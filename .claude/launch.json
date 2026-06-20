@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-resident",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@liviq/web-resident", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "web-admin",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@liviq/web-admin", "dev"],
+      "port": 3001
+    }
+  ]
+}

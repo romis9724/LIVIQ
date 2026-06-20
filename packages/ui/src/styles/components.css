@@ -1,0 +1,399 @@
+/**
+ * 핵심 컴포넌트 스타일 — LIVIQ Foundation 충실 이식.
+ * 색만으로 상태를 전달하지 않는다(아이콘/텍스트 병기). 터치 타깃 ≥ 44px.
+ */
+
+/* ============ Button ============ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    filter var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.btn--sm {
+  min-height: 40px;
+  padding: 0 var(--space-4);
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.btn--primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn--secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+.btn--secondary:hover {
+  background: var(--color-surface-sunken);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-accent);
+  padding: 0 var(--space-4);
+}
+.btn--ghost:hover {
+  background: var(--color-citation);
+}
+
+.btn--danger {
+  background: var(--color-danger);
+  color: var(--color-on-accent);
+}
+.btn--danger:hover {
+  filter: brightness(1.08);
+}
+
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+  opacity: 0.7;
+  filter: none;
+}
+
+/* ============ SurfaceCard ============ */
+.surface-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+}
+
+/* ============ CitationCard ============ */
+.citation-card {
+  background: var(--color-citation);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 22%, transparent);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.citation-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.citation-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.citation-card__label {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent);
+  letter-spacing: 0.02em;
+}
+.citation-card__title {
+  font-weight: 600;
+  font-size: var(--text-base);
+  margin-bottom: var(--space-1);
+}
+.citation-card__meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+.citation-card__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+/* ============ ConfidenceBadge ============ */
+.confidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.confidence-badge__glyph {
+  font-size: 0.8rem;
+}
+.confidence-badge--answered {
+  background: color-mix(in oklch, var(--color-success) 16%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 40%, transparent);
+  color: color-mix(in oklch, var(--color-success) 70%, var(--color-text));
+}
+.confidence-badge--review {
+  background: color-mix(in oklch, var(--color-warning) 20%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-warning) 45%, transparent);
+  color: color-mix(in oklch, var(--color-warning) 55%, var(--color-text));
+}
+.confidence-badge--handoff {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+
+/* ============ StatusPill ============ */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-sunken);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.status-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.status-pill--progress {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  color: var(--color-accent);
+}
+.status-pill--done {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 38%, transparent);
+  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+}
+.status-pill--fault {
+  background: color-mix(in oklch, var(--color-danger) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+}
+
+/* ============ FeedbackButtons ============ */
+.feedback {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.feedback-btn--up[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--color-success) 16%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 45%, transparent);
+  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+}
+.feedback-btn--down[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--color-danger) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 40%, transparent);
+  color: var(--color-danger);
+}
+
+/* ============ FormField ============ */
+.form-field__label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.form-field__input {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: 1rem; /* 모바일 자동 확대 방지 */
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.form-field__input:focus-visible {
+  border-color: var(--color-accent);
+}
+.form-field__input[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+.form-field__help {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+.form-field__error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+  margin-top: var(--space-2);
+}
+
+/* ============ EmptyState ============ */
+.empty-state {
+  text-align: center;
+  padding: var(--space-6) var(--space-4);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+}
+.empty-state__icon {
+  font-size: 1.75rem;
+  margin-bottom: var(--space-2);
+}
+.empty-state__title {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+.empty-state__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.empty-state__action {
+  margin-top: var(--space-4);
+}
+
+/* ============ Toast ============ */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-text);
+  color: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.toast__icon {
+  font-weight: 700;
+}
+.toast--success .toast__icon {
+  color: var(--color-success);
+}
+.toast--danger .toast__icon {
+  color: var(--color-danger);
+}
+
+/* ============ Switch ============ */
+.switch {
+  width: 46px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  padding: 3px;
+  display: flex;
+  justify-content: flex-start;
+  background: var(--color-border-strong);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.switch--on {
+  background: var(--color-accent);
+  justify-content: flex-end;
+}
+.switch__knob {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / 0.2);
+  display: block;
+}
+
+/* ============ Skeleton ============ */
+@keyframes liviq-shimmer {
+  0% {
+    background-position: -340px 0;
+  }
+  100% {
+    background-position: 340px 0;
+  }
+}
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-sunken) 25%,
+    color-mix(in oklch, var(--color-text) 8%, var(--color-surface)) 50%,
+    var(--color-surface-sunken) 75%
+  );
+  background-size: 680px 100%;
+  animation: liviq-shimmer 1.3s infinite linear;
+}
+
+/* ============ Dialog ============ */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: oklch(0% 0 0 / 0.4);
+  z-index: 50;
+}
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+}
+.dialog__title {
+  font-weight: 600;
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-1);
+}
+.dialog__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+.dialog__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}

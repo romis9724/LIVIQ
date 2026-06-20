@@ -1,0 +1,256 @@
+/* 파운데이션 쇼케이스 레이아웃 — LIVIQ Foundation.dc.html 이식. 토큰만 사용. */
+.fnd {
+  max-width: var(--layout-max);
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6);
+}
+
+.fnd__header {
+  margin-bottom: var(--space-12);
+}
+
+.fnd__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.fnd__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.fnd__wordmark {
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+}
+
+.fnd__version {
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.fnd__title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: var(--space-3);
+}
+
+.fnd__lede {
+  font-size: var(--text-lg);
+  color: var(--color-text-muted);
+  max-width: 60ch;
+}
+.fnd__lede strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.fnd__back {
+  display: inline-flex;
+  margin-top: var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.fnd__section {
+  margin-bottom: var(--space-12);
+}
+
+.fnd__section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.fnd__section-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.fnd__section-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.fnd__group-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* 색상 스와치 */
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+.swatch-grid:last-child {
+  margin-bottom: 0;
+}
+.swatch {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.swatch__chip {
+  height: 56px;
+  border-bottom: 1px solid var(--color-border);
+}
+.swatch__body {
+  padding: var(--space-3);
+}
+.swatch__name {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.swatch__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 타이포 샘플 */
+.type-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.type-row + .type-row {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-6);
+}
+.type-row__tag {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  min-width: 120px;
+}
+.type-sample--title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+.type-sample--lg {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.type-sample--base {
+  font-size: var(--text-base);
+  max-width: 52ch;
+}
+.type-sample--sm {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 토큰 데모 (간격/모서리/그림자) */
+.token-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+.rhythm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.rhythm-row__n {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  width: 32px;
+}
+.rhythm-bar {
+  height: 12px;
+  background: var(--color-accent);
+  border-radius: 2px;
+}
+.radii-row {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+.radii-box {
+  width: 64px;
+  height: 64px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-strong);
+}
+.radii-label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+  text-align: center;
+}
+.shadow-demo {
+  width: 120px;
+  height: 64px;
+  margin: var(--space-4) auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 컴포넌트 카드 그리드 */
+.comp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.comp-card__name {
+  font-weight: 600;
+  margin-bottom: var(--space-1);
+}
+.comp-card__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-4);
+}
+.fnd-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.fnd-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.fnd__footer {
+  margin-top: var(--space-12);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}

@@ -1,0 +1,13 @@
+.placeholder {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6);
+  display: flex;
+  align-items: center;
+  min-height: 70vh;
+}
+
+.placeholder .empty-state {
+  width: 100%;
+  padding: var(--space-12) var(--space-6);
+}

@@ -1,0 +1,187 @@
+/* 관리자 문서 관리 — 업로드·색인 요약·문서 테이블. */
+@keyframes liviq-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.doc-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.doc-upload {
+  background: var(--color-surface);
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+}
+.doc-upload__icon {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+}
+.doc-upload__text {
+  flex: 1;
+}
+.doc-upload__title {
+  font-weight: 700;
+  font-size: var(--text-base);
+}
+.doc-upload__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.doc-summary {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.doc-summary__card {
+  flex: 1;
+  min-width: 160px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.doc-summary__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.doc-summary__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  flex: 1;
+}
+.doc-summary__count {
+  font-weight: 700;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.doc-tablecard {
+  padding: 0;
+  overflow: hidden;
+}
+.doc-table__scroll {
+  overflow-x: auto;
+}
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 920px;
+  font-size: var(--text-sm);
+}
+.doc-table thead tr {
+  background: var(--color-surface-sunken);
+  text-align: left;
+  color: var(--color-text-muted);
+}
+.doc-table th {
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.doc-table__right {
+  text-align: right;
+}
+.doc-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.doc-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+.doc-nowrap {
+  white-space: nowrap;
+}
+.doc-date {
+  color: var(--color-text-muted);
+}
+
+.doc-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.doc-name__icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+}
+.doc-name__title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.doc-name__meta {
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+}
+
+.doc-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.doc-idx {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.doc-idx__spin {
+  display: inline-block;
+  animation: liviq-spin 1.1s linear infinite;
+}
+.doc-idx--indexed {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 38%, transparent);
+  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+}
+.doc-idx--indexing {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  color: var(--color-accent);
+}
+.doc-idx--pending {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+.doc-idx--failed {
+  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+}

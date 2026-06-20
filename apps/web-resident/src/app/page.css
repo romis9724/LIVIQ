@@ -1,0 +1,143 @@
+/* "전체 화면" 개요 — 디자인(LIVIQ 전체 화면.dc.html) 충실 이식. 토큰만 사용. */
+.overview {
+  max-width: var(--layout-max);
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-6);
+}
+
+.overview__header {
+  margin-bottom: var(--space-12);
+}
+
+.overview__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.overview__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.overview__wordmark {
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+}
+
+.overview__title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  margin-bottom: var(--space-3);
+}
+
+.overview__lede {
+  color: var(--color-text-muted);
+  max-width: 60ch;
+}
+
+.overview__section {
+  margin-bottom: var(--space-12);
+}
+
+.overview__section:last-of-type {
+  margin-bottom: 0;
+}
+
+.overview__section-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.overview__section-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.overview__section-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.screen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: var(--space-4);
+}
+
+.screen-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-decoration: none;
+  color: inherit;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.screen-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-2px);
+}
+
+.screen-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  font-size: 1.2rem;
+}
+
+.screen-card__title {
+  font-weight: 700;
+  font-size: var(--text-base);
+  margin-top: var(--space-2);
+}
+
+.screen-card__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.screen-card__priority {
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-top: var(--space-1);
+}
+
+.overview__footer {
+  margin-top: var(--space-12);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.overview__footer-link {
+  color: var(--color-accent);
+  font-weight: 600;
+}

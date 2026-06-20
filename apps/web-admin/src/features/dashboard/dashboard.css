@@ -1,0 +1,295 @@
+/* 관리자 대시보드 — KPI·일별 질의량·민원 현황·검수/토큰 위젯. */
+.dash-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.dash-period {
+  min-height: 40px;
+  flex: none;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.dash-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* KPI */
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+}
+@media (max-width: 980px) {
+  .dash-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.dash-kpi__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.dash-kpi__value {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.dash-kpi__delta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.dash-kpi__vs {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+/* charts */
+.dash-charts {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: var(--space-4);
+}
+.dash-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+@media (max-width: 980px) {
+  .dash-charts,
+  .dash-bottom {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dash-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+.dash-card__title {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+.dash-card__title--mb {
+  margin-bottom: var(--space-4);
+}
+.dash-card__meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.dash-legend {
+  display: flex;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.dash-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.dash-legend__sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.dash-legend__sw--total {
+  background: var(--color-accent);
+}
+.dash-legend__sw--solved {
+  background: color-mix(in oklch, var(--color-success) 55%, var(--color-surface));
+}
+
+.dash-chart__scroll {
+  overflow-x: auto;
+}
+.dash-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  min-width: 560px;
+}
+.dash-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+.dash-bar__col {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+}
+.dash-bar__total {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in oklch, var(--color-accent) 22%, var(--color-surface-sunken));
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.dash-bar__solved {
+  width: 100%;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in oklch, var(--color-success) 55%, var(--color-surface));
+}
+.dash-bar__label {
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+}
+
+/* 민원 현황 */
+.dash-complaints {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.dash-complaint__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.dash-complaint__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.dash-complaint__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.dash-complaint__count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dash-complaint__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  overflow: hidden;
+}
+.dash-complaint__track > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+
+/* 검수 대기 위젯 */
+.dash-link {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.dash-review__big {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.dash-review__count {
+  font-size: 2rem;
+  font-weight: 700;
+  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
+}
+.dash-review__sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.dash-review__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dash-review__list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.dash-review__q {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-review__score {
+  font-weight: 700;
+}
+
+/* 토큰 위젯 */
+.dash-token__big {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+.dash-token__value {
+  font-size: 2rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dash-token__unit {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.dash-token__delta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+  margin-bottom: var(--space-4);
+}
+.dash-token__note {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+.dash-token__total {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.dash-token__amount {
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}

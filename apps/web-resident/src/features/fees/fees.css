@@ -1,0 +1,205 @@
+/* 입주민 관리비 — 이번 달·AI 설명·추이 차트·항목별 내역. */
+.fees {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.fees__header {
+  flex: none;
+  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.fees__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.fees__main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.fees-month__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.fees-month__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.fees-month__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+.fees-month__amount {
+  font-size: 2.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+.fees-month__due {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+}
+.fees-explain-toggle {
+  margin-top: var(--space-4);
+  width: 100%;
+  min-height: var(--tap-min);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 35%, transparent);
+  border-radius: var(--radius-md);
+  background: var(--color-citation);
+  color: var(--color-accent);
+  font-weight: 600;
+  font-size: var(--text-base);
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.fees-explain {
+  background: var(--color-citation);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+}
+.fees-explain__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--space-3);
+}
+.fees-explain__mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fees-explain__label {
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.fees-explain__text {
+  margin: 0 0 var(--space-3);
+  line-height: 1.65;
+}
+.fees-explain__text strong {
+  font-weight: 700;
+}
+.fees-explain__basis {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.fees-explain__basis strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.fees-section__title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+.fees-chart__scroll {
+  overflow-x: auto;
+}
+.fees-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  height: 140px;
+  min-width: 300px;
+}
+.fees-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  justify-content: flex-end;
+}
+.fees-bar__value {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.fees-bar__fill {
+  width: 100%;
+  border-radius: 6px 6px 0 0;
+  background: color-mix(in oklch, var(--color-accent) 28%, var(--color-surface-sunken));
+}
+.fees-bar__fill[data-current] {
+  background: var(--color-accent);
+}
+.fees-bar__month {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.fees-bar__month[data-current] {
+  color: var(--color-accent);
+}
+
+.fees-breakdown {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.fees-breakdown__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.fees-breakdown__name {
+  flex: 1;
+}
+.fees-breakdown__delta {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-danger);
+}
+.fees-breakdown__amount {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.fees-breakdown__row--total {
+  border-bottom: none;
+  padding: var(--space-4) 0 0;
+}
+.fees-breakdown__row--total .fees-breakdown__name {
+  font-weight: 700;
+}
+.fees-breakdown__total {
+  font-weight: 700;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}

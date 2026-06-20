@@ -1,0 +1,66 @@
+# CLAUDE.md — LIVIQ 프로젝트 가이드
+
+아파트 관리 **AI 플랫폼**. 기존 시스템·문서 위에 얹는 **AI 검색·응대·요약 계층**이다.
+입주민 앱/관리 웹을 재구현하는 프로젝트가 아니다.
+
+상세 설계는 [docs/](docs/README.md). 이 파일은 매 세션 로드되니 **간결 유지**.
+
+## 절대 규칙 (어기면 안 됨)
+
+1. **출처 없는 AI 답변 금지.** 모든 답변에 근거 문서·조항 인용. 근거 없으면 지어내지 말고 **담당자 연결 폴백**.
+2. **개인정보는 외부 LLM에 전송 금지.** 호출 직전 마스킹/가명화, 실패 시 호출 중단(fail-closed).
+3. **단지(tenant) 격리.** 모든 쿼리에 `tenant_id` + DB RLS 이중 방어. 단지 간 데이터 혼입 절대 금지.
+4. **인가는 서버에서.** 프론트 메뉴 숨김은 보조일 뿐. 모든 엔드포인트가 역할·테넌트·소유권 검증.
+5. **관리비는 ERP가 단일 출처.** AI는 설명만, 계산·부과 금지.
+6. **위험 출력은 사람 검수.** 입주민 자동발송 공지 금지(초안까지만). 신뢰도 낮은 답변은 검수 큐.
+7. **토큰은 비용.** 캐싱·컨텍스트 예산·모델 라우팅 적용([docs/08](docs/08-llm-token-optimization.md)).
+8. **액션은 코드가 실행.** LLM 출력으로 권한·발송 등 부수효과를 직접 트리거하지 않음.
+
+## 스택
+
+TypeScript 풀스택 · Turborepo + pnpm · Next.js(웹) · NestJS(api) · Drizzle ORM ·
+PostgreSQL 16 + pgvector · Redis + BullMQ · Zod 검증 · 외부 LLM API(Claude 우선).
+
+## 구조 ([docs/02](docs/02-directory-structure.md))
+
+```text
+apps/  web-resident · web-admin · api · ai-worker
+packages/  ai-core · db · shared · ui · config-*
+docs/ refs/ tests/ infra/
+```
+
+## 자주 쓰는 명령
+
+```bash
+pnpm install
+docker compose -f infra/docker-compose.yml up -d   # postgres/redis/minio
+pnpm db:migrate && pnpm db:seed
+pnpm dev            # api·웹·worker 병렬
+pnpm test --coverage   # 단위/통합 (≥80%)
+pnpm e2e               # Playwright
+pnpm lint && pnpm tsc --noEmit
+pnpm build
+```
+
+## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)
+
+- 기능/도메인 단위 구성. 파일 200~400줄(800 상한). 불변 패턴, 작은 함수, 깊은 중첩 회피.
+- 네이밍: 컴포넌트 `PascalCase` · 훅 `useX` · 디렉토리/CSS `kebab-case` · 상수 `UPPER_SNAKE` · DB `snake_case`.
+- 경계 입력은 Zod 검증. 외부(ERP/LLM)는 어댑터 인터페이스 뒤로.
+- UI는 디자인 토큰만 사용(하드코딩 금지), 접근성 WCAG 2.2 AA, 라이트 테마 1차.
+- 시크릿 하드코딩 금지. env는 부팅 시 Zod 검증.
+
+## 작업 방식
+
+- 새 구현 전 **재사용 검토**(라이브러리/기존 패턴). KISS·YAGNI·DRY.
+- TDD: 실패 테스트 → 구현 → 리팩터. 보안(인가/RLS/마스킹) 테스트는 CRITICAL 게이트.
+- 코드 게이트 순서: format → lint → typecheck → test → build ([docs/09](docs/09-implementation-harness.md)).
+- "완료" 정의는 [docs/09 §9](docs/09-implementation-harness.md). 아키텍처 결정 변경은 ADR 로그에 기록.
+- 한국어로 응답·문서화. 기술 식별자는 원문 유지.
+
+## 문서 지도
+
+요구사항 [00](docs/00-requirements.md) · 아키텍처 [01](docs/01-architecture.md) · 디렉토리 [02](docs/02-directory-structure.md) ·
+DB [03](docs/03-database-design.md) · 메뉴 [04](docs/04-menu-structure.md) · UI/UX [05](docs/05-ui-ux-design.md) ·
+보안 [06](docs/06-security-privacy.md) · 테스트 [07](docs/07-testing-strategy.md) · 토큰 [08](docs/08-llm-token-optimization.md) ·
+구현 [09](docs/09-implementation-harness.md)

@@ -1,0 +1,4 @@
+/* @liviq/ui 전체 스타일 진입점 — 앱은 이 파일 하나만 import 한다. */
+@import "./tokens.css";
+@import "./global.css";
+@import "./components.css";

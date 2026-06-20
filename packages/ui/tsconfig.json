@@ -1,0 +1,9 @@
+{
+  "extends": "@liviq/config-ts/react-lib.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": "."
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

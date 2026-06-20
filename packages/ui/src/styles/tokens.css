@@ -1,0 +1,53 @@
+/**
+ * LIVIQ 디자인 토큰 — 단일 출처 (docs/05 §2 · LIVIQ Foundation)
+ * 콘셉트: Trustworthy Utility (차분한 라이트 테마, 또렷한 위계, 신뢰).
+ * 규칙: 팔레트·타이포·간격을 화면에 하드코딩하지 않고 이 토큰만 사용한다.
+ */
+:root {
+  /* color (oklch) */
+  --color-surface: oklch(99% 0 0);
+  --color-surface-sunken: oklch(97% 0.005 250);
+  --color-text: oklch(22% 0.02 250);
+  --color-text-muted: oklch(50% 0.02 250);
+  --color-accent: oklch(58% 0.16 250); /* 신뢰감 있는 블루 · 행동·링크 */
+  --color-success: oklch(62% 0.15 150); /* 답변됨·완료 */
+  --color-warning: oklch(75% 0.15 80); /* 검토 필요 */
+  --color-danger: oklch(58% 0.2 25); /* 장애·반려 */
+  --color-citation: oklch(96% 0.03 250); /* 출처 카드 배경 */
+
+  --color-border: color-mix(in oklch, var(--color-text) 13%, transparent);
+  --color-border-strong: color-mix(in oklch, var(--color-text) 24%, transparent);
+  --color-on-accent: var(--color-surface);
+
+  /* type (모바일 가독성 우선, 본문 최소 16px) */
+  --text-sm: 0.875rem;
+  --text-base: clamp(1rem, 0.96rem + 0.2vw, 1.0625rem);
+  --text-lg: clamp(1.125rem, 1rem + 0.5vw, 1.375rem);
+  --text-title: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+
+  /* spacing rhythm */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-12: 3rem;
+
+  /* radius / elevation */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.06), 0 4px 12px oklch(0% 0 0 / 0.06);
+
+  /* motion */
+  --duration-fast: 150ms;
+  --duration-normal: 280ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* touch */
+  --tap-min: 44px; /* 최소 터치 타깃 */
+
+  /* layout */
+  --layout-max: 1080px;
+}

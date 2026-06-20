@@ -1,0 +1,214 @@
+/* 관리자 민원 관리 — 검색·필터·데이터테이블·페이지네이션. */
+.ia-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.ia-search {
+  min-height: 40px;
+  width: 220px;
+  flex: none;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.ia-filters {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ia-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.ia-filter[data-active] {
+  border-color: var(--color-accent);
+  background: color-mix(in oklch, var(--color-accent) 10%, var(--color-surface));
+  color: var(--color-accent);
+}
+.ia-filter__count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+}
+.ia-filter[data-active] .ia-filter__count {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.ia-tablecard {
+  padding: 0;
+  overflow: hidden;
+}
+.ia-table__scroll {
+  overflow-x: auto;
+}
+.ia-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+  font-size: var(--text-sm);
+}
+.ia-table thead tr {
+  background: var(--color-surface-sunken);
+  text-align: left;
+  color: var(--color-text-muted);
+}
+.ia-table th {
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ia-table__right {
+  text-align: right;
+}
+.ia-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.ia-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+.ia-nowrap {
+  white-space: nowrap;
+}
+.ia-cell--id {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ia-cell__title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ia-cell__asker {
+  color: var(--color-text-muted);
+}
+.ia-cell--date {
+  color: var(--color-text-muted);
+}
+.ia-table td[data-muted] {
+  color: var(--color-text-muted);
+}
+
+.ia-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ia-cat__name {
+  font-weight: 600;
+}
+.ia-cat__conf {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+}
+
+.ia-prio {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.ia-prio--high {
+  background: color-mix(in oklch, var(--color-danger) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 35%, transparent);
+  color: var(--color-danger);
+}
+.ia-prio--mid {
+  background: color-mix(in oklch, var(--color-warning) 18%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-warning) 40%, transparent);
+  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
+}
+.ia-prio--low {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+
+.ia-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.ia-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ia-status--unassigned {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+.ia-status--progress {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  color: var(--color-accent);
+}
+.ia-status--done {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 38%, transparent);
+  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+}
+
+.ia-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.ia-pages {
+  display: flex;
+  gap: var(--space-2);
+}
+.ia-page {
+  min-height: 36px;
+  min-width: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.ia-page--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
