@@ -1,0 +1,22 @@
+# mcp/ Python 트리 린트·타입 설정.
+# TS 모노레포(turbo/pnpm) 밖 — 독립 도구로 게이트한다.
+#
+# 실행:
+#   pip install ruff mypy
+#   ruff check .        # 린트
+#   ruff format .       # 포맷
+#   mypy .              # 타입체크
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+# E/F 기본, I 임포트정렬, UP 최신문법, B 버그유발 패턴
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true   # langchain/mcp 등 외부 스텁 부재 허용
+warn_unused_ignores = true
+check_untyped_defs = true
