@@ -444,7 +444,7 @@
       <div class="findings">
         <section class="panel panel-strength">
           <div class="panel-head">
-            <h3>완료된 액션 (14)</h3>
+            <h3>완료된 액션 (15)</h3>
             <span class="count">20 → 71</span>
           </div>
           <ul class="panel-list">
@@ -493,40 +493,36 @@
               <div class="note"><code>mcp/pyproject.toml</code> + Python CI 워크플로. TS 파이프라인 밖 Python 트리 린트/타입 확보.</div>
             </li>
             <li>
-              <div class="head"><span class="tag tag-done">test ✓</span> @liviq/ui 테스트 (10건)</div>
-              <div class="note">vitest + jsdom/RTL. cx·StatusPill·ConfidenceBadge <strong>10/10 통과</strong> + turbo <code>test</code> 배선. <code>pnpm test</code> 작동.</div>
+              <div class="head"><span class="tag tag-done">test ✓</span> 워크스페이스 테스트 (22건)</div>
+              <div class="note">vitest + jsdom/RTL. ui 10(cx·StatusPill·ConfidenceBadge) + web-resident 7(screens) + web-admin 5(review-queue 무결성) = <strong>22/22 통과</strong>. <code>pnpm test</code> turbo 배선.</div>
             </li>
           </ul>
         </section>
 
         <section class="panel panel-risk">
           <div class="panel-head">
-            <h3>남은 ROI (70 → 상향)</h3>
-            <span class="count">다음 단계</span>
+            <h3>남은 ROI (71 → 상향)</h3>
+            <span class="count">전부 blocked / 大작업</span>
           </div>
           <ul class="panel-list">
             <li>
               <div class="head"><span class="tag tag-rule">Cat G · L</span> api 도입 시 evals adapter 연결</div>
-              <div class="note"><strong>Impact 6/10 · blocked.</strong> <code>apps/api</code>·<code>ai-core</code> 미존재로 현재 불가. wiring 시 <code>evals/adapter.mjs</code> → pending 6건이 실측 pass-rate로 전환. G 3 → 5.</div>
+              <div class="note"><strong>Impact 6/10 · ⛔ blocked.</strong> <code>apps/api</code>·<code>ai-core</code> 코드 자체가 없음. 도입 후 <code>evals/adapter.mjs</code> wiring → pending 6건이 실측 pass-rate로 전환. G 3 → 5.</div>
             </li>
             <li>
-              <div class="head"><span class="tag tag-rule">Cat C · M</span> ADR·MEMORY 지속 축적</div>
-              <div class="note"><strong>Impact 5/10.</strong> 결정 발생 시마다 docs/adr/ 추가. 스코어러 C는 영어 섹션 헤더 heuristic — 실질 암묵지는 이미 외부화됨.</div>
+              <div class="head"><span class="tag tag-rule">test · L</span> 웹 앱 <em>컴포넌트</em> 테스트 (jsdom+RTL)</div>
+              <div class="note"><strong>Impact 5/10.</strong> 순수 로직/데이터 테스트는 완료(22/22). 남은 것은 feature 컴포넌트 렌더 테스트 — context·라우터 mock 필요. 보안(인가·마스킹)은 CRITICAL 게이트로 우선.</div>
             </li>
             <li>
-              <div class="head"><span class="tag tag-rule">infra · M</span> mcp Python 린트/타입(ruff·mypy)</div>
-              <div class="note"><strong>Impact 5/10.</strong> mcp/는 TS 파이프라인 밖 — ruff·mypy 도입으로 Python 게이트 확보.</div>
-            </li>
-            <li>
-              <div class="head"><span class="tag tag-rule">test · M</span> 웹 앱·ui 테스트 커버리지</div>
-              <div class="note"><strong>Impact 6/10.</strong> 현재 테스트 인프라 미비. 보안(인가·마스킹)은 CRITICAL 게이트로 우선.</div>
+              <div class="head"><span class="tag tag-rule">C · D 상한</span> 스코어러 heuristic (조치 불필요)</div>
+              <div class="note"><strong>Impact —.</strong> C/D 저점은 영어 섹션 헤더·root-relative 경로 heuristic 한계. 실질 암묵지·의존성 문서·검증기(깨진 경로 0)는 이미 완비. 점수 위해 문서 훼손 안 함.</div>
             </li>
           </ul>
         </section>
       </div>
 
       <footer>
-        LIVIQ · AI-Readiness v2 · 7 카테고리 / 100점 · 20 → 65 · scored 2026-07-02
+        LIVIQ · AI-Readiness v2 · 7 카테고리 / 100점 · 20 → 71 · scored 2026-07-02
       </footer>
     </div>
   </body>

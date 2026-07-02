@@ -3,7 +3,7 @@
     "repo": "LIVIQ",
     "path": "/Users/user/Workspace/LIVIQ",
     "scored_at": "2026-07-02",
-    "git_branch": "main",
+    "git_branch": "chore/ai-readiness-hardening",
     "rubric_version": "v2-100pt",
     "modules_total": 4,
     "context_files_total": 10,
@@ -189,7 +189,7 @@
       {
         "path": "/Users/user/Workspace/LIVIQ/packages/ui",
         "rel": "packages/ui",
-        "code_files": 16,
+        "code_files": 18,
         "has_context": true,
         "context_file": "/Users/user/Workspace/LIVIQ/packages/ui/CLAUDE.md",
         "context_kind": "CLAUDE.md"
