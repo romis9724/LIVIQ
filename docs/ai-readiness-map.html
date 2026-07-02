@@ -444,7 +444,7 @@
       <div class="findings">
         <section class="panel panel-strength">
           <div class="panel-head">
-            <h3>완료된 액션 (15)</h3>
+            <h3>완료된 액션 (16)</h3>
             <span class="count">20 → 71</span>
           </div>
           <ul class="panel-list">
@@ -493,8 +493,8 @@
               <div class="note"><code>mcp/pyproject.toml</code> + Python CI 워크플로. TS 파이프라인 밖 Python 트리 린트/타입 확보.</div>
             </li>
             <li>
-              <div class="head"><span class="tag tag-done">test ✓</span> 워크스페이스 테스트 (22건)</div>
-              <div class="note">vitest + jsdom/RTL. ui 10(cx·StatusPill·ConfidenceBadge) + web-resident 7(screens) + web-admin 5(review-queue 무결성) = <strong>22/22 통과</strong>. <code>pnpm test</code> turbo 배선.</div>
+              <div class="head"><span class="tag tag-done">test ✓</span> 워크스페이스 테스트 (25건)</div>
+              <div class="note">vitest + jsdom/RTL. ui 10 + web-resident 7 + web-admin 8(review-queue 무결성 5 + ReviewQueue 컴포넌트 3) = <strong>25/25 통과</strong>. ReviewQueue 테스트는 절대규칙 1·6 UI 강제. <code>pnpm test</code> turbo 배선.</div>
             </li>
           </ul>
         </section>
@@ -502,7 +502,7 @@
         <section class="panel panel-risk">
           <div class="panel-head">
             <h3>남은 ROI (71 → 상향)</h3>
-            <span class="count">전부 blocked / 大작업</span>
+            <span class="count">전부 blocked / 노이즈</span>
           </div>
           <ul class="panel-list">
             <li>
@@ -510,8 +510,8 @@
               <div class="note"><strong>Impact 6/10 · ⛔ blocked.</strong> <code>apps/api</code>·<code>ai-core</code> 코드 자체가 없음. 도입 후 <code>evals/adapter.mjs</code> wiring → pending 6건이 실측 pass-rate로 전환. G 3 → 5.</div>
             </li>
             <li>
-              <div class="head"><span class="tag tag-rule">test · L</span> 웹 앱 <em>컴포넌트</em> 테스트 (jsdom+RTL)</div>
-              <div class="note"><strong>Impact 5/10.</strong> 순수 로직/데이터 테스트는 완료(22/22). 남은 것은 feature 컴포넌트 렌더 테스트 — context·라우터 mock 필요. 보안(인가·마스킹)은 CRITICAL 게이트로 우선.</div>
+              <div class="head"><span class="tag tag-rule">test · S</span> 나머지 feature 컴포넌트 확대</div>
+              <div class="note"><strong>Impact 3/10.</strong> ReviewQueue 패턴 확립됨(jsdom+RTL). AssistantChat·NoticeComposer 등으로 점진 확대 — 인프라는 이미 있음.</div>
             </li>
             <li>
               <div class="head"><span class="tag tag-rule">C · D 상한</span> 스코어러 heuristic (조치 불필요)</div>
