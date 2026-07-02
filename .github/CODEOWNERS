@@ -1,0 +1,21 @@
+# CODEOWNERS — 리뷰 자동 요청 · independent critic
+# 형식: <경로>  <소유자>. 마지막 매칭이 우선.
+# ⚠ 아래 핸들은 플레이스홀더 — 실제 팀 GitHub 핸들/팀으로 교체할 것.
+
+# 기본 소유자
+*                           @romis9724
+
+# 컨텍스트 문서(AI 준비도) — 변경 시 게이트
+/CLAUDE.md                  @romis9724
+/ARCHITECTURE.md            @romis9724
+/MEMORY.md                  @romis9724
+**/CLAUDE.md                @romis9724
+/docs/adr/                  @romis9724
+
+# 보안 민감 경로 — 반드시 리뷰 (절대규칙 2·3·4)
+/mcp/                       @romis9724
+/docs/06-security-privacy.md @romis9724
+/evals/                     @romis9724
+
+# 공유 디자인 시스템 — 변경이 앱 전체 파급
+/packages/ui/               @romis9724

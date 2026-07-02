@@ -8,6 +8,10 @@ out/
 dist/
 .turbo/
 
+# python cache
+__pycache__/
+*.pyc
+
 # vercel (machine/account-specific project links)
 .vercel/
 
@@ -31,3 +35,11 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+
+# secrets / credentials (절대 커밋 금지)
+mcp/service-credential.json
+mcp/tokens.json
+**/service-credential.json
+**/tokens.json
+*.pem
+*.key

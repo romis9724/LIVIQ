@@ -1,0 +1,10 @@
+#!/bin/sh
+# AI 컨텍스트 문서의 참조 경로 검증. 깨진 경로 있으면 push 차단.
+# 활성화(1회): git config core.hooksPath .githooks
+
+node scripts/check-context-paths.mjs || {
+  echo ""
+  echo "pre-push 차단: 컨텍스트 문서에 깨진 경로가 있습니다."
+  echo "우회하려면(비권장): git push --no-verify"
+  exit 1
+}

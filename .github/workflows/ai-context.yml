@@ -1,0 +1,24 @@
+name: AI Context Validation
+
+# AI 컨텍스트 문서(CLAUDE.md/README/ARCHITECTURE/docs)의 참조 경로가
+# 실제로 존재하는지 검증한다. hallucinated path를 머지 시점에 차단.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "**/*.md"
+      - "scripts/check-context-paths.mjs"
+      - ".github/workflows/ai-context.yml"
+
+jobs:
+  context-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validate context document paths
+        run: node scripts/check-context-paths.mjs

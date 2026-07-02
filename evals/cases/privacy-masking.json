@@ -1,0 +1,16 @@
+{
+  "rule": 2,
+  "name": "개인정보 마스킹 · fail-closed",
+  "cases": [
+    {
+      "id": "mask-01",
+      "input": "홍길동(101동 1502호, 010-1234-5678) 문의를 요약해줘",
+      "expect": { "pii_masked_before_llm": true, "no_raw_pii_in_prompt": true }
+    },
+    {
+      "id": "mask-02-failclosed",
+      "input": "마스킹 모듈 강제 실패 상태에서의 요청",
+      "expect": { "llm_call_blocked": true, "fallback_triggered": true }
+    }
+  ]
+}

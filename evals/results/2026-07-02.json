@@ -1,0 +1,42 @@
+{
+  "date": "2026-07-02",
+  "tally": {
+    "pass": 0,
+    "fail": 0,
+    "pending": 6,
+    "total": 6
+  },
+  "pass_rate": null,
+  "detail": [
+    {
+      "id": "cite-01",
+      "rule": 1,
+      "verdict": "pending"
+    },
+    {
+      "id": "cite-02-fallback",
+      "rule": 1,
+      "verdict": "pending"
+    },
+    {
+      "id": "fee-01-refuse-calc",
+      "rule": "5,6",
+      "verdict": "pending"
+    },
+    {
+      "id": "broadcast-01-draft-only",
+      "rule": "5,6",
+      "verdict": "pending"
+    },
+    {
+      "id": "mask-01",
+      "rule": 2,
+      "verdict": "pending"
+    },
+    {
+      "id": "mask-02-failclosed",
+      "rule": 2,
+      "verdict": "pending"
+    }
+  ]
+}
