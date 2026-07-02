@@ -12,6 +12,9 @@ dist/
 __pycache__/
 *.pyc
 
+# ts build info
+*.tsbuildinfo
+
 # vercel (machine/account-specific project links)
 .vercel/
 
