@@ -1,6 +1,6 @@
 # LIVIQ 설계 문서
 
-아파트 관리 AI 플랫폼 **LIVIQ**의 설계 문서 모음. 기획/계획서는 루트 [README.md](../README.md), 프로젝트 가이드는 [CLAUDE.md](../CLAUDE.md) 참고.
+아파트 관리 AI 플랫폼 **LIVIQ**의 설계 문서 모음. 개발 시작점은 루트 [README.md](../README.md), 프로젝트 가이드는 [CLAUDE.md](../CLAUDE.md), 전체 사업 계획서는 [10-project-plan.md](10-project-plan.md) 참고.
 
 ## 한눈에
 
@@ -23,6 +23,7 @@
 | 07 | [테스트 전략](07-testing-strategy.md) | 단위/통합/E2E + AI 평가, CI 게이트 |
 | 08 | [LLM 토큰 절약](08-llm-token-optimization.md) | 캐싱·라우팅·컨텍스트 예산·비용 모니터링 |
 | 09 | [구현/하네스](09-implementation-harness.md) | 빌드 순서, CI/CD, 훅, 단계별 플랜, Done 정의 |
+| 10 | [사업 계획서](10-project-plan.md) | 범위·제약·일정·리스크 (구축 전제 실행 계획) |
 
 ## 참고 자료
 

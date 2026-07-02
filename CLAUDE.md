@@ -21,26 +21,33 @@
 TypeScript 풀스택 · Turborepo + pnpm · Next.js(웹) · NestJS(api) · Drizzle ORM ·
 PostgreSQL 16 + pgvector · Redis + BullMQ · Zod 검증 · 외부 LLM API(Claude 우선).
 
-## 구조 ([docs/02](docs/02-directory-structure.md))
+## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
+
+현재 구현된 것(현실):
 
 ```text
-apps/  web-resident · web-admin · api · ai-worker
-packages/  ai-core · db · shared · ui · config-*
-docs/ refs/ tests/ infra/
+apps/      web-resident · web-admin          # Next.js 웹 2종
+packages/  ui · config-ts                    # 공유 컴포넌트/설정
+mcp/       gmail·apt MCP 서버 · management_agent (Python)
+docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
+
+계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(NestJS) · `apps/ai-worker` ·
+`packages/ai-core`·`db`·`shared` · `infra/`(docker-compose) — 도입 시점에 이 블록 갱신.
 
 ## 자주 쓰는 명령
 
 ```bash
 pnpm install
-docker compose -f infra/docker-compose.yml up -d   # postgres/redis/minio
-pnpm db:migrate && pnpm db:seed
-pnpm dev            # api·웹·worker 병렬
-pnpm test --coverage   # 단위/통합 (≥80%)
-pnpm e2e               # Playwright
-pnpm lint && pnpm tsc --noEmit
-pnpm build
+pnpm dev         # turbo run dev — 웹 앱 병렬 (apps/*, packages/*)
+pnpm build       # turbo run build
+pnpm lint        # turbo run lint
+pnpm typecheck   # turbo run typecheck
+pnpm start       # turbo run start (build 후)
 ```
+
+> Note: `db:migrate`·`test`·`e2e` 등은 해당 패키지(api·db) 도입 후 루트 스크립트로
+> 추가 예정. 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
 
 ## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)
 
