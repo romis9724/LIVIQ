@@ -18,6 +18,11 @@ reauth_gmail.py         Gmail OAuth 재인증 스크립트
 - `fee_agent/` — `config`·`store`·`sheets`·`mailer`·`tools`·`agent` 모듈
 - `gmail_mcp_server.py` / `apt_mcp_server.py` — 각 MCP 서버 엔트리
 
+## 자주 하는 수정 패턴
+
+- **없음 — 이 모듈은 수정하지 않는다.** 프로토타입 동결([../docs/adr/0008-freeze-mcp-prototype.md](../docs/adr/0008-freeze-mcp-prototype.md)). 참조·재현용으로만 열람.
+- 기능이 필요하면 여기 고치지 말고 `packages/ai-core`(TS, 계획)에 재구현. Why: TS 파이프라인 밖 · 유지보수 종료.
+
 ## 의존성 (상세 그래프: [../ARCHITECTURE.md](../ARCHITECTURE.md))
 
 - 의존: 외부 — Gmail API(OAuth) · Google Sheets(서비스 계정) · Ollama 로컬 LLM

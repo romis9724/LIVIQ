@@ -33,6 +33,12 @@ pnpm --filter @liviq/web-admin typecheck
 - `src/features/notice-composer/` — 공지 **초안**만 생성, 자동발송 금지
 - `src/app/documents/` · `src/app/meetings/` — 문서·회의록 검색/요약 (출처 인용)
 
+## 자주 하는 수정 패턴
+
+- **새 관리 라우트 추가** — `src/app/<name>/page.tsx` + `src/features/<name>/` 도메인 로직 생성. 예시: `src/app/review-queue/page.tsx` · `src/features/review-queue/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
+- **features/ 도메인 로직 수정** — `src/features/<name>/`에서 데이터·컴포넌트 수정. 예시: `src/features/notice-composer/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
+- **테스트 추가** — 컴포넌트는 `<Name>.test.tsx`, 순수 로직은 `data.test.ts` 규칙. 예시: `src/features/review-queue/ReviewQueue.test.tsx` · `src/features/review-queue/data.test.ts`. 검증: `pnpm --filter @liviq/web-admin test`
+
 ## 규칙 (Why)
 
 - 공지·알림은 초안까지만. 입주민 자동발송 금지. Why: 절대규칙 6.

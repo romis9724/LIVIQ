@@ -15,9 +15,10 @@ src/index.ts              공개 배럴 — 신규 컴포넌트는 여기 export
 ## 명령
 
 ```bash
-pnpm --filter @liviq/ui build
+pnpm --filter @liviq/ui test
 pnpm --filter @liviq/ui typecheck
 pnpm --filter @liviq/ui lint
+# 자체 build 없음 — 앱이 소스를 직접 소비. 빌드 검증은 루트 `pnpm build`
 ```
 
 ## 의존성 (상세 그래프: [../../ARCHITECTURE.md](../../ARCHITECTURE.md))
@@ -32,6 +33,12 @@ pnpm --filter @liviq/ui lint
 - `src/components/citation-card/CitationCard.tsx` — 출처 표시(절대규칙 1 UI)
 - `src/components/confidence-badge/ConfidenceBadge.tsx` — AI 신뢰도 표시
 - `src/index.ts` — export 누락 시 앱에서 import 불가
+
+## 자주 하는 수정 패턴
+
+- **새 공유 컴포넌트 추가** — `src/components/<kebab-case>/PascalCase.tsx` + `PascalCase.test.tsx` 생성 후 `src/index.ts`에 export. 예시: `src/components/status-pill/StatusPill.tsx`(+`StatusPill.test.tsx`). 검증: `pnpm --filter @liviq/ui test`
+- **기존 컴포넌트 variant 추가** — 컴포넌트의 variant 타입·클래스 확장. 예시: `src/components/button/Button.tsx` (`ButtonVariant`). 검증: `pnpm --filter @liviq/ui typecheck`
+- **토큰 추가·변경** — `src/styles/tokens.css`만 수정(값 하드코딩 금지). 두 앱 전체에 파급. 검증: 루트 `pnpm build`(앱 빌드가 토큰 소비)
 
 ## 규칙 (Why)
 

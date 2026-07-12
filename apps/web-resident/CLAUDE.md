@@ -34,6 +34,12 @@ pnpm --filter @liviq/web-resident typecheck
 - `src/features/assistant/` — AI 문의 응대 UI (출처 카드·신뢰도 배지 필수)
 - `src/app/(resident)/fees/` — 관리비 조회 (ERP 값 표시만, 계산 금지)
 
+## 자주 하는 수정 패턴
+
+- **새 화면(탭) 추가** — `src/app/(resident)/<name>/page.tsx` + `src/features/<name>/<Name>View.tsx`(+css) 생성 후 `src/lib/screens.ts`의 `RESIDENT_SCREENS`에 등록. 예시: `src/features/notices/NoticeBoard.tsx` · `src/app/(resident)/notices/page.tsx`. 검증: `pnpm --filter @liviq/web-resident test`
+- **기존 화면에 컴포넌트 추가** — 해당 `src/features/<name>/`에 컴포넌트+css 추가. 예시: `src/features/assistant/AssistantChat.tsx`(+`assistant.css`). 검증: `pnpm --filter @liviq/web-resident typecheck`
+- **화면 카탈로그 수정** — 라우트·우선순위 단일 출처 `src/lib/screens.ts`. 예시 테스트: `src/lib/screens.test.ts`. 검증: `pnpm --filter @liviq/web-resident test`
+
 ## 규칙 (Why)
 
 - UI는 `@liviq/ui` 토큰·컴포넌트만 사용. 색·간격 하드코딩 금지. Why: 디자인 일관성·테마.

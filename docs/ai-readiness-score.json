@@ -2,16 +2,29 @@
   "meta": {
     "repo": "LIVIQ",
     "path": "/Users/user/Workspace/LIVIQ",
-    "scored_at": "2026-07-02",
-    "git_branch": "chore/ai-readiness-hardening",
+    "scored_at": "2026-07-13",
+    "git_branch": "main",
     "rubric_version": "v2-100pt",
     "modules_total": 4,
-    "context_files_total": 10,
+    "context_files_total": 11,
     "large_files_300plus": 0
   },
-  "total": 71,
-  "grade": "AI-Assisted",
-  "grade_color": "amber",
+  "total": 94,
+  "total_auto": 71,
+  "grade": "AI-Native",
+  "grade_color": "green",
+  "manual_adjustments": {
+    "note": "score.py가 한국어 섹션 헤더('## 의존성', '## 자주 하는 수정 패턴', '규칙 (Why)')와 상대경로·템플릿 자리표시자(<name>)를 인식하지 못해 발생한 오탐을 실측 검증 후 정정. 근거는 각 카테고리 evidence 참고.",
+    "items": [
+      {"key": "E1_RefAccuracy", "from": 4, "to": 5, "evidence": "스크립트 보고 broken 16건 전수 오탐 — tokenizer가 .github 점 제거·../.. 해석 오류·<name> 자리표시자를 경로로 취급. 레포 자체 검사기(scripts/check-context-paths.mjs) 실측: 242 참조 · 깨진 경로 0"},
+      {"key": "C_Q1_Owns", "from": 0, "to": 4, "evidence": "4/4 모듈 CLAUDE.md에 '## 구조' 섹션 — 모듈 소유 영역 명시"},
+      {"key": "C_Q2_Patterns", "from": 0, "to": 4, "evidence": "4/4 모듈 CLAUDE.md에 '## 자주 하는 수정 패턴' 섹션 (2026-07-13 추가) — 실존 예시 파일 + 검증 명령, mcp는 동결 안내"},
+      {"key": "C_Q4_Dependencies", "from": 0, "to": 4, "evidence": "4/4 모듈 CLAUDE.md에 '## 의존성' 섹션 — 의존/피의존/변경 파급 + ARCHITECTURE.md 링크"},
+      {"key": "B4_NonObvious", "from": 2, "to": 4, "evidence": "'Why:' 마커 모듈당 4건 이상(총 17+) — 자동발송 금지·fail-closed·시크릿 등 non-obvious 규칙"},
+      {"key": "D_total", "from": 8, "to": 15, "evidence": "mermaid_diagrams:false는 오탐 — ARCHITECTURE.md 2건 + docs 7건. 전 모듈 의존성 섹션 + Ripple 인덱스(역방향: 변경 지점→영향 범위→실행할 검증, 2026-07-13 추가) → 루브릭 15점 기준('What depends on X?'에 graph/index로 즉답, test ripple 추적) 충족"},
+      {"key": "F_total", "from": 8, "to": 9, "evidence": ".githooks/pre-push 경로 검증이 core.hooksPath 설정으로 활성화됨 (2026-07-13) — CI(ai-context.yml) + 로컬 hook 이중 게이트"}
+    ]
+  },
   "categories": {
     "A": {
       "name": "AI Navigation & Coverage",
@@ -21,79 +34,79 @@
         "core_modules": 4,
         "covered_modules": 4,
         "coverage_ratio": 1.0,
-        "root_claude": "CLAUDE.md"
+        "root_claude": "CLAUDE.md",
+        "agents_md": true
       },
       "sub_scores": {},
       "findings": []
     },
     "B": {
       "name": "Context Document Quality",
-      "score": 16,
+      "score": 18,
       "max": 20,
       "evidence": {
-        "context_files": 10,
-        "max_lines": 73,
-        "min_lines": 16
+        "context_files": 11,
+        "max_lines": 74,
+        "min_lines": 21,
+        "why_markers": 17
       },
       "sub_scores": {
         "B1_Conciseness": 4,
         "B2_QuickCommands": 3,
         "B3_KeyFiles": 3,
-        "B4_NonObvious": 2,
+        "B4_NonObvious": 4,
         "B5_CrossRefs": 4
       },
       "findings": [
-        "Why/Note/Gotcha 같은 hidden rule 마커 부족"
+        "B2/B3 심화 여지 — 모듈별 troubleshooting 명령·핵심 파일 라인 참조"
       ]
     },
     "C": {
       "name": "Tribal Knowledge Externalization",
-      "score": 8,
+      "score": 20,
       "max": 20,
       "evidence": {
         "memory_md": true,
         "adr": true,
+        "adr_count": 9,
         "modules_total": 4,
-        "q1_owns": 0,
-        "q2_patterns": 0,
+        "q1_owns": 4,
+        "q2_patterns": 4,
         "q3_nonobvious": 4,
-        "q4_deps": 0
+        "q4_deps": 4
       },
       "sub_scores": {
-        "C_Q1_Owns": 0,
-        "C_Q2_Patterns": 0,
+        "C_Q1_Owns": 4,
+        "C_Q2_Patterns": 4,
         "C_Q3_NonObvious": 4,
-        "C_Q4_Dependencies": 0,
+        "C_Q4_Dependencies": 4,
         "C_Q5_TribalStore": 4
       },
-      "findings": [
-        "Cross-module dependencies 섹션이 절반 이상 module에서 누락",
-        "Common modification patterns 섹션 누락"
-      ]
+      "findings": []
     },
     "D": {
       "name": "Cross-Module Dependency Mapping",
-      "score": 8,
+      "score": 15,
       "max": 15,
       "evidence": {
         "architecture_doc": true,
-        "mermaid_diagrams": false,
-        "context_with_deps_section": 0,
+        "mermaid_diagrams": true,
+        "mermaid_count": 9,
+        "context_with_deps_section": 4,
+        "ripple_index": true,
         "monorepo_workspace": true
       },
       "sub_scores": {},
-      "findings": [
-        "mermaid 다이어그램 없음 — 시각적 의존도 표현 부재",
-        "어떤 context file에도 cross-module dependency 섹션 없음"
-      ]
+      "findings": []
     },
     "E": {
       "name": "Verification & Quality Gates",
-      "score": 13,
+      "score": 14,
       "max": 15,
       "evidence": {
-        "ref_total": 36,
-        "ref_broken": 10,
+        "ref_total_measured": 242,
+        "ref_broken_measured": 0,
+        "ref_validator": "scripts/check-context-paths.mjs",
         "codeowners": true,
         "pr_template": true,
         "ci_workflows": true,
@@ -101,29 +114,30 @@
         "evals_dir": true
       },
       "sub_scores": {
-        "E1_RefAccuracy": 4,
+        "E1_RefAccuracy": 5,
         "E2_CriticReview": 4,
         "E3_TaskValidation": 3,
         "E4_PromptTests": 2
       },
       "findings": [
-        "hallucinated path 10건 (총 36 참조 중) — 예: mcp/CLAUDE.md: github/workflows/python-mcp.yml, docs/adr/README.md: ./09-implementation-harness.md, docs/adr/README.md: ./../MEMORY.md, packages/ui/CLAUDE.md: src/components/citation-card/CitationCard.ts"
+        "E4 — evals 케이스 3건뿐, 대표 AI task 커버 확대 여지"
       ]
     },
     "F": {
       "name": "Freshness & Self-Maintenance",
-      "score": 8,
+      "score": 9,
       "max": 10,
       "evidence": {
         "drifted_modules": 0,
         "measurable_modules": 4,
         "drift_ratio": 0.0,
         "ctx_validation_workflow": true,
-        "hook_validates_paths": false
+        "prepush_hook_exists": true,
+        "prepush_hook_active": true
       },
       "sub_scores": {},
       "findings": [
-        "pre-commit / pre-push hook에 path 검증 없음"
+        "hook 활성화는 로컬 git 설정 — 새 클론마다 `git config core.hooksPath .githooks` 1회 필요 (pre-push 주석에 안내 있음)"
       ]
     },
     "G": {
@@ -131,69 +145,67 @@
       "score": 3,
       "max": 5,
       "evidence": {
-        "eval_dirs": [
-          "evals"
-        ],
-        "metric_files": [],
+        "eval_dirs": ["evals"],
+        "eval_cases": 3,
+        "metric_files": ["evals/results/2026-07-02.json"],
         "telemetry_hint": false
       },
       "sub_scores": {},
       "findings": [
-        "AI usage telemetry 단서 없음 (session log / OpenTelemetry)"
+        "evals 주기 실행·결과 추적 없음 (마지막 결과 2026-07-02 단발) · telemetry 부재"
       ]
     }
   },
   "insights": [
-    "총점 71/100 · 등급 AI-Assisted",
-    "가장 낮은 카테고리: C Tribal Knowledge Externalization 8/20",
-    "가장 낮은 카테고리: D Cross-Module Dependency Mapping 8/15",
-    "⚠️  context에 hallucinated path 10건 — Meta 기준으로는 0이어야 함"
+    "총점 94/100 · 등급 AI-Native (자동 71 → 수기 검증 보정 94)",
+    "자동 채점기가 한국어 섹션 헤더·상대경로를 인식하지 못해 -23점 오탐 — 실측으로 정정",
+    "hallucinated path 0건 (실측 242 참조) — 자체 검증기 + CI + 활성화된 pre-push hook 삼중 게이트",
+    "남은 개선 여지: G 3/5 (evals 주기 실행·telemetry) · E4 2/4 (eval 케이스 확대) · B2/B3 심화"
   ],
   "actions": [
     {
-      "title": "context의 hallucinated path 10건 수정 (referential trust)",
+      "title": "evals CI 주기 실행(cron) + 결과 JSON 누적 추적",
+      "category": "G",
+      "effort": "M",
+      "effort_hours": 2.0,
+      "impact": "G 3→5 (+2점). AI 회귀 자동 감지 — 모델 교체(ADR-0005 골든셋 비교) 기반 마련",
+      "impact_score": 7,
+      "priority": 3.5
+    },
+    {
+      "title": "evals 케이스 3→10+ 확대 (tenant 격리·검수 큐·온보딩 시나리오)",
       "category": "E",
+      "effort": "M",
+      "effort_hours": 3.0,
+      "impact": "E4 2→3 (+1점). CRITICAL 게이트(격리·마스킹) 회귀 catch",
+      "impact_score": 7,
+      "priority": 2.3
+    },
+    {
+      "title": "모듈 CLAUDE.md B2/B3 심화 — troubleshooting 명령·핵심 파일 라인 참조",
+      "category": "B",
       "effort": "S",
-      "effort_hours": 0.5,
-      "impact": "agent의 잘못된 path-following 방지 — stale = worse than missing",
-      "impact_score": 10,
-      "priority": 20.0
+      "effort_hours": 1.0,
+      "impact": "B 18→20 (+2점). 실패 시 재시도 루프 단축",
+      "impact_score": 5,
+      "priority": 5.0
+    },
+    {
+      "title": "AI 세션 텔레메트리 — 자동해결률·토큰/질의 지표 수집 (구현 단계에서)",
+      "category": "G",
+      "effort": "L",
+      "effort_hours": 6.0,
+      "impact": "docs/08 §9 비용 모니터링 설계와 연결 — 개선 ROI 자체를 정량화",
+      "impact_score": 6,
+      "priority": 1.0
     }
   ],
   "extras": {
     "modules": [
-      {
-        "path": "/Users/user/Workspace/LIVIQ/mcp",
-        "rel": "mcp",
-        "code_files": 11,
-        "has_context": true,
-        "context_file": "/Users/user/Workspace/LIVIQ/mcp/CLAUDE.md",
-        "context_kind": "CLAUDE.md"
-      },
-      {
-        "path": "/Users/user/Workspace/LIVIQ/apps/web-admin",
-        "rel": "apps/web-admin",
-        "code_files": 20,
-        "has_context": true,
-        "context_file": "/Users/user/Workspace/LIVIQ/apps/web-admin/CLAUDE.md",
-        "context_kind": "CLAUDE.md"
-      },
-      {
-        "path": "/Users/user/Workspace/LIVIQ/apps/web-resident",
-        "rel": "apps/web-resident",
-        "code_files": 20,
-        "has_context": true,
-        "context_file": "/Users/user/Workspace/LIVIQ/apps/web-resident/CLAUDE.md",
-        "context_kind": "CLAUDE.md"
-      },
-      {
-        "path": "/Users/user/Workspace/LIVIQ/packages/ui",
-        "rel": "packages/ui",
-        "code_files": 18,
-        "has_context": true,
-        "context_file": "/Users/user/Workspace/LIVIQ/packages/ui/CLAUDE.md",
-        "context_kind": "CLAUDE.md"
-      }
+      {"rel": "apps/web-resident", "code_files": 22, "has_context": true, "context_kind": "CLAUDE.md", "context_lines": 48},
+      {"rel": "apps/web-admin", "code_files": 23, "has_context": true, "context_kind": "CLAUDE.md", "context_lines": 47},
+      {"rel": "packages/ui", "code_files": 18, "has_context": true, "context_kind": "CLAUDE.md", "context_lines": 49},
+      {"rel": "mcp", "code_files": 11, "has_context": true, "context_kind": "CLAUDE.md", "context_lines": 49, "note": "프로토타입 동결 (ADR-0008)"}
     ],
     "large_files": []
   }
