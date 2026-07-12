@@ -1,5 +1,7 @@
 # LIVIQ — LLM·RAG 기반 아파트 관리 지원 시스템 구축 계획서
 
+> ⚠️ **역사적 문서** — 초기 사업계획 스냅샷. 이후 결정으로 일부 내용이 대체됨(LLM은 [ADR-0005](adr/0005-single-llm-openai-compat.md), 관리비는 [ADR-0006](adr/0006-fees-excel-upload-source.md), 에이전트는 [ADR-0007](adr/0007-readonly-tool-agent.md), STT는 MVP 제외). **실행 기준은 [00](00-requirements.md)·[09](09-implementation-harness.md)·[docs/adr/](adr/README.md)**.
+
 Version 2.0
 작성일: 2026-06-20
 상태: 초안 (이해관계자 검토 전)
@@ -142,8 +144,8 @@ LIVIQ — 아파트 관리 업무 지원 AI 플랫폼
 - 한계: STT 정확도(다화자·방언·소음)에 좌우. **요약은 검수 후 회의록으로 확정**
 
 ### 5.6 AI 관리비 설명 — Phase 2, 위험 중간
-- 동작: ERP의 확정된 부과 데이터를 **읽어와** 전월·평균 대비 설명
-- 원칙: AI는 **계산하지 않고 설명만**. 금액 산출은 ERP가 단일 출처(source of truth)
+- 동작: 확정 관리비 데이터(관리자 엑셀 업로드, 추후 ERP 병행)를 **읽어와** 전월·평균 대비 설명
+- 원칙: AI는 **계산하지 않고 설명만**. 금액 산출은 확정 업로드 데이터가 단일 출처(source of truth)
 
 ### 5.7 (검토) 감정 분석 기반 민원 우선순위 — 보류
 - 감정 분석은 한국어 짧은 민원에서 정확도가 낮고 오분류 리스크가 크다.

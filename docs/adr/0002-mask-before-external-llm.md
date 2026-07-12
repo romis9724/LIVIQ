@@ -1,13 +1,14 @@
 # ADR-0002: 외부 LLM 호출 전 마스킹 (fail-closed)
 
 - 상태: Accepted
+- 갱신: 2026-07-13 — [ADR-0005](0005-single-llm-openai-compat.md)에서 **전 프로바이더(self-hosted 포함)로 확대** 적용
 - 날짜: 2026-06-20
 - 관련: [docs/06-security-privacy.md](../06-security-privacy.md), [MEMORY.md](../../MEMORY.md)
 
 ## 맥락
 
 입주민 문의·문서에는 개인정보(이름·동호수·연락처·차량번호 등)가 섞인다. 응대·요약을 위해
-외부 LLM(Claude 등)을 호출하는데, 개인정보가 외부로 유출되면 법규 위반·신뢰 붕괴다.
+LLM(당시 외부 API 전제)을 호출하는데, 개인정보가 외부로 유출되면 법규 위반·신뢰 붕괴다.
 
 ## 결정
 

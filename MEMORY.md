@@ -15,7 +15,7 @@
 
 ## 보안·개인정보 (CRITICAL, 협상 불가)
 
-- **개인정보 → 외부 LLM 전송 전 마스킹, 실패 시 호출 중단(fail-closed).** "일단 보내고 나중에" 없음.
+- **개인정보 → LLM 전송 전 마스킹(전 프로바이더, self-hosted 포함), 실패 시 호출 중단(fail-closed).** "일단 보내고 나중에" 없음.
   [ADR-0002](docs/adr/0002-mask-before-external-llm.md)
 - **tenant 격리는 이중 방어**: 앱 쿼리의 `tenant_id` + DB RLS. 하나만으로 신뢰하지 않는다.
 - **시크릿 파일**: `mcp/service-credential.json`·`tokens.json`은 `.gitignore`로 차단, 로컬 전용.
@@ -23,7 +23,7 @@
 
 ## 도메인 규칙 (놓치기 쉬움)
 
-- **관리비는 ERP가 단일 출처.** AI는 값을 설명만, 계산·부과 절대 금지. [ADR-0003](docs/adr/0003-erp-single-source-fees.md)
+- **관리비는 확정 업로드 데이터(엑셀, 추후 ERP)가 단일 출처.** AI는 값을 설명만, 계산·부과 절대 금지. [ADR-0006](docs/adr/0006-fees-excel-upload-source.md)
 - **입주민 대상 공지·알림은 초안까지만.** 자동발송 금지 — 사람이 검수 후 발송(관리 웹 review-queue).
 - **출처 없는 AI 답변 금지.** 근거 문서·조항 인용 못 하면 지어내지 말고 담당자 연결 폴백.
 - **신뢰도 낮은 답변은 검수 큐로.** `apps/web-admin/src/app/review-queue/`.

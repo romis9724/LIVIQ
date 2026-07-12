@@ -1,4 +1,4 @@
-# CLAUDE.md — LIVIQ 프로젝트 가이드
+# AGENTS.md — LIVIQ 프로젝트 가이드
 
 아파트 관리 **AI 플랫폼**. 기존 시스템·문서 위에 얹는 **AI 검색·응대·요약 계층**이다.
 입주민 앱/관리 웹을 재구현하는 프로젝트가 아니다.
@@ -7,13 +7,13 @@
 
 ## 절대 규칙 (어기면 안 됨)
 
-1. **출처 없는 AI 답변 금지.** 모든 답변에 검증된 근거(문서 조항 **또는** 확정 데이터·도구 결과) 인용. 근거 없으면 지어내지 말고 **담당자 연결 폴백**.
+1. **출처 없는 AI 답변 금지.** 모든 답변에 근거 문서·조항 인용. 근거 없으면 지어내지 말고 **담당자 연결 폴백**.
 2. **개인정보는 LLM에 전송 금지(전 프로바이더, self-hosted 포함).** 호출 직전 마스킹/가명화, 실패 시 호출 중단(fail-closed).
 3. **단지(tenant) 격리.** 모든 쿼리에 `tenant_id` + DB RLS 이중 방어. 단지 간 데이터 혼입 절대 금지.
 4. **인가는 서버에서.** 프론트 메뉴 숨김은 보조일 뿐. 모든 엔드포인트가 역할·테넌트·소유권 검증.
 5. **관리비는 확정 업로드 데이터(엑셀, 추후 ERP)가 단일 출처.** AI는 설명만, 계산·부과 금지.
 6. **위험 출력은 사람 검수.** 입주민 자동발송 공지 금지(초안까지만). 신뢰도 낮은 답변은 검수 큐.
-7. **토큰은 비용.** 캐싱·컨텍스트 예산·에이전트 스텝 상한 적용(단일 모델, 라우팅 보류)([docs/08](docs/08-llm-token-optimization.md)).
+7. **토큰은 비용.** 캐싱·컨텍스트 예산 적용(단일 모델 — 라우팅은 보류)([docs/08](docs/08-llm-token-optimization.md)).
 8. **액션은 코드가 실행.** LLM 출력으로 권한·발송 등 부수효과를 직접 트리거하지 않음. (에이전트 도구는 읽기 전용 — 쓰기는 UI/폼)
 
 ## 스택
@@ -29,7 +29,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 ```text
 apps/      web-resident · web-admin          # Next.js 웹 2종
 packages/  ui · config-ts                    # 공유 컴포넌트/설정
-mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
+mcp/       gmail·apt MCP 서버 · management_agent (Python)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
@@ -71,4 +71,4 @@ pnpm start       # turbo run start (build 후)
 요구사항 [00](docs/00-requirements.md) · 아키텍처 [01](docs/01-architecture.md) · 디렉토리 [02](docs/02-directory-structure.md) ·
 DB [03](docs/03-database-design.md) · 메뉴 [04](docs/04-menu-structure.md) · UI/UX [05](docs/05-ui-ux-design.md) ·
 보안 [06](docs/06-security-privacy.md) · 테스트 [07](docs/07-testing-strategy.md) · 토큰 [08](docs/08-llm-token-optimization.md) ·
-구현 [09](docs/09-implementation-harness.md) · 데이터 [11](docs/11-data-architecture.md) · ADR [docs/adr/](docs/adr/README.md)
+구현 [09](docs/09-implementation-harness.md)

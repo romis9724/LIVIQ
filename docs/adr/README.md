@@ -12,5 +12,10 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 |---|------|------|
 | [0001](0001-monorepo-layered-ai.md) | 모노레포 + AI 계층 아키텍처 | Accepted |
 | [0002](0002-mask-before-external-llm.md) | 외부 LLM 호출 전 마스킹 (fail-closed) | Accepted |
-| [0003](0003-erp-single-source-fees.md) | 관리비는 ERP 단일 출처, AI는 설명만 | Accepted |
+| [0003](0003-erp-single-source-fees.md) | 관리비는 ERP 단일 출처, AI는 설명만 | Superseded by 0006 |
 | [0004](0004-mcp-module-split-shared-store.md) | mcp 에이전트 모듈 분할 + 공유 store | Accepted |
+| [0005](0005-single-llm-openai-compat.md) | 단일 LLM + OpenAI-호환 엔드포인트 추상화 · 임베딩 bge-m3 고정 | Accepted |
+| [0006](0006-fees-excel-upload-source.md) | 관리비 원천 = 엑셀 업로드(ERP 어댑터는 추후) | Accepted |
+| [0007](0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 (정적 라우터 대체) | Accepted |
+| [0008](0008-freeze-mcp-prototype.md) | mcp/ 프로토타입 동결 — 신규 AI는 ai-core | Accepted |
+| [0009](0009-neo4j-in-mvp.md) | Neo4j를 MVP부터 포함 (FR-FAC-02 Must 승격) | Accepted |

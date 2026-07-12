@@ -50,10 +50,11 @@ docs/            설계·계획 문서    refs/  참조 자료
 ## 규칙 (요약 · 상세는 CLAUDE.md)
 
 > **출처 없는 AI 답변 금지** · **개인정보 외부 LLM 전송 전 마스킹(fail-closed)** ·
-> **tenant 격리(tenant_id + RLS)** · **인가는 서버에서** · **관리비는 ERP 단일 출처** ·
+> **tenant 격리(tenant_id + RLS)** · **인가는 서버에서** · **관리비는 확정 업로드(엑셀) 데이터 단일 출처** ·
 > **위험 출력은 사람 검수(자동발송 금지)**.
 
 ## 스택
 
 TypeScript · Turborepo + pnpm · Next.js · (계획) NestJS · Drizzle ORM ·
-PostgreSQL 16 + pgvector · Redis + BullMQ · Zod · 외부 LLM API(Claude 우선).
+PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis + BullMQ · Zod ·
+LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM 등, env 교체) · 임베딩 bge-m3.

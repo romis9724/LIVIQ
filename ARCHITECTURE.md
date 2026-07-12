@@ -35,7 +35,7 @@ graph TD
   MA -.-> GM
   MA -.-> APT
   GM -.->|OAuth| EXT["Gmail API"]
-  APT -.-> ERP["아파트 관리 시스템"]
+  APT -.-> ERP["(추후) ERP"]
 ```
 
 ## 목표 아키텍처 (계획 · 아직 미존재)
@@ -49,7 +49,7 @@ graph LR
   API --> WORKER["apps/ai-worker<br/>(BullMQ)"]
   DB --> PG[("PostgreSQL 16<br/>+ pgvector")]
   WORKER --> REDIS[("Redis")]
-  AICORE -.->|마스킹 후| LLM["외부 LLM (Claude)"]
+  AICORE -.->|마스킹 후| LLM["LLM 엔드포인트 (OpenAI-호환: Ollama·vLLM 등)"]
 ```
 
 계획 컴포넌트를 도입할 때 위 그래프를 **현재 그래프로 승격**하고 이 표를 갱신한다.
@@ -69,4 +69,4 @@ graph LR
 - `packages/ui`는 앱을 import하지 않는다(단방향). Why: 순환 의존 방지·재사용.
 - `mcp/`(Python)는 TS 워크스페이스와 코드 공유 없음. 계약은 MCP 프로토콜로만. Why: 언어 경계.
 - 외부(ERP/LLM/Gmail)는 어댑터 뒤에 둔다. Why: 교체 가능성·마스킹 삽입 지점 확보([docs/06](docs/06-security-privacy.md)).
-- 개인정보는 외부 LLM 경계를 넘기 전 반드시 마스킹(fail-closed). Why: 절대규칙 2.
+- 개인정보는 LLM 경계를 넘기 전 반드시 마스킹(fail-closed, self-hosted 포함). Why: 절대규칙 2.

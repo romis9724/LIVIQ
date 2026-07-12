@@ -1,6 +1,6 @@
 # ADR-0003: 관리비는 ERP 단일 출처, AI는 설명만
 
-- 상태: Accepted
+- 상태: Superseded by [ADR-0006](0006-fees-excel-upload-source.md)
 - 날짜: 2026-06-20
 - 관련: [docs/00-requirements.md](../00-requirements.md), [MEMORY.md](../../MEMORY.md)
 

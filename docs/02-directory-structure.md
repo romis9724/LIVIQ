@@ -1,7 +1,9 @@
 # 02. 디렉토리 구조 설계
 
 > 아키텍처: [01-architecture.md](01-architecture.md) · 인덱스: [README.md](README.md)
-> 스택: Turborepo + pnpm + Next.js + NestJS + Drizzle + PostgreSQL/pgvector (TypeScript 전 영역)
+> 스택: Turborepo + pnpm + Next.js + NestJS + Drizzle + PostgreSQL/pgvector + Neo4j (TypeScript 전 영역)
+
+> 본 문서는 **목표 구조**다. 현재 구현 현황은 [CLAUDE.md](../CLAUDE.md) '구조' 절 참조.
 
 ## 1. 원칙
 
@@ -18,7 +20,7 @@ LIVIQ/
 │   ├── web-resident/      # 입주민 반응형 웹/PWA (Next.js)
 │   ├── web-admin/         # 관리자·시설·입대의 콘솔 (Next.js)
 │   ├── api/               # NestJS (도메인 API + BFF + AI 오케스트레이션 진입)
-│   └── ai-worker/         # BullMQ 워커 (인제스트/OCR/STT/임베딩/요약/평가)
+│   └── ai-worker/         # BullMQ 워커 (인제스트/OCR/임베딩/평가/graph-sync)
 ├── packages/
 │   ├── ai-core/           # RAG·오케스트레이션·LLM 어댑터·토큰예산 (프레임워크 비의존)
 │   ├── db/                # Drizzle 스키마·마이그레이션·RLS·시드
@@ -39,6 +41,8 @@ LIVIQ/
 ├── CLAUDE.md              # 프로젝트 가이드 (루트, Claude Code 자동 로드)
 └── README.md             # 기획/계획서
 ```
+
+> `mcp/`(레포 실존): Python 프로토타입 **동결** — 참고용. 신규 AI 기능은 `packages/ai-core`([ADR-0008](adr/0008-freeze-mcp-prototype.md)).
 
 ## 3. `apps/web-resident` (Next.js, 기능 단위)
 
@@ -68,7 +72,7 @@ web-resident/
 └── package.json
 ```
 
-> `web-admin`도 동일 패턴. 라우트: `documents/`, `inquiries/`, `notices/`(초안·검수), `review-queue/`(AI 검수), `facilities/`, `meetings/`, `dashboard/`, `settings/`.
+> `web-admin`도 동일 패턴. 라우트: `documents/`, `inquiries/`, `notices/`(초안·검수), `review-queue/`(AI 검수), `facilities/`, `fees/`(엑셀 업로드), `onboarding/`(가입 승인), `dashboard/`, `settings/`.
 
 ## 4. `apps/api` (NestJS, 도메인 모듈)
 
@@ -90,14 +94,13 @@ api/
 │   │   ├── assistant/             # 질의 오케스트레이션 (ai-core 사용)
 │   │   ├── inquiries/             # 민원·자동분류
 │   │   ├── notices/               # 공지 초안·발송
-│   │   ├── fees/                  # 관리비 조회(ERP 어댑터)+설명
+│   │   ├── fees/                  # 관리비 조회(엑셀 업로드 원천)+AI 설명
 │   │   ├── facilities/            # 시설·이력
-│   │   ├── meetings/              # 회의록 요약
 │   │   ├── review/                # AI 검수 큐
 │   │   ├── consents/              # 개인정보 동의
 │   │   └── audit/                 # 감사 로그
 │   ├── integrations/
-│   │   └── erp/                   # 기존 ERP 어댑터 (읽기 전용, 인터페이스+구현)
+│   │   └── erp/                   # (추후) ERP 어댑터 — 도입 시 활성, 현재는 인터페이스 자리만
 │   └── config/                    # env 검증(Zod), 시크릿 로더
 └── package.json
 ```
@@ -111,11 +114,12 @@ api/
 ```text
 ai-core/
 ├── src/
-│   ├── orchestrator.ts            # 의도분류→검색→생성→후처리 파이프
-│   ├── intent/                    # 분류기
+│   ├── orchestrator.ts            # 캐시→의도분류→에이전트 루프(스텝 상한)→후처리
+│   ├── intent/                    # 분류기 (AI처리/사람연결/캐시 1차 분기)
+│   ├── tools/                     # 도구 레지스트리 — retrieval(pgvector)·graph(Neo4j)·sql(고정 조회). 전부 읽기 전용, 파라미터 Zod 검증·tenant/소유권 강제
 │   ├── retrieval/                 # 임베딩·벡터검색·리랭킹
 │   ├── generation/                # 프롬프트 빌더·LLM 호출
-│   ├── llm/                       # provider 어댑터 (Claude 등), 토큰 카운트
+│   ├── llm/                       # OpenAI-호환 클라이언트(env로 프로바이더 교체), 토큰 카운트
 │   ├── budget/                    # 컨텍스트 예산·청크 선택 ([08])
 │   ├── cache/                     # 정확/의미 캐시 인터페이스
 │   ├── pii/                       # 마스킹/가명화 (api와 공유)
