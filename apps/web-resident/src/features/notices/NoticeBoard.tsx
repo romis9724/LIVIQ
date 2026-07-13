@@ -17,13 +17,6 @@ interface Notice {
   summary: string;
 }
 
-const KIND_LABEL: Record<NoticeKind, string> = {
-  important: "중요",
-  life: "생활",
-  work: "공사",
-  event: "행사",
-};
-
 const NOTICES: readonly Notice[] = [
   {
     id: "n1",
