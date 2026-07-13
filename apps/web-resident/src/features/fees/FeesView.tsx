@@ -80,7 +80,7 @@ export function FeesView() {
               것으로 추정됩니다.
             </p>
             <div className="fees-explain__basis">
-              <span aria-hidden="true">🔎</span> 기준: <strong>2026-05 ERP 확정 데이터</strong>. AI는
+              <span aria-hidden="true">🔎</span> 기준: <strong>2026-05 확정 관리비 데이터(업로드)</strong>. AI는
               확정 금액을 조회·설명만 하며 직접 계산하지 않습니다. 정확한 산출 내역은 관리사무소에서
               확인할 수 있습니다.
             </div>

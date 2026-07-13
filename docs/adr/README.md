@@ -19,3 +19,6 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0007](0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 (정적 라우터 대체) | Accepted |
 | [0008](0008-freeze-mcp-prototype.md) | mcp/ 프로토타입 동결 — 신규 AI는 ai-core | Accepted |
 | [0009](0009-neo4j-in-mvp.md) | Neo4j를 MVP부터 포함 (FR-FAC-02 Must 승격) | Accepted |
+| [0010](0010-envelope-encryption-env-master-key.md) | pii_vault 봉투 암호화 — env 마스터 키, KMS는 확장 시 승격 | Accepted |
+| [0011](0011-redis-server-session.md) | Redis 서버 세션 + httpOnly 쿠키 (JWT stateless 대신) | Accepted |
+| [0012](0012-in-app-notification-only.md) | MVP 알림은 인앱 알림함만, 웹푸시는 Phase 2 | Accepted |

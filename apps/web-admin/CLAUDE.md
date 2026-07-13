@@ -6,7 +6,7 @@
 ## 구조
 
 ```text
-src/app/    dashboard · inquiries · notices(+new) · review-queue · meetings · documents · facilities
+src/app/    dashboard · inquiries · notices(+new) · review-queue · documents · facilities
 src/features/   위 라우트별 도메인 로직 (inquiry-admin · notice-composer · dashboard · review-queue …)
 src/components/admin-shell/   관리 셸(내비/레이아웃)
 ```
@@ -34,7 +34,7 @@ pnpm --filter @liviq/web-admin test src/features/review-queue/data.test.ts # 단
 
 - `src/app/review-queue/page.tsx` — 신뢰도 낮은 AI 출력 사람 검수 큐 (절대규칙 6)
 - `src/features/notice-composer/NoticeComposer.tsx` — 공지 **초안**만 생성, 자동발송 금지
-- `src/app/documents/page.tsx` · `src/app/meetings/page.tsx` — 문서·회의록 검색/요약 (출처 인용)
+- `src/app/documents/page.tsx` — 문서 검색/요약 (출처 인용 · 회의록은 문서 유형으로 통합)
 
 ## 자주 하는 수정 패턴
 

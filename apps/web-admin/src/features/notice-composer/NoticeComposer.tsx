@@ -82,7 +82,7 @@ export function NoticeComposer() {
       <Dialog
         open={dialogOpen}
         title="공지를 발송할까요?"
-        description="[중요] 6/22(월) 새벽 단수 안내 · 대상 1,204세대 · 검수 완료. 발송 후에는 수정할 수 없으며 입주민 앱·푸시로 즉시 전달됩니다."
+        description="[중요] 6/22(월) 새벽 단수 안내 · 대상 1,204세대 · 검수 완료. 발송 후에는 수정할 수 없으며 입주민 앱 알림함으로 전달됩니다."
         confirmLabel="발송 확인"
         onCancel={() => setDialogOpen(false)}
         onConfirm={() => {

@@ -1,0 +1,82 @@
+# LIVIQ 로컬 개발 인프라 (docker compose)
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# 값은 레포 루트 .env.example 기본값과 정합한다(그대로 쓰면 앱 env가 바로 붙음).
+# 이 파일의 자격증명은 로컬 개발 전용 — 운영은 시크릿 매니저로 주입한다.
+# 버전 태그는 (초기값)이며, 운영 전 고정 태그로 핀 고정한다.
+
+services:
+  # PostgreSQL 16 + pgvector.
+  # NOTE: `CREATE EXTENSION vector`는 이 이미지에 확장 바이너리만 포함될 뿐
+  #       활성화는 packages/db 첫 마이그레이션에서 수행한다(여기서 하지 않음).
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: liviq
+      POSTGRES_PASSWORD: liviq
+      POSTGRES_DB: liviq
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liviq -d liviq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis — 서버 세션(ADR-0011) · 캐시 · BullMQ 큐 겸용.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MinIO — S3 호환 오브젝트 스토리지. API 9000 / 콘솔 9001.
+  # NOTE: 버킷(liviq)은 자동 생성되지 않는다 — 앱/셋업 단계에서 생성한다.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Neo4j 5 community — 시설 파생 그래프(ADR-0009). 벡터 인덱스는 5.13+ 내장.
+  # HTTP 7474 / Bolt 7687. 자격증명은 NEO4J_AUTH로 초기화(비밀번호 8자 이상 요구).
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/liviqlocal
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p liviqlocal 'RETURN 1' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  neo4jdata:

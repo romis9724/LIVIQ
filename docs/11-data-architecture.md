@@ -7,10 +7,10 @@
 
 | 스토어 | 담는 것 | 안 담는 것 | 격리 |
 |--------|---------|-----------|------|
-| **PostgreSQL 16 + pgvector** (SoR) | 업무 전 도메인(계정·세대·문서메타·대화·민원·공지·시설·회의록(문서)·관리비·평면도·감사·큐) + **문서 임베딩**(`document_chunks`) | 시설 텍스트 임베딩(→Neo4j), 원본 파일 바이트(→S3) | **RLS** 행 격리(`tenant_id`) |
+| **PostgreSQL 16 + pgvector** (SoR) | 업무 전 도메인(계정·세대·문서메타·대화·민원·공지·**인앱 알림함**(`notifications`)·시설·회의록(문서)·관리비·평면도·감사·큐) + **문서 임베딩**(`document_chunks`) | 시설 텍스트 임베딩(→Neo4j), 원본 파일 바이트(→S3) | **RLS** 행 격리(`tenant_id`) |
 | **Neo4j** (파생) | 시설 도메인 그래프(설비·장애·정비·부품·위치) + **시설 텍스트 벡터**(노드 프로퍼티) | 업무 원천(항상 PG가 SoR), 문서 임베딩 | `tenant_id` 노드 프로퍼티 + **쿼리 레이어 강제 필터** |
 | **Redis** | 응답 캐시(정확/의미)·세션·BullMQ 큐 | 영속 원천 데이터 | 키 프리픽스 `tenant:{id}:` |
-| **S3 호환** | 원본 파일(문서·음성)·평면도 이미지·업로드 엑셀 | 정형/관계 데이터·임베딩 | 키 프리픽스 `{tenant_id}/`, 서명 URL |
+| **S3 호환** | 원본 파일(문서)·평면도 이미지·업로드 엑셀 | 정형/관계 데이터·임베딩 | 키 프리픽스 `{tenant_id}/`, 서명 URL |
 
 ## 2. 데이터 배치 결정표
 
@@ -29,7 +29,7 @@
 
 ### 3.1 문서 인제스트
 
-업로드 원본은 S3, 정규화 텍스트·임베딩은 pgvector. `content_hash`로 멱등, 버전 변경 시 증분 재색인.
+업로드 원본은 S3, 정규화 텍스트·임베딩은 pgvector. `content_hash`로 멱등, 버전 변경 시 증분 재색인. **발송된 공지도 인제스트 트리거** — `documents`(`source_type=공지`)로 자동 색인, 정정·철회 시 재색인/제거.
 
 ```mermaid
 flowchart LR
@@ -93,13 +93,17 @@ flowchart LR
 
 ### 3.4 온보딩·명부
 
-소장 명부 엑셀이 `users`를 사전 생성. 입주민 가입은 Google OAuth + 정보 입력 후 사전등록 행과 자동 대조, 소장 최종 승인으로 `active`. 스키마: [03 §4.1](03-database-design.md).
+소장 명부 엑셀이 `users`를 사전 생성. 입주민 가입은 Google OAuth → **단지 초대코드**(tenant 확정) → **개인정보 동의**(`policy_version` 기록) → 정보 입력(**만 14세 미만 차단**) → 사전등록 행과 자동 대조, 소장 최종 승인으로 `active`. 명부 재업로드는 **diff 병합**(`pre_registered`만 교체, 매칭된 `pending`/`active` 불변, 빠진 세대는 '전출 후보'로 표시). 스키마: [03 §4.1](03-database-design.md).
 
 ```mermaid
 flowchart TD
   RX[소장 명부 엑셀] --> PR[(users 사전생성 pre_registered · login_id NULL)]
-  G[입주민 Google 로그인] --> INF[정보 입력]
-  INF --> MT{자동 대조 성함+생일+동·호}
+  G[입주민 Google 로그인] --> IV[단지 초대코드 입력 tenant 확정]
+  IV --> CS[개인정보 동의 필수·선택 policy_version 기록]
+  CS --> INF[정보 입력 성함·생일·동·호]
+  INF --> AGE{만 14세 이상?}
+  AGE -->|미만| BLK[가입 차단]
+  AGE -->|이상| MT{자동 대조 성함+생일+동·호}
   PR -.대조대상.-> MT
   MT -->|일치| P1[pending · roster_matched=true 명부일치 배지]
   MT -->|불일치| P2[pending 신규 행]

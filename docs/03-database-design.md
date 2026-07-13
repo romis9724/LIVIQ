@@ -29,6 +29,7 @@ erDiagram
   tenants ||--o{ outbox_events : "이벤트"
   tenants ||--o{ audit_logs : "감사"
   tenants ||--o{ jobs : "작업"
+  tenants ||--o{ notifications : "알림"
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
   unit_types ||--o{ floor_plans : "평면도"
@@ -40,6 +41,7 @@ erDiagram
   users ||--o| pii_vault : "분리저장"
   users ||--o{ user_roles : "역할"
   users ||--o{ consents : "동의"
+  users ||--o{ notifications : "수신"
   documents ||--o{ document_chunks : "청크"
   document_chunks ||--o{ citations : "근거"
   conversations ||--o{ messages : "메시지"
@@ -178,6 +180,14 @@ erDiagram
     uuid notice_id FK
     string review_status
   }
+  notifications {
+    uuid id PK
+    uuid tenant_id FK
+    uuid user_id FK
+    string type
+    string title
+    timestamptz read_at
+  }
   facilities {
     uuid id PK
     uuid tenant_id FK
@@ -237,7 +247,12 @@ erDiagram
 ## 3. 공통 컬럼 규약
 
 모든 업무 테이블: `id (uuid pk)`, `tenant_id (uuid, fk→tenants)`, `created_at`, `updated_at`.
-삭제는 가급적 `deleted_at`(soft delete). 개인정보 포함 테이블은 보관기간 정책 적용([06]).
+
+- **금액**: `numeric(12,0)` — KRW **원 단위 정수**(소수 없음). 계산·부과는 원천 데이터, AI는 설명만(§1).
+- **시각**: `timestamptz`(UTC 저장), 표시는 `Asia/Seoul`.
+- **soft delete**: `deleted_at timestamptz NULL` 적용 테이블 = `documents`·`notices`·`inquiries`·`facilities`·`users`. 이 테이블의 `UNIQUE`는 **partial unique index** `WHERE deleted_at IS NULL`로 걸어 삭제 후 재등록을 허용.
+- **updated_at**: DB 트리거로 자동 갱신(앱 누락 방지).
+- 개인정보 포함 테이블은 보관기간·파기 정책 적용([06 §4.4](06-security-privacy.md)).
 
 ## 4. 핵심 테이블
 
@@ -260,7 +275,8 @@ households(id, tenant_id, building_id, floor int, unit_no int,
 -- 사용자 (식별정보는 pii_vault로 분리)
 users(id, tenant_id, household_id NULL,
       login_id UNIQUE NULL,          -- OAuth subject(Google sub). 명부 사전등록 행은 NULL
-      status,                        -- pre_registered|pending|active|inactive|rejected
+      status,                        -- pre_registered|pending|active|inactive|rejected|withdrawn
+                                     --   inactive=전출(1년 보관) · withdrawn=탈퇴(즉시 비식별, [06 §4.4])
       roster_matched bool,           -- 가입 시 명부 사전등록 행과 자동 대조 일치 여부
       pii_ref uuid NULL,             -- pii_vault.id
       approved_by NULL, approved_at NULL, rejected_reason NULL,  -- 소장 승인/거절
@@ -285,6 +301,8 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 > 사전등록 행과 **자동 대조**(성함+생일+동·호)한다 — 일치 시 해당 행에 `login_id`를 채우고 `roster_matched=true`로
 > `pending` 전이(명부 일치 배지), 불일치 시 신규 행을 `pending`으로 만든다. 소장 최종 승인으로 `active`(거절은 `rejected`+사유).
 > 전체 흐름: [11 §온보딩·명부](11-data-architecture.md).
+>
+> **명부 재업로드(diff 병합)**: 재업로드 시 기존 `pre_registered` 행과 (성함+생일+동·호) 키로 diff — 신규는 추가, 명부에서 사라진 행은 `inactive`(전출 추정) 표시(자동 삭제 금지, 소장 확인). 이미 `active`로 가입한 세대 계정은 유지.
 
 ### 4.2 문서·벡터 (RAG)
 
@@ -332,12 +350,13 @@ citations(id, tenant_id, message_id,
           source_ref,                                  -- chunk_id 외 원천 식별자(fee period·facility_id 등)
           source_revision,                             -- 원천 버전(문서 version·관리비 period·upload_id)
           observed_at,                                 -- 근거 관측 시점
-          document_id NULL, chunk_id NULL,             -- 문서 인용일 때만(그 외 NULL)
+          document_id NULL, chunk_id NULL,             -- 문서 인용일 때만(그 외 NULL). chunk_id FK: ON DELETE SET NULL
           quote text, page int, clause)                -- 응답 근거 (실재 검증됨)
 ```
 
 > **인용은 문서에 한정하지 않는다.** 문서 인용은 `source_kind`의 한 종류일 뿐, 도구 결과(관리비·민원·시설·그래프) 근거도 동일 테이블로 추적한다.
 > 신뢰도 임계 미만 응답은 `messages.review_status=needs_review` + 사용자에겐 폴백 안내(사후 검수로 골든셋 개선).
+> **과거 답변 출처 보존**: `chunk_id`는 청크 재색인·삭제 시 `ON DELETE SET NULL`. 원문 청크가 사라져도 `quote`·`source_revision`으로 답변 시점의 근거를 열람할 수 있다.
 
 ### 4.4 민원·공지
 
@@ -351,13 +370,19 @@ inquiries(id, tenant_id, household_id, author_user_id,
           assignee_user_id NULL, attachments jsonb,
           created_at, updated_at)
 
-notices(id, tenant_id, title, body text, status,       -- draft|published
+notices(id, tenant_id, title, body text, status,       -- draft|published|retracted|superseded
+        scheduled_at NULL,                              -- 예약 발송 시각(단일 컬럼; NULL=즉시). 발송 후 정정=superseded, 철회=retracted
         published_at, published_by, audience,           -- ALL|building|household
         created_at, updated_at)
 
 notice_drafts(id, tenant_id, notice_id NULL, prompt_keywords jsonb,
               ai_body text, reviewed_by NULL, review_status,  -- pending|approved|rejected
               created_at)                                      -- 자동발송 금지: 검수 후 notices로 승격
+
+-- 인앱 알림함 (앱 내 알림만, 외부 자동발송 아님)
+notifications(id, tenant_id, user_id, type,            -- notice|inquiry_status|approval|system
+              title, body text, link,                  -- link=앱 내 딥링크
+              read_at NULL, created_at)                 -- RLS 대상(본인 알림만 열람)
 ```
 
 ### 4.5 시설·회의
@@ -385,7 +410,7 @@ incidents(id, tenant_id, facility_id, occurred_at, symptom text,
 ### 4.6 관리비 (엑셀 업로드 원천, 추후 ERP 병행)
 
 ```sql
--- 관리자 엑셀 업로드가 원천. AI는 설명만(계산 X). 같은 월 재업로드 = 해당 월 전체 교체.
+-- 관리자 엑셀 업로드가 원천. AI는 설명만(계산 X). 재업로드 = 해당 (tenant, period) 전 행 삭제 후 삽입(단일 트랜잭션, 전체 교체).
 fees(id, tenant_id, household_id, period,            -- YYYY-MM
      breakdown jsonb,                                 -- 항목별 금액 {일반관리비, 청소비, 난방, ...}
      total_amount numeric,
@@ -402,7 +427,7 @@ excel_uploads(id, tenant_id, type,                    -- fee | roster
               uploaded_by, created_at)
 ```
 
-> 업로드 플로우: 업로드 → 파싱·Zod 검증 → 오류 리포트/미리보기 → 확정 적용(`fees` upsert, 같은 월 전체 교체). 상세: [11 §관리비 엑셀 업로드](11-data-architecture.md).
+> 업로드 플로우: 업로드 → 파싱·Zod 검증 → 오류 리포트/미리보기 → 확정 적용. 확정 적용은 **해당 `(tenant_id, period)`의 기존 `fees` 전 행 삭제 후 재삽입**(단일 트랜잭션 = docs/11의 "전체 교체"). 상세: [11 §관리비 엑셀 업로드](11-data-architecture.md).
 
 ### 4.7 운영·AI 품질·작업
 
@@ -421,6 +446,8 @@ jobs(id, tenant_id, type,                                   -- ingest|ocr|reembe
      ref_id, status, attempts int, error text NULL,
      created_at, updated_at)
 ```
+
+> **`audit_logs` append-only 강제**: 런타임 DB role에 `INSERT`·`SELECT`만 `GRANT`, `UPDATE`·`DELETE`는 `REVOKE`(RLS와 동일한 마이그레이션 게이트에서 설정). 앱 코드 규율이 아니라 **권한으로 수정·삭제 차단**.
 
 ### 4.8 평면도·디지털트윈
 
@@ -465,6 +492,7 @@ outbox_events(id, tenant_id, aggregate_type,          -- facility|incident|maint
 
 > 시설 도메인 쓰기 트랜잭션에서 도메인 행과 `outbox_events`를 **원자적으로** 기록 → `ai-worker`가 순차 반영(MERGE). Neo4j는 파생·재생성 가능(전체 리플레이로 재구성). 상세 흐름: [11 §PG→Neo4j 동기화](11-data-architecture.md).
 > **워커 처리 규칙**: `FOR UPDATE SKIP LOCKED`로 이벤트 claim(중복 처리 방지). Neo4j 노드에 `last_applied_version`을 저장해 더 오래된 이벤트는 거부(순서 역전 방지). delete는 노드 삭제가 아니라 **tombstone 이벤트**로 처리(지연 도착한 update가 삭제된 노드를 재생성하지 못하게). 최대 재시도 초과 시 **DLQ**(`status=failed`)로 격리 후 운영자가 재처리.
+> **DLQ 정책**: `payload`는 aggregate **전체 스냅샷**. 한 이벤트가 DLQ로 격리돼도 **후속 이벤트 처리는 계속 진행**하며, DLQ 재처리는 중간 이벤트를 순차 재생하지 않고 **최신 스냅샷 리플레이**로 수렴시킨다.
 
 ## 5. RLS (행 수준 보안)
 
@@ -482,25 +510,34 @@ CREATE POLICY tenant_isolation ON documents
 - **트랜잭션 래퍼 강제**: 모든 쿼리는 tenant 컨텍스트가 설정된 트랜잭션 래퍼 안에서만 실행 — 래퍼 밖 쿼리는 구조적으로 금지.
 - **composite FK로 cross-tenant 참조 차단**: 부모 `UNIQUE(tenant_id, id)` + 자식 `FK(tenant_id, parent_id) → 부모(tenant_id, id)`로 다른 단지 행 참조를 DB가 거부.
 - **컨텍스트 미설정 시 fail-closed**: `app.tenant_id` 미설정이면 `nullif(...)`가 NULL → 정책이 거짓 → 읽기·쓰기 **모두 실패**.
-- `SYS_ADMIN`은 단지 업무 데이터 RLS를 우회하지 **않는다**(메타/모니터링 테이블만 접근). 단지 콘텐츠 열람은 별도 승인·감사 필요([06]).
+- `SYS_ADMIN`은 단지 업무 데이터 RLS를 우회하지 **않는다**(메타/모니터링 테이블만 접근). 단지 콘텐츠 열람은 별도 승인·감사 필요([06 §3](06-security-privacy.md)).
 - 애플리케이션 레벨 필터 + DB 레벨 RLS **이중 방어**.
+- **워커(ai-worker) role 정책**: `ai-worker` 전용 DB role은 `outbox_events`·`jobs`에 한해 **cross-tenant `SELECT`/`UPDATE`** 허용(큐 폴링·claim). 도메인 테이블 접근 권한은 없다 — 이벤트를 claim한 뒤 그 이벤트의 `tenant_id`로 `SET LOCAL app.tenant_id` 후 도메인 반영. 큐만 전역, 도메인은 tenant 컨텍스트로 **`BYPASSRLS` 없이** 처리.
+
+**전역·예외 테이블 정책** — 아래 테이블은 표준 tenant 격리에서 예외:
+
+| 테이블 | 정책 |
+|--------|------|
+| `ai_eval_golden` | `tenant_id = current OR tenant_id IS NULL` — 공용 골든셋(NULL) + 자기 단지 골든셋 읽기 |
+| `tenants` | RLS 예외 — 멤버십(사용자↔테넌트) 기반 인가로 접근 통제 |
+| `outbox_events`·`jobs` | 워커 role만 cross-tenant(위), 그 외 role은 표준 tenant 격리 |
 
 ## 6. 개인정보 처리
 
 | 항목 | 정책 |
 |------|------|
-| 저장 | 이름·연락처·이메일·생년월일은 `pii_vault`에 **암호화** — **KMS 기반 envelope**(키 버전 관리·회전). 업무 테이블은 `pii_ref`만 |
+| 저장 | 이름·연락처·이메일·생년월일은 `pii_vault`에 **봉투 암호화(AES-256-GCM)** — env 마스터 키(KEK) + per-tenant DEK, 다단지 확장 시 KMS 승격. 복호화는 전용 앱 서비스만([06 §4.1](06-security-privacy.md)). 업무 테이블은 `pii_ref`만 |
 | 검색 | 평문 대신 정규화 후 **keyed HMAC** 해시로 조회(단순 salted hash는 값 공간 작은 전화번호·생년월일에 사전 대입 취약) |
-| 표시 | 입주민 노출 화면은 마스킹 뷰 사용 (예: `홍*동`, `010-****-1234`) |
+| 표시 | 입주민 노출 화면은 마스킹 표시 (예: `홍*동`, `010-****-1234`) — 복호화·마스킹은 전용 앱 서비스가 수행 |
 | LLM 전송 | 호출 전 마스킹/가명화. 원문 식별정보 전송 0건 ([06], FR-AI-05) |
 | 보관 | 동의 목적·기간 만료 시 파기 배치. 탈퇴 시 즉시 비식별/삭제 |
 | 로그 | `audit_logs`·앱 로그에도 개인정보 비저장(마스킹) |
 
-마스킹 뷰 예:
+**DB 뷰는 복호화하지 않는다** — 복호화·마스킹(`홍*동`)은 복호화 권한을 가진 전용 애플리케이션 서비스만 수행([06 §4.1](06-security-privacy.md)). DB 뷰는 비식별 컬럼 + 검색 해시·상태 배지만 노출한다:
 ```sql
-CREATE VIEW v_users_masked AS
-SELECT u.id, u.tenant_id, u.household_id,
-       mask_name(p.name_enc) AS name, mask_phone(p.phone_enc) AS phone
+CREATE VIEW v_users_safe AS
+SELECT u.id, u.tenant_id, u.household_id, u.status, u.roster_matched,
+       p.name_hash, p.phone_hash        -- 조회·대조용 해시(평문·복호화 없음)
 FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 ```
 
@@ -516,4 +553,6 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 
 - Drizzle 마이그레이션을 버전관리. 운영 반영은 CI에서 자동 실행([09]).
 - 파괴적 변경(컬럼 삭제·임베딩 차원 변경)은 2단계(추가→백필→정리)로 무중단.
-- 시드: 역할·민원 카테고리·공용 골든셋 기본 데이터.
+- **시드 분리**:
+  - **운영 시드**: 역할·민원 카테고리·공용 골든셋 + 파일럿 단지 90세대 마스터(`buildings`·`households`·`unit_types`) + **MANAGER 초대 행**(소장 이메일 시드 → 해당 이메일로 Google OAuth 로그인 시 자동 MANAGER 역할, [06 §2](06-security-privacy.md)).
+  - **테스트 픽스처**: 2-tenant 합성 데이터 + 90세대 생성기(격리·소유권 테스트용). 운영 시드와 코드 경로 분리.

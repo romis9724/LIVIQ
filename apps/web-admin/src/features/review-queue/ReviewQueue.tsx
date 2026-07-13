@@ -28,8 +28,8 @@ export function ReviewQueue() {
               <span className="rq-head__count">{items.length}건 대기</span>
             </div>
             <p className="admin-page__lede">
-              신뢰도가 낮거나 출처가 약한 답변을 검토하고 승인·반려합니다. 승인된 답변만 입주민에게
-              노출됩니다.
+              신뢰도가 낮거나 출처가 약한 답변을 검토하고 승인·반려합니다. 승인·반려 결과는 골든셋과
+              FAQ 개선에 반영됩니다(사용자에게 재전달되지 않음).
             </p>
           </div>
           <div className="rq-head__sort">

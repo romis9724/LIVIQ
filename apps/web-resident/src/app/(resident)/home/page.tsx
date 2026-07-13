@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 const SHORTCUTS = [
   { href: "/fees", icon: "🧾", label: "관리비" },
   { href: "/inquiries", icon: "🛠", label: "민원접수" },
-  { href: "/reservations", icon: "📅", label: "시설예약" },
-  { href: "/contacts", icon: "📞", label: "연락처" },
+  { href: "/notices", icon: "📢", label: "공지" },
+  { href: "/me", icon: "👤", label: "내 정보" },
 ] as const;
 
 export default function HomePage() {

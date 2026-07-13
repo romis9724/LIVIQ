@@ -64,7 +64,7 @@ export function MeView() {
       <section className="me-section">
         <h2 className="me-section__title">설정</h2>
         <div className="me-group">
-          <SettingToggle label="푸시 알림" checked={settings.push} onChange={() => toggleSetting("push")} />
+          <SettingToggle label="알림 수신" checked={settings.push} onChange={() => toggleSetting("push")} />
           <SettingToggle
             label="AI 추천 질문 표시"
             checked={settings.ai}

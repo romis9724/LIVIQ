@@ -1,6 +1,6 @@
 /**
  * 화면 카탈로그 — "LIVIQ 전체 화면" 디자인의 DCLogic 데이터를 코드로 옮긴 단일 출처.
- * 입주민 6 + 관리자 7 화면. 우선순위(P0~P2)와 라우트를 함께 보관한다.
+ * 입주민 6 + 관리자 6 화면. 우선순위(P0~P2)와 라우트를 함께 보관한다.
  */
 export type Priority = "P0" | "P1" | "P2";
 export type AppArea = "resident" | "admin";
@@ -30,7 +30,6 @@ export const ADMIN_SCREENS: readonly ScreenItem[] = [
   { icon: "🛠", title: "민원 관리", desc: "AI 분류·우선순위·배정", href: "/admin/inquiries", priority: "P1", area: "admin" },
   { icon: "📁", title: "문서 관리", desc: "업로드·공개범위·색인 상태", href: "/admin/documents", priority: "P1", area: "admin" },
   { icon: "🏢", title: "시설 관리", desc: "상태·AI 원인 후보", href: "/admin/facilities", priority: "P2", area: "admin" },
-  { icon: "🎙", title: "회의록", desc: "STT→요약→검수 확정", href: "/admin/meetings", priority: "P2", area: "admin" },
 ];
 
 /** 우선순위 → 라벨 색상 토큰 (디자인 DCLogic.pc() 이식). */

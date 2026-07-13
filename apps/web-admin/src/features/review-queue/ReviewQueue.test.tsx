@@ -33,7 +33,7 @@ describe("ReviewQueue", () => {
       container.querySelector(".rq-head__count")?.textContent;
 
     expect(count()).toBe("2건 대기");
-    fireEvent.click(screen.getAllByRole("button", { name: "반려" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "반려" })[0]!);
     expect(count()).toBe("1건 대기");
   });
 });

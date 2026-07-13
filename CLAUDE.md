@@ -34,7 +34,8 @@ docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
 계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(NestJS) · `apps/ai-worker` ·
-`packages/ai-core`·`db`·`shared` · `infra/`(docker-compose) — 도입 시점에 이 블록 갱신.
+`packages/ai-core`·`db`·`shared` — 도입 시점에 이 블록 갱신.
+로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j), env 계약은 `.env.example`.
 
 ## 자주 쓰는 명령
 
@@ -44,10 +45,11 @@ pnpm dev         # turbo run dev — 웹 앱 병렬 (apps/*, packages/*)
 pnpm build       # turbo run build
 pnpm lint        # turbo run lint
 pnpm typecheck   # turbo run typecheck
+pnpm test        # turbo run test — vitest (web 2종 + ui)
 pnpm start       # turbo run start (build 후)
 ```
 
-> Note: `db:migrate`·`test`·`e2e` 등은 해당 패키지(api·db) 도입 후 루트 스크립트로
+> Note: `db:migrate`·`e2e` 등은 해당 패키지(api·db) 도입 후 루트 스크립트로
 > 추가 예정. 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
 
 ## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)

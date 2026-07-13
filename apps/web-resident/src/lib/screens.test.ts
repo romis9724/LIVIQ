@@ -3,9 +3,9 @@ import { describe, it, expect } from "vitest";
 import { RESIDENT_SCREENS, ADMIN_SCREENS, priorityColor } from "./screens";
 
 describe("screens 카탈로그", () => {
-  it("입주민 6 · 관리자 7 화면", () => {
+  it("입주민 6 · 관리자 6 화면", () => {
     expect(RESIDENT_SCREENS).toHaveLength(6);
-    expect(ADMIN_SCREENS).toHaveLength(7);
+    expect(ADMIN_SCREENS).toHaveLength(6);
   });
 
   it("모든 href는 절대경로(/)로 시작한다", () => {

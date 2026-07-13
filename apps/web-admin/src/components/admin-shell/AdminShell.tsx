@@ -19,7 +19,6 @@ const NAV: readonly NavItem[] = [
   { href: "/inquiries", icon: "🛠", label: "민원 관리", badge: "3" },
   { href: "/documents", icon: "📁", label: "문서 관리" },
   { href: "/facilities", icon: "🏢", label: "시설 관리" },
-  { href: "/meetings", icon: "🎙", label: "회의록" },
 ];
 
 /** 관리자 콘솔 셸 — 좌측 사이드바 내비 + 사용자 + 메인 영역. */

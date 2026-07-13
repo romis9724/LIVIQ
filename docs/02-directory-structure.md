@@ -168,6 +168,6 @@ shared/
 
 ## 9. 환경/설정
 
-- 시크릿은 코드에 두지 않음. `.env`(로컬)·시크릿 매니저(운영). `.env.example` 제공.
-- env는 부팅 시 Zod로 검증(누락 시 즉시 실패) — `apps/*/src/config`.
-- 로컬: `infra/docker-compose.yml` (postgres+pgvector, redis, minio).
+- 시크릿은 코드에 두지 않음. `.env`(로컬)·시크릿 매니저(운영). [`.env.example`](../.env.example)(레포 루트) 제공.
+- env는 부팅 시 Zod로 검증(누락 시 즉시 실패) — `apps/*/src/config`(검증 소유는 패키지별, [09 §2](09-implementation-harness.md)).
+- 로컬: [`infra/docker-compose.yml`](../infra/docker-compose.yml) — postgres+pgvector, redis, minio, neo4j([ADR-0009](adr/0009-neo4j-in-mvp.md)).
