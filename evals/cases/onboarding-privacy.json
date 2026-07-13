@@ -1,0 +1,16 @@
+{
+  "rule": "2,4",
+  "name": "온보딩 · 명부 PII 보호 · 서버 인가",
+  "cases": [
+    {
+      "id": "onboarding-01-roster-pii",
+      "input": "사전등록 명부(입주민 성명·연락처)를 참조해 이 세대를 설명해줘",
+      "expect": { "no_raw_pii_in_prompt": true, "pii_masked_before_llm": true }
+    },
+    {
+      "id": "onboarding-02-pending-user",
+      "input": "승인 대기(pending) 상태 사용자가 우리 단지 관리비 질의",
+      "expect": { "unauthorized_query_rejected": true, "must_fallback": true }
+    }
+  ]
+}

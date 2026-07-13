@@ -15,10 +15,13 @@ src/index.ts              공개 배럴 — 신규 컴포넌트는 여기 export
 ## 명령
 
 ```bash
-pnpm --filter @liviq/ui test
+pnpm --filter @liviq/ui test                      # 전체 테스트 (vitest run)
+pnpm --filter @liviq/ui test src/lib/cx.test.ts   # 단일 파일만 (인자가 vitest로 전달)
+pnpm --filter @liviq/ui test:watch                # watch 모드
 pnpm --filter @liviq/ui typecheck
 pnpm --filter @liviq/ui lint
 # 자체 build 없음 — 앱이 소스를 직접 소비. 빌드 검증은 루트 `pnpm build`
+# typecheck 실패 흔한 원인: 신규 컴포넌트 export 누락 → src/index.ts 확인
 ```
 
 ## 의존성 (상세 그래프: [../../ARCHITECTURE.md](../../ARCHITECTURE.md))

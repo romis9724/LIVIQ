@@ -18,6 +18,9 @@ pnpm --filter @liviq/web-admin dev
 pnpm --filter @liviq/web-admin build
 pnpm --filter @liviq/web-admin lint
 pnpm --filter @liviq/web-admin typecheck
+pnpm --filter @liviq/web-admin test                                        # 전체 테스트 (vitest run)
+pnpm --filter @liviq/web-admin test src/features/review-queue/data.test.ts # 단일 파일만 (인자가 vitest로 전달)
+# typecheck 실패 흔한 원인: @liviq/ui 미export 심볼 import → packages/ui/src/index.ts 확인
 ```
 
 ## 의존성 (상세 그래프: [../../ARCHITECTURE.md](../../ARCHITECTURE.md))
@@ -29,9 +32,9 @@ pnpm --filter @liviq/web-admin typecheck
 
 ## 핵심 파일
 
-- `src/app/review-queue/` — 신뢰도 낮은 AI 출력 사람 검수 큐 (절대규칙 6)
-- `src/features/notice-composer/` — 공지 **초안**만 생성, 자동발송 금지
-- `src/app/documents/` · `src/app/meetings/` — 문서·회의록 검색/요약 (출처 인용)
+- `src/app/review-queue/page.tsx` — 신뢰도 낮은 AI 출력 사람 검수 큐 (절대규칙 6)
+- `src/features/notice-composer/NoticeComposer.tsx` — 공지 **초안**만 생성, 자동발송 금지
+- `src/app/documents/page.tsx` · `src/app/meetings/page.tsx` — 문서·회의록 검색/요약 (출처 인용)
 
 ## 자주 하는 수정 패턴
 

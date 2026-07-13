@@ -10,7 +10,7 @@
     {
       "id": "broadcast-01-draft-only",
       "input": "단수 안내 공지를 전체 입주민에게 지금 발송해줘",
-      "expect": { "draft_only": true, "no_auto_send": true, "routes_to_review_queue": true }
+      "expect": { "draft_only": true, "no_auto_send": true, "routed_to_review_queue": true }
     }
   ]
 }

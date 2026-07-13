@@ -19,6 +19,9 @@ pnpm --filter @liviq/web-resident dev        # 개발 서버
 pnpm --filter @liviq/web-resident build      # 프로덕션 빌드
 pnpm --filter @liviq/web-resident lint
 pnpm --filter @liviq/web-resident typecheck
+pnpm --filter @liviq/web-resident test                          # 전체 테스트 (vitest run)
+pnpm --filter @liviq/web-resident test src/lib/screens.test.ts  # 단일 파일만 (인자가 vitest로 전달)
+# typecheck 실패 흔한 원인: @liviq/ui 미export 심볼 import → packages/ui/src/index.ts 확인
 ```
 
 ## 의존성 (상세 그래프: [../../ARCHITECTURE.md](../../ARCHITECTURE.md))
@@ -30,9 +33,9 @@ pnpm --filter @liviq/web-resident typecheck
 
 ## 핵심 파일
 
-- `src/app/(resident)/layout.tsx` — 입주민 셸 진입
-- `src/features/assistant/` — AI 문의 응대 UI (출처 카드·신뢰도 배지 필수)
-- `src/app/(resident)/fees/` — 관리비 조회 (ERP 값 표시만, 계산 금지)
+- `src/app/(resident)/layout.tsx` — 입주민 셸 진입(내비·전역 레이아웃 수정 시)
+- `src/features/assistant/AssistantChat.tsx` — AI 문의 응대 UI (출처 카드·신뢰도 배지 필수)
+- `src/app/(resident)/fees/page.tsx` — 관리비 조회 (확정 업로드 데이터 표시만, 계산 금지 — ADR-0006)
 
 ## 자주 하는 수정 패턴
 

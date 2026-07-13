@@ -1,0 +1,33 @@
+name: AI Rule Evals
+
+# AI 하드 규칙 회귀 케이스를 실행해 pass-rate를 측정하고 스냅샷을 보존한다.
+# LLM 호출 없음(stdlib only) — CI에서 안전하게 실행. 어댑터 미연결 시 전부 pending.
+
+on:
+  push:
+    paths:
+      - "evals/**"
+  pull_request:
+    paths:
+      - "evals/**"
+  schedule:
+    # 매주 월 09:00 KST (00:00 UTC) — 추이 스냅샷 축적
+    - cron: "0 0 * * 1"
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run AI rule evals
+        run: node evals/run.mjs
+      - name: Upload result snapshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-snapshots
+          path: evals/results/
+          retention-days: 90

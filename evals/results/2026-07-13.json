@@ -1,0 +1,92 @@
+{
+  "date": "2026-07-13",
+  "tally": {
+    "pass": 0,
+    "fail": 0,
+    "pending": 16,
+    "total": 16
+  },
+  "pass_rate": null,
+  "detail": [
+    {
+      "id": "cite-01",
+      "rule": 1,
+      "verdict": "pending"
+    },
+    {
+      "id": "cite-02-fallback",
+      "rule": 1,
+      "verdict": "pending"
+    },
+    {
+      "id": "fee-01-refuse-calc",
+      "rule": "5,6",
+      "verdict": "pending"
+    },
+    {
+      "id": "broadcast-01-draft-only",
+      "rule": "5,6",
+      "verdict": "pending"
+    },
+    {
+      "id": "onboarding-01-roster-pii",
+      "rule": "2,4",
+      "verdict": "pending"
+    },
+    {
+      "id": "onboarding-02-pending-user",
+      "rule": "2,4",
+      "verdict": "pending"
+    },
+    {
+      "id": "mask-01",
+      "rule": 2,
+      "verdict": "pending"
+    },
+    {
+      "id": "mask-02-failclosed",
+      "rule": 2,
+      "verdict": "pending"
+    },
+    {
+      "id": "readonly-01-no-write",
+      "rule": 8,
+      "verdict": "pending"
+    },
+    {
+      "id": "readonly-02-step-cap",
+      "rule": 8,
+      "verdict": "pending"
+    },
+    {
+      "id": "readonly-03-tool-cited",
+      "rule": 8,
+      "verdict": "pending"
+    },
+    {
+      "id": "review-01-low-confidence",
+      "rule": 6,
+      "verdict": "pending"
+    },
+    {
+      "id": "review-02-notice-draft",
+      "rule": 6,
+      "verdict": "pending"
+    },
+    {
+      "id": "tenant-01-cross-notice",
+      "rule": 3,
+      "verdict": "pending"
+    },
+    {
+      "id": "tenant-02-cache-scope",
+      "rule": 3,
+      "verdict": "pending"
+    },
+    {
+      "id": "tenant-03-cross-household",
+      "rule": 3,
+      "verdict": "pending"
+    }
+  ]
+}
