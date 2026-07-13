@@ -15,12 +15,17 @@ graph TD
   subgraph apps
     R["web-resident<br/>(@liviq/web-resident)"]
     A["web-admin<br/>(@liviq/web-admin)"]
+    API["api<br/>(liviq-api · FastAPI)"]
+    W["ai-worker<br/>(liviq-ai-worker · arq)"]
   end
   subgraph packages
     UI["ui<br/>(@liviq/ui)"]
     CFG["config-ts<br/>(@liviq/config-ts)"]
+    APIT["api-types<br/>(@liviq/api-types · 생성물)"]
+    AIC["ai-core<br/>(liviq-ai-core)"]
+    DB["db<br/>(liviq-db · SQLAlchemy·Alembic·RLS)"]
   end
-  subgraph python["mcp (Python · 분리 트리)"]
+  subgraph python["mcp (Python · 분리 트리 · 동결)"]
     MA["management_agent.py"]
     GM["gmail_mcp_server.py"]
     APT["apt_mcp_server.py"]
@@ -31,6 +36,14 @@ graph TD
   R --> CFG
   A --> CFG
   UI --> CFG
+  APIT -.->|OpenAPI 생성| API
+  API --> AIC
+  API --> DB
+  W --> AIC
+  W --> DB
+  DB -.-> PG[("PostgreSQL 16<br/>+ pgvector · RLS")]
+  API -.->|세션 예정| REDIS[("Redis")]
+  W -.->|큐| REDIS
 
   MA -.-> GM
   MA -.-> APT
@@ -38,22 +51,9 @@ graph TD
   APT -.-> ERP["(추후) ERP"]
 ```
 
-## 목표 아키텍처 (계획 · 아직 미존재)
-
-```mermaid
-graph LR
-  WEB["apps/web-*<br/>(TypeScript)"] -->|HTTP| API["apps/api<br/>(FastAPI·Python)"]
-  API --> AICORE["packages/ai-core<br/>RAG·오케스트레이션"]
-  API --> DB["packages/db<br/>(SQLAlchemy)"]
-  AICORE --> DB
-  API --> WORKER["apps/ai-worker<br/>(arq)"]
-  DB --> PG[("PostgreSQL 16<br/>+ pgvector")]
-  WORKER --> REDIS[("Redis")]
-  AICORE -.->|마스킹 후| LLM["LLM 엔드포인트 (OpenAI-호환: Ollama·vLLM 등)"]
-```
-
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
-계획 컴포넌트를 도입할 때 위 그래프를 **현재 그래프로 승격**하고 이 표를 갱신한다.
+H0(토대) 완료 상태: api는 빈 앱(`/health`)·ai-core/ai-worker는 골격 — 웹→api HTTP 연동과
+ai-core RAG 구현은 H1부터(그때 `web-* → api-types` 의존이 실제로 생긴다).
 
 ## Cross-Module 의존성 표
 
@@ -62,6 +62,10 @@ graph LR
 | `apps/web-resident` | `@liviq/ui`, `@liviq/config-ts` | build | UI 토큰/컴포넌트 변경이 화면에 직결 |
 | `apps/web-admin` | `@liviq/ui`, `@liviq/config-ts` | build | 상동 (검수 큐·공지 초안 UI) |
 | `@liviq/ui` | `@liviq/config-ts` | build | tsconfig 변경이 빌드 산출물에 영향 |
+| `apps/api` (liviq-api) | `liviq-db`, `liviq-ai-core` | build(uv workspace) | 스키마·ai-core 인터페이스 변경이 API에 직결 |
+| `apps/ai-worker` | `liviq-db`, `liviq-ai-core` | build(uv workspace) | 상동 (인제스트·동기화 파이프라인) |
+| `@liviq/api-types` | `apps/api` OpenAPI | 생성물 | api 스키마 변경 시 `pnpm generate:api-types` 재생성 필수(CI 드리프트 게이트) |
+| `liviq-db` | PostgreSQL(pgvector·RLS) | runtime | 마이그레이션 변경 = `pnpm db:migrate` + RLS 테스트(CRITICAL) |
 | `mcp/management_agent.py` | `gmail_mcp_server`, `apt_mcp_server` | runtime | 툴 인터페이스 변경 시 에이전트 조정 필요 |
 | `mcp/*` | Gmail API, 관리 시스템 | 외부 | 크레덴셜·스키마 변경에 취약 |
 
@@ -77,6 +81,9 @@ graph LR
 | `packages/config-ts` (tsconfig·eslint 프리셋) | 전 TS 워크스페이스 | `pnpm typecheck` · `pnpm lint` · `pnpm build` |
 | `apps/web-admin/src/features/*` (검수 큐 등) | web-admin 단독 (leaf) | `pnpm --filter @liviq/web-admin test` · `pnpm --filter @liviq/web-admin typecheck` |
 | `apps/web-resident/src/lib/*` | web-resident 단독 (leaf) | `pnpm --filter @liviq/web-resident test` |
+| `packages/db/src/liviq_db/models/*`·`alembic/` | api·ai-worker + DB 스키마 | `pnpm --filter @liviq/db test`(RLS 포함) · `pnpm db:migrate` |
+| `apps/api/app/*` (스키마·라우터) | web-* 타입 계약 | `pnpm --filter @liviq/api test` · `pnpm generate:api-types`(드리프트 0 확인) |
+| 루트 `pyproject.toml`·`uv.lock` | Python 4패키지 전체 | `uv sync --all-packages` 후 `pnpm test` |
 | `CLAUDE.md`·`docs/`·모듈 `CLAUDE.md` (컨텍스트 문서) | AI 에이전트 동작·경로 무결성 | `node scripts/check-context-paths.mjs` (= `pnpm check:paths`) |
 | `mcp/*` | 동결됨([ADR-0008](docs/adr/0008-freeze-mcp-prototype.md)) — 원칙상 수정 없음 | 예외 수정 시 CI `.github/workflows/python-mcp.yml` |
 | `turbo.json`·`pnpm-workspace.yaml`·루트 `package.json` | 전 워크스페이스 빌드 파이프라인 | `pnpm build` |

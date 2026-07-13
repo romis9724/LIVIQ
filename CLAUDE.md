@@ -26,18 +26,23 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실):
+현재 구현된 것(현실, H0 완료):
 
 ```text
-apps/      web-resident · web-admin          # Next.js 웹 2종
-packages/  ui · config-ts                    # 공유 컴포넌트/설정
+apps/      web-resident · web-admin          # Next.js 웹 2종 (화면은 목업 데이터)
+           api                               # FastAPI 빈 앱(/health) + env 검증 (liviq-api)
+           ai-worker                         # arq 워커 골격 (liviq-ai-worker)
+packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
+           api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
+           ai-core                           # AI 토대 골격 (liviq-ai-core)
+           db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
-계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(FastAPI·Python) · `apps/ai-worker`(arq) ·
-`packages/ai-core`·`db`(SQLAlchemy·Alembic)·`api-types`(OpenAPI 생성) — 도입 시점에 이 블록 갱신([ADR-0013](docs/adr/0013-python-backend.md)).
-로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j), env 계약은 `.env.example`.
+Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
+H1부터: ai-core RAG 구현·웹→api 연동([docs/09 §8](docs/09-implementation-harness.md)).
+로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
 
 ## 자주 쓰는 명령
 
@@ -47,12 +52,16 @@ pnpm dev         # turbo run dev — 웹 앱 병렬 (apps/*, packages/*)
 pnpm build       # turbo run build
 pnpm lint        # turbo run lint
 pnpm typecheck   # turbo run typecheck
-pnpm test        # turbo run test — vitest (web 2종 + ui)
+pnpm test        # turbo run test — vitest(web 2종+ui) + pytest(Python 4종, cov 80 게이트)
 pnpm start       # turbo run start (build 후)
+uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
+pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
+pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
 ```
 
-> Note: `db:migrate`·`e2e` 등은 해당 패키지(api·db) 도입 후 루트 스크립트로
-> 추가 예정. 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
+> Note: `e2e`는 tests/e2e 도입 후 루트 스크립트로 추가 예정.
+> 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
+> Python 패키지 디렉토리에서 plain `uv run` 금지(형제 멤버 deps를 prune함) — `uv run --no-sync` 사용.
 
 ## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)
 
