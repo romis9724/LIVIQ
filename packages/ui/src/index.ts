@@ -40,3 +40,6 @@ export type { SkeletonProps } from "./components/skeleton/Skeleton";
 
 export { Switch } from "./components/switch/Switch";
 export type { SwitchProps } from "./components/switch/Switch";
+
+export { FileDropzone } from "./components/file-dropzone/FileDropzone";
+export type { FileDropzoneProps, FileDropzoneState } from "./components/file-dropzone/FileDropzone";

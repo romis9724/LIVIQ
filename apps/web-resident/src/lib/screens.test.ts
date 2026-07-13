@@ -1,15 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { RESIDENT_SCREENS, ADMIN_SCREENS, priorityColor } from "./screens";
+import { RESIDENT_SCREENS, ADMIN_SCREENS, ONBOARDING_SCREENS, priorityColor } from "./screens";
 
 describe("screens 카탈로그", () => {
-  it("입주민 6 · 관리자 6 화면", () => {
+  it("입주민 6 · 관리자 8 · 온보딩 3 화면", () => {
     expect(RESIDENT_SCREENS).toHaveLength(6);
-    expect(ADMIN_SCREENS).toHaveLength(6);
+    expect(ADMIN_SCREENS).toHaveLength(8);
+    expect(ONBOARDING_SCREENS).toHaveLength(3);
   });
 
   it("모든 href는 절대경로(/)로 시작한다", () => {
-    for (const s of [...RESIDENT_SCREENS, ...ADMIN_SCREENS]) {
+    for (const s of [...RESIDENT_SCREENS, ...ADMIN_SCREENS, ...ONBOARDING_SCREENS]) {
       expect(s.href.startsWith("/")).toBe(true);
     }
   });
@@ -17,6 +18,7 @@ describe("screens 카탈로그", () => {
   it("area 값이 카탈로그와 일치한다", () => {
     expect(RESIDENT_SCREENS.every((s) => s.area === "resident")).toBe(true);
     expect(ADMIN_SCREENS.every((s) => s.area === "admin")).toBe(true);
+    expect(ONBOARDING_SCREENS.every((s) => s.area === "onboarding")).toBe(true);
   });
 
   it("AI 비서·검수 큐는 P0 우선순위", () => {

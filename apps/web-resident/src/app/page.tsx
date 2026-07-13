@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ADMIN_SCREENS, priorityColor, RESIDENT_SCREENS, type ScreenItem } from "@/lib/screens";
+import {
+  ADMIN_SCREENS,
+  ONBOARDING_SCREENS,
+  priorityColor,
+  RESIDENT_SCREENS,
+  type ScreenItem,
+} from "@/lib/screens";
 import "./page.css";
 
 export const metadata: Metadata = {
@@ -50,6 +56,20 @@ export default function OverviewPage() {
         </div>
         <div className="screen-grid">
           {RESIDENT_SCREENS.map((screen) => (
+            <ScreenCard key={screen.href} screen={screen} />
+          ))}
+        </div>
+      </section>
+
+      <section className="overview__section" aria-labelledby="onboarding-heading">
+        <div className="overview__section-head">
+          <h2 id="onboarding-heading" className="overview__section-title">
+            온보딩
+          </h2>
+          <span className="overview__section-meta">가입·승인 · 하단 탭 밖</span>
+        </div>
+        <div className="screen-grid">
+          {ONBOARDING_SCREENS.map((screen) => (
             <ScreenCard key={screen.href} screen={screen} />
           ))}
         </div>

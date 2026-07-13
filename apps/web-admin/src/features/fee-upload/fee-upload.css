@@ -1,0 +1,394 @@
+/* 관리비 관리 — 엑셀 업로드 마법사 + 부과 현황. 디자인 토큰만 사용. */
+
+/* 탭 */
+.fu-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.fu-tab {
+  min-height: 42px;
+  padding: 0 var(--space-4);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+.fu-tab:hover {
+  color: var(--color-text);
+}
+.fu-tab[aria-selected="true"] {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+/* 스테퍼 (notice-composer 스타일 이식, fee-upload 국소) */
+.fu-stepper {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-6);
+  padding: 0;
+}
+.fu-stepper__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.fu-stepper__dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.fu-stepper__dot[data-state="done"] {
+  background: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
+  color: var(--color-on-accent);
+}
+.fu-stepper__dot[data-state="current"] {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+.fu-stepper__dot[data-state="todo"] {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+.fu-stepper__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.fu-stepper__label[data-current] {
+  color: var(--color-text);
+}
+.fu-stepper__line {
+  width: 32px;
+  height: 2px;
+  background: var(--color-border-strong);
+  margin: 0 var(--space-1);
+}
+
+/* 카드 */
+.fu-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-8);
+  max-width: 760px;
+}
+.fu-card__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+.fu-card__lede {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-6);
+}
+
+/* 필드 */
+.fu-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-6);
+}
+.fu-field label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.fu-field select {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  max-width: 260px;
+}
+.fu-field__help {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+
+/* 템플릿 링크 + 안내 */
+.fu-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.fu-templink {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* 액션 바 */
+.fu-actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+.fu-actions--between {
+  justify-content: space-between;
+}
+
+/* 검증 진행 */
+.fu-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.fu-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-accent);
+  animation: fu-spin 0.8s linear infinite;
+}
+@keyframes fu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 상태 배지 */
+.fu-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.fu-badge--ok {
+  background: color-mix(in oklch, var(--color-success) 16%, transparent);
+  color: color-mix(in oklch, var(--color-success) 55%, var(--color-text));
+}
+.fu-badge--err {
+  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
+  color: var(--color-danger);
+}
+
+/* 오류 리포트 */
+.fu-errnote {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-danger) 8%, transparent);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* 표 */
+.fu-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.fu-table th,
+.fu-table td {
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.fu-table th {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+}
+.fu-table td.fu-num,
+.fu-table th.fu-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fu-tablecard {
+  overflow: hidden;
+}
+.fu-table__more {
+  padding: var(--space-3) var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* 미리보기 요약 카드 */
+.fu-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+@media (max-width: 720px) {
+  .fu-stats {
+    grid-template-columns: 1fr;
+  }
+}
+.fu-stat {
+  padding: var(--space-5) var(--space-6);
+}
+.fu-stat__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+.fu-stat__value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.fu-stat__delta {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.fu-stat__delta--up {
+  color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
+}
+.fu-stat__delta--down {
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+
+/* 완료 화면 */
+.fu-done {
+  text-align: center;
+  padding: var(--space-12) var(--space-8);
+}
+.fu-done__mark {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto var(--space-4);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  background: color-mix(in oklch, var(--color-success) 18%, transparent);
+  color: color-mix(in oklch, var(--color-success) 55%, var(--color-text));
+}
+.fu-done__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin-bottom: var(--space-2);
+}
+.fu-done__lede {
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-6);
+}
+
+/* 부과 현황 */
+.fu-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.fu-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+.fu-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.fu-filter label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.fu-filter select {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.fu-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+@media (max-width: 720px) {
+  .fu-summary {
+    grid-template-columns: 1fr;
+  }
+}
+.fu-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fu-history__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.fu-history__item:last-child {
+  border-bottom: none;
+}
+.fu-history__month {
+  font-weight: 700;
+  min-width: 88px;
+}
+.fu-history__rev {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.fu-history__at {
+  color: var(--color-text-muted);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.fu-section__title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin-bottom: var(--space-4);
+}
+
+.fu-toast {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 20;
+}

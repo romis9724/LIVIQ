@@ -1,0 +1,92 @@
+/* ============ FileDropzone ============ */
+/* 드래그&드롭 + 클릭 업로드 영역. 색만으로 상태 전달 금지(아이콘/텍스트 병기). */
+.file-dropzone {
+  width: 100%;
+}
+.file-dropzone__zone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 148px;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+.file-dropzone__zone:hover {
+  border-color: var(--color-accent);
+  background: var(--color-citation);
+}
+.file-dropzone__zone--dragging {
+  border-style: solid;
+  border-color: var(--color-accent);
+  background: var(--color-citation);
+}
+.file-dropzone__zone--selected {
+  border-style: solid;
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  background: var(--color-surface);
+}
+.file-dropzone__zone--uploading {
+  border-style: solid;
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  background: var(--color-surface);
+  cursor: progress;
+}
+.file-dropzone__zone--error {
+  border-color: color-mix(in oklch, var(--color-danger) 45%, transparent);
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
+}
+.file-dropzone__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.file-dropzone__icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+.file-dropzone__title {
+  font-weight: 600;
+  font-size: var(--text-base);
+}
+.file-dropzone__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.file-dropzone__error {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-danger);
+}
+.file-dropzone__progress {
+  width: 100%;
+  max-width: 320px;
+  height: 8px;
+  margin-top: var(--space-1);
+  border-radius: 999px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+.file-dropzone__progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width var(--duration-normal) var(--ease-out);
+}

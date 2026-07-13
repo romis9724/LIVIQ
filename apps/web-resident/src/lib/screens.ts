@@ -1,9 +1,9 @@
 /**
  * 화면 카탈로그 — "LIVIQ 전체 화면" 디자인의 DCLogic 데이터를 코드로 옮긴 단일 출처.
- * 입주민 6 + 관리자 6 화면. 우선순위(P0~P2)와 라우트를 함께 보관한다.
+ * 입주민 6 + 관리자 8 화면. 우선순위(P0~P2)와 라우트를 함께 보관한다.
  */
 export type Priority = "P0" | "P1" | "P2";
-export type AppArea = "resident" | "admin";
+export type AppArea = "resident" | "admin" | "onboarding";
 
 export interface ScreenItem {
   icon: string;
@@ -23,12 +23,20 @@ export const RESIDENT_SCREENS: readonly ScreenItem[] = [
   { icon: "👤", title: "나", desc: "활동·설정·개인정보 동의", href: "/me", priority: "P2", area: "resident" },
 ];
 
+export const ONBOARDING_SCREENS: readonly ScreenItem[] = [
+  { icon: "🔑", title: "로그인", desc: "구글 시작·소장 승인 안내", href: "/login", priority: "P0", area: "onboarding" },
+  { icon: "📝", title: "가입 신청", desc: "동의·초대코드·만14세 게이트", href: "/signup", priority: "P0", area: "onboarding" },
+  { icon: "⏳", title: "계정 상태", desc: "대기·반려·비활성 변형", href: "/pending", priority: "P1", area: "onboarding" },
+];
+
 export const ADMIN_SCREENS: readonly ScreenItem[] = [
   { icon: "✅", title: "AI 검수 큐", desc: "신뢰도 검토·승인/반려", href: "/admin/review-queue", priority: "P0", area: "admin" },
+  { icon: "👥", title: "가입 승인", desc: "명부 대조·승인/거절·전출 처리", href: "/admin/approvals", priority: "P1", area: "admin" },
   { icon: "📢", title: "공지 초안 작성", desc: "키워드→초안→검수→발송", href: "/admin/notices/new", priority: "P0", area: "admin" },
   { icon: "📊", title: "대시보드", desc: "자동해결률·환각률·토큰비용", href: "/admin/dashboard", priority: "P1", area: "admin" },
   { icon: "🛠", title: "민원 관리", desc: "AI 분류·우선순위·배정", href: "/admin/inquiries", priority: "P1", area: "admin" },
   { icon: "📁", title: "문서 관리", desc: "업로드·공개범위·색인 상태", href: "/admin/documents", priority: "P1", area: "admin" },
+  { icon: "💰", title: "관리비 관리", desc: "엑셀 업로드·월별 부과·세대 조회", href: "/admin/fees", priority: "P1", area: "admin" },
   { icon: "🏢", title: "시설 관리", desc: "상태·AI 원인 후보", href: "/admin/facilities", priority: "P2", area: "admin" },
 ];
 

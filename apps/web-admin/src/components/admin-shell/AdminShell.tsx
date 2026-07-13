@@ -14,10 +14,12 @@ interface NavItem {
 
 const NAV: readonly NavItem[] = [
   { href: "/dashboard", icon: "📊", label: "대시보드" },
+  { href: "/approvals", icon: "👥", label: "가입 승인", badge: "5" },
   { href: "/review-queue", icon: "✅", label: "AI 검수 큐", badge: "7" },
   { href: "/notices/new", icon: "📢", label: "공지 초안" },
   { href: "/inquiries", icon: "🛠", label: "민원 관리", badge: "3" },
   { href: "/documents", icon: "📁", label: "문서 관리" },
+  { href: "/fees", icon: "💰", label: "관리비 관리" },
   { href: "/facilities", icon: "🏢", label: "시설 관리" },
 ];
 

@@ -1,0 +1,334 @@
+/* 가입 승인 — 명부 업로드 패널 + 가입 대기 목록. 토큰만 사용. */
+
+/* ---- 명부 업로드 패널 (접을 수 있는 details) ---- */
+.apv-upload {
+  margin-bottom: var(--space-6);
+}
+.apv-upload__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+.apv-upload__summary::-webkit-details-marker {
+  display: none;
+}
+.apv-upload__icon {
+  font-size: 1.4rem;
+  flex: none;
+}
+.apv-upload__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.apv-upload__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.apv-upload__sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.apv-upload__chevron {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: rotate(45deg);
+  transition: transform var(--duration-fast) ease;
+}
+.apv-upload[open] .apv-upload__chevron {
+  transform: rotate(-135deg);
+}
+.apv-upload__summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: var(--radius-sm);
+}
+.apv-upload__body {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ---- diff 요약 ---- */
+.apv-diff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.apv-diff__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.apv-badge {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+}
+.apv-badge--new {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 30%, transparent);
+  color: var(--color-accent);
+}
+.apv-badge--kept {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 35%, transparent);
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.apv-badge--out {
+  background: color-mix(in oklch, var(--color-warning) 18%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-warning) 45%, transparent);
+  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
+}
+
+/* ---- 전출 후보 목록 ---- */
+.apv-out {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+.apv-out__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+.apv-out__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.apv-out__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.apv-out__unit {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.apv-out__name {
+  color: var(--color-text-muted);
+  flex: 1;
+}
+.apv-out__empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ---- 가입 대기 목록 ---- */
+.apv-queue__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.apv-queue__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.apv-count {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-accent) 30%, transparent);
+  color: var(--color-accent);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.apv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.apv-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4) var(--space-5);
+}
+.apv-card[data-status="approved"],
+.apv-card[data-status="rejected"] {
+  opacity: 0.72;
+}
+.apv-card__body {
+  min-width: 0;
+}
+.apv-card__idline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.apv-card__name {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.apv-card__unit {
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.apv-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-6);
+}
+.apv-card__meta dt {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.apv-card__meta dd {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.apv-policy {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+}
+
+.apv-match {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.apv-match--ok {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.apv-match--warn {
+  background: color-mix(in oklch, var(--color-warning) 18%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
+}
+
+.apv-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+.apv-result {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 14px;
+}
+.apv-result--approved {
+  background: color-mix(in oklch, var(--color-success) 16%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.apv-result--rejected {
+  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
+  color: var(--color-danger);
+}
+
+@media (max-width: 640px) {
+  .apv-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .apv-card__actions {
+    justify-content: flex-end;
+  }
+}
+
+/* ---- 거절 사유 다이얼로그 (사유 입력 필수) ---- */
+.apv-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: color-mix(in oklch, var(--color-text) 45%, transparent);
+}
+.apv-modal__panel {
+  width: min(480px, 100%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-6);
+}
+.apv-modal__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-4);
+}
+.apv-modal__label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.apv-modal__label span {
+  color: var(--color-danger);
+}
+.apv-modal__textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: var(--text-base);
+  line-height: 1.5;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  resize: vertical;
+}
+.apv-modal__textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.apv-modal__help {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-2);
+}
+.apv-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+}
+
+/* ---- 토스트 (우하단 고정, review-queue 패턴) ---- */
+.apv-toast {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 20;
+}
