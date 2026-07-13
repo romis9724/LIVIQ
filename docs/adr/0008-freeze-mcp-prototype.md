@@ -2,6 +2,7 @@
 
 - 상태: Accepted
 - 날짜: 2026-07-13
+- 갱신: 2026-07-13 — 참고 승격([ADR-0013](0013-python-backend.md)): 신규 Python 백엔드 구현 시 복사·개작 허용, 직접 import·수정은 계속 금지.
 - 관련: [ADR-0001](0001-monorepo-layered-ai.md), [ADR-0004](0004-mcp-module-split-shared-store.md), [docs/02 §2](../02-directory-structure.md), [리뷰 M4](../review/cursor-review.md)
 
 ## 맥락

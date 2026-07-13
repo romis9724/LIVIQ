@@ -18,9 +18,11 @@
 
 ## 스택
 
-TypeScript 풀스택 · Turborepo + pnpm · Next.js(웹) · NestJS(api) · Drizzle ORM ·
-PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis + BullMQ · Zod 검증 ·
+**웹(TypeScript)** Next.js(web-resident·web-admin) · Turborepo + pnpm · 공유 `@liviq/ui`·`config-ts`.
+**백엔드(Python 3.12+)** FastAPI + Pydantic v2(경계 검증) · SQLAlchemy 2.0(async) + Alembic(RLS SQL) · arq(Redis 큐) · uv workspace ([ADR-0013](docs/adr/0013-python-backend.md)).
+데이터: PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis(세션·캐시·큐) · MinIO.
 LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) · 임베딩 bge-m3(1024).
+타입 공유: FastAPI OpenAPI → openapi-typescript 생성(`packages/api-types`).
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
@@ -33,8 +35,8 @@ mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
-계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(NestJS) · `apps/ai-worker` ·
-`packages/ai-core`·`db`·`shared` — 도입 시점에 이 블록 갱신.
+계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(FastAPI·Python) · `apps/ai-worker`(arq) ·
+`packages/ai-core`·`db`(SQLAlchemy·Alembic)·`api-types`(OpenAPI 생성) — 도입 시점에 이 블록 갱신([ADR-0013](docs/adr/0013-python-backend.md)).
 로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j), env 계약은 `.env.example`.
 
 ## 자주 쓰는 명령
@@ -55,10 +57,10 @@ pnpm start       # turbo run start (build 후)
 ## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)
 
 - 기능/도메인 단위 구성. 파일 200~400줄(800 상한). 불변 패턴, 작은 함수, 깊은 중첩 회피.
-- 네이밍: 컴포넌트 `PascalCase` · 훅 `useX` · 디렉토리/CSS `kebab-case` · 상수 `UPPER_SNAKE` · DB `snake_case`.
-- 경계 입력은 Zod 검증. 외부(ERP/LLM)는 어댑터 인터페이스 뒤로.
+- 네이밍: 컴포넌트 `PascalCase` · 훅 `useX` · 디렉토리/CSS `kebab-case` · 상수 `UPPER_SNAKE` · DB·Python 모듈 `snake_case`(PEP 8).
+- 경계 입력 검증: 서버(Python)=Pydantic v2 · 웹 폼=Zod. 외부(ERP/LLM)는 어댑터 인터페이스 뒤로.
 - UI는 디자인 토큰만 사용(하드코딩 금지), 접근성 WCAG 2.2 AA, 라이트 테마 1차.
-- 시크릿 하드코딩 금지. env는 부팅 시 Zod 검증.
+- 시크릿 하드코딩 금지. env는 부팅 시 검증(웹=Zod, Python=Pydantic Settings).
 
 ## 작업 방식
 

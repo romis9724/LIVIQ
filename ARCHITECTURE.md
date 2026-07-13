@@ -42,16 +42,17 @@ graph TD
 
 ```mermaid
 graph LR
-  WEB["apps/web-*"] -->|HTTP| API["apps/api<br/>(NestJS)"]
+  WEB["apps/web-*<br/>(TypeScript)"] -->|HTTP| API["apps/api<br/>(FastAPI·Python)"]
   API --> AICORE["packages/ai-core<br/>RAG·오케스트레이션"]
-  API --> DB["packages/db<br/>(Drizzle)"]
+  API --> DB["packages/db<br/>(SQLAlchemy)"]
   AICORE --> DB
-  API --> WORKER["apps/ai-worker<br/>(BullMQ)"]
+  API --> WORKER["apps/ai-worker<br/>(arq)"]
   DB --> PG[("PostgreSQL 16<br/>+ pgvector")]
   WORKER --> REDIS[("Redis")]
   AICORE -.->|마스킹 후| LLM["LLM 엔드포인트 (OpenAI-호환: Ollama·vLLM 등)"]
 ```
 
+백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
 계획 컴포넌트를 도입할 때 위 그래프를 **현재 그래프로 승격**하고 이 표를 갱신한다.
 
 ## Cross-Module 의존성 표

@@ -2,6 +2,7 @@
 
 - 상태: Accepted
 - 날짜: 2026-06-20
+- 갱신: 2026-07-13 — 백엔드 언어는 [ADR-0013](0013-python-backend.md)으로 Python 전환. 모노레포·계층 구조 결정 자체는 유지.
 - 관련: [docs/01-architecture.md](../01-architecture.md), [ARCHITECTURE.md](../../ARCHITECTURE.md)
 
 ## 맥락

@@ -37,7 +37,7 @@
 
 ```text
 [web-resident]  Next.js (PWA)  ─┐
-[web-admin]     Next.js        ─┤── HTTPS ──► [api]  NestJS (BFF + 도메인 API)
+[web-admin]     Next.js        ─┤── HTTPS ──► [api]  FastAPI (BFF + 도메인 API)
                                  │                 │
                                  │                 ├─► [PostgreSQL + pgvector]  (주 DB=SoR, 벡터 색인)
                                  │                 ├─► [Neo4j]                  (시설 파생 그래프·시설 벡터)
@@ -46,15 +46,15 @@
                                  │                 └─► [ai-core 모듈]           (오케스트레이션)
                                  │                          │
                                  │                          └─► LLM/임베딩 (OpenAI-호환: Ollama·vLLM 등)
-[ai-worker]  Node 워커 (BullMQ) ─┘  인제스트·임베딩·OCR·graph-sync(outbox→Neo4j) (비동기)
+[ai-worker]  Python 워커 (arq)  ─┘  인제스트·임베딩·OCR·graph-sync(outbox→Neo4j) (비동기)
 ```
 
 | 컨테이너 | 역할 | 스택 |
 |----------|------|------|
 | `web-resident` | 입주민 반응형 웹/PWA | Next.js(App Router), React, TS |
 | `web-admin` | 관리자/시설/입대의 콘솔 | Next.js, React, TS |
-| `api` | 인증·인가·도메인 API·BFF, AI 오케스트레이션 진입점 | NestJS, TS |
-| `ai-worker` | 비동기 인제스트(청킹/임베딩/OCR), graph-sync(outbox→Neo4j), 평가 배치 | Node, BullMQ |
+| `api` | 인증·인가·도메인 API·BFF, AI 오케스트레이션 진입점 | FastAPI, Python |
+| `ai-worker` | 비동기 인제스트(청킹/임베딩/OCR), graph-sync(outbox→Neo4j), 평가 배치 | Python, arq |
 | `db` | 관계형 + 벡터 색인 (SoR) | PostgreSQL 16 + pgvector(HNSW) |
 | `graph` | 시설 도메인 파생 그래프 + 시설 텍스트 벡터(재생성 가능) | Neo4j |
 | `cache/queue` | 응답 캐시·세션·작업 큐 | Redis |
@@ -100,7 +100,7 @@
                         → 응답(스트리밍, 출처 카드: 문서 인용 + 도구 결과 근거)
 ```
 
-도구 레지스트리(전부 **읽기 전용** — 파라미터 Zod 검증·tenant/소유권은 코드가 강제, LLM은 선택만):
+도구 레지스트리(전부 **읽기 전용** — 파라미터 Pydantic 검증·tenant/소유권은 코드가 강제, LLM은 선택만):
 
 | 도구 | 소스 | 용도 | 권한 스코프 |
 |------|------|------|-------------|
@@ -140,7 +140,7 @@
 
 - **동기(요청-응답)**: 검색형 질의(스트리밍), 화면 조회, 액션 실행.
 - **비동기(큐)**: 문서 인제스트, OCR, 임베딩 재색인, 평가 배치, 알림 발송.
-- 브로커: Redis + BullMQ. 작업 상태는 `jobs` 테이블로 추적([03](03-database-design.md)).
+- 브로커: Redis + arq. 작업 상태는 `jobs` 테이블로 추적([03](03-database-design.md)).
 
 ## 9. 관측성 (Observability)
 
@@ -162,20 +162,20 @@
 
 | 영역 | 선택 | 근거 |
 |------|------|------|
-| 언어 | TypeScript (전 영역) | 단일 언어, 타입 공유 |
-| 모노레포 | Turborepo + pnpm | 캐시 빌드, 워크스페이스 |
+| 언어 | 웹=TypeScript · 백엔드=Python 3.12+ | 표면별 최적 생태계, 타입은 OpenAPI 생성물로 공유([ADR-0013](adr/0013-python-backend.md)) |
+| 모노레포 | Turborepo + pnpm(TS) · uv workspace(Python) | 캐시 빌드, 워크스페이스, 단일 lock |
 | 프론트 | Next.js(App Router), React | SSR/PWA, 사용자 web 규칙 |
-| 백엔드 | NestJS | 모듈/DI, 도메인 경계 |
-| ORM | Drizzle ORM | 타입세이프, SQL 친화, 마이그레이션 |
+| 백엔드 | FastAPI (Pydantic v2, sse-starlette) | async 네이티브, 스키마 검증·SSE 스트리밍, AI 생태계 정합 |
+| ORM | SQLAlchemy 2.0(async) + Alembic | async 세션, 마이그레이션, RLS SQL 병행 |
 | DB | PostgreSQL 16 + pgvector | 관계형+벡터 단일화 (SoR) |
 | 그래프 | Neo4j | 시설 그래프·시설 텍스트 벡터, 파생/재생성 가능 |
-| 캐시/큐 | Redis + BullMQ | 캐시·세션·비동기 |
-| 검증 | Zod | 경계 입력 검증, 타입 추론 |
+| 캐시/큐 | Redis + arq | 캐시·세션·비동기(async·cron 내장) |
+| 검증 | Pydantic v2(서버) + Zod(웹 폼) | 경계 입력 검증, 계약은 OpenAPI 생성 |
 | 인증 | Google OAuth(+명부 대조 승인) | 역할 기반, 자체 비밀번호 미보관([00 FR-ONB]) |
 | LLM | OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) | 벤더 중립, 성능비교 용이, [08] |
 | 임베딩 | bge-m3(1024, Ollama/vLLM 로컬 실행) | 한국어 강함, 차원 고정([03]) |
 | 스토리지 | S3 호환 | 원본 문서·이미지 |
-| 테스트 | Vitest, Playwright, AI eval 하네스 | [07] |
+| 테스트 | Vitest·Playwright(웹) · pytest(백엔드) · AI eval 하네스 | [07] |
 | 관측성 | OpenTelemetry + 로그 수집 | 표준 |
 
 > 생성 모델은 **동시에 하나만** 운영. 선정·교체는 골든셋 회귀 평가([07](07-testing-strategy.md))로 결정하며, 교체는 env 설정 변경만으로 가능.
@@ -195,6 +195,7 @@
 | — | Neo4j = 시설 전용 파생 그래프(PG가 SoR, outbox 동기화) | Neo4j를 SoR로 / 단일 PG | 정합성·격리·백업 단순 + 그래프 탐색 확보 |
 | [0006](adr/0006-fees-excel-upload-source.md) | 관리비 원천 = 엑셀 업로드(ERP 어댑터는 추후) | ERP 미러 | ERP 부재, 어댑터 인터페이스로 병행 대비 |
 | [0007](adr/0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 + 스텝 상한(정적 라우터 대체) | 정적 라우터 유지 / 자유 ReAct 루프 | 복합 질의 커버 + 비용·평가 통제. 쓰기는 도구 제외로 규칙 8 유지 |
+| [0013](adr/0013-python-backend.md) | 백엔드 전면 Python(FastAPI·arq·SQLAlchemy+Alembic·ai-core) | 기존 TS 백엔드 스택 유지 | AI/데이터 생태계 정합, mcp 자산 재사용, 웹↔api 타입은 OpenAPI 생성 |
 
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.

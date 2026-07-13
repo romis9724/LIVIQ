@@ -22,3 +22,4 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0010](0010-envelope-encryption-env-master-key.md) | pii_vault 봉투 암호화 — env 마스터 키, KMS는 확장 시 승격 | Accepted |
 | [0011](0011-redis-server-session.md) | Redis 서버 세션 + httpOnly 쿠키 (JWT stateless 대신) | Accepted |
 | [0012](0012-in-app-notification-only.md) | MVP 알림은 인앱 알림함만, 웹푸시는 Phase 2 | Accepted |
+| [0013](0013-python-backend.md) | 백엔드 Python 전환 (FastAPI·SQLAlchemy·arq·uv) | Accepted |

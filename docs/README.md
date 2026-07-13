@@ -5,7 +5,7 @@
 ## 한눈에
 
 - **정체성**: 기존 아파트 시스템·문서 위에 얹는 **AI 검색·응대·요약 계층** (앱 재구현 아님)
-- **스택**: TypeScript 풀스택 — Turborepo + Next.js + NestJS + PostgreSQL/pgvector + Neo4j(시설 파생) + Drizzle + Redis · LLM은 OpenAI-호환 단일 엔드포인트(Ollama·vLLM 등) + 임베딩 bge-m3
+- **스택**: 웹 TypeScript(Next.js·Turborepo) + 백엔드 Python(FastAPI·SQLAlchemy·arq·uv — [ADR-0013](adr/0013-python-backend.md)) · PostgreSQL/pgvector + Neo4j(시설 파생) + Redis · LLM은 OpenAI-호환 단일 엔드포인트(Ollama·vLLM 등) + 임베딩 bge-m3
 - **MVP**: 입주민 반응형 웹/PWA + 관리자 웹 + AI 코어 (동시 구축)
 - **불변 원칙**: 출처 인용 · 환각 시 사람연결 폴백 · 개인정보 LLM 미전송(전 프로바이더) · 단지 격리(RLS) · 위험 출력 사람 검수 · 토큰 절약
 

@@ -55,6 +55,7 @@ docs/            설계·계획 문서    refs/  참조 자료
 
 ## 스택
 
-TypeScript · Turborepo + pnpm · Next.js · (계획) NestJS · Drizzle ORM ·
-PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis + BullMQ · Zod ·
+**웹** TypeScript · Next.js · Turborepo + pnpm · Zod(클라이언트 검증).
+**백엔드(계획)** Python 3.12+ · FastAPI + Pydantic v2 · SQLAlchemy 2.0 + Alembic · arq · uv ([ADR-0013](docs/adr/0013-python-backend.md)).
+데이터: PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis(세션·캐시·큐).
 LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM 등, env 교체) · 임베딩 bge-m3.

@@ -1,7 +1,7 @@
 # 03. 데이터베이스 설계서
 
 > 아키텍처: [01-architecture.md](01-architecture.md) · 데이터 아키텍처: [11-data-architecture.md](11-data-architecture.md) · 보안/개인정보: [06-security-privacy.md](06-security-privacy.md)
-> 엔진: PostgreSQL 16 + pgvector(HNSW) · ORM: Drizzle · 모든 테이블 `snake_case`
+> 엔진: PostgreSQL 16 + pgvector(HNSW) · ORM: SQLAlchemy 2.0(async) · 마이그레이션: Alembic · 모든 테이블 `snake_case`
 
 ## 1. 설계 원칙
 
@@ -427,7 +427,7 @@ excel_uploads(id, tenant_id, type,                    -- fee | roster
               uploaded_by, created_at)
 ```
 
-> 업로드 플로우: 업로드 → 파싱·Zod 검증 → 오류 리포트/미리보기 → 확정 적용. 확정 적용은 **해당 `(tenant_id, period)`의 기존 `fees` 전 행 삭제 후 재삽입**(단일 트랜잭션 = docs/11의 "전체 교체"). 상세: [11 §관리비 엑셀 업로드](11-data-architecture.md).
+> 업로드 플로우: 업로드 → 파싱·Pydantic 검증 → 오류 리포트/미리보기 → 확정 적용. 확정 적용은 **해당 `(tenant_id, period)`의 기존 `fees` 전 행 삭제 후 재삽입**(단일 트랜잭션 = docs/11의 "전체 교체"). 상세: [11 §관리비 엑셀 업로드](11-data-architecture.md).
 
 ### 4.7 운영·AI 품질·작업
 
@@ -447,7 +447,7 @@ jobs(id, tenant_id, type,                                   -- ingest|ocr|reembe
      created_at, updated_at)
 ```
 
-> **`audit_logs` append-only 강제**: 런타임 DB role에 `INSERT`·`SELECT`만 `GRANT`, `UPDATE`·`DELETE`는 `REVOKE`(RLS와 동일한 마이그레이션 게이트에서 설정). 앱 코드 규율이 아니라 **권한으로 수정·삭제 차단**.
+> **`audit_logs` append-only 강제**: 런타임 DB role에 `INSERT`·`SELECT`만 `GRANT`, `UPDATE`·`DELETE`는 `REVOKE`(RLS와 동일한 Alembic custom migration 게이트에서 설정). 앱 코드 규율이 아니라 **권한으로 수정·삭제 차단**.
 
 ### 4.8 평면도·디지털트윈
 
@@ -506,7 +506,7 @@ CREATE POLICY tenant_isolation ON documents
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
 - API는 트랜잭션 시작 시 `SET LOCAL app.tenant_id = $`, `app.user_id`, `app.role` 설정.
-- **마이그레이션 owner와 런타임 role 분리**: 런타임 role에 `BYPASSRLS` 부여 금지(테이블 owner는 기본 RLS를 우회하므로 `FORCE`로 차단).
+- **마이그레이션 owner와 런타임 role 분리**: 런타임 role에 `BYPASSRLS` 부여 금지(테이블 owner는 기본 RLS를 우회하므로 `FORCE`로 차단). 정책·role은 스키마 자동생성 대상이 아니므로 **Alembic custom migration(`op.execute`)으로 버전관리**([09 §2.1](09-implementation-harness.md)).
 - **트랜잭션 래퍼 강제**: 모든 쿼리는 tenant 컨텍스트가 설정된 트랜잭션 래퍼 안에서만 실행 — 래퍼 밖 쿼리는 구조적으로 금지.
 - **composite FK로 cross-tenant 참조 차단**: 부모 `UNIQUE(tenant_id, id)` + 자식 `FK(tenant_id, parent_id) → 부모(tenant_id, id)`로 다른 단지 행 참조를 DB가 거부.
 - **컨텍스트 미설정 시 fail-closed**: `app.tenant_id` 미설정이면 `nullif(...)`가 NULL → 정책이 거짓 → 읽기·쓰기 **모두 실패**.
@@ -551,7 +551,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 
 ## 8. 마이그레이션 전략
 
-- Drizzle 마이그레이션을 버전관리. 운영 반영은 CI에서 자동 실행([09]).
+- Alembic 마이그레이션을 버전관리(RLS 정책·role은 custom migration `op.execute`, [09 §2.1](09-implementation-harness.md)). 운영 반영은 CI에서 자동 실행([09]).
 - 파괴적 변경(컬럼 삭제·임베딩 차원 변경)은 2단계(추가→백필→정리)로 무중단.
 - **시드 분리**:
   - **운영 시드**: 역할·민원 카테고리·공용 골든셋 + 파일럿 단지 90세대 마스터(`buildings`·`households`·`unit_types`) + **MANAGER 초대 행**(소장 이메일 시드 → 해당 이메일로 Google OAuth 로그인 시 자동 MANAGER 역할, [06 §2](06-security-privacy.md)).

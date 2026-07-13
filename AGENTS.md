@@ -18,9 +18,11 @@
 
 ## 스택
 
-TypeScript 풀스택 · Turborepo + pnpm · Next.js(웹) · NestJS(api) · Drizzle ORM ·
-PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis + BullMQ · Zod 검증 ·
+**웹(TypeScript)** Next.js(web-resident·web-admin) · Turborepo + pnpm · 공유 `@liviq/ui`·`config-ts`.
+**백엔드(Python 3.12+)** FastAPI + Pydantic v2(경계 검증) · SQLAlchemy 2.0(async) + Alembic(RLS SQL) · arq(Redis 큐) · uv workspace ([ADR-0013](docs/adr/0013-python-backend.md)).
+데이터: PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis(세션·캐시·큐) · MinIO.
 LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) · 임베딩 bge-m3(1024).
+타입 공유: FastAPI OpenAPI → openapi-typescript 생성(`packages/api-types`).
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
@@ -33,8 +35,8 @@ mcp/       gmail·apt MCP 서버 · management_agent (Python)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
-계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(NestJS) · `apps/ai-worker` ·
-`packages/ai-core`·`db`·`shared` · `infra/`(docker-compose) — 도입 시점에 이 블록 갱신.
+계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(FastAPI·Python) · `apps/ai-worker`(arq) ·
+`packages/ai-core`·`db`(SQLAlchemy·Alembic)·`api-types`(OpenAPI 생성) · `infra/`(docker-compose) — 도입 시점에 이 블록 갱신([ADR-0013](docs/adr/0013-python-backend.md)).
 
 ## 자주 쓰는 명령
 
