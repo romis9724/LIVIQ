@@ -19,7 +19,8 @@
   [ADR-0002](docs/adr/0002-mask-before-external-llm.md)
 - **tenant 격리는 이중 방어**: 앱 쿼리의 `tenant_id` + DB RLS. 하나만으로 신뢰하지 않는다.
 - **시크릿 파일**: `mcp/service-credential.json`·`tokens.json`은 `.gitignore`로 차단, 로컬 전용.
-  로그·에러 메시지에도 노출 금지.
+  로그·에러 메시지에도 노출 금지. `mcp/apt_mng_agent.zip`도 이 시크릿들을 동봉하고 있어
+  gitignore 차단 — 커밋 시도 금지, 불필요하면 로컬 삭제.
 
 ## 도메인 규칙 (놓치기 쉬움)
 
@@ -27,6 +28,17 @@
 - **입주민 대상 공지·알림은 초안까지만.** 자동발송 금지 — 사람이 검수 후 발송(관리 웹 review-queue).
 - **출처 없는 AI 답변 금지.** 근거 문서·조항 인용 못 하면 지어내지 말고 담당자 연결 폴백.
 - **신뢰도 낮은 답변은 검수 큐로.** `apps/web-admin/src/app/review-queue/`.
+
+## 하네스·검증 (2026-07-13 AI-readiness 감사에서 확정)
+
+- **AI-readiness 자동 채점기(score.py)는 한국어를 못 읽는다.** 한국어 섹션 헤더(`## 의존성` 등)·
+  상대경로(`.github`, `../..`)·자리표시자(`<name>`)를 오탐 — 자동 71점 vs 실측 98점.
+  재감사 시 자동 점수만 믿지 말고 [docs/ai-readiness-score.json](docs/ai-readiness-score.json)의
+  `manual_adjustments` 보정 원칙을 따를 것.
+- **pre-push 경로 검증은 클론별 1회 활성화 필요**: `git config core.hooksPath .githooks`.
+  hook 파일이 있어도 이 설정 없이는 돌지 않는다 (CI는 별개로 항상 검증).
+- **evals가 전부 pending인 것은 정상** — adapter 미연결(fail 아님). `apps/api`·`ai-core` 도입 시
+  [evals/adapter.mjs](evals/adapter.mjs) 하나만 wiring하면 16 케이스가 즉시 실측 전환된다.
 
 ## Five-Question (모듈별 요약 · 상세는 각 CLAUDE.md)
 
