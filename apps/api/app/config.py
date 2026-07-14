@@ -14,9 +14,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ApiSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # ADR-0011 세션 스토어. H1에서 소비. 기본값 금지 — 명시 주입 강제.
+    # ADR-0011 세션 스토어 + arq 큐. 기본값 금지 — 명시 주입 강제.
     redis_url: str = Field(..., validation_alias="REDIS_URL")
     api_env: str = Field("local", validation_alias="API_ENV")
+
+    # S3 호환(MinIO) — 원본 문서 저장(docs/11 §1). 키 프리픽스 `{tenant_id}/`.
+    s3_endpoint_url: str = Field(..., validation_alias="S3_ENDPOINT_URL")
+    s3_access_key_id: str = Field(..., validation_alias="S3_ACCESS_KEY_ID")
+    s3_secret_access_key: str = Field(..., validation_alias="S3_SECRET_ACCESS_KEY")
+    s3_bucket: str = Field("liviq", validation_alias="S3_BUCKET")
 
 
 @lru_cache

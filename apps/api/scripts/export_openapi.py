@@ -12,6 +12,9 @@ import sys
 
 # 스키마는 코드에서만 결정된다(env 무관). 부팅 검증만 통과시키는 더미값.
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
+os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
+os.environ.setdefault("S3_ACCESS_KEY_ID", "x")
+os.environ.setdefault("S3_SECRET_ACCESS_KEY", "x")
 
 from app.main import create_app  # noqa: E402
 

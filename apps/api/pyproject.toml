@@ -9,6 +9,9 @@ dependencies = [
     "pydantic-settings",
     "sse-starlette",
     "uvicorn[standard]",
+    "python-multipart",
+    "boto3",
+    "arq",
     "liviq-db",
     "liviq-ai-core",
 ]
@@ -26,5 +29,6 @@ packages = ["app"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 # 커버리지 게이트 80%(docs/09 §4.1) — 로컬·CI 동일. 소스는 app 패키지만(tests 제외).
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80"
