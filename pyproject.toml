@@ -58,6 +58,6 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-# pgvector·testcontainers는 타입 스텁을 배포하지 않음
-module = ["pgvector.*", "testcontainers.*"]
+# pgvector·testcontainers·boto3는 타입 스텁을 배포하지 않음
+module = ["pgvector.*", "testcontainers.*", "boto3.*"]
 ignore_missing_imports = true
