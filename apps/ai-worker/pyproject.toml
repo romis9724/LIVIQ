@@ -6,6 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "arq",
     "pydantic-settings",
+    "pypdf",
+    "boto3",
     "liviq-db",
     "liviq-ai-core",
 ]
@@ -23,5 +25,6 @@ packages = ["src/ai_worker"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 # 커버리지 게이트 80%(docs/09 §4.1) — 로컬·CI 동일. 소스는 ai_worker 패키지만.
 addopts = "--cov=ai_worker --cov-report=term-missing --cov-fail-under=80"
