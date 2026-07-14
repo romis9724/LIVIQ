@@ -5,7 +5,9 @@ description = "LIVIQ ai-core — RAG·오케스트레이션·LLM 어댑터·토�
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2",
+    "pydantic-settings",
     "httpx",
+    "sqlalchemy[asyncio]>=2.0",
 ]
 
 [build-system]
@@ -17,5 +19,6 @@ packages = ["src/ai_core"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 # 커버리지 게이트 80%(docs/09 §4.1) — 로컬·CI 동일. 소스는 ai_core 패키지만.
 addopts = "--cov=ai_core --cov-report=term-missing --cov-fail-under=80"
