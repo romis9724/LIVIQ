@@ -38,6 +38,21 @@ node evals/run.mjs --trend         # 저장된 스냅샷의 날짜별 추이 표
 잡 요약(step summary)에 pass/fail/pending 표를 남기고, `results/` 스냅샷을
 아티팩트로 90일 보존해 pass-rate 추이를 축적한다.
 
-> 현재 상태: AI 계층(`apps/api`·`ai-core`) 미구현 → 어댑터가 `not-wired`를 반환하고
-> 케이스는 **pending**으로 집계된다. api 도입 시 [adapter.mjs](adapter.mjs)만 연결하면
-> 기존 케이스가 즉시 측정 대상이 된다. 케이스는 지금 미리 정의해 규칙을 고정한다.
+## 어댑터 연결 (H1)
+
+[adapter.mjs](adapter.mjs)는 **`LIVIQ_EVAL_API_URL` env 게이트**다:
+
+- **미설정(CI 기본)**: `not-wired` 반환 → 전 케이스 pending. LLM 호출 0으로 CI 안전.
+- **설정 시**: 실제 api `/assistant/ask`(SSE)에 질의해 측정. 로컬·스테이징 전용.
+
+```bash
+# 사전: infra 기동 + api 서버 실행 + 골든셋 문서 시드(단지 tenant)
+LIVIQ_EVAL_API_URL=http://localhost:8000 node evals/run.mjs --rule=1
+```
+
+측정 범위(H1): **규칙 1(출처 인용·폴백)**만 SSE 결과에서 관측한다
+(`must_cite`·`must_fallback`·`no_hallucination`·`no_answer_from_thin_air`·`tool_result_cited`).
+그 외 규칙(마스킹·격리·검수·도구 등, H2+ 기능)은 관측 키를 넣지 않아 **pending**으로 남는다 —
+판정 불가를 정직하게 표기하며, 해당 기능 구현 시 어댑터에 관측 키를 추가한다.
+
+dev 컨텍스트는 `LIVIQ_EVAL_TENANT_ID`·`LIVIQ_EVAL_USER_ID`(기본값 = web dev 상수)로 시드와 맞춘다.
