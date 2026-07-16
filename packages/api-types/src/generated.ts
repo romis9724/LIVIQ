@@ -161,6 +161,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Document */
+        patch: operations["patch_document_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/documents/{document_id}/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reindex Document */
+        post: operations["reindex_document_documents__document_id__reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -291,6 +325,11 @@ export interface components {
         /** DocumentOut */
         DocumentOut: {
             /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
              * Id
              * Format: uuid
              */
@@ -312,6 +351,16 @@ export interface components {
              * @enum {string}
              */
             visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+        };
+        /**
+         * DocumentPatchIn
+         * @description 부분 수정 — 지정한 필드만 갱신(둘 다 None이면 no-op 아님, 422).
+         */
+        DocumentPatchIn: {
+            /** Title */
+            title?: string | null;
+            /** Visibility */
+            visibility?: ("ALL" | "RESIDENT" | "ADMIN" | "COUNCIL") | null;
         };
         /** DocumentUploadOut */
         DocumentUploadOut: {
@@ -704,7 +753,10 @@ export interface operations {
     };
     list_documents_documents_get: {
         parameters: {
-            query?: never;
+            query?: {
+                index_status?: ("pending" | "indexing" | "indexed" | "failed") | null;
+                q?: string | null;
+            };
             header?: {
                 "x-dev-tenant-id"?: string | null;
                 "x-dev-user-id"?: string | null;
@@ -761,6 +813,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_document_documents__document_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_document_documents__document_id__reindex_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
                 };
             };
             /** @description Validation Error */

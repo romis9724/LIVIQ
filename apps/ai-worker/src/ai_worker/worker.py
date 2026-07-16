@@ -76,7 +76,7 @@ class WorkerSettings:  # pragma: no cover — arq가 소비하는 선언
     functions = [ingest_document_task]
     on_startup = startup
     on_shutdown = shutdown
-
-    @staticmethod
-    def redis_settings() -> RedisSettings:
-        return RedisSettings.from_dsn(get_settings().redis_url)
+    # arq는 redis_settings를 "속성"으로 읽는다(호출 아님) — 메서드로 두면
+    # 'staticmethod' object has no attribute 'host'로 기동 실패. import 시점에
+    # env(REDIS_URL)가 필요하므로 테스트 conftest는 더미 env를 선설정한다.
+    redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

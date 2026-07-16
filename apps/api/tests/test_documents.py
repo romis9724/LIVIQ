@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 
 import httpx
@@ -116,6 +117,119 @@ async def test_list_returns_uploaded(
     items = response.json()["items"]
     assert len(items) == 1
     assert items[0]["title"] == "문서A"
+
+
+async def _upload(c: httpx.AsyncClient, *, title: str, body: str, visibility: str = "ALL") -> str:
+    response = await c.post(
+        "/documents",
+        files={"file": (f"{title}.txt", body.encode(), "text/plain")},
+        data={"title": title, "source_type": "공지", "visibility": visibility},
+    )
+    assert response.status_code == 201
+    return str(response.json()["id"])
+
+
+async def _set_status(session: AsyncSession, doc_id: str, status: str) -> None:
+    document = await session.get(Document, uuid.UUID(doc_id))
+    assert document is not None
+    document.index_status = status
+    await session.flush()
+
+
+async def test_list_filters_by_index_status(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue], db_session: AsyncSession
+) -> None:
+    c, _, _ = client
+    doc_id = await _upload(c, title="대기문서", body="대기 본문")
+    # 두 번째 문서를 indexed 로 승격해 필터 분리 확인
+    other = await _upload(c, title="완료문서", body="완료 본문")
+    await _set_status(db_session, other, "indexed")
+
+    pending = await c.get("/documents", params={"index_status": "pending"})
+    assert [i["id"] for i in pending.json()["items"]] == [doc_id]
+    indexed = await c.get("/documents", params={"index_status": "indexed"})
+    assert [i["id"] for i in indexed.json()["items"]] == [other]
+
+
+async def test_list_rejects_unknown_index_status(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue],
+) -> None:
+    c, _, _ = client
+    response = await c.get("/documents", params={"index_status": "bogus"})
+    assert response.status_code == 422
+
+
+async def test_list_filters_by_title_query(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue],
+) -> None:
+    c, _, _ = client
+    await _upload(c, title="주차장 운영 세칙", body="주차 본문")
+    await _upload(c, title="분리수거 안내문", body="수거 본문")
+    response = await c.get("/documents", params={"q": "주차"})
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["title"] == "주차장 운영 세칙"
+
+
+async def test_patch_updates_title_and_visibility(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue],
+) -> None:
+    c, _, _ = client
+    doc_id = await _upload(c, title="원제목", body="본문")
+    response = await c.patch(
+        f"/documents/{doc_id}", json={"title": "새 제목", "visibility": "ADMIN"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "새 제목"
+    assert body["visibility"] == "ADMIN"
+
+
+async def test_patch_missing_document_returns_404(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue],
+) -> None:
+    c, _, _ = client
+    response = await c.patch(f"/documents/{uuid.uuid4()}", json={"title": "없음"})
+    assert response.status_code == 404
+
+
+async def test_reindex_resets_status_and_reenqueues(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue], db_session: AsyncSession
+) -> None:
+    c, _, queue = client
+    doc_id = await _upload(c, title="실패문서", body="본문")
+    await _set_status(db_session, doc_id, "failed")
+    queue.jobs.clear()
+
+    response = await c.post(f"/documents/{doc_id}/reindex")
+    assert response.status_code == 200
+    assert response.json()["index_status"] == "pending"
+    assert queue.jobs == [("ingest_document_task", (doc_id, str(TENANT_ID)))]
+
+
+async def test_reindex_conflicts_while_indexing(
+    client: tuple[httpx.AsyncClient, FakeStorage, FakeQueue], db_session: AsyncSession
+) -> None:
+    c, _, _ = client
+    doc_id = await _upload(c, title="색인중문서", body="본문")
+    await _set_status(db_session, doc_id, "indexing")
+    response = await c.post(f"/documents/{doc_id}/reindex")
+    assert response.status_code == 409
+
+
+async def test_resident_role_forbidden(db_session: AsyncSession) -> None:
+    """RESIDENT 역할은 문서 관리 엔드포인트 접근 403(교차 역할 격리, 규칙 4)."""
+    await _seed_tenant_user(db_session)
+    app = create_app()
+    app.dependency_overrides[get_context] = lambda: RequestContext(
+        TENANT_ID, USER_ID, roles=("RESIDENT",)
+    )
+    app.dependency_overrides[get_tenant_session] = lambda: db_session
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        assert (await c.get("/documents")).status_code == 403
+        assert (await c.patch(f"/documents/{uuid.uuid4()}", json={"title": "x"})).status_code == 403
+        assert (await c.post(f"/documents/{uuid.uuid4()}/reindex")).status_code == 403
 
 
 async def test_missing_dev_headers_rejected() -> None:
