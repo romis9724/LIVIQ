@@ -18,10 +18,10 @@ from app.deps import (
     Queue,
     RequestContext,
     Storage,
-    get_context,
     get_queue,
     get_storage,
     get_tenant_session,
+    require_roles,
 )
 from app.schemas.documents import (
     DocumentListOut,
@@ -41,7 +41,7 @@ MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB — 초대형 업로드 차단
 
 @router.get("", response_model=DocumentListOut)
 async def list_documents(
-    ctx: Annotated[RequestContext, Depends(get_context)],
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
 ) -> DocumentListOut:
     rows = await session.scalars(
@@ -56,7 +56,7 @@ async def list_documents(
 
 @router.post("", response_model=DocumentUploadOut, status_code=201)
 async def upload_document(
-    ctx: Annotated[RequestContext, Depends(get_context)],
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     storage: Annotated[Storage, Depends(get_storage)],
     queue: Annotated[Queue, Depends(get_queue)],

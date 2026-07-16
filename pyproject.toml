@@ -22,6 +22,7 @@ dev = [
     "pytest-asyncio",
     "pytest-cov",
     "testcontainers[postgres]",
+    "fakeredis>=2.36.2",
 ]
 
 # ── 공유 도구 설정 (여기 한 곳만 — 패키지별 중복 금지) ────────────────
@@ -58,6 +59,6 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-# pgvector·testcontainers·boto3는 타입 스텁을 배포하지 않음
-module = ["pgvector.*", "testcontainers.*", "boto3.*"]
+# pgvector·testcontainers·boto3·fakeredis는 타입 스텁을 배포하지 않음
+module = ["pgvector.*", "testcontainers.*", "boto3.*", "fakeredis.*"]
 ignore_missing_imports = true

@@ -1,51 +1,127 @@
-"""공통 의존성 — 요청 컨텍스트(테넌트·사용자)·DB 세션·스토리지·큐·LLM (docs/02 §4).
+"""공통 의존성 — 요청 컨텍스트(테넌트·사용자·역할)·DB 세션·스토리지·큐·LLM (docs/02 §4).
 
-인가는 서버에서(규칙 4). 정식 인증(Google OAuth + Redis 세션, ADR-0011)은 후속 —
-지금은 **local 환경 전용 dev 헤더 컨텍스트**만 허용하고, 그 외 환경은 501을 반환한다
-(암묵 통과 금지 — fail-closed).
+인가는 서버에서(규칙 4). 정식 세션 인증(Redis 서버 세션 + httpOnly 쿠키, ADR-0011)은
+쿠키 경로로 확립하고, local 환경에선 기존 dev 헤더 경로를 보조로 유지한다. 그 외 환경에서
+쿠키·세션이 없으면 401(암묵 통과 금지 — fail-closed).
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import Annotated, Any, Protocol
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Cookie, Depends, Header, HTTPException, Response
+from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai_core.llm.client import LlmClient
 from app.config import get_settings
+from app.session import SESSION_ABSOLUTE_TTL, SessionStore, get_session_store
 from liviq_db.engine import create_engine, create_session_factory
 
-# 역할→문서 공개범위(docs/03 §4.2 visibility 매핑). H1은 입주민 여정만.
+SESSION_COOKIE_NAME = "liviq_session"
+
+# 역할→문서 공개범위(docs/03 §4.2 visibility 매핑).
 RESIDENT_VISIBILITIES = ("ALL", "RESIDENT")
+_ROLE_VISIBILITIES: dict[str, tuple[str, ...]] = {
+    "RESIDENT": ("ALL", "RESIDENT"),
+    "MANAGER": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
+    "STAFF": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
+    "FACILITY": ("ALL", "ADMIN"),
+    "COUNCIL": ("ALL", "RESIDENT", "COUNCIL"),
+}
+_VISIBILITY_ORDER = ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
+# local dev 헤더 컨텍스트에 부여할 역할 — 기존 로컬 워크플로·테스트 보존.
+DEV_ROLES = ("RESIDENT", "MANAGER", "STAFF")
+
+
+def visibilities_for(roles: Iterable[str]) -> tuple[str, ...]:
+    """역할 집합의 공개범위 합집합(정렬 고정). 비어 있으면 입주민 기본값."""
+    granted: set[str] = set()
+    for role in roles:
+        granted.update(_ROLE_VISIBILITIES.get(role, ()))
+    result = tuple(v for v in _VISIBILITY_ORDER if v in granted)
+    return result or RESIDENT_VISIBILITIES
 
 
 @dataclass(frozen=True)
 class RequestContext:
     tenant_id: uuid.UUID
     user_id: uuid.UUID
+    roles: tuple[str, ...] = ()
     visibilities: tuple[str, ...] = RESIDENT_VISIBILITIES
 
 
 async def get_context(
+    session_store: Annotated[SessionStore, Depends(get_session_store)],
+    liviq_session: Annotated[str | None, Cookie()] = None,
     x_dev_tenant_id: Annotated[str | None, Header()] = None,
     x_dev_user_id: Annotated[str | None, Header()] = None,
 ) -> RequestContext:
-    """local 전용 dev 컨텍스트. 정식 세션 인증 도입 시 이 함수만 교체."""
-    if get_settings().api_env != "local":
-        raise HTTPException(status_code=501, detail="인증 미구현 — local 환경 전용 API")
-    if not x_dev_tenant_id or not x_dev_user_id:
-        raise HTTPException(status_code=401, detail="X-Dev-Tenant-Id·X-Dev-User-Id 헤더 필요")
-    try:
+    """세션 쿠키 우선, 없으면 local dev 헤더. 둘 다 없으면 401(fail-closed)."""
+    if liviq_session:
+        try:
+            data = await session_store.get(liviq_session)
+        except RedisError as exc:  # Redis 장애 → 세션 검증 실패 = 401(ADR-0011)
+            raise HTTPException(status_code=401, detail="세션 검증 실패") from exc
+        if data is None:
+            raise HTTPException(status_code=401, detail="세션 만료 또는 무효")
         return RequestContext(
-            tenant_id=uuid.UUID(x_dev_tenant_id), user_id=uuid.UUID(x_dev_user_id)
+            tenant_id=uuid.UUID(data.tenant_id),
+            user_id=uuid.UUID(data.user_id),
+            roles=data.roles,
+            visibilities=visibilities_for(data.roles),
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="헤더 UUID 형식 오류") from exc
+    if get_settings().api_env == "local":
+        if not x_dev_tenant_id or not x_dev_user_id:
+            raise HTTPException(status_code=401, detail="X-Dev-Tenant-Id·X-Dev-User-Id 헤더 필요")
+        try:
+            tenant_id = uuid.UUID(x_dev_tenant_id)
+            user_id = uuid.UUID(x_dev_user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="헤더 UUID 형식 오류") from exc
+        return RequestContext(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            roles=DEV_ROLES,
+            visibilities=visibilities_for(DEV_ROLES),
+        )
+    raise HTTPException(status_code=401, detail="인증 필요 — 세션 없음")
+
+
+def require_roles(*roles: str) -> Callable[[RequestContext], Awaitable[RequestContext]]:
+    """지정 역할 중 하나 이상을 가진 컨텍스트만 통과. 교집합 없으면 403(규칙 4)."""
+    allowed = frozenset(roles)
+
+    async def guard(
+        ctx: Annotated[RequestContext, Depends(get_context)],
+    ) -> RequestContext:
+        if allowed.isdisjoint(ctx.roles):
+            raise HTTPException(status_code=403, detail="권한 없음")
+        return ctx
+
+    return guard
+
+
+def set_session_cookie(response: Response, session_id: str) -> None:
+    """세션 쿠키 설정 — httpOnly·SameSite=lax, 비-local에서만 Secure."""
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,
+        samesite="lax",
+        path="/",
+        secure=get_settings().api_env != "local",
+        max_age=int(SESSION_ABSOLUTE_TTL.total_seconds()),
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    """로그아웃 — 세션 쿠키 제거."""
+    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
 
 
 _session_factory: async_sessionmaker[AsyncSession] | None = None

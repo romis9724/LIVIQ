@@ -33,7 +33,9 @@ async def client(
     await _seed_tenant_user(db_session)
     storage, queue = FakeStorage(), FakeQueue()
     app = create_app()
-    app.dependency_overrides[get_context] = lambda: RequestContext(TENANT_ID, USER_ID)
+    app.dependency_overrides[get_context] = lambda: RequestContext(
+        TENANT_ID, USER_ID, roles=("MANAGER",)
+    )
     app.dependency_overrides[get_tenant_session] = lambda: db_session
     app.dependency_overrides[get_storage] = lambda: storage
     app.dependency_overrides[get_queue] = lambda: queue

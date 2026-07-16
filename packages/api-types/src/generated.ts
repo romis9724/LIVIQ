@@ -172,7 +172,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
         };
         requestBody: {
             content: {
@@ -208,7 +210,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
         };
         requestBody?: never;
         responses: {
@@ -240,7 +244,9 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path?: never;
-            cookie?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
         };
         requestBody: {
             content: {

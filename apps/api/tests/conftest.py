@@ -9,10 +9,15 @@ import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
 import pytest_asyncio
+
+if TYPE_CHECKING:
+    from app.session import SessionStore
+    from fakeredis.aioredis import FakeRedis
 
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
@@ -105,6 +110,24 @@ def fake_llm() -> LlmClient:
         return httpx.Response(200, content=sse.encode())
 
     return LlmClient(settings, transport=httpx.MockTransport(handler), retry_backoff_s=0.0)
+
+
+@pytest_asyncio.fixture
+async def fake_redis() -> AsyncIterator[FakeRedis]:
+    from fakeredis.aioredis import FakeRedis
+
+    redis = FakeRedis(decode_responses=True)
+    try:
+        yield redis
+    finally:
+        await redis.aclose()
+
+
+@pytest.fixture
+def session_store(fake_redis: FakeRedis) -> SessionStore:
+    from app.session import SessionStore
+
+    return SessionStore(fake_redis)
 
 
 class FakeStorage:
