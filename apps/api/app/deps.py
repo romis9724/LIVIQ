@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai_core.llm.client import LlmClient
 from app.config import get_settings
-from app.session import SESSION_ABSOLUTE_TTL, SessionStore, get_session_store
+from app.session import SESSION_ABSOLUTE_TTL, SessionData, SessionStore, get_session_store
 from liviq_db.engine import create_engine, create_session_factory
 
 SESSION_COOKIE_NAME = "liviq_session"
@@ -61,7 +61,11 @@ async def get_context(
     x_dev_tenant_id: Annotated[str | None, Header()] = None,
     x_dev_user_id: Annotated[str | None, Header()] = None,
 ) -> RequestContext:
-    """세션 쿠키 우선, 없으면 local dev 헤더. 둘 다 없으면 401(fail-closed)."""
+    """세션 쿠키 우선, 없으면 local dev 헤더. 둘 다 없으면 401(fail-closed).
+
+    온보딩 세션·비활성 상태(pending/rejected/inactive)는 일반 API 접근 403 —
+    상태별 화면 분기는 /me가 담당(docs/06 §2). 상태 무관 조회는 get_session_raw.
+    """
     if liviq_session:
         try:
             data = await session_store.get(liviq_session)
@@ -69,6 +73,10 @@ async def get_context(
             raise HTTPException(status_code=401, detail="세션 검증 실패") from exc
         if data is None:
             raise HTTPException(status_code=401, detail="세션 만료 또는 무효")
+        if data.kind != "user":  # 온보딩 세션은 일반 API 접근 불가(온보딩 제출만)
+            raise HTTPException(status_code=403, detail="온보딩 필요")
+        if data.status != "active":  # pending/rejected/inactive → 상태별 안내 화면만
+            raise HTTPException(status_code=403, detail=data.status)
         return RequestContext(
             tenant_id=uuid.UUID(data.tenant_id),
             user_id=uuid.UUID(data.user_id),
@@ -90,6 +98,22 @@ async def get_context(
             visibilities=visibilities_for(DEV_ROLES),
         )
     raise HTTPException(status_code=401, detail="인증 필요 — 세션 없음")
+
+
+async def get_session_raw(
+    session_store: Annotated[SessionStore, Depends(get_session_store)],
+    liviq_session: Annotated[str | None, Cookie()] = None,
+) -> SessionData:
+    """상태 무관 세션 조회 — /me·온보딩 제출용. 쿠키 없거나 만료면 401(상태는 통과)."""
+    if not liviq_session:
+        raise HTTPException(status_code=401, detail="인증 필요 — 세션 없음")
+    try:
+        data = await session_store.get(liviq_session)
+    except RedisError as exc:
+        raise HTTPException(status_code=401, detail="세션 검증 실패") from exc
+    if data is None:
+        raise HTTPException(status_code=401, detail="세션 만료 또는 무효")
+    return data
 
 
 def require_roles(*roles: str) -> Callable[[RequestContext], Awaitable[RequestContext]]:
@@ -143,6 +167,18 @@ async def get_tenant_session(
         await session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(ctx.tenant_id))
         )
+        yield session
+
+
+async def get_db_session() -> AsyncIterator[AsyncSession]:
+    """tenant 컨텍스트 없는 세션 — OAuth 콜백의 login_id(google sub) 전역 조회 전용.
+
+    login_id는 글로벌 partial-unique라 tenant 확정 전 조회가 불가피 = RLS 예외 지점.
+    prod 배선(liviq_app은 NOBYPASSRLS)에선 이 조회만 BYPASSRLS role 또는 SECURITY
+    DEFINER 함수가 필요(H2 후속). 그 외 모든 도메인 쿼리는 get_tenant_session 경유.
+    """
+    factory = _get_session_factory()
+    async with factory() as session:
         yield session
 
 

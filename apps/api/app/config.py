@@ -24,6 +24,15 @@ class ApiSettings(BaseSettings):
     s3_secret_access_key: str = Field(..., validation_alias="S3_SECRET_ACCESS_KEY")
     s3_bucket: str = Field("liviq", validation_alias="S3_BUCKET")
 
+    # Google OAuth(PKCE) — optional. 미설정 시 /auth/google/* 503(부팅은 성공, ADR-0011).
+    google_oauth_client_id: str | None = Field(None, validation_alias="GOOGLE_OAUTH_CLIENT_ID")
+    google_oauth_client_secret: str | None = Field(
+        None, validation_alias="GOOGLE_OAUTH_CLIENT_SECRET"
+    )
+    google_oauth_redirect_uri: str | None = Field(
+        None, validation_alias="GOOGLE_OAUTH_REDIRECT_URI"
+    )
+
 
 @lru_cache
 def get_settings() -> ApiSettings:

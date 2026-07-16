@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.routers import assistant, documents
+from app.routers import assistant, auth, documents
 
 # local 개발 웹 오리진(web-resident 3000·web-admin 3001). 운영 CORS는 배포 설정에서.
 LOCAL_WEB_ORIGINS = ["http://localhost:3000", "http://localhost:3001"]
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     def health() -> HealthResponse:
         return HealthResponse(status="ok")
 
+    app.include_router(auth.router)
     app.include_router(documents.router)
     app.include_router(assistant.router)
     return app

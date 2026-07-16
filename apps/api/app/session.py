@@ -30,16 +30,24 @@ async def _resolve[T](result: Awaitable[T] | T) -> T:
 
 SESSION_ABSOLUTE_TTL = timedelta(hours=24)  # 절대 수명 — 슬라이딩으로도 못 넘김
 SESSION_IDLE_TTL = timedelta(hours=2)  # idle 만료 — 조회 시마다 연장(슬라이딩)
+OAUTH_STATE_TTL = 600  # PKCE code_verifier 임시 보관(콜백까지) — 10분
 
 _SESSION_PREFIX = "session:"
 _USER_SESSIONS_PREFIX = "user_sessions:"
+_OAUTH_STATE_PREFIX = "oauth_state:"
 
 
 @dataclass(frozen=True)
 class SessionData:
+    """세션 값. kind=onboarding(users 행 없는 신규 로그인)은 tenant/user가 비고,
+    google_sub만 있다 — 온보딩 제출에서 사용. status는 계정 상태(상태별 차단 판정용)."""
+
     tenant_id: str
     user_id: str
     roles: tuple[str, ...]
+    kind: str = "user"
+    status: str = "active"
+    google_sub: str | None = None
 
 
 def _session_key(session_id: str) -> str:
@@ -50,21 +58,29 @@ def _user_sessions_key(tenant_id: str, user_id: str) -> str:
     return f"{_USER_SESSIONS_PREFIX}{tenant_id}:{user_id}"
 
 
+def _oauth_state_key(state: str) -> str:
+    return f"{_OAUTH_STATE_PREFIX}{state}"
+
+
 class SessionStore:
     """Redis 기반 세션 저장소. `decode_responses=True` 클라이언트를 주입받는다."""
 
     def __init__(self, redis: Redis) -> None:
         self._redis = redis
 
-    async def create(self, tenant_id: str, user_id: str, roles: list[str]) -> str:
+    async def create(
+        self, tenant_id: str, user_id: str, roles: list[str], status: str = "active"
+    ) -> str:
         session_id = secrets.token_urlsafe(32)
         now = time.time()
         expires_at = now + SESSION_ABSOLUTE_TTL.total_seconds()
         value = json.dumps(
             {
+                "kind": "user",
                 "tenant_id": tenant_id,
                 "user_id": user_id,
                 "roles": list(roles),
+                "status": status,
                 "created_at": now,
                 "expires_at": expires_at,  # 절대 만료 판정은 값 기준(TTL은 idle)
             }
@@ -75,6 +91,24 @@ class SessionStore:
         await self._redis.set(_session_key(session_id), value, ex=idle)
         await _resolve(self._redis.sadd(set_key, session_id))  # revoke_all 인덱스
         await _resolve(self._redis.expire(set_key, absolute))
+        return session_id
+
+    async def create_onboarding(self, google_sub: str) -> str:
+        """users 행 없는 신규 로그인용 세션 — tenant 미정, 온보딩 제출까지만 유효.
+        revoke_all 인덱스에 넣지 않는다(user_id 없음 — idle 만료로 자연 폐기)."""
+        session_id = secrets.token_urlsafe(32)
+        now = time.time()
+        value = json.dumps(
+            {
+                "kind": "onboarding",
+                "google_sub": google_sub,
+                "created_at": now,
+                "expires_at": now + SESSION_ABSOLUTE_TTL.total_seconds(),
+            }
+        )
+        await self._redis.set(
+            _session_key(session_id), value, ex=int(SESSION_IDLE_TTL.total_seconds())
+        )
         return session_id
 
     async def get(self, session_id: str) -> SessionData | None:
@@ -93,10 +127,22 @@ class SessionStore:
         if ttl > 0:
             await _resolve(self._redis.expire(key, ttl))
         return SessionData(
-            tenant_id=payload["tenant_id"],
-            user_id=payload["user_id"],
-            roles=tuple(payload["roles"]),
+            tenant_id=payload.get("tenant_id", ""),
+            user_id=payload.get("user_id", ""),
+            roles=tuple(payload.get("roles", ())),
+            kind=payload.get("kind", "user"),
+            status=payload.get("status", "active"),
+            google_sub=payload.get("google_sub"),
         )
+
+    async def save_oauth_state(
+        self, state: str, code_verifier: str, ttl: int = OAUTH_STATE_TTL
+    ) -> None:
+        await self._redis.set(_oauth_state_key(state), code_verifier, ex=ttl)
+
+    async def pop_oauth_state(self, state: str) -> str | None:
+        """1회용 — state CSRF 방어(재사용 불가). GETDEL로 조회·삭제를 원자적으로."""
+        return await _resolve(self._redis.getdel(_oauth_state_key(state)))
 
     async def revoke(self, session_id: str) -> None:
         await self._redis.delete(_session_key(session_id))

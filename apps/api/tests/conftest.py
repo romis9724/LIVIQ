@@ -148,3 +148,24 @@ class FakeQueue:
 
 TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 USER_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
+
+GOOGLE_SUB = "google-sub-fixed-001"
+
+
+class FakeOAuthProvider:
+    """OAuthProvider 오버라이드 — 고정 sub/email 반환(네트워크 없음)."""
+
+    def __init__(self, sub: str = GOOGLE_SUB, email: str | None = None) -> None:
+        self.sub = sub
+        self.email = email
+
+    def authorize_url(self, state: str, code_challenge: str) -> str:
+        return (
+            "https://accounts.google.com/o/oauth2/v2/auth"
+            f"?state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
+        )
+
+    async def exchange(self, code: str, code_verifier: str) -> object:
+        from app.oauth import OAuthIdentity
+
+        return OAuthIdentity(sub=self.sub, email=self.email)
