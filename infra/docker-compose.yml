@@ -3,6 +3,9 @@
 #   docker compose -f infra/docker-compose.yml up -d
 #
 # 값은 레포 루트 .env.example 기본값과 정합한다(그대로 쓰면 앱 env가 바로 붙음).
+# 호스트 포트는 로컬 타 프로젝트와 충돌을 피해 재배치됨:
+#   postgres 15432 · redis 6381 · minio 9002/9003 · neo4j 7475/7688
+#   (5432는 네이티브 homebrew postgres@17이 127.0.0.1 선점 — localhost 접속이 가려짐)
 # 이 파일의 자격증명은 로컬 개발 전용 — 운영은 시크릿 매니저로 주입한다.
 # 버전 태그는 (초기값)이며, 운영 전 고정 태그로 핀 고정한다.
 
@@ -17,7 +20,7 @@ services:
       POSTGRES_PASSWORD: liviq
       POSTGRES_DB: liviq
     ports:
-      - "5432:5432"
+      - "15432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,7 +33,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6381:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -48,8 +51,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"
+      - "9003:9001"
     volumes:
       - miniodata:/data
     healthcheck:
@@ -65,8 +68,8 @@ services:
     environment:
       NEO4J_AUTH: neo4j/liviqlocal
     ports:
-      - "7474:7474"
-      - "7687:7687"
+      - "7475:7474"
+      - "7688:7687"
     volumes:
       - neo4jdata:/data
     healthcheck:

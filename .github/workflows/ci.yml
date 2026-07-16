@@ -1,0 +1,102 @@
+name: CI
+
+# 코드 게이트 워크플로 (docs/09 §3·§4.1).
+# 순서: format → lint → typecheck → test(coverage) → build.
+# TS(web·ui·config-ts·api-types)와 Python(api·ai-worker·ai-core·db)을 turbo가 함께 오케스트레이션.
+# PR에선 변경 영향 패키지만(--filter=...[origin/main]), main push에선 전체 실행.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 같은 ref의 이전 실행은 취소(PR 연속 푸시 시 중복 낭비 방지).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Code gate (format · lint · typecheck · test · build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # PR: 변경 영향 패키지만. main push: 전체(빈 필터). fetch-depth 0가 origin/main diff의 전제.
+      TURBO_FILTER: ${{ github.event_name == 'pull_request' && '--filter=...[origin/main]' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # turbo ...[origin/main] diff · gitleaks 히스토리 전제
+
+      - name: Fetch main for turbo diff (PR only)
+        if: github.event_name == 'pull_request'
+        run: git fetch origin main:refs/remotes/origin/main
+
+      # pnpm은 setup-node 캐시(cache: pnpm)보다 먼저 설치돼야 한다.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3 # 루트 package.json packageManager와 일치
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync Python workspace
+        run: uv sync --all-packages # 전 멤버 설치(plain sync는 dev 도구만)
+
+      # ── format ── (Python만: TS용 prettier 미설정. mcp/는 별도 트리라 미탐색)
+      - name: Format check (Python)
+        run: uv run --no-sync ruff format --check apps packages
+
+      # TODO: TS format(prettier --check) — prettier 도입 후 추가(docs/09 §4.1 TS 게이트)
+      # TODO: TS vitest coverage thresholds — 앱 커버리지 실측 후 게이트화(docs/09 §4.1)
+
+      # ── lint → typecheck → test(coverage) → build ── (turbo, TS·Python 공통)
+      - name: Lint
+        run: pnpm turbo run lint ${{ env.TURBO_FILTER }}
+
+      - name: Typecheck
+        run: pnpm turbo run typecheck ${{ env.TURBO_FILTER }}
+
+      - name: Test (coverage)
+        run: pnpm turbo run test ${{ env.TURBO_FILTER }}
+
+      - name: Build
+        run: pnpm turbo run build ${{ env.TURBO_FILTER }}
+
+      # ── 계약 드리프트 ── (OpenAPI 재생성 후 생성물 diff 0이 아니면 실패, §1.1)
+      - name: API contract drift
+        run: |
+          pnpm generate:api-types
+          git diff --exit-code -- packages/api-types/src/generated.ts
+
+      # ── 경로 검증 ── (stale 컨텍스트 링크 차단)
+      - name: Context path check
+        run: pnpm check:paths
+
+  # 시크릿 스캔은 메인 게이트와 병렬(별도 job). 라이선스 env는 org 전용이라 미주입.
+  # TODO: 의존성 취약점 스캔(docs/09 §4) — 이번 범위 아님.
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 전체 히스토리 스캔 전제
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

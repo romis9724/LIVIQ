@@ -199,3 +199,102 @@
 
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
+
+## 13. REST API 표면 (v1 — H2 확정)
+
+> **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
+
+### 13.1 공통 규약
+
+- 관리자 전용 경로는 `/admin/*` 접두 + 역할 가드. 접두는 가독성용일 뿐 **인가는 항상 서버 의존성 가드**([06 §2](06-security-privacy.md)).
+- 모든 엔드포인트: 세션 인증 → 테넌트 컨텍스트(`SET LOCAL app.tenant_id`) → 역할 → 소유권 순 검증. 목록은 페이지네이션(`page`·`limit`, 응답 `items`·`total`).
+- AI 응답 스트리밍은 전부 [09 §1.1](09-implementation-harness.md)의 SSE 4이벤트 계약(`status`·`token`·`citation`·`done`)을 재사용한다.
+- local 개발 한정 `X-Dev-Tenant-Id`/`X-Dev-User-Id` 헤더 인증은 H2-1에서 세션으로 대체하고 `API_ENV=local`에서만 동작하도록 격리 유지.
+
+### 13.2 엔드포인트 (도메인별)
+
+**인증·온보딩** (H2-1 · [ADR-0011](adr/0011-redis-server-session.md), [06 §2](06-security-privacy.md), 화면: 입주민 온보딩 3종)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /auth/google/login` | 공개 | PKCE·state 생성 → Google 리다이렉트 |
+| `GET /auth/google/callback` | 공개 | 세션 확립. 계정 상태별 분기(신규→온보딩, pending→대기 화면, active→홈) |
+| `POST /auth/logout` | 세션 | 세션 revoke |
+| `GET /me` | 세션(모든 상태) | 프로필·역할·계정 상태 — 상태별 화면 분기의 단일 출처 |
+| `POST /onboarding/profile` | 세션(신규) | 초대코드(tenant 확정)·동의·성함·생년월일·동·호 → 명부 자동 대조 → `pending` |
+
+**계정 승인·명부** (H2-1, 화면: 관리자 가입 승인)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/approvals` | MANAGER | 대기 목록(명부 일치 배지 = `roster_matched`) |
+| `POST /admin/approvals/{user_id}/approve` · `/reject` | MANAGER | 거절은 사유 필수. 상태 전환 시 대상 세션 즉시 revoke + 알림 생성 |
+| `POST /admin/roster/upload` | MANAGER | 명부 엑셀 → `excel_uploads(type=roster)` → 사전등록 diff 병합([03 §4.1](03-database-design.md)) |
+
+**AI 비서** (H1 구현됨, 화면: 입주민 AI 비서)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `POST /assistant/ask` | RESIDENT+ | SSE. 계약은 [09 §1.1](09-implementation-harness.md) — 불변 |
+
+**문서** (H1 구현·H2-2 보강, 화면: 관리자 문서 관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `POST /documents` | MANAGER·STAFF | 구현됨 — 업로드→S3→인제스트 큐, `content_hash` 멱등 |
+| `GET /documents` | MANAGER·STAFF | 구현됨 — H2-2에서 `index_status` 필터 추가 |
+| `PATCH /documents/{id}` | MANAGER·STAFF | H2-2 — 공개범위(visibility)·제목 수정 |
+| `POST /documents/{id}/reindex` | MANAGER·STAFF | H2-2 — 재색인(failed 복구) |
+
+**민원** (H2-3, 화면: 입주민 민원·하자 / 관리자 민원 관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `POST /inquiries` | RESIDENT | 접수. AI 카테고리·우선순위는 서버가 **제안값**으로 채움(키워드 기반, [03 §4.4](03-database-design.md)) |
+| `GET /inquiries` | RESIDENT | **본인 `author_user_id` 한정**(세대 공유 제외 — FR-RES-02) |
+| `GET /inquiries/{id}` + `/events` | 작성자 또는 MANAGER·STAFF | 타임라인 = `inquiry_events` 순차 |
+| `GET /admin/inquiries` | MANAGER·STAFF | 접수함(상태·카테고리 필터) |
+| `POST /admin/inquiries/{id}/assign` · `/status` | MANAGER·STAFF | 상태 머신 `received→assigned→in_progress→done`(역행은 관리자만). 변경 시 `inquiry_events` 기록 + 작성자 알림 |
+
+**공지** (H2-4, 화면: 입주민 공지 / 관리자 공지 관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /notices` · `/notices/{id}` | RESIDENT+ | `audience`·역할 필터 |
+| `POST /admin/notices/drafts` | MANAGER·STAFF | 키워드→AI 초안(`notice_drafts`). **출처 인용 강제** — 근거 문서 없으면 초안 생성 거절 |
+| `GET /admin/notices/drafts/{id}` | MANAGER·STAFF | 초안·인용 확인(검수 화면) |
+| `POST /admin/notices` | MANAGER | **발송·예약은 사람 확정만**(AI 초안 승인 후 승격). published 시 대상자 알림 생성 |
+
+**관리비** (H2-5 · [ADR-0006](adr/0006-fees-excel-upload-source.md), 화면: 입주민 관리비 / 관리자 관리비 관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `POST /admin/fees/uploads` | MANAGER·STAFF | 엑셀 업로드→파싱·Pydantic 검증→`excel_uploads`+오류 리포트 |
+| `GET /admin/fees/uploads/{id}` | MANAGER·STAFF | 미리보기·행 단위 오류 확인(확정 전) |
+| `POST /admin/fees/uploads/{id}/apply` | MANAGER | **확정 적용** — 해당 (tenant, period) 전체 교체, 단일 트랜잭션([11 §3.3](11-data-architecture.md)) |
+| `GET /fees` | RESIDENT | **본인 세대 + 입주 승인 이후 월만**([06 §2](06-security-privacy.md) 결정 E) |
+| `GET /admin/fees` | MANAGER·STAFF | 월별 부과 현황·세대별 조회 |
+| `POST /fees/explain` | RESIDENT | AI 설명(SSE) — 확정 데이터(전월·평균 diff)를 컨텍스트로 **설명만**, 인용 `source_kind=fee_data`. H3 도구 레지스트리 도입 시 `get_fees` 도구로 통합(§5.2) |
+
+**검수 큐** (H2-6, 화면: 관리자 AI 검수 큐)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/review-queue` | MANAGER | `messages.review_status=needs_review` 목록(질문·답변·인용·신뢰도) |
+| `POST /admin/review-queue/{message_id}/decide` | MANAGER | `approve`/`reject`(+메모) → `reviewed_by/at` 기록. **사후 검수** — 이미 전달된 답변 회수 없음, 골든셋 후보로 축적([07 §5](07-testing-strategy.md)). 반려 시 정정 알림은 백로그 |
+
+**알림함** (횡단 · [ADR-0012](adr/0012-in-app-notification-only.md), 화면: 입주민 나>알림함)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /notifications` | 본인 | RLS — 본인 알림만 |
+| `POST /notifications/{id}/read` | 본인 | 읽음 처리(배지 해제) |
+
+> 알림 **생성**은 전용 엔드포인트가 아니라 각 도메인 트랜잭션 내부에서 코드가 수행한다(공지 published·민원 상태 변경·가입 승인/거절) — 규칙 8(액션은 코드가 실행).
+
+### 13.3 표면 불변식 (구현이 어겨서는 안 되는 것)
+
+1. AI가 상태를 바꾸는 엔드포인트는 없다 — AI 산출물은 항상 `*_drafts`·제안 컬럼(`ai_suggested_*`)에 머물고, 상태 전이는 사람 액션 엔드포인트만 수행(규칙 6·8).
+2. 관리비 쓰기는 엑셀 업로드 confirm 플로우가 유일하다. `/fees/explain`은 읽기+설명 전용(규칙 5).
+3. 입주민 리소스는 소유권 필터가 쿼리에 박힌다(`author_user_id`·`household_id`·승인 시점) — 파라미터로 우회 불가.
+4. SSE 계약(4이벤트)은 assistant·explain 등 모든 AI 스트리밍이 공유하며 변경 금지([09 §1.1](09-implementation-harness.md)).

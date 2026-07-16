@@ -1,0 +1,34 @@
+[project]
+name = "liviq-api"
+version = "0.1.0"
+description = "LIVIQ api — FastAPI (도메인 API·BFF·AI 오케스트레이션 진입)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "pydantic>=2",
+    "pydantic-settings",
+    "sse-starlette",
+    "uvicorn[standard]",
+    "python-multipart",
+    "boto3",
+    "arq",
+    "liviq-db",
+    "liviq-ai-core",
+]
+
+[tool.uv.sources]
+liviq-db = { workspace = true }
+liviq-ai-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# 커버리지 게이트 80%(docs/09 §4.1) — 로컬·CI 동일. 소스는 app 패키지만(tests 제외).
+addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80"

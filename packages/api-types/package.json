@@ -1,0 +1,18 @@
+{
+  "name": "@liviq/api-types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./generated": "./src/generated.ts"
+  },
+  "scripts": {
+    "generate": "uv run --no-sync --project ../../apps/api python ../../apps/api/scripts/export_openapi.py openapi.json && openapi-typescript openapi.json -o src/generated.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@liviq/config-ts": "workspace:*",
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.7.2"
+  }
+}

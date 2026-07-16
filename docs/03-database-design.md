@@ -342,6 +342,8 @@ messages(id, tenant_id, conversation_id, role,       -- user|assistant|system
          confidence numeric NULL,                      -- 신뢰도
          status,                                       -- answered|fallback|handed_off
          review_status NULL,                           -- needs_review|approved|rejected
+         reviewed_by NULL, reviewed_at NULL,           -- 검수 처리 기록(검수 큐, H2-6)
+         review_note text NULL,                        -- 검수 메모(반려 사유·수정 제안 — 골든셋 후보)
          token_input int, token_output int, cost_usd numeric,  -- [08] 비용추적
          created_at)
 
@@ -369,6 +371,12 @@ inquiries(id, tenant_id, household_id, author_user_id,
           status,                                       -- received|assigned|in_progress|done
           assignee_user_id NULL, attachments jsonb,
           created_at, updated_at)
+
+-- 민원 타임라인 (화면 "민원 상세 타임라인"의 원천 — 상태·배정 변경마다 기록, H2-3)
+inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified|assigned|status_changed|comment
+               actor_user_id NULL,                     -- NULL = 시스템(AI 분류 등)
+               payload jsonb,                          -- {from, to, category_id, note, ...}
+               created_at)
 
 notices(id, tenant_id, title, body text, status,       -- draft|published|retracted|superseded
         scheduled_at NULL,                              -- 예약 발송 시각(단일 컬럼; NULL=즉시). 발송 후 정정=superseded, 철회=retracted

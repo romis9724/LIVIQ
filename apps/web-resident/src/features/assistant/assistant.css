@@ -195,6 +195,11 @@
   margin-bottom: 6px;
 }
 
+.ai-row__review-note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
 /* handoff */
 .handoff-contact {
   font-size: var(--text-sm);

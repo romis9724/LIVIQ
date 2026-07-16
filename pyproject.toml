@@ -1,0 +1,63 @@
+# LIVIQ Python 백엔드 — uv workspace 루트 (단일 lock)
+# 루트 자체는 패키지가 아님(package = false). 멤버 4개를 오케스트레이션하고
+# 공유 도구(ruff·mypy)·dev 의존만 소유한다. ADR-0013 참조.
+[project]
+name = "liviq-workspace"
+version = "0.1.0"
+description = "LIVIQ 백엔드 uv workspace 루트 (api·ai-worker·ai-core·db)"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/ai-worker", "packages/ai-core", "packages/db"]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "testcontainers[postgres]",
+]
+
+# ── 공유 도구 설정 (여기 한 곳만 — 패키지별 중복 금지) ────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps/api/app", "apps/ai-worker/src", "packages/ai-core/src", "packages/db/src"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic autogenerate 산출물 — 긴 제약 정의 라인은 손대지 않는다
+"**/alembic/versions/*.py" = ["E501"]
+
+[tool.ruff.format]
+# alembic autogenerate 산출물은 재포맷하지 않는다(위 per-file-ignore와 동일 의도).
+# mcp/는 별도 트리(python-mcp.yml·Py3.10)라 포맷 대상에서 제외 — CI·로컬 모두
+# `ruff format apps packages`로 워크스페이스 멤버만 검사(mcp는 루트 트리라 미탐색).
+exclude = ["**/alembic/versions/*.py"]
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# pgvector·testcontainers·boto3는 타입 스텁을 배포하지 않음
+module = ["pgvector.*", "testcontainers.*", "boto3.*"]
+ignore_missing_imports = true

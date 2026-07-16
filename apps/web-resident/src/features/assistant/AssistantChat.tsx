@@ -2,72 +2,42 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
+import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
-type Resolution =
-  | { kind: "answered"; text: string; citation: { title: string; meta: string } }
-  | { kind: "fallback"; text: string };
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "ai";
-  status: "streaming" | "done";
-  resolution?: Resolution;
-  userText?: string;
-}
-
 const SUGGESTIONS = ["관리비 이의신청 방법", "엘리베이터 점검일", "분리수거 배출 시간"];
-const FOLLOW_UPS = ["관리비 이의신청 방법", "엘리베이터 점검일", "분리수거 배출 시간"];
 
-const FALLBACK_KEYWORDS = ["보험", "한도", "누수", "전기차", "충전"];
+const STAGE_HINT: Record<string, string> = {
+  searching: "출처 문서 찾는 중…",
+  generating: "답변 작성 중…",
+  verifying: "근거 확인 중…",
+};
 
-/** 질문 내용으로 응답을 결정한다(백엔드 연동 전 결정적 목업). 근거 없으면 폴백. */
-function resolve(question: string): Resolution {
-  if (FALLBACK_KEYWORDS.some((k) => question.includes(k))) {
-    return {
-      kind: "fallback",
-      text: "이 질문은 근거 문서에서 정확한 내용을 찾지 못했어요. 추측해서 답하지 않고 관리사무소 담당자에게 연결해 드릴게요.",
-    };
-  }
-  return {
-    kind: "answered",
-    text: "규정상 평일 09:00~18:00에 인테리어 공사가 가능한 것으로 보입니다. 주말·공휴일은 제한됩니다. 정확한 적용은 관리사무소에 확인해 주세요.",
-    citation: { title: "관리규약 제32조 (공사 시간 제한)", meta: "12페이지 · 2024.03 개정본" },
-  };
+const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 관리사무소 담당자에게 연결해 드릴게요.";
+
+const FALLBACK_TEXT: Record<string, string> = {
+  no_evidence: "근거 문서에서 정확한 내용을 찾지 못했어요. 추측하지 않고 관리사무소 담당자에게 연결해 드릴게요.",
+  llm_unavailable: "AI 요약이 일시적으로 어려워 검색된 근거만 안내해요. 잠시 후 다시 시도해 주세요.",
+  low_confidence: FALLBACK_DEFAULT,
+  masking_failed: "개인정보 보호를 위해 이 질문은 담당자에게 직접 연결해 드릴게요.",
+};
+
+function fallbackText(reason: string | null): string {
+  return (reason ? FALLBACK_TEXT[reason] : undefined) ?? FALLBACK_DEFAULT;
 }
-
-let seq = 0;
-const nextId = () => `m${++seq}`;
 
 export function AssistantChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { messages, ask, pending } = useAssistantStream();
   const [draft, setDraft] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
-
-  const ask = (question: string) => {
-    const text = question.trim();
-    if (!text) return;
-    const aiId = nextId();
-    setMessages((prev) => [
-      ...prev,
-      { id: nextId(), role: "user", status: "done", userText: text },
-      { id: aiId, role: "ai", status: "streaming" },
-    ]);
+  const submit = (question: string) => {
+    void ask(question);
     setDraft("");
-    const t = setTimeout(() => {
-      const resolution = resolve(text);
-      setMessages((prev) =>
-        prev.map((m) => (m.id === aiId ? { ...m, status: "done", resolution } : m)),
-      );
-    }, 1300);
-    timers.current.push(t);
   };
 
   const isEmpty = messages.length === 0;
@@ -96,20 +66,20 @@ export function AssistantChat() {
             </p>
             <div className="chips">
               {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" className="chip" onClick={() => ask(s)}>
+                <button key={s} type="button" className="chip" onClick={() => submit(s)}>
                   {s}
                 </button>
               ))}
             </div>
           </div>
         ) : (
-          messages.map((m) =>
+          messages.map((m: ChatMessage) =>
             m.role === "user" ? (
               <div key={m.id} className="bubble-user">
-                {m.userText}
+                {m.text}
               </div>
             ) : (
-              <AiMessage key={m.id} message={m} onChip={ask} />
+              <AiRow key={m.id} message={m} onChip={submit} />
             ),
           )
         )}
@@ -119,7 +89,7 @@ export function AssistantChat() {
         className="composer"
         onSubmit={(e) => {
           e.preventDefault();
-          ask(draft);
+          submit(draft);
         }}
       >
         <label htmlFor="assistant-ask" className="sr-only">
@@ -134,7 +104,12 @@ export function AssistantChat() {
           onChange={(e) => setDraft(e.target.value)}
           autoComplete="off"
         />
-        <button type="submit" className="composer__send" aria-label="질문 보내기" disabled={!draft.trim()}>
+        <button
+          type="submit"
+          className="composer__send"
+          aria-label="질문 보내기"
+          disabled={!draft.trim() || pending}
+        >
           ↑
         </button>
       </form>
@@ -142,39 +117,50 @@ export function AssistantChat() {
   );
 }
 
-function AiMessage({ message, onChip }: { message: ChatMessage; onChip: (q: string) => void }) {
+function AiRow({ message, onChip }: { message: AiMessage; onChip: (q: string) => void }) {
+  const streaming = message.status === "streaming";
+  const answered = message.result?.status === "answered" && !message.error;
+
   return (
     <div className="ai-row">
       <span className="ai-row__avatar" aria-hidden="true">
         L
       </span>
       <div className="ai-row__body">
-        {message.status === "streaming" ? (
+        {streaming ? (
           <>
             <div className="bubble-ai">
-              규정상 평일 09:00~18:00에는 인테리어 공사가 가능
+              {message.text}
               <span className="caret" aria-hidden="true" />
             </div>
             <div className="ai-row__hint">
-              <span aria-hidden="true">📄</span> 출처 문서 확인 중…
+              <span aria-hidden="true">📄</span> {STAGE_HINT[message.stage] ?? "처리 중…"}
             </div>
           </>
-        ) : message.resolution?.kind === "answered" ? (
+        ) : answered ? (
           <>
-            <ConfidenceBadge status="answered" />
+            <ConfidenceBadge status={message.result?.needsReview ? "review" : "answered"} />
             <div className="bubble-ai">
-              <p>{message.resolution.text}</p>
-              <CitationCard
-                title={message.resolution.citation.title}
-                meta={message.resolution.citation.meta}
-                href="#"
-              />
+              <p>{message.text}</p>
+              {message.citations.map((c) => (
+                <CitationCard
+                  key={c.ref}
+                  title={c.documentTitle}
+                  meta={[c.clause, c.page != null ? `${c.page}p` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  href="#"
+                />
+              ))}
             </div>
+            {message.result?.needsReview ? (
+              <p className="ai-row__review-note">관리사무소 확인 예정인 답변이에요.</p>
+            ) : null}
             <FeedbackButtons />
             <div className="ai-row__followups">
               <span className="ai-row__followups-label">이어서 물어보기</span>
               <div className="chips">
-                {FOLLOW_UPS.map((c) => (
+                {SUGGESTIONS.map((c) => (
                   <button key={c} type="button" className="chip" onClick={() => onChip(c)}>
                     {c}
                   </button>
@@ -186,7 +172,15 @@ function AiMessage({ message, onChip }: { message: ChatMessage; onChip: (q: stri
           <>
             <ConfidenceBadge status="handoff" />
             <div className="bubble-ai">
-              <p>{message.resolution?.text}</p>
+              <p>{message.error ? message.text : fallbackText(message.result?.fallbackReason ?? null)}</p>
+              {message.citations.map((c) => (
+                <CitationCard
+                  key={c.ref}
+                  title={c.documentTitle}
+                  meta={[c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ")}
+                  href="#"
+                />
+              ))}
               <div className="handoff-contact">관리사무소 · 평일 09:00~18:00 · 담당 김*수 소장</div>
               <div className="handoff-actions">
                 <button type="button" className="btn btn--primary">

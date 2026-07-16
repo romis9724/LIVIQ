@@ -26,18 +26,25 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실):
+현재 구현된 것(현실, H1 완료 — RAG MVP):
 
 ```text
-apps/      web-resident · web-admin          # Next.js 웹 2종
-packages/  ui · config-ts                    # 공유 컴포넌트/설정
+apps/      web-resident                      # Next.js — AI 비서 화면 실연동(SSE), 나머지 화면은 목업
+           web-admin                         # Next.js — 전 화면 목업 데이터 (H2에서 실연동)
+           api                               # FastAPI — documents 업로드·assistant SSE 질의 (liviq-api)
+           ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
+packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
+           api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
+           ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·오케스트레이터 (liviq-ai-core)
+           db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
+evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(rule-1)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
-계획된 것(아직 미존재, 목표 아키텍처): `apps/api`(FastAPI·Python) · `apps/ai-worker`(arq) ·
-`packages/ai-core`·`db`(SQLAlchemy·Alembic)·`api-types`(OpenAPI 생성) — 도입 시점에 이 블록 갱신([ADR-0013](docs/adr/0013-python-backend.md)).
-로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j), env 계약은 `.env.example`.
+Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
+인증은 local dev 헤더(`X-Dev-*`) 임시 — 정식 세션·역할은 H2-1. 다음 단계·백로그: [docs/09 §8.2·§8.3](docs/09-implementation-harness.md).
+로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
 
 ## 자주 쓰는 명령
 
@@ -47,12 +54,16 @@ pnpm dev         # turbo run dev — 웹 앱 병렬 (apps/*, packages/*)
 pnpm build       # turbo run build
 pnpm lint        # turbo run lint
 pnpm typecheck   # turbo run typecheck
-pnpm test        # turbo run test — vitest (web 2종 + ui)
+pnpm test        # turbo run test — vitest(web 2종+ui) + pytest(Python 4종, cov 80 게이트)
 pnpm start       # turbo run start (build 후)
+uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
+pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
+pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
 ```
 
-> Note: `db:migrate`·`e2e` 등은 해당 패키지(api·db) 도입 후 루트 스크립트로
-> 추가 예정. 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
+> Note: `e2e`는 tests/e2e 도입 후 루트 스크립트로 추가 예정.
+> 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
+> Python 패키지 디렉토리에서 plain `uv run` 금지(형제 멤버 deps를 prune함) — `uv run --no-sync` 사용.
 
 ## 코드 컨벤션 (사용자 web 규칙 + 본 프로젝트)
 
@@ -64,6 +75,7 @@ pnpm start       # turbo run start (build 후)
 
 ## 작업 방식
 
+- **작업 사이클(H2부터)**: 작업 단위(Hx-y)마다 브랜치 → ①설계 갱신 커밋(구현 전 필수) → ②구현 커밋(게이트 그린 단위) → ③현행화 커밋(CLAUDE.md·ARCHITECTURE.md·docs/09 §8 상태) → ④PR(CI 그린+사용자 확인 후 머지). 상세: [docs/09 §3.1](docs/09-implementation-harness.md).
 - 새 구현 전 **재사용 검토**(라이브러리/기존 패턴). KISS·YAGNI·DRY.
 - TDD: 실패 테스트 → 구현 → 리팩터. 보안(인가/RLS/마스킹) 테스트는 CRITICAL 게이트.
 - 코드 게이트 순서: format → lint → typecheck → test → build ([docs/09](docs/09-implementation-harness.md)).
