@@ -1,6 +1,7 @@
 """LIVIQ api — FastAPI 앱 팩토리(docs/09 §8.1, 02 §4).
 
 H1: documents(업로드·인제스트 트리거)·assistant(SSE 질의) 라우터.
+H2-1: auth(OAuth·세션)·onboarding(제출·명부 대조)·approvals(승인)·roster(명부 업로드).
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.routers import assistant, auth, documents
+from app.routers import approvals, assistant, auth, documents, onboarding, roster
 
 # local 개발 웹 오리진(web-resident 3000·web-admin 3001). 운영 CORS는 배포 설정에서.
 LOCAL_WEB_ORIGINS = ["http://localhost:3000", "http://localhost:3001"]
@@ -37,6 +38,9 @@ def create_app() -> FastAPI:
         return HealthResponse(status="ok")
 
     app.include_router(auth.router)
+    app.include_router(onboarding.router)
+    app.include_router(approvals.router)
+    app.include_router(roster.router)
     app.include_router(documents.router)
     app.include_router(assistant.router)
     return app

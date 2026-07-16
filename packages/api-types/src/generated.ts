@@ -4,6 +4,74 @@
  */
 
 export interface paths {
+    "/admin/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Approvals */
+        get: operations["list_approvals_admin_approvals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/approvals/{user_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve */
+        post: operations["approve_admin_approvals__user_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/approvals/{user_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject */
+        post: operations["reject_admin_approvals__user_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/roster/upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Roster */
+        post: operations["upload_roster_admin_roster_upload_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/ask": {
         parameters: {
             query?: never;
@@ -130,10 +198,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/onboarding/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Profile */
+        post: operations["submit_profile_onboarding_profile_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ApprovalListOut */
+        ApprovalListOut: {
+            /** Items */
+            items: components["schemas"]["ApprovalOut"][];
+        };
+        /** ApprovalOut */
+        ApprovalOut: {
+            /** Building Name */
+            building_name: string | null;
+            /** Floor */
+            floor: number | null;
+            /** Name Masked */
+            name_masked: string;
+            /**
+             * Requested At
+             * Format: date-time
+             */
+            requested_at: string;
+            /** Roster Matched */
+            roster_matched: boolean;
+            /** Unit No */
+            unit_no: number | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
         /** AskRequest */
         AskRequest: {
             /** Conversation Id */
@@ -157,6 +270,18 @@ export interface components {
              * @enum {string}
              */
             visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+        };
+        /** Body_upload_roster_admin_roster_upload_post */
+        Body_upload_roster_admin_roster_upload_post: {
+            /** File */
+            file: string;
+        };
+        /** ConsentIn */
+        ConsentIn: {
+            /** Granted */
+            granted: boolean;
+            /** Purpose */
+            purpose: string;
         };
         /** DocumentListOut */
         DocumentListOut: {
@@ -232,6 +357,64 @@ export interface components {
             /** User Id */
             user_id: string | null;
         };
+        /** ProfileIn */
+        ProfileIn: {
+            /**
+             * Birth Date
+             * Format: date
+             */
+            birth_date: string;
+            /** Building Name */
+            building_name: string;
+            /** Consents */
+            consents: components["schemas"]["ConsentIn"][];
+            /** Floor */
+            floor: number;
+            /** Invite Code */
+            invite_code: string;
+            /** Name */
+            name: string;
+            /** Unit No */
+            unit_no: number;
+        };
+        /** ProfileOut */
+        ProfileOut: {
+            /** Roster Matched */
+            roster_matched: boolean;
+            /** Status */
+            status: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** RejectIn */
+        RejectIn: {
+            /** Reason */
+            reason: string;
+        };
+        /** RosterRowError */
+        RosterRowError: {
+            /** Reason */
+            reason: string;
+            /** Row */
+            row: number;
+        };
+        /** RosterUploadOut */
+        RosterUploadOut: {
+            /** Applied */
+            applied: number;
+            /** Errors */
+            errors: components["schemas"]["RosterRowError"][];
+            /** Marked Inactive */
+            marked_inactive: number;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -254,6 +437,152 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_approvals_admin_approvals_get: {
+        parameters: {
+            query?: {
+                status?: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApprovalListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_admin_approvals__user_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_admin_approvals__user_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_roster_admin_roster_upload_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_roster_admin_roster_upload_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ask_assistant_ask_post: {
         parameters: {
             query?: never;
@@ -483,6 +812,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_profile_onboarding_profile_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileOut"];
                 };
             };
             /** @description Validation Error */

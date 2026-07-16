@@ -170,6 +170,19 @@ async def get_tenant_session(
         yield session
 
 
+async def get_onboarding_session() -> AsyncIterator[AsyncSession]:
+    """온보딩 제출 전용 트랜잭션 세션 — 컨텍스트 미설정으로 시작.
+
+    온보딩은 아직 tenant가 확정되지 않았다(초대코드로 확정). tenants는 RLS 예외라
+    코드가 초대코드로 조회하고, 확정 후 라우터가 같은 트랜잭션에서 app.tenant_id를
+    설정해 households·users·pii_vault를 정상 격리 경로로 읽고 쓴다(auth_lookup 아님 —
+    users 전역 SELECT를 열지 않아 명부 대조가 단지 밖으로 새지 않는다, docs/03 §5).
+    """
+    factory = _get_session_factory()
+    async with factory() as session, session.begin():
+        yield session
+
+
 async def get_auth_lookup_session() -> AsyncIterator[AsyncSession]:
     """OAuth 콜백의 login_id(google sub) 전역 조회 전용 트랜잭션 세션.
 

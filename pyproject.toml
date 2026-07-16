@@ -59,6 +59,6 @@ warn_redundant_casts = true
 no_implicit_optional = true
 
 [[tool.mypy.overrides]]
-# pgvector·testcontainers·boto3·fakeredis는 타입 스텁을 배포하지 않음
-module = ["pgvector.*", "testcontainers.*", "boto3.*", "fakeredis.*"]
+# pgvector·testcontainers·boto3·fakeredis·openpyxl은 타입 스텁을 배포하지 않음
+module = ["pgvector.*", "testcontainers.*", "boto3.*", "fakeredis.*", "openpyxl.*"]
 ignore_missing_imports = true

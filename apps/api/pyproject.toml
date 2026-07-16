@@ -16,6 +16,7 @@ dependencies = [
     "liviq-db",
     "liviq-ai-core",
     "cryptography>=49.0.0",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.uv.sources]
