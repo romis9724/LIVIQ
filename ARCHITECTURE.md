@@ -43,7 +43,7 @@ graph TD
   W --> AIC
   W --> DB
   DB -.-> PG[("PostgreSQL 16<br/>+ pgvector · RLS")]
-  API -.->|세션 예정 ADR-0011| REDIS[("Redis")]
+  API -.->|세션 ADR-0011| REDIS[("Redis")]
   API -.->|arq enqueue| REDIS
   W -.->|큐| REDIS
   API -.->|문서 원본| S3[("MinIO / S3")]
@@ -58,10 +58,12 @@ graph TD
 
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
 
-**H1(RAG MVP) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
-ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는 `documents` 업로드·`assistant` SSE 질의,
-web-resident **비서 화면만 실연동**(SSE — 나머지 화면과 web-admin 전 화면은 아직 목업 데이터).
-인증은 local dev 헤더(`X-Dev-*`) 임시 — 정식 세션·역할 인가는 H2-1([docs/09 §8.2](docs/09-implementation-harness.md)).
+**H1(RAG MVP)+H2-1(인증) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
+ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는 `documents`·`assistant` SSE에 더해
+**정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·Google OAuth PKCE·역할 인가 가드(`require_roles`)·
+PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
+dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
+web-resident **비서 화면만 실연동**(SSE — 나머지 화면·web-admin 전 화면·온보딩 화면 연동은 H2-2+).
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 
 ## Cross-Module 의존성 표

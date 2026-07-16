@@ -259,3 +259,113 @@ async def test_v_users_safe_enforces_tenant_isolation(
     rows = (await owner_conn.execute(text("SELECT id, name_hash FROM v_users_safe"))).all()
     assert len(rows) == 1, "security_invoker 뷰가 tenant 격리를 우회함"
     assert rows[0][0] == seed.a.user_id
+
+
+# ── users auth_lookup 정책: 콜백 전역 조회(SELECT 전용, docs/03 §5) ────────
+
+
+async def _set_auth_lookup(conn: AsyncConnection, role: str) -> None:
+    """auth_lookup 플래그 ON + role 전환(tenant 미설정 — 전역 조회 컨텍스트)."""
+    await conn.execute(text("SELECT set_config('app.auth_lookup', 'on', true)"))
+    await conn.execute(text(f"SET LOCAL ROLE {role}"))
+
+
+async def test_users_lookup_denied_without_auth_lookup_flag(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """플래그 없이 tenant 컨텍스트도 없으면 users 조회 0행(fail-closed)."""
+    await set_context(owner_conn, "liviq_app", tenant_id=None)
+
+    assert await _count(owner_conn, "users") == 0
+
+
+async def test_users_lookup_visible_with_auth_lookup_flag(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """auth_lookup='on'이면 tenant 무관 전역 SELECT(콜백 login_id 조회)."""
+    await _set_auth_lookup(owner_conn, "liviq_app")
+
+    assert await _count(owner_conn, "users") == 2, "auth_lookup 플래그로 전역 조회가 안 됨"
+
+
+async def test_auth_lookup_flag_does_not_enable_writes(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """auth_lookup은 FOR SELECT — 플래그가 있어도 쓰기는 불가(CRITICAL)."""
+    await _set_auth_lookup(owner_conn, "liviq_app")
+
+    async def insert_user() -> object:
+        return await owner_conn.execute(
+            text("INSERT INTO users(tenant_id, status) VALUES(:t, 'active')").bindparams(
+                t=seed.a.tenant_id
+            )
+        )
+
+    # INSERT는 tenant_isolation WITH CHECK만 평가(tenant 미설정) → RLS 위반.
+    await _assert_denied(owner_conn, insert_user)
+
+    # UPDATE는 tenant_isolation USING만 평가(tenant 미설정) → 대상 행 0(쓰기 불가).
+    result = await owner_conn.execute(
+        text("UPDATE users SET status = 'tampered' WHERE id = :i").bindparams(i=seed.a.user_id)
+    )
+    assert result.rowcount == 0, "auth_lookup 플래그로 UPDATE가 새어나감"
+
+
+# ── tenant_keys: DEK 격리 + append-only(권한으로 강제, ADR-0010) ──────────
+
+
+async def _seed_tenant_key(conn: AsyncConnection, tenant_id: object, label: str) -> None:
+    await conn.execute(
+        text(
+            "INSERT INTO tenant_keys(tenant_id, key_version, dek_wrapped) VALUES(:t, 1, :d)"
+        ).bindparams(t=tenant_id, d=f"wrapped-{label}".encode())
+    )
+
+
+async def test_tenant_keys_isolation(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """단지 A는 자기 DEK만 — B의 키는 안 보인다(격리)."""
+    await _seed_tenant_key(owner_conn, seed.a.tenant_id, "a")
+    await _seed_tenant_key(owner_conn, seed.b.tenant_id, "b")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    assert await _count(owner_conn, "tenant_keys") == 1, "타 단지 DEK가 노출됨(격리 실패)"
+
+
+async def test_tenant_keys_update_denied(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """키는 append-only — liviq_app에 UPDATE 권한 없음(회전은 새 버전 INSERT)."""
+    await _seed_tenant_key(owner_conn, seed.a.tenant_id, "a")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    async def update_key() -> object:
+        return await owner_conn.execute(
+            text("UPDATE tenant_keys SET key_version = 2 WHERE tenant_id = :t").bindparams(
+                t=seed.a.tenant_id
+            )
+        )
+
+    await _assert_denied(owner_conn, update_key)
+
+
+async def test_tenant_keys_delete_denied(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """키 삭제 금지 — 복호 불능 방지(liviq_app에 DELETE 권한 없음)."""
+    await _seed_tenant_key(owner_conn, seed.a.tenant_id, "a")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    async def delete_key() -> object:
+        return await owner_conn.execute(
+            text("DELETE FROM tenant_keys WHERE tenant_id = :t").bindparams(t=seed.a.tenant_id)
+        )
+
+    await _assert_denied(owner_conn, delete_key)
+
+
+async def test_tenant_keys_insert_allowed(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """자기 단지 키 INSERT는 허용(회전 = 새 버전 append)."""
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    result = await owner_conn.execute(
+        text(
+            "INSERT INTO tenant_keys(tenant_id, key_version, dek_wrapped) VALUES(:t, 1, :d)"
+        ).bindparams(t=seed.a.tenant_id, d=b"wrapped-app")
+    )
+    assert result.rowcount == 1

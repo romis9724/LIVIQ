@@ -18,11 +18,24 @@ class ApiSettings(BaseSettings):
     redis_url: str = Field(..., validation_alias="REDIS_URL")
     api_env: str = Field("local", validation_alias="API_ENV")
 
+    # pii_vault 봉투 암호화 마스터 키(KEK) — 32byte base64. 필수(fail-closed, ADR-0010).
+    # 유실 = pii_vault 복호 불능. 시크릿 매니저 + 오프라인 백업(docs/09 §7).
+    pii_master_key: str = Field(..., validation_alias="PII_MASTER_KEY")
+
     # S3 호환(MinIO) — 원본 문서 저장(docs/11 §1). 키 프리픽스 `{tenant_id}/`.
     s3_endpoint_url: str = Field(..., validation_alias="S3_ENDPOINT_URL")
     s3_access_key_id: str = Field(..., validation_alias="S3_ACCESS_KEY_ID")
     s3_secret_access_key: str = Field(..., validation_alias="S3_SECRET_ACCESS_KEY")
     s3_bucket: str = Field("liviq", validation_alias="S3_BUCKET")
+
+    # Google OAuth(PKCE) — optional. 미설정 시 /auth/google/* 503(부팅은 성공, ADR-0011).
+    google_oauth_client_id: str | None = Field(None, validation_alias="GOOGLE_OAUTH_CLIENT_ID")
+    google_oauth_client_secret: str | None = Field(
+        None, validation_alias="GOOGLE_OAUTH_CLIENT_SECRET"
+    )
+    google_oauth_redirect_uri: str | None = Field(
+        None, validation_alias="GOOGLE_OAUTH_REDIRECT_URI"
+    )
 
 
 @lru_cache

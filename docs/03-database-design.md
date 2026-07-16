@@ -289,7 +289,14 @@ user_roles(id, tenant_id, user_id, role)   -- role: RESIDENT|MANAGER|STAFF|FACIL
 -- 개인정보 분리 저장 (암호화)
 pii_vault(id, tenant_id, name_enc, phone_enc, email_enc, birth_date_enc,
           name_hash, phone_hash,     -- 검색용 해시(평문 저장 금지)
+          birth_date_hash,           -- 명부 대조 키(성함+생일+동호) 구성용(H2-1)
+          key_version int,           -- 암호화에 쓴 DEK 버전(무중단 키 회전, ADR-0010)
           created_at, updated_at)
+
+-- per-tenant DEK 저장 (KEK(env PII_MASTER_KEY)로 감싼 wrapped key — ADR-0010, H2-1)
+tenant_keys(id, tenant_id, key_version int, dek_wrapped bytea,
+            created_at)
+  UNIQUE(tenant_id, key_version)
 
 -- 개인정보 동의
 consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
@@ -529,13 +536,14 @@ CREATE POLICY tenant_isolation ON documents
 | `ai_eval_golden` | `tenant_id = current OR tenant_id IS NULL` — 공용 골든셋(NULL) + 자기 단지 골든셋 읽기 |
 | `tenants` | RLS 예외 — 멤버십(사용자↔테넌트) 기반 인가로 접근 통제 |
 | `outbox_events`·`jobs` | 워커 role만 cross-tenant(위), 그 외 role은 표준 tenant 격리 |
+| `users` (auth 조회 한정) | **`auth_lookup` permissive 정책(H2-1)** — OAuth 콜백의 `login_id` 전역 조회는 tenant 확정 전이라 표준 격리를 못 통과. `SET LOCAL app.auth_lookup='on'` 플래그가 켜진 트랜잭션에서 **SELECT만** 허용(`USING (current_setting('app.auth_lookup', true) = 'on')`). 콜백 조회 단 한 곳만 사용, 쓰기는 불가 — 행을 찾으면 그 `tenant_id`로 정상 컨텍스트 재설정 후 진행 |
 
 ## 6. 개인정보 처리
 
 | 항목 | 정책 |
 |------|------|
 | 저장 | 이름·연락처·이메일·생년월일은 `pii_vault`에 **봉투 암호화(AES-256-GCM)** — env 마스터 키(KEK) + per-tenant DEK, 다단지 확장 시 KMS 승격. 복호화는 전용 앱 서비스만([06 §4.1](06-security-privacy.md)). 업무 테이블은 `pii_ref`만 |
-| 검색 | 평문 대신 정규화 후 **keyed HMAC** 해시로 조회(단순 salted hash는 값 공간 작은 전화번호·생년월일에 사전 대입 취약) |
+| 검색 | 평문 대신 정규화 후 **keyed HMAC** 해시로 조회(단순 salted hash는 값 공간 작은 전화번호·생년월일에 사전 대입 취약). HMAC 키는 별도 env 없이 **KEK(`PII_MASTER_KEY`)에서 HKDF로 파생**(`info="pii-hmac"`) — 키 공급원 1개 유지(H2-1) |
 | 표시 | 입주민 노출 화면은 마스킹 표시 (예: `홍*동`, `010-****-1234`) — 복호화·마스킹은 전용 앱 서비스가 수행 |
 | LLM 전송 | 호출 전 마스킹/가명화. 원문 식별정보 전송 0건 ([06], FR-AI-05) |
 | 보관 | 동의 목적·기간 만료 시 파기 배치. 탈퇴 시 즉시 비식별/삭제 |

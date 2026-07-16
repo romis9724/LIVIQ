@@ -49,3 +49,6 @@ mcp/tokens.json
 
 # 시크릿 포함 아카이브 (service-credential.json·tokens.json 동봉)
 mcp/apt_mng_agent.zip
+
+# 테스트 아티팩트
+.coverage

@@ -15,7 +15,7 @@ from .notices import Notice, NoticeDraft, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
 from .plans import FloorPlan, PlanDevice
 from .tenants import Building, Household, Tenant, UnitType
-from .users import Consent, PiiVault, User, UserRole
+from .users import Consent, PiiVault, TenantKey, User, UserRole
 
 metadata = Base.metadata
 
@@ -60,6 +60,7 @@ __all__ = [
     "SOFT_DELETE_TABLES",
     "TENANTLESS_TABLES",
     "Tenant",
+    "TenantKey",
     "UnitType",
     "User",
     "UserRole",
