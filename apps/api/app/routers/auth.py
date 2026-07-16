@@ -12,12 +12,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import (
     clear_session_cookie,
-    get_db_session,
+    get_auth_lookup_session,
     get_session_raw,
     set_session_cookie,
 )
@@ -50,13 +50,14 @@ async def google_callback(
     state: str,
     provider: Annotated[OAuthProvider, Depends(get_oauth_provider)],
     session_store: Annotated[SessionStore, Depends(get_session_store)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
 ) -> RedirectResponse:
     verifier = await session_store.pop_oauth_state(state)
     if verifier is None:  # state 미상·재사용 → CSRF 방어
         raise HTTPException(status_code=400, detail="state 검증 실패")
     identity = await provider.exchange(code, verifier)
 
+    # auth_lookup 플래그가 켜진 세션 — users의 login_id 전역 조회만 허용(docs/03 §5).
     user = await session.scalar(
         select(User).where(User.login_id == identity.sub, User.deleted_at.is_(None))
     )
@@ -64,6 +65,10 @@ async def google_callback(
         sid = await session_store.create_onboarding(identity.sub)
         redirect = RedirectResponse(_ONBOARDING_PATH, status_code=302)
     else:
+        # 신원 확정 → 그 tenant_id로 정상 격리 경로 전환 후 역할 조회(§5).
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(user.tenant_id))
+        )
         roles = list(
             await session.scalars(
                 select(UserRole.role).where(

@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from app.deps import get_db_session, get_queue, get_storage, get_tenant_session
+from app.deps import get_auth_lookup_session, get_queue, get_storage, get_tenant_session
 from app.main import create_app
 from app.oauth import (
     GoogleOAuth,
@@ -134,7 +134,7 @@ def _build_client(
     app = create_app()
     app.dependency_overrides[get_redis] = lambda: fake_redis
     app.dependency_overrides[get_tenant_session] = lambda: db_session
-    app.dependency_overrides[get_db_session] = lambda: db_session
+    app.dependency_overrides[get_auth_lookup_session] = lambda: db_session
     app.dependency_overrides[get_storage] = lambda: FakeStorage()
     app.dependency_overrides[get_queue] = lambda: FakeQueue()
     app.dependency_overrides[get_oauth_provider] = lambda: provider

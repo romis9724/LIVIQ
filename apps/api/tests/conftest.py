@@ -5,6 +5,7 @@ app.main·config 임포트 시점 env 검증을 통과시키기 위해 더미 en
 
 from __future__ import annotations
 
+import base64
 import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
@@ -23,6 +24,8 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
 os.environ.setdefault("S3_ACCESS_KEY_ID", "test")
 os.environ.setdefault("S3_SECRET_ACCESS_KEY", "test")
+# 봉투 암호화 KEK — 32byte base64 더미(ADR-0010, fail-closed 검증용).
+os.environ.setdefault("PII_MASTER_KEY", base64.b64encode(b"0" * 32).decode())
 
 from sqlalchemy.ext.asyncio import (  # noqa: E402
     AsyncSession,

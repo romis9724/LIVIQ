@@ -18,6 +18,10 @@ class ApiSettings(BaseSettings):
     redis_url: str = Field(..., validation_alias="REDIS_URL")
     api_env: str = Field("local", validation_alias="API_ENV")
 
+    # pii_vault 봉투 암호화 마스터 키(KEK) — 32byte base64. 필수(fail-closed, ADR-0010).
+    # 유실 = pii_vault 복호 불능. 시크릿 매니저 + 오프라인 백업(docs/09 §7).
+    pii_master_key: str = Field(..., validation_alias="PII_MASTER_KEY")
+
     # S3 호환(MinIO) — 원본 문서 저장(docs/11 §1). 키 프리픽스 `{tenant_id}/`.
     s3_endpoint_url: str = Field(..., validation_alias="S3_ENDPOINT_URL")
     s3_access_key_id: str = Field(..., validation_alias="S3_ACCESS_KEY_ID")

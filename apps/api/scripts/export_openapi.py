@@ -15,6 +15,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
 os.environ.setdefault("S3_ACCESS_KEY_ID", "x")
 os.environ.setdefault("S3_SECRET_ACCESS_KEY", "x")
+os.environ.setdefault("PII_MASTER_KEY", "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=")
 
 from app.main import create_app  # noqa: E402
 

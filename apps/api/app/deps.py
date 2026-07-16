@@ -170,15 +170,17 @@ async def get_tenant_session(
         yield session
 
 
-async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """tenant 컨텍스트 없는 세션 — OAuth 콜백의 login_id(google sub) 전역 조회 전용.
+async def get_auth_lookup_session() -> AsyncIterator[AsyncSession]:
+    """OAuth 콜백의 login_id(google sub) 전역 조회 전용 트랜잭션 세션.
 
-    login_id는 글로벌 partial-unique라 tenant 확정 전 조회가 불가피 = RLS 예외 지점.
-    prod 배선(liviq_app은 NOBYPASSRLS)에선 이 조회만 BYPASSRLS role 또는 SECURITY
-    DEFINER 함수가 필요(H2 후속). 그 외 모든 도메인 쿼리는 get_tenant_session 경유.
+    login_id는 글로벌 partial-unique라 tenant 확정 전 조회가 불가피 = 표준 격리 예외.
+    `app.auth_lookup='on'` 플래그로 users의 `auth_lookup` permissive 정책(SELECT 전용)을
+    켠다(docs/03 §5). 행을 찾으면 콜백이 같은 트랜잭션에서 그 tenant_id로 app.tenant_id를
+    설정해 정상 격리 경로로 전환한다(user_roles 등 조회).
     """
     factory = _get_session_factory()
-    async with factory() as session:
+    async with factory() as session, session.begin():
+        await session.execute(text("SELECT set_config('app.auth_lookup', 'on', true)"))
         yield session
 
 

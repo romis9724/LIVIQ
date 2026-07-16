@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Index,
+    Integer,
     LargeBinary,
     String,
     UniqueConstraint,
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import (
     Base,
+    CreatedAtMixin,
     IdMixin,
     TenantMixin,
     TimestampMixin,
@@ -43,6 +45,25 @@ class PiiVault(IdMixin, TenantMixin, TimestampMixin, Base):
     # 검색용 keyed HMAC 해시(평문 저장 금지, §6)
     name_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     phone_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 명부 대조 키(성함+생일+동호) 구성용 해시(H2-1, §4.1)
+    birth_date_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 이 레코드 암호화에 쓴 DEK 버전(무중단 키 회전, ADR-0010)
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+
+
+class TenantKey(IdMixin, TenantMixin, CreatedAtMixin, Base):
+    """per-tenant DEK 저장(KEK로 감싼 wrapped key, ADR-0010).
+
+    append-only — 키 회전은 새 key_version INSERT로만. UPDATE/DELETE는 권한으로 차단.
+    """
+
+    __tablename__ = "tenant_keys"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "key_version", name="uq_tenant_keys_tenant_key_version"),
+    )
+
+    key_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    dek_wrapped: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
 
 
 class User(IdMixin, TenantMixin, TimestampMixin, Base):
