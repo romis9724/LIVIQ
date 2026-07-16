@@ -36,14 +36,19 @@ graph TD
   R --> CFG
   A --> CFG
   UI --> CFG
+  R -.->|HTTP·SSE /assistant| API
   APIT -.->|OpenAPI 생성| API
   API --> AIC
   API --> DB
   W --> AIC
   W --> DB
   DB -.-> PG[("PostgreSQL 16<br/>+ pgvector · RLS")]
-  API -.->|세션 예정| REDIS[("Redis")]
+  API -.->|세션 예정 ADR-0011| REDIS[("Redis")]
+  API -.->|arq enqueue| REDIS
   W -.->|큐| REDIS
+  API -.->|문서 원본| S3[("MinIO / S3")]
+  W -.->|원본 다운로드| S3
+  AIC -.->|OpenAI-호환<br/>마스킹 후| LLM["생성 LLM · bge-m3<br/>(Ollama 등, env 교체)"]
 
   MA -.-> GM
   MA -.-> APT
@@ -52,8 +57,12 @@ graph TD
 ```
 
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
-H0(토대) 완료 상태: api는 빈 앱(`/health`)·ai-core/ai-worker는 골격 — 웹→api HTTP 연동과
-ai-core RAG 구현은 H1부터(그때 `web-* → api-types` 의존이 실제로 생긴다).
+
+**H1(RAG MVP) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
+ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는 `documents` 업로드·`assistant` SSE 질의,
+web-resident **비서 화면만 실연동**(SSE — 나머지 화면과 web-admin 전 화면은 아직 목업 데이터).
+인증은 local dev 헤더(`X-Dev-*`) 임시 — 정식 세션·역할 인가는 H2-1([docs/09 §8.2](docs/09-implementation-harness.md)).
+web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 
 ## Cross-Module 의존성 표
 
