@@ -41,6 +41,11 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
 os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
 os.environ.setdefault("S3_ACCESS_KEY_ID", "test")
 os.environ.setdefault("S3_SECRET_ACCESS_KEY", "test")
+# graph-sync는 GraphClient를 지연 생성(startup 시점)하지만, 더미 NEO4J_* 선설정으로
+# 어떤 import 경로에서도 부팅 실패가 없게 한다(연결은 하지 않음).
+os.environ.setdefault("NEO4J_URI", "bolt://localhost:7688")
+os.environ.setdefault("NEO4J_USER", "neo4j")
+os.environ.setdefault("NEO4J_PASSWORD", "liviqlocal")
 
 
 @pytest.fixture(scope="session")
