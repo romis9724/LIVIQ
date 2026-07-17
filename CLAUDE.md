@@ -29,9 +29,9 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 현재 구현된 것(현실, H1 완료 — RAG MVP):
 
 ```text
-apps/      web-resident                      # Next.js — 비서(SSE)·민원 실연동, 나머지 화면은 목업
-           web-admin                         # Next.js — 문서·민원 관리 실연동, 나머지 화면 목업
-           api                               # FastAPI — documents·assistant·inquiries + 인증(세션·OAuth·온보딩·승인) (liviq-api)
+apps/      web-resident                      # Next.js — 비서(SSE)·민원·공지 실연동, 나머지 화면은 목업
+           web-admin                         # Next.js — 문서·민원·공지 초안 실연동, 나머지 화면 목업
+           api                               # FastAPI — documents·assistant·inquiries·notices + 인증(세션·OAuth·온보딩·승인) (liviq-api)
            ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
 packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
