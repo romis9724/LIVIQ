@@ -36,6 +36,7 @@ from app.deps import (
     get_tenant_session,
     require_roles,
 )
+from app.rate_limit import enforce_rate_limit
 from app.schemas.assistant import (
     AnswerStatus,
     AskRequest,
@@ -56,7 +57,7 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 facility_router = APIRouter(prefix="/admin/facilities", tags=["facilities"])
 
 
-@router.post("/ask")
+@router.post("/ask", dependencies=[Depends(enforce_rate_limit)])
 async def ask(
     body: AskRequest,
     ctx: Annotated[RequestContext, Depends(get_context)],
@@ -67,7 +68,7 @@ async def ask(
     return await _assistant_response(body, ctx, session, llm, graph, channel="resident")
 
 
-@facility_router.post("/assistant")
+@facility_router.post("/assistant", dependencies=[Depends(enforce_rate_limit)])
 async def facility_assistant(
     body: AskRequest,
     ctx: Annotated[RequestContext, Depends(require_roles(*_FACILITY_ASSISTANT_ROLES))],
