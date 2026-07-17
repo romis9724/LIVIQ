@@ -225,6 +225,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/review-queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Review Queue
+         * @description 검수 대상 assistant 답변 목록. 신뢰도 낮은 순(nulls last)→오래된 순 정렬.
+         */
+        get: operations["list_review_queue_admin_review_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/review-queue/{message_id}/decide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Decide Review
+         * @description 승인/반려 결정 기록(사후) — review_status·reviewed_by/at·note 갱신. 부수효과 없음.
+         */
+        post: operations["decide_review_admin_review_queue__message_id__decide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/roster/upload": {
         parameters: {
             query?: never;
@@ -647,6 +687,16 @@ export interface components {
             /** Purpose */
             purpose: string;
         };
+        /** DecideIn */
+        DecideIn: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "approve" | "reject";
+            /** Note */
+            note?: string | null;
+        };
         /** DocumentListOut */
         DocumentListOut: {
             /** Items */
@@ -1068,6 +1118,56 @@ export interface components {
         RejectIn: {
             /** Reason */
             reason: string;
+        };
+        /** ReviewCitationOut */
+        ReviewCitationOut: {
+            /** Document Title */
+            document_title: string | null;
+            /** Quote */
+            quote: string | null;
+        };
+        /** ReviewItemOut */
+        ReviewItemOut: {
+            /** Answer */
+            answer: string;
+            /** Citations */
+            citations: components["schemas"]["ReviewCitationOut"][];
+            /** Confidence */
+            confidence: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Message Id
+             * Format: uuid
+             */
+            message_id: string;
+            /** Question */
+            question: string | null;
+            /** Review Note */
+            review_note: string | null;
+            /**
+             * Review Status
+             * @enum {string}
+             */
+            review_status: "needs_review" | "approved" | "rejected";
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Status */
+            status: string | null;
+        };
+        /** ReviewListOut */
+        ReviewListOut: {
+            /** Items */
+            items: components["schemas"]["ReviewItemOut"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
         };
         /** RosterRowError */
         RosterRowError: {
@@ -1592,6 +1692,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DraftDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_review_queue_admin_review_queue_get: {
+        parameters: {
+            query?: {
+                status?: "needs_review" | "approved" | "rejected";
+                page?: number;
+                limit?: number;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    decide_review_admin_review_queue__message_id__decide_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                message_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemOut"];
                 };
             };
             /** @description Validation Error */

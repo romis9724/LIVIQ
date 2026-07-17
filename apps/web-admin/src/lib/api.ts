@@ -461,3 +461,107 @@ export async function listAdminFees(period: string): Promise<AdminFeeList> {
     householdCount: body.household_count,
   };
 }
+
+// ── AI 검수 큐 (docs/01 §13, 규칙 6 — 사후 검수·회수 없음) ─────────────────────
+
+export type ReviewStatus = "needs_review" | "approved" | "rejected";
+export type ReviewAction = "approve" | "reject";
+
+export interface ReviewCitation {
+  documentTitle: string | null;
+  quote: string | null;
+}
+
+export interface ReviewItem {
+  messageId: string;
+  question: string | null;
+  answer: string;
+  confidence: number | null; // 0~1
+  status: string | null; // answered|fallback|handed_off
+  citations: ReviewCitation[];
+  createdAt: string;
+  reviewStatus: ReviewStatus;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
+export interface ReviewList {
+  items: ReviewItem[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+interface RawReviewCitation {
+  document_title: string | null;
+  quote: string | null;
+}
+
+interface RawReviewItem {
+  message_id: string;
+  question: string | null;
+  answer: string;
+  confidence: number | null;
+  status: string | null;
+  citations: RawReviewCitation[];
+  created_at: string;
+  review_status: ReviewStatus;
+  reviewed_at: string | null;
+  review_note: string | null;
+}
+
+function toReviewItem(raw: RawReviewItem): ReviewItem {
+  return {
+    messageId: raw.message_id,
+    question: raw.question,
+    answer: raw.answer,
+    confidence: raw.confidence,
+    status: raw.status,
+    citations: raw.citations.map((c) => ({
+      documentTitle: c.document_title,
+      quote: c.quote,
+    })),
+    createdAt: raw.created_at,
+    reviewStatus: raw.review_status,
+    reviewedAt: raw.reviewed_at,
+    reviewNote: raw.review_note,
+  };
+}
+
+export async function listReviewQueue(
+  status: ReviewStatus = "needs_review",
+  page = 1,
+  limit = 20,
+): Promise<ReviewList> {
+  const search = new URLSearchParams({
+    status,
+    page: String(page),
+    limit: String(limit),
+  });
+  const response = await fetch(`${API_BASE_URL}/admin/review-queue?${search.toString()}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    items: (body.items as RawReviewItem[]).map(toReviewItem),
+    total: body.total,
+    page: body.page,
+    limit: body.limit,
+  };
+}
+
+/** 승인/반려 결정(MANAGER). 반려는 note 필수. 409=이미 처리됨·403=권한 없음. */
+export async function decideReview(
+  messageId: string,
+  action: ReviewAction,
+  note?: string,
+): Promise<ReviewItem> {
+  const response = await fetch(`${API_BASE_URL}/admin/review-queue/${messageId}/decide`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ action, note: note ?? null }),
+  });
+  await ensureOk(response);
+  return toReviewItem(await response.json());
+}
