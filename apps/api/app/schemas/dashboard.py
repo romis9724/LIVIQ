@@ -24,9 +24,19 @@ class CacheStats(BaseModel):
     hit_rate: float | None  # hits/(hits+misses), 합 0이면 null
 
 
+class BudgetStats(BaseModel):
+    """단지 일일 토큰 예산 대비 사용량(H4-4, NFR-COST-01). 경고만 — 차단 없음."""
+
+    enabled: bool  # 예산 설정 여부(budget > 0)
+    budget: int  # 일일 상한(토큰). 비활성이면 0
+    used_today: int  # 오늘(UTC) assistant 입출력 토큰 합계
+    exceeded: bool  # enabled and used_today > budget
+
+
 class DashboardStatsOut(BaseModel):
     days: int
     ai: AiStats
     cache: CacheStats
+    budget: BudgetStats
     inquiries: dict[str, int]  # 상태(received|assigned|in_progress|done)별 카운트(기간 내 생성)
     facilities: dict[str, int]  # 상태(normal|check|fault|risk)별 카운트(전체 스냅샷)
