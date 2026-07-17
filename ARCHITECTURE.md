@@ -59,13 +59,14 @@ graph TD
 
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
 
-**H1(RAG MVP)+H2-1(인증) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
+**H1(RAG MVP)+H2(입주민/관리자 기능) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
 ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는 `documents`·`assistant` SSE에 더해
 **정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·Google OAuth PKCE·역할 인가 가드(`require_roles`)·
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
 화면 실연동: web-resident **비서·민원·공지·관리비**, web-admin **문서·민원·공지 초안·관리비·검수 큐**(H2-6) — 온보딩·홈/나·대시보드 연동은 백로그.
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
+E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
 ## Cross-Module 의존성 표
 
@@ -98,6 +99,7 @@ web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은
 | 루트 `pyproject.toml`·`uv.lock` | Python 4패키지 전체 | `uv sync --all-packages` 후 `pnpm test` |
 | `CLAUDE.md`·`docs/`·모듈 `CLAUDE.md` (컨텍스트 문서) | AI 에이전트 동작·경로 무결성 | `node scripts/check-context-paths.mjs` (= `pnpm check:paths`) |
 | `mcp/*` | 동결됨([ADR-0008](docs/adr/0008-freeze-mcp-prototype.md)) — 원칙상 수정 없음 | 예외 수정 시 CI `.github/workflows/python-mcp.yml` |
+| `apps/web-*` 화면·`apps/api` 라우터 (E2E 여정 경로) | `tests/e2e` 여정 셀렉터·시드 계약 | `pnpm e2e` (infra 기동 필요 — turbo 게이트 밖, CI e2e 잡이 커버) |
 | `turbo.json`·`pnpm-workspace.yaml`·루트 `package.json` | 전 워크스페이스 빌드 파이프라인 | `pnpm build` |
 
 > `packages/config-ts`에는 자체 `scripts`가 없다(프리셋만 제공) — 검증은 이를 소비하는 워크스페이스 전체로 돌린다.

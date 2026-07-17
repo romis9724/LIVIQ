@@ -26,7 +26,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1 완료 — RAG MVP):
+현재 구현된 것(현실, H1(RAG MVP)+H2(입주민/관리자 기능) 완료):
 
 ```text
 apps/      web-resident                      # Next.js — 비서(SSE)·민원·공지·관리비 실연동, 나머지 화면은 목업
@@ -38,7 +38,8 @@ packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·오케스트레이터 (liviq-ai-core)
            db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
-evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(rule-1)
+evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·5·6)
+tests/     e2e                               # Playwright 결정론 여정 (@liviq/e2e — @llm 태그는 로컬 전용)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
@@ -59,9 +60,9 @@ pnpm start       # turbo run start (build 후)
 uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
 pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
 pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
+pnpm e2e                  # Playwright 여정 (infra 기동 필요 — CI는 @llm 자동 제외)
 ```
 
-> Note: `e2e`는 tests/e2e 도입 후 루트 스크립트로 추가 예정.
 > 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.
 > Python 패키지 디렉토리에서 plain `uv run` 금지(형제 멤버 deps를 prune함) — `uv run --no-sync` 사용.
 
