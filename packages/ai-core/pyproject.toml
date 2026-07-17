@@ -8,6 +8,7 @@ dependencies = [
     "pydantic-settings",
     "httpx",
     "sqlalchemy[asyncio]>=2.0",
+    "neo4j>=6.2.0",
 ]
 
 [build-system]

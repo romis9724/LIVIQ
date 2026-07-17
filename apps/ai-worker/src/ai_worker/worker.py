@@ -12,11 +12,14 @@ import uuid
 from typing import Any
 
 import boto3
+from arq import cron
 from arq.connections import RedisSettings
 from sqlalchemy import text
 
+from ai_core.graph import GraphClient
 from ai_core.llm.client import LlmClient
 from ai_worker.config import get_settings
+from ai_worker.graph_sync import sync_outbox_task
 from ai_worker.ingest import IngestResult, ingest_document
 from liviq_db.engine import create_engine, create_session_factory
 
@@ -66,14 +69,21 @@ async def startup(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 �
     ctx["session_factory"] = create_session_factory(create_engine())
     ctx["llm"] = LlmClient()
     ctx["download"] = _download_factory()
+    graph = GraphClient.from_settings()
+    await graph.ensure_constraints_and_index()
+    ctx["graph"] = graph
 
 
 async def shutdown(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 전용
-    pass
+    graph: GraphClient | None = ctx.get("graph")
+    if graph is not None:
+        await graph.close()
 
 
 class WorkerSettings:  # pragma: no cover — arq가 소비하는 선언
-    functions = [ingest_document_task]
+    functions = [ingest_document_task, sync_outbox_task]
+    # graph-sync는 15초 주기 cron(docs/11 §3.5). cron_jobs도 arq가 읽는 클래스 속성.
+    cron_jobs = [cron(sync_outbox_task, second={0, 15, 30, 45}, run_at_startup=False)]
     on_startup = startup
     on_shutdown = shutdown
     # arq는 redis_settings를 "속성"으로 읽는다(호출 아님) — 메서드로 두면
