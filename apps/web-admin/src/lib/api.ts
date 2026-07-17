@@ -322,3 +322,142 @@ export async function publishNotice(input: PublishNoticeInput): Promise<void> {
   });
   await ensureOk(response);
 }
+
+// ── 관리비 (docs/01 §13, 규칙 5 — 엑셀이 단일 출처·표시 전용) ──────────────────
+
+export type FeeUploadStatus = "validated" | "failed";
+
+export interface FeeRowError {
+  row: number;
+  reason: string;
+}
+
+export interface FeePreviewRow {
+  buildingName: string;
+  floor: number;
+  unitNo: number;
+  breakdown: Record<string, number>;
+  total: number;
+}
+
+export interface FeeUploadResult {
+  uploadId: string;
+  status: FeeUploadStatus;
+  period: string;
+  rowCount: number;
+  validRows: number;
+  errors: FeeRowError[];
+  preview: FeePreviewRow[];
+}
+
+export interface FeeApplyResult {
+  uploadId: string;
+  status: string;
+  period: string;
+  applied: number;
+}
+
+export interface AdminFeeRow {
+  householdId: string;
+  buildingName: string;
+  floor: number;
+  unitNo: number;
+  total: number;
+}
+
+export interface AdminFeeList {
+  period: string;
+  households: AdminFeeRow[];
+  totalSum: number;
+  householdCount: number;
+}
+
+interface RawFeeUpload {
+  upload_id: string;
+  status: FeeUploadStatus;
+  period: string;
+  row_count: number;
+  valid_rows: number;
+  errors: FeeRowError[];
+  preview: {
+    building_name: string;
+    floor: number;
+    unit_no: number;
+    breakdown: Record<string, number>;
+    total: number;
+  }[];
+}
+
+function toFeeUpload(raw: RawFeeUpload): FeeUploadResult {
+  return {
+    uploadId: raw.upload_id,
+    status: raw.status,
+    period: raw.period,
+    rowCount: raw.row_count,
+    validRows: raw.valid_rows,
+    errors: raw.errors,
+    preview: raw.preview.map((p) => ({
+      buildingName: p.building_name,
+      floor: p.floor,
+      unitNo: p.unit_no,
+      breakdown: p.breakdown,
+      total: p.total,
+    })),
+  };
+}
+
+/** 관리비 엑셀 업로드·검증(저장은 apply까지 미반영). 413=용량초과·422=형식오류. */
+export async function uploadFeeExcel(file: File, period: string): Promise<FeeUploadResult> {
+  const form = new FormData();
+  form.set("file", file);
+  const response = await fetch(
+    `${API_BASE_URL}/admin/fees/uploads?period=${encodeURIComponent(period)}`,
+    { method: "POST", headers: DEV_HEADERS, body: form },
+  );
+  await ensureOk(response);
+  return toFeeUpload(await response.json());
+}
+
+/** 검증된 업로드를 확정 적재(해당 월 전체 교체·MANAGER). 409=validated 아님. */
+export async function applyFeeUpload(uploadId: string): Promise<FeeApplyResult> {
+  const response = await fetch(`${API_BASE_URL}/admin/fees/uploads/${uploadId}/apply`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    uploadId: body.upload_id,
+    status: body.status,
+    period: body.period,
+    applied: body.applied,
+  };
+}
+
+/** 월별 세대 부과 현황(관리자). */
+export async function listAdminFees(period: string): Promise<AdminFeeList> {
+  const response = await fetch(
+    `${API_BASE_URL}/admin/fees?period=${encodeURIComponent(period)}`,
+    { headers: DEV_HEADERS },
+  );
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    period: body.period,
+    households: (body.households as {
+      household_id: string;
+      building_name: string;
+      floor: number;
+      unit_no: number;
+      total: number;
+    }[]).map((h) => ({
+      householdId: h.household_id,
+      buildingName: h.building_name,
+      floor: h.floor,
+      unitNo: h.unit_no,
+      total: h.total,
+    })),
+    totalSum: body.total_sum,
+    householdCount: body.household_count,
+  };
+}

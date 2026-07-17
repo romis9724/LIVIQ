@@ -10,10 +10,24 @@
   background: var(--color-surface);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 .fees__title {
   font-size: var(--text-lg);
   font-weight: 700;
+}
+.fees__month-field input {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-base);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 .fees__main {
   flex: 1;
@@ -43,6 +57,12 @@
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-danger);
+}
+.fees-month__delta[data-down] {
+  color: var(--color-success);
+}
+.fees-explain__head .confidence-badge {
+  margin-left: auto;
 }
 .fees-month__amount {
   font-size: 2.6rem;
@@ -126,6 +146,13 @@
   font-weight: 700;
   margin-bottom: var(--space-4);
 }
+.fees-compare {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-6);
+  height: 140px;
+  padding: 0 var(--space-4);
+}
 .fees-chart__scroll {
   overflow-x: auto;
 }
@@ -202,4 +229,32 @@
   font-weight: 700;
   font-size: var(--text-lg);
   font-variant-numeric: tabular-nums;
+}
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 1.05rem;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-accent);
+  border-radius: 2px;
+  animation: liviq-fees-blink 1s infinite;
+}
+@keyframes liviq-fees-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.2;
+  }
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

@@ -50,7 +50,7 @@ export function FeeUpload() {
           aria-labelledby="fu-tab-upload"
           hidden={tab !== "upload"}
         >
-          {tab === "upload" ? <UploadWizard onViewStatus={() => setTab("status")} /> : null}
+          {tab === "upload" ? <UploadWizard onApplied={() => setTab("status")} /> : null}
         </div>
         <div
           role="tabpanel"

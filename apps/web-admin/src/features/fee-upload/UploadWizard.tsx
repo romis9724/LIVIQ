@@ -1,74 +1,105 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Button, Dialog, FileDropzone, SurfaceCard } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button, Dialog, FileDropzone, SurfaceCard, Toast } from "@liviq/ui";
+import type { ToastTone } from "@liviq/ui";
 import {
-  FEE_ITEMS,
-  HOUSEHOLDS,
-  PREV_MONTH_TOTAL,
-  feeSummary,
-  formatWon,
-  monthLabel,
-  percentDelta,
-  previewRows,
-  validateUpload,
-  type ValidationResult,
-} from "./logic";
+  ApiError,
+  applyFeeUpload,
+  uploadFeeExcel,
+  type FeeUploadResult,
+} from "@/lib/api";
+import { breakdownColumns, formatWon, monthLabel, unitLabel } from "./logic";
 
-type Step = "select" | "validate" | "preview" | "confirm";
+type Step = "select" | "review" | "confirm";
 
 const STEP_LABELS: Record<Step, string> = {
   select: "파일 선택",
-  validate: "검증",
-  preview: "미리보기",
+  review: "검증·미리보기",
   confirm: "확정",
 };
-const ORDER: Step[] = ["select", "validate", "preview", "confirm"];
+const ORDER: Step[] = ["select", "review", "confirm"];
+const TOAST_DURATION_MS = 3200;
 
-const UPLOAD_MONTHS = ["2026-07", "2026-08"] as const;
-const VALIDATE_DELAY_MS = 1200;
-
-interface UploadWizardProps {
-  onViewStatus: () => void;
+/** 이번 달(YYYY-MM). 업로드 대상 월 기본값. */
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export function UploadWizard({ onViewStatus }: UploadWizardProps) {
-  const [step, setStep] = useState<Step>("select");
-  const [targetMonth, setTargetMonth] = useState<string>(UPLOAD_MONTHS[0]);
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [validating, setValidating] = useState(false);
-  const [result, setResult] = useState<ValidationResult | null>(null);
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError || err instanceof Error) return err.message;
+  return "알 수 없는 오류가 발생했습니다.";
+}
+
+interface UploadWizardProps {
+  onApplied: () => void;
+}
+
+export function UploadWizard({ onApplied }: UploadWizardProps) {
+  const [period, setPeriod] = useState<string>(currentMonth());
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [result, setResult] = useState<FeeUploadResult | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [done, setDone] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
+    setToast({ message, tone });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
+  }, []);
 
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
+      if (toastTimer.current) clearTimeout(toastTimer.current);
     },
     [],
   );
 
-  const startValidation = () => {
-    if (!fileName) return;
-    setStep("validate");
-    setValidating(true);
-    setResult(null);
-    timer.current = setTimeout(() => {
-      setResult(validateUpload(fileName));
-      setValidating(false);
-    }, VALIDATE_DELAY_MS);
-  };
-
-  const reset = () => {
-    setStep("select");
-    setFileName(null);
-    setValidating(false);
-    setResult(null);
-    setDone(false);
-  };
-
+  const step: Step = result ? "review" : "select";
   const curIdx = ORDER.indexOf(step);
+
+  async function handleUpload() {
+    if (!file) return;
+    setUploading(true);
+    setResult(null);
+    try {
+      const res = await uploadFeeExcel(file, period);
+      setResult(res);
+      if (res.status === "failed") {
+        showToast(`검증 실패 — 유효한 세대가 없습니다.`, "danger");
+      }
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function handleApply() {
+    if (!result) return;
+    setDialogOpen(false);
+    setApplying(true);
+    try {
+      const applied = await applyFeeUpload(result.uploadId);
+      showToast(`${monthLabel(period)} 관리비를 ${applied.applied}세대에 반영했습니다.`);
+      reset();
+      onApplied();
+    } catch (err) {
+      // 409=validated 아님(이미 적용/실패) 등 상태코드 메시지 노출.
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  function reset() {
+    setResult(null);
+    setFile(null);
+  }
 
   return (
     <>
@@ -96,66 +127,54 @@ export function UploadWizard({ onViewStatus }: UploadWizardProps) {
         })}
       </ol>
 
-      {step === "select" ? (
-        <SelectStep
-          targetMonth={targetMonth}
-          onMonth={setTargetMonth}
-          fileName={fileName}
-          onFile={(f) => setFileName(f.name)}
-          onNext={startValidation}
-        />
-      ) : null}
-
-      {step === "validate" ? (
-        <ValidateStep
-          validating={validating}
+      {result ? (
+        <ReviewStep
           result={result}
-          onBack={() => setStep("select")}
-          onNext={() => setStep("preview")}
+          period={period}
+          applying={applying}
+          onBack={reset}
+          onApply={() => setDialogOpen(true)}
         />
-      ) : null}
-
-      {step === "preview" ? (
-        <PreviewStep onBack={() => setStep("validate")} onNext={() => setStep("confirm")} />
-      ) : null}
-
-      {step === "confirm" ? (
-        done ? (
-          <DoneScreen month={targetMonth} onReset={reset} onViewStatus={onViewStatus} />
-        ) : (
-          <ConfirmStep
-            month={targetMonth}
-            onBack={() => setStep("preview")}
-            onConfirm={() => setDialogOpen(true)}
-          />
-        )
-      ) : null}
+      ) : (
+        <SelectStep
+          period={period}
+          onPeriod={setPeriod}
+          file={file}
+          uploading={uploading}
+          onFile={setFile}
+          onNext={handleUpload}
+        />
+      )}
 
       <Dialog
         open={dialogOpen}
         danger
-        title={`${monthLabel(targetMonth)} 관리비를 확정할까요?`}
-        description={`${monthLabel(targetMonth)} 관리비를 ${HOUSEHOLDS.length}세대에 반영합니다. 같은 달 기존 데이터는 전체 교체되며 되돌릴 수 없습니다.`}
+        title={`${monthLabel(period)} 관리비를 확정할까요?`}
+        description={`${monthLabel(period)} 관리비를 ${result?.validRows ?? 0}세대에 반영합니다. 같은 달 기존 데이터는 전체 교체되며 되돌릴 수 없습니다.`}
         confirmLabel="전체 교체 · 확정"
         onCancel={() => setDialogOpen(false)}
-        onConfirm={() => {
-          setDialogOpen(false);
-          setDone(true);
-        }}
+        onConfirm={handleApply}
       />
+
+      {toast ? (
+        <div className="fu-toast-slot">
+          <Toast message={toast.message} tone={toast.tone} />
+        </div>
+      ) : null}
     </>
   );
 }
 
 interface SelectStepProps {
-  targetMonth: string;
-  onMonth: (m: string) => void;
-  fileName: string | null;
+  period: string;
+  onPeriod: (m: string) => void;
+  file: File | null;
+  uploading: boolean;
   onFile: (file: File) => void;
   onNext: () => void;
 }
 
-function SelectStep({ targetMonth, onMonth, fileName, onFile, onNext }: SelectStepProps) {
+function SelectStep({ period, onPeriod, file, uploading, onFile, onNext }: SelectStepProps) {
   return (
     <section className="fu-card" aria-labelledby="fu-select-title">
       <h2 id="fu-select-title" className="fu-card__title">
@@ -167,72 +186,86 @@ function SelectStep({ targetMonth, onMonth, fileName, onFile, onNext }: SelectSt
 
       <div className="fu-field">
         <label htmlFor="fu-month">대상 월</label>
-        <select id="fu-month" value={targetMonth} onChange={(e) => onMonth(e.target.value)}>
-          {UPLOAD_MONTHS.map((m) => (
-            <option key={m} value={m}>
-              {monthLabel(m)}
-            </option>
-          ))}
-        </select>
+        <input
+          id="fu-month"
+          type="month"
+          value={period}
+          onChange={(e) => onPeriod(e.target.value)}
+        />
       </div>
 
       <FileDropzone
         label="관리비 엑셀 업로드"
         accept=".xlsx"
         maxSizeMb={10}
-        state={fileName ? "selected" : "idle"}
-        fileName={fileName ?? undefined}
+        state={uploading ? "uploading" : file ? "selected" : "idle"}
+        fileName={file?.name}
         onFile={onFile}
       />
 
       <p className="fu-hint">
-        <button type="button" className="fu-templink">
-          템플릿 다운로드
-        </button>
-        <span>컬럼: 동 · 호 · 항목별 금액(원 단위)</span>
+        <span>컬럼: 동 · 층 · 호 · 항목별 금액(원 단위)</span>
       </p>
 
       <div className="fu-actions">
-        <Button variant="primary" onClick={onNext} disabled={!fileName}>
-          다음 · 검증
+        <Button variant="primary" onClick={onNext} disabled={!file || uploading}>
+          {uploading ? "검증 중…" : "다음 · 검증"}
         </Button>
       </div>
     </section>
   );
 }
 
-interface ValidateStepProps {
-  validating: boolean;
-  result: ValidationResult | null;
+interface ReviewStepProps {
+  result: FeeUploadResult;
+  period: string;
+  applying: boolean;
   onBack: () => void;
-  onNext: () => void;
+  onApply: () => void;
 }
 
-function ValidateStep({ validating, result, onBack, onNext }: ValidateStepProps) {
-  if (validating || !result) {
-    return (
-      <section className="fu-card">
-        <div className="fu-progress" role="status" aria-live="polite">
-          <span className="fu-spinner" aria-hidden="true" />
-          엑셀을 검증하고 있어요…
-        </div>
-      </section>
-    );
-  }
+function ReviewStep({ result, period, applying, onBack, onApply }: ReviewStepProps) {
+  const failed = result.status === "failed";
+  const hasErrors = result.errors.length > 0;
+  const columns = breakdownColumns(result.preview);
 
-  if (!result.ok) {
-    return (
-      <section className="fu-card" aria-labelledby="fu-err-title">
-        <h2 id="fu-err-title" className="fu-card__title">
-          <span className="fu-badge fu-badge--err">
-            <span aria-hidden="true">⚠</span> 검증 실패
-          </span>
-        </h2>
+  return (
+    <section aria-labelledby="fu-review-title">
+      <h2 id="fu-review-title" className="fu-section__title">
+        {monthLabel(period)} 검증 결과
+      </h2>
+
+      <div className="fu-stats">
+        <SurfaceCard className="fu-stat">
+          <div className="fu-stat__label">유효 세대</div>
+          <div className="fu-stat__value">{result.validRows}세대</div>
+        </SurfaceCard>
+        <SurfaceCard className="fu-stat">
+          <div className="fu-stat__label">파싱 행</div>
+          <div className="fu-stat__value">{result.rowCount}행</div>
+        </SurfaceCard>
+        <SurfaceCard className="fu-stat">
+          <div className="fu-stat__label">오류</div>
+          <div
+            className={`fu-stat__value ${hasErrors ? "fu-stat__delta--up" : ""}`}
+          >
+            {result.errors.length}건
+          </div>
+        </SurfaceCard>
+      </div>
+
+      {failed ? (
         <p className="fu-errnote" role="alert">
-          오류 {result.issues.length}건 · 누락 세대 {result.missingCount}건. 오류를 수정한 뒤 다시
-          업로드하세요.
+          유효한 세대가 없어 확정할 수 없습니다. 오류를 수정한 뒤 다시 업로드하세요.
         </p>
+      ) : hasErrors ? (
+        <p className="fu-errnote">
+          오류 {result.errors.length}행은 확정 시 <strong>스킵</strong>되고 유효한{" "}
+          {result.validRows}세대만 반영됩니다.
+        </p>
+      ) : null}
 
+      {hasErrors ? (
         <div className="surface-card fu-tablecard">
           <table className="fu-table">
             <thead>
@@ -240,189 +273,68 @@ function ValidateStep({ validating, result, onBack, onNext }: ValidateStepProps)
                 <th scope="col" className="fu-num">
                   행
                 </th>
-                <th scope="col">컬럼</th>
                 <th scope="col">사유</th>
               </tr>
             </thead>
             <tbody>
-              {result.issues.map((issue) => (
-                <tr key={`${issue.row}-${issue.column}`}>
-                  <td className="fu-num">{issue.row}</td>
-                  <td>{issue.column}</td>
-                  <td>{issue.reason}</td>
+              {result.errors.map((e) => (
+                <tr key={`${e.row}-${e.reason}`}>
+                  <td className="fu-num">{e.row}</td>
+                  <td>{e.reason}</td>
                 </tr>
               ))}
-              <tr>
-                <td className="fu-num">—</td>
-                <td>세대</td>
-                <td>누락 세대 {result.missingCount}</td>
-              </tr>
             </tbody>
           </table>
         </div>
+      ) : null}
 
-        <div className="fu-actions">
-          <Button variant="secondary" onClick={onBack}>
-            ← 이전으로
-          </Button>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="fu-card">
-      <span className="fu-badge fu-badge--ok">
-        <span aria-hidden="true">✓</span> {result.validatedCount}세대 검증 통과
-      </span>
-      <p className="fu-card__lede" style={{ marginTop: "var(--space-4)" }}>
-        누락·중복·음수 금액 없이 모든 세대가 통과했습니다.
-      </p>
-      <div className="fu-actions fu-actions--between">
-        <Button variant="secondary" onClick={onBack}>
-          ← 이전
-        </Button>
-        <Button variant="primary" onClick={onNext}>
-          다음 · 미리보기
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function PreviewStep({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
-  const summary = feeSummary(HOUSEHOLDS);
-  const delta = percentDelta(summary.total, PREV_MONTH_TOTAL);
-  const rows = previewRows(HOUSEHOLDS);
-  const rest = HOUSEHOLDS.length - rows.length;
-  const mainItems = FEE_ITEMS.slice(0, 2);
-
-  return (
-    <section aria-labelledby="fu-preview-title">
-      <h2 id="fu-preview-title" className="fu-section__title">
-        반영 전 미리보기
-      </h2>
-
-      <div className="fu-stats">
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">합계</div>
-          <div className="fu-stat__value">{formatWon(summary.total)}</div>
-        </SurfaceCard>
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">세대 평균</div>
-          <div className="fu-stat__value">{formatWon(summary.average)}</div>
-        </SurfaceCard>
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">전월 대비</div>
-          <div className={`fu-stat__value fu-stat__delta ${delta >= 0 ? "fu-stat__delta--up" : "fu-stat__delta--down"}`}>
-            {delta >= 0 ? "+" : ""}
-            {delta}%
-          </div>
-        </SurfaceCard>
-      </div>
-
-      <div className="surface-card fu-tablecard">
-        <table className="fu-table">
-          <thead>
-            <tr>
-              <th scope="col">동</th>
-              <th scope="col">호</th>
-              {mainItems.map((it) => (
-                <th scope="col" key={it.key} className="fu-num">
-                  {it.label}
-                </th>
-              ))}
-              <th scope="col" className="fu-num">
-                합계
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((h) => (
-              <tr key={`${h.dong}-${h.ho}`}>
-                <td>{h.dong}</td>
-                <td>{h.ho}</td>
-                {mainItems.map((it) => (
-                  <td key={it.key} className="fu-num">
-                    {formatWon(h.items[it.key])}
-                  </td>
+      {result.preview.length > 0 ? (
+        <div className="surface-card fu-tablecard">
+          <table className="fu-table">
+            <thead>
+              <tr>
+                <th scope="col">동</th>
+                <th scope="col">호</th>
+                {columns.map((c) => (
+                  <th scope="col" key={c} className="fu-num">
+                    {c}
+                  </th>
                 ))}
-                <td className="fu-num">{formatWon(h.total)}</td>
+                <th scope="col" className="fu-num">
+                  합계
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="fu-table__more">…외 {rest}세대</div>
-      </div>
+            </thead>
+            <tbody>
+              {result.preview.map((row) => (
+                <tr key={`${row.buildingName}-${row.floor}-${row.unitNo}`}>
+                  <td>{row.buildingName}</td>
+                  <td>{unitLabel(row.floor, row.unitNo)}</td>
+                  {columns.map((c) => (
+                    <td key={c} className="fu-num">
+                      {row.breakdown[c] != null ? formatWon(row.breakdown[c]) : "—"}
+                    </td>
+                  ))}
+                  <td className="fu-num">{formatWon(row.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {result.validRows > result.preview.length ? (
+            <div className="fu-table__more">…외 {result.validRows - result.preview.length}세대</div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="fu-actions fu-actions--between">
         <Button variant="secondary" onClick={onBack}>
-          ← 이전
+          ← 다시 업로드
         </Button>
-        <Button variant="primary" onClick={onNext}>
-          다음 · 확정
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-interface ConfirmStepProps {
-  month: string;
-  onBack: () => void;
-  onConfirm: () => void;
-}
-
-function ConfirmStep({ month, onBack, onConfirm }: ConfirmStepProps) {
-  return (
-    <section className="fu-card" aria-labelledby="fu-confirm-title">
-      <h2 id="fu-confirm-title" className="fu-card__title">
-        {monthLabel(month)} 관리비 확정
-      </h2>
-      <p className="fu-card__lede">
-        확정하면 {monthLabel(month)} 관리비가 {HOUSEHOLDS.length}세대에 반영됩니다.
-      </p>
-      <p className="fu-errnote">
-        같은 달 기존 데이터는 <strong>전체 교체</strong>되며 되돌릴 수 없습니다. 확정 전에 미리보기를
-        다시 확인하세요.
-      </p>
-      <div className="fu-actions fu-actions--between">
-        <Button variant="secondary" onClick={onBack}>
-          ← 이전
-        </Button>
-        <Button variant="danger" onClick={onConfirm}>
-          확정하기
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-interface DoneScreenProps {
-  month: string;
-  onReset: () => void;
-  onViewStatus: () => void;
-}
-
-function DoneScreen({ month, onReset, onViewStatus }: DoneScreenProps) {
-  return (
-    <section className="fu-card">
-      <div className="fu-done">
-        <div className="fu-done__mark" aria-hidden="true">
-          ✓
-        </div>
-        <div className="fu-done__title">{monthLabel(month)} 관리비가 반영되었습니다</div>
-        <p className="fu-done__lede">
-          {HOUSEHOLDS.length}세대에 전체 교체로 반영되었습니다. 부과 현황에서 세대별 내역을 확인하세요.
-        </p>
-        <div className="fu-actions" style={{ justifyContent: "center" }}>
-          <Button variant="primary" onClick={onViewStatus}>
-            부과 현황 보기
+        {!failed ? (
+          <Button variant="danger" onClick={onApply} disabled={applying}>
+            {applying ? "반영 중…" : "확정 적용"}
           </Button>
-          <Button variant="secondary" onClick={onReset}>
-            새 업로드
-          </Button>
-        </div>
+        ) : null}
       </div>
     </section>
   );
