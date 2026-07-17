@@ -35,3 +35,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 # 커버리지 게이트 80%(docs/09 §4.1) — 로컬·CI 동일. 소스는 app 패키지만(tests 제외).
 addopts = "--cov=app --cov-report=term-missing --cov-fail-under=80"
+
+# SQLAlchemy async 핸들러 본문은 greenlet 컨텍스트에서 실행돼 기본 트레이서가 놓친다.
+# greenlet concurrency로 라우터 핸들러 커버리지를 정확히 측정(ASGI 테스트, docs/09 §4.1).
+[tool.coverage.run]
+concurrency = ["greenlet"]

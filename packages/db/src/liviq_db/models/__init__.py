@@ -10,7 +10,7 @@ from .conversations import AiFeedback, Citation, Conversation, Message
 from .documents import Document, DocumentChunk
 from .facilities import Facility, Incident, MaintenanceLog
 from .fees import ExcelUpload, Fee
-from .inquiries import Inquiry, InquiryCategory
+from .inquiries import Inquiry, InquiryCategory, InquiryEvent
 from .notices import Notice, NoticeDraft, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
 from .plans import FloorPlan, PlanDevice
@@ -47,6 +47,7 @@ __all__ = [
     "Incident",
     "Inquiry",
     "InquiryCategory",
+    "InquiryEvent",
     "Job",
     "MaintenanceLog",
     "Message",
