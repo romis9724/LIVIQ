@@ -200,7 +200,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -282,6 +282,20 @@
 |-----------|------|------|
 | `GET /admin/review-queue` | MANAGER | `messages.review_status=needs_review` 목록(질문·답변·인용·신뢰도) |
 | `POST /admin/review-queue/{message_id}/decide` | MANAGER | `approve`/`reject`(+메모) → `reviewed_by/at` 기록. **사후 검수** — 이미 전달된 답변 회수 없음, 골든셋 후보로 축적([07 §5](07-testing-strategy.md)). 반려 시 정정 알림은 백로그 |
+
+**시설** (H3-1·H3-4 · [ADR-0009](adr/0009-neo4j-in-mvp.md), 화면: 관리자 시설 관리·AI 도우미. 그래프 모델·동기화: [11 §3.5·§4](11-data-architecture.md))
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/facilities` | MANAGER·STAFF·FACILITY | 설비 목록(상태·유형 필터) |
+| `POST /admin/facilities` | MANAGER·FACILITY | 설비 등록 — **도메인 행 + `outbox_events` 원자 기록**([03 §4.9](03-database-design.md), 이중 쓰기 금지) |
+| `GET /admin/facilities/{id}` | MANAGER·STAFF·FACILITY | 상세 + 장애·정비 이력 |
+| `PATCH /admin/facilities/{id}` | MANAGER·FACILITY | 상태(normal\|check\|fault\|risk)·정보 수정(+outbox) |
+| `POST /admin/facilities/{id}/incidents` | MANAGER·FACILITY | 장애 기록(증상·조치) — outbox 경유로 Neo4j 임베딩 반영 |
+| `POST /admin/facilities/{id}/maintenance` | MANAGER·FACILITY | 정비 기록(작업·교체 부품, +outbox) |
+| `POST /admin/facilities/assistant` | MANAGER·FACILITY | AI 도우미(SSE 4이벤트) — 도구 에이전트 경로([ADR-0007](adr/0007-readonly-tool-agent.md)), 유사 장애→**원인 후보 제시(단정 금지**, FR-FAC-02). Neo4j 미가용 시 그래프 도구 제외 폴백 |
+
+> Neo4j에 직접 쓰는 엔드포인트는 없다 — 모든 시설 쓰기는 PG 트랜잭션+outbox 한 경로, 그래프 반영은 ai-worker 단독([11 §3.5](11-data-architecture.md)).
 
 **알림함** (횡단 · [ADR-0012](adr/0012-in-app-notification-only.md), 화면: 입주민 나>알림함)
 
