@@ -86,6 +86,82 @@ jobs:
       - name: Context path check
         run: pnpm check:paths
 
+  # E2E 결정론 여정(docs/07 §4, docs/09 §8.2 H2-7). 게이트와 병렬. @llm 여정은
+  # 임베딩 LLM 필요라 config grepInvert(process.env.CI)로 제외 — 여기선 LLM 불요.
+  e2e:
+    name: E2E journeys (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: liviq
+          POSTGRES_PASSWORD: liviq
+          POSTGRES_DB: liviq
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U liviq -d liviq"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://liviq:liviq@localhost:5432/liviq
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync Python workspace
+        run: uv sync --all-packages
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Install Playwright browser
+        run: pnpm --filter @liviq/e2e exec playwright install --with-deps chromium
+
+      # config가 api·web-resident·web-admin webServer를 기동하고 seed globalSetup이
+      # E2E 전용 tenant를 심는다. CI(process.env.CI)라 @llm 여정은 자동 제외.
+      - name: Run E2E
+        run: pnpm e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 7
+
   # 시크릿 스캔은 메인 게이트와 병렬(별도 job). 라이선스 env는 org 전용이라 미주입.
   # TODO: 의존성 취약점 스캔(docs/09 §4) — 이번 범위 아님.
   secret-scan:
