@@ -565,3 +565,219 @@ export async function decideReview(
   await ensureOk(response);
   return toReviewItem(await response.json());
 }
+
+// ── 시설 관리 (docs/01 §13, 규칙 8 — 쓰기는 전부 사람 폼) ──────────────────────
+
+export type FacilityStatus = "normal" | "check" | "fault" | "risk";
+
+export interface Facility {
+  id: string;
+  name: string;
+  location: string | null;
+  type: string | null;
+  status: FacilityStatus;
+  nextCheckAt: string | null;
+  createdAt: string;
+}
+
+export interface Incident {
+  id: string;
+  facilityId: string;
+  occurredAt: string | null;
+  symptom: string;
+  resolution: string | null;
+  rootCause: string | null;
+  createdAt: string;
+}
+
+export interface MaintenanceLog {
+  id: string;
+  facilityId: string;
+  performedAt: string | null;
+  work: string;
+  performer: string | null;
+  parts: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface FacilityDetail extends Facility {
+  incidents: Incident[];
+  maintenanceLogs: MaintenanceLog[];
+}
+
+export interface FacilityCreateInput {
+  name: string;
+  location?: string;
+  type?: string;
+  status: FacilityStatus;
+}
+
+export interface FacilityPatchInput {
+  name?: string;
+  location?: string;
+  type?: string;
+  status?: FacilityStatus;
+}
+
+export interface IncidentInput {
+  symptom: string;
+  resolution?: string;
+  rootCause?: string;
+}
+
+export interface MaintenanceInput {
+  work: string;
+  performer?: string;
+}
+
+export interface FacilityFilter {
+  status?: FacilityStatus;
+  type?: string;
+}
+
+interface RawFacility {
+  id: string;
+  name: string;
+  location: string | null;
+  type: string | null;
+  status: FacilityStatus;
+  next_check_at: string | null;
+  created_at: string;
+}
+
+interface RawIncident {
+  id: string;
+  facility_id: string;
+  occurred_at: string | null;
+  symptom: string;
+  resolution: string | null;
+  root_cause: string | null;
+  created_at: string;
+}
+
+interface RawMaintenance {
+  id: string;
+  facility_id: string;
+  performed_at: string | null;
+  work: string;
+  performer: string | null;
+  parts: Record<string, unknown> | null;
+  created_at: string;
+}
+
+function toFacility(raw: RawFacility): Facility {
+  return {
+    id: raw.id,
+    name: raw.name,
+    location: raw.location,
+    type: raw.type,
+    status: raw.status,
+    nextCheckAt: raw.next_check_at,
+    createdAt: raw.created_at,
+  };
+}
+
+function toIncident(raw: RawIncident): Incident {
+  return {
+    id: raw.id,
+    facilityId: raw.facility_id,
+    occurredAt: raw.occurred_at,
+    symptom: raw.symptom,
+    resolution: raw.resolution,
+    rootCause: raw.root_cause,
+    createdAt: raw.created_at,
+  };
+}
+
+function toMaintenance(raw: RawMaintenance): MaintenanceLog {
+  return {
+    id: raw.id,
+    facilityId: raw.facility_id,
+    performedAt: raw.performed_at,
+    work: raw.work,
+    performer: raw.performer,
+    parts: raw.parts,
+    createdAt: raw.created_at,
+  };
+}
+
+/** FacilityFilter → 쿼리스트링(빈 값 생략). 순수 함수 — 테스트 대상. */
+export function buildFacilityQuery(filter: FacilityFilter): string {
+  const search = new URLSearchParams();
+  if (filter.status) search.set("status", filter.status);
+  if (filter.type && filter.type.trim()) search.set("type", filter.type.trim());
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function listFacilities(filter: FacilityFilter = {}): Promise<Facility[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities${buildFacilityQuery(filter)}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawFacility[]).map(toFacility);
+}
+
+export async function getFacility(id: string): Promise<FacilityDetail> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities/${id}`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const raw = await response.json();
+  return {
+    ...toFacility(raw as RawFacility),
+    incidents: (raw.incidents as RawIncident[]).map(toIncident),
+    maintenanceLogs: (raw.maintenance_logs as RawMaintenance[]).map(toMaintenance),
+  };
+}
+
+export async function createFacility(input: FacilityCreateInput): Promise<Facility> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: input.name,
+      location: input.location ?? null,
+      type: input.type ?? null,
+      status: input.status,
+    }),
+  });
+  await ensureOk(response);
+  return toFacility(await response.json());
+}
+
+export async function patchFacility(id: string, input: FacilityPatchInput): Promise<Facility> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  await ensureOk(response);
+  return toFacility(await response.json());
+}
+
+export async function createIncident(facilityId: string, input: IncidentInput): Promise<Incident> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities/${facilityId}/incidents`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      symptom: input.symptom,
+      resolution: input.resolution ?? null,
+      root_cause: input.rootCause ?? null,
+    }),
+  });
+  await ensureOk(response);
+  return toIncident(await response.json());
+}
+
+export async function createMaintenance(
+  facilityId: string,
+  input: MaintenanceInput,
+): Promise<MaintenanceLog> {
+  const response = await fetch(`${API_BASE_URL}/admin/facilities/${facilityId}/maintenance`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ work: input.work, performer: input.performer ?? null }),
+  });
+  await ensureOk(response);
+  return toMaintenance(await response.json());
+}
