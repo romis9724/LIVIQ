@@ -12,6 +12,7 @@ interface NavItem {
   badge?: string;
 }
 
+// ponytail: 배지 카운트는 목업(하드코딩) — 셸 전역 실시간 카운트 배선은 범위 밖(별도 작업).
 const NAV: readonly NavItem[] = [
   { href: "/dashboard", icon: "📊", label: "대시보드" },
   { href: "/approvals", icon: "👥", label: "가입 승인", badge: "5" },
