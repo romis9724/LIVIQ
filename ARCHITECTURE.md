@@ -67,6 +67,9 @@ dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
 화면 실연동: web-resident **비서·민원·공지·관리비**, web-admin **문서·민원·공지 초안·관리비·검수 큐·시설**(H3-1) — 온보딩·홈/나·대시보드 연동은 백로그.
 시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
 outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
+`/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
+레지스트리 6종(역할·그래프 가용성 필터, tenant·user는 코드 주입), 스텝 상한 3, 도구 인용은 `source_kind=tool:*`
+(SSE citation은 document_id null). Neo4j env 없으면 그래프 도구만 제외(PG 폴백).
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
