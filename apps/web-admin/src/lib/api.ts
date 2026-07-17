@@ -781,3 +781,58 @@ export async function createMaintenance(
   await ensureOk(response);
   return toMaintenance(await response.json());
 }
+
+// ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────
+// 비율(0~1 분수·null)은 서버 값 그대로 — 표기 변환은 features/dashboard/data.ts.
+
+export interface DashboardStats {
+  days: number;
+  ai: {
+    queryCount: number;
+    avgTokenInput: number | null;
+    avgTokenOutput: number | null;
+    answerRate: number | null;
+    fallbackRate: number | null;
+    needsReviewRate: number | null;
+  };
+  cache: { hits: number; misses: number; hitRate: number | null };
+  inquiries: Record<string, number>;
+  facilities: Record<string, number>;
+}
+
+interface RawDashboardStats {
+  days: number;
+  ai: {
+    query_count: number;
+    avg_token_input: number | null;
+    avg_token_output: number | null;
+    answer_rate: number | null;
+    fallback_rate: number | null;
+    needs_review_rate: number | null;
+  };
+  cache: { hits: number; misses: number; hit_rate: number | null };
+  inquiries: Record<string, number>;
+  facilities: Record<string, number>;
+}
+
+export async function getDashboardStats(days: number): Promise<DashboardStats> {
+  const response = await fetch(`${API_BASE_URL}/admin/dashboard/stats?days=${days}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const raw = (await response.json()) as RawDashboardStats;
+  return {
+    days: raw.days,
+    ai: {
+      queryCount: raw.ai.query_count,
+      avgTokenInput: raw.ai.avg_token_input,
+      avgTokenOutput: raw.ai.avg_token_output,
+      answerRate: raw.ai.answer_rate,
+      fallbackRate: raw.ai.fallback_rate,
+      needsReviewRate: raw.ai.needs_review_rate,
+    },
+    cache: { hits: raw.cache.hits, misses: raw.cache.misses, hitRate: raw.cache.hit_rate },
+    inquiries: raw.inquiries,
+    facilities: raw.facilities,
+  };
+}
