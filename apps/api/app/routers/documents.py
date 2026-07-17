@@ -11,9 +11,11 @@ import uuid
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import answer_cache
 from app.deps import (
     Queue,
     RequestContext,
@@ -32,6 +34,7 @@ from app.schemas.documents import (
     SourceType,
     Visibility,
 )
+from app.session import get_redis
 from liviq_db.models import Document, Job
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -142,15 +145,20 @@ async def upload_document(
 async def patch_document(
     ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    redis: Annotated[Redis, Depends(get_redis)],
     document_id: uuid.UUID,
     body: DocumentPatchIn,
 ) -> DocumentOut:
     document = await _get_owned_document(session, ctx.tenant_id, document_id)
     if body.title is not None:
         document.title = body.title
+    # visibility 변경은 검색 노출 범위를 바꾼다 → 캐시 세대 증가로 이전 답변 무효화(H4-2).
+    visibility_changed = body.visibility is not None and body.visibility != document.visibility
     if body.visibility is not None:
         document.visibility = body.visibility
     await session.flush()
+    if visibility_changed:
+        await answer_cache.bump_generation(redis, ctx.tenant_id)
     return DocumentOut.model_validate(document, from_attributes=True)
 
 

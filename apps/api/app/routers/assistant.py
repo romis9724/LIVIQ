@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -28,6 +29,7 @@ from ai_core.orchestrator import (
 from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
+from app import answer_cache
 from app.deps import (
     RequestContext,
     get_context,
@@ -46,6 +48,7 @@ from app.schemas.assistant import (
     StatusStage,
     TokenData,
 )
+from app.session import get_redis
 from liviq_db.models import Citation, Conversation, Message
 
 _REGISTRY = default_registry()
@@ -64,8 +67,9 @@ async def ask(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     llm: Annotated[LlmClient, Depends(get_llm)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> EventSourceResponse:
-    return await _assistant_response(body, ctx, session, llm, graph, channel="resident")
+    return await _assistant_response(body, ctx, session, llm, graph, redis, channel="resident")
 
 
 @facility_router.post("/assistant", dependencies=[Depends(enforce_rate_limit)])
@@ -75,6 +79,7 @@ async def facility_assistant(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     llm: Annotated[LlmClient, Depends(get_llm)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
+    redis: Annotated[Redis, Depends(get_redis)],
 ) -> EventSourceResponse:
     """시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
 
@@ -87,6 +92,7 @@ async def facility_assistant(
         session,
         llm,
         graph,
+        redis,
         channel="admin",
         answer_prompt=FACILITY_ANSWER_SYSTEM_PROMPT,
     )
@@ -98,11 +104,12 @@ async def _assistant_response(
     session: AsyncSession,
     llm: LlmClient,
     graph: GraphClient | None,
+    redis: Redis,
     *,
     channel: str,
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
 ) -> EventSourceResponse:
-    """대화 적재 + 도구 에이전트 스트림 + 영속화 — /assistant/ask·시설 도우미 공유."""
+    """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 두 엔드포인트 공유."""
     conversation = await _load_or_create_conversation(session, ctx, body.conversation_id, channel)
     session.add(
         Message(
@@ -122,13 +129,19 @@ async def _assistant_response(
     )
 
     async def stream() -> AsyncIterator[dict[str, str]]:
-        async for event in answer_question(
-            body.question,
-            registry=_REGISTRY,
-            deps=deps,
-            ctx=tool_ctx,
-            answer_prompt=answer_prompt,
-        ):
+        # 캐시 히트면 LLM 호출 0으로 재생, 미스면 정상 스트림(완료 후 저장).
+        cached = await answer_cache.lookup(redis, ctx=tool_ctx, question=body.question)
+        if cached is not None:
+            events: AsyncIterator[object] = answer_cache.replay(cached, tenant_id=ctx.tenant_id)
+        else:
+            events = answer_question(
+                body.question,
+                registry=_REGISTRY,
+                deps=deps,
+                ctx=tool_ctx,
+                answer_prompt=answer_prompt,
+            )
+        async for event in events:
             match event:
                 case StatusEvent(stage=stage):
                     data = StatusData(stage=cast(StatusStage, stage)).model_dump_json()
@@ -162,6 +175,10 @@ async def _assistant_response(
                     message_id = await _persist_assistant_message(
                         session, ctx, conversation.id, done
                     )
+                    if cached is None:  # 정상 경로만 저장(재생은 재저장 금지)
+                        await answer_cache.store(
+                            redis, ctx=tool_ctx, question=body.question, done=done
+                        )
                     yield {
                         "event": "done",
                         "data": DoneData(

@@ -23,6 +23,10 @@ class ApiSettings(BaseSettings):
     rate_limit_user_per_min: int = Field(10, validation_alias="RATE_LIMIT_USER_PER_MIN")
     rate_limit_tenant_per_min: int = Field(100, validation_alias="RATE_LIMIT_TENANT_PER_MIN")
 
+    # AI 질의 정확 캐시 TTL 초(docs/08 §2.0·2.1, docs/09 §8.5 H4-2). 0=캐시 전체 비활성.
+    # 히트 시 LLM 호출 0으로 SSE 재생 — 격리는 키(tenant·user/roles·visibilities·gen)로 보장.
+    answer_cache_ttl_s: int = Field(3600, validation_alias="CACHE_TTL_S")
+
     # pii_vault 봉투 암호화 마스터 키(KEK) — 32byte base64. 필수(fail-closed, ADR-0010).
     # 유실 = pii_vault 복호 불능. 시크릿 매니저 + 오프라인 백업(docs/09 §7).
     pii_master_key: str = Field(..., validation_alias="PII_MASTER_KEY")

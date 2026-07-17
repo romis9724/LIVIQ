@@ -8,12 +8,14 @@ RLS를 그대로 받는다(docs/03 §5). jobs 테이블로 상태 추적(docs/03
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from typing import Any
 
 import boto3
 from arq import cron
 from arq.connections import RedisSettings
+from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from ai_core.graph import GraphClient
@@ -62,6 +64,16 @@ async def ingest_document_task(
         result: IngestResult = await ingest_document(
             session, llm=llm, download=download, document_id=doc_id, tenant_id=ten_id
         )
+
+    # 색인 성공 시 캐시 세대 증가 → 이전 답변 캐시를 키 수준에서 무효화(H4-2, docs/08 §2.1).
+    # 키 포맷은 apps/api answer_cache._gen_key(`cache:gen:{tenant}`)와 일치해야 한다.
+    # arq는 ctx["redis"]로 풀을 주입한다(테스트 ctx엔 없을 수 있음 → 건너뜀). fail-open.
+    redis = ctx.get("redis")
+    if redis is not None and result.status == "indexed":
+        # 무효화 실패가 인제스트 성공을 되돌리면 안 됨(fail-open).
+        with contextlib.suppress(RedisError):
+            await redis.incr(f"cache:gen:{ten_id}")
+
     return {"status": result.status, "chunks": result.chunk_count, "error": result.error}
 
 
