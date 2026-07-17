@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Button, Dialog, Skeleton, Toast } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button, CitationCard, ConfidenceBadge, Dialog, Skeleton, Toast } from "@liviq/ui";
+import type { ToastTone } from "@liviq/ui";
+
+import { ApiError, createNoticeDraft, publishNotice, type NoticeDraft } from "@/lib/api";
+import { addKeyword, canGenerate, confidenceStatus, removeKeyword, MAX_KEYWORDS } from "./data";
 import "./notice-composer.css";
 
 type Step = "keyword" | "drafting" | "review";
@@ -13,34 +17,117 @@ const STEP_LABELS: Record<Step, string> = {
 };
 const ORDER: Step[] = ["keyword", "drafting", "review"];
 
-const DRAFT_BODY = `안녕하세요, 래미안 한강 1단지 관리사무소입니다.
+const ADD_REASON: Record<"empty" | "duplicate" | "max", string> = {
+  empty: "키워드를 입력하세요.",
+  duplicate: "이미 추가한 키워드입니다.",
+  max: `키워드는 최대 ${MAX_KEYWORDS}개까지 추가할 수 있습니다.`,
+};
 
-노후 배관 교체 공사로 인해 아래와 같이 단수가 예정되어 있어 안내드립니다.
+const TOAST_DURATION_MS = 3200;
 
-· 일시: 2026년 6월 22일(월) 03:00 ~ 05:00 (약 2시간)
-· 대상: 1203동 전 세대
-· 유의사항: 단수 시간 동안 수돗물 사용이 어려우니 미리 받아두시기 바랍니다.
+interface ToastState {
+  message: string;
+  tone: ToastTone;
+}
 
-공사 진행 상황에 따라 종료 시각이 다소 변동될 수 있습니다. 입주민 여러분의 양해를 부탁드립니다.
-
-문의: 관리사무소 (대표번호 안내 참고)`;
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError || err instanceof Error) return err.message;
+  return "알 수 없는 오류가 발생했습니다.";
+}
 
 export function NoticeComposer() {
   const [step, setStep] = useState<Step>("keyword");
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [genError, setGenError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<NoticeDraft | null>(null);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [sent, setSent] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
+  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
+    setToast({ message, tone });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
   }, []);
 
-  const generate = () => {
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const reset = useCallback(() => {
+    setStep("keyword");
+    setKeywords([]);
+    setGenError(null);
+    setDraft(null);
+    setTitle("");
+    setBody("");
+  }, []);
+
+  const handleAddKeyword = useCallback((raw: string): boolean => {
+    const result = addKeyword(keywords, raw);
+    if (!result.ok) {
+      setGenError(ADD_REASON[result.reason]);
+      return false;
+    }
+    setKeywords(result.keywords);
+    setGenError(null);
+    return true;
+  }, [keywords]);
+
+  async function handleGenerate() {
+    if (!canGenerate(keywords)) {
+      setGenError("키워드를 1개 이상 입력하세요.");
+      return;
+    }
     setStep("drafting");
-    timer.current = setTimeout(() => setStep("review"), 1400);
-  };
+    setGenError(null);
+    try {
+      const generated = await createNoticeDraft(keywords);
+      setDraft(generated);
+      setTitle(generated.title);
+      setBody(generated.body);
+      setStep("review");
+    } catch (err) {
+      setStep("keyword");
+      if (err instanceof ApiError && err.status === 422) {
+        setGenError(err.message); // 근거 문서 없음 — 문서 업로드 후 재시도
+      } else if (err instanceof ApiError && err.status === 503) {
+        setGenError("AI 초안 생성을 일시적으로 할 수 없습니다. 잠시 후 다시 시도하세요.");
+      } else {
+        setGenError(errorMessage(err));
+      }
+    }
+  }
+
+  async function handlePublish() {
+    if (!draft || publishing) return;
+    setPublishing(true);
+    try {
+      await publishNotice({ draftId: draft.draftId, title: title.trim(), body: body.trim() });
+      setDialogOpen(false);
+      showToast("공지를 발송했습니다. 입주민에게 알림이 전달됩니다.");
+      reset();
+    } catch (err) {
+      setDialogOpen(false);
+      if (err instanceof ApiError && err.status === 409) {
+        showToast("이미 처리된 초안입니다. 다시 작성해 주세요.", "danger");
+        reset();
+      } else {
+        showToast(errorMessage(err), "danger");
+      }
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   const curIdx = ORDER.indexOf(step);
+  const canSend = title.trim().length > 0 && body.trim().length > 0;
 
   return (
     <>
@@ -72,96 +159,124 @@ export function NoticeComposer() {
       </header>
 
       <main className="admin-page__main">
-        {step === "keyword" ? <KeywordStep onGenerate={generate} /> : null}
+        {step === "keyword" ? (
+          <KeywordStep
+            keywords={keywords}
+            error={genError}
+            onAdd={handleAddKeyword}
+            onRemove={(i) => setKeywords((prev) => removeKeyword(prev, i))}
+            onGenerate={handleGenerate}
+          />
+        ) : null}
         {step === "drafting" ? <DraftingStep /> : null}
-        {step === "review" ? (
-          <ReviewStep onSend={() => setDialogOpen(true)} onBack={() => setStep("keyword")} />
+        {step === "review" && draft ? (
+          <ReviewStep
+            draft={draft}
+            title={title}
+            body={body}
+            canSend={canSend}
+            onTitle={setTitle}
+            onBody={setBody}
+            onSend={() => setDialogOpen(true)}
+            onBack={reset}
+          />
         ) : null}
       </main>
 
       <Dialog
         open={dialogOpen}
         title="공지를 발송할까요?"
-        description="[중요] 6/22(월) 새벽 단수 안내 · 대상 1,204세대 · 검수 완료. 발송 후에는 수정할 수 없으며 입주민 앱 알림함으로 전달됩니다."
-        confirmLabel="발송 확인"
+        description="검수를 완료했습니까? 발송 즉시 입주민에게 알림이 갑니다. 발송 후에는 수정할 수 없습니다."
+        confirmLabel={publishing ? "발송 중…" : "발송 확인"}
         onCancel={() => setDialogOpen(false)}
-        onConfirm={() => {
-          setDialogOpen(false);
-          setSent(true);
-        }}
+        onConfirm={handlePublish}
       />
 
-      {sent ? (
+      {toast ? (
         <div className="nc-toast">
-          <Toast tone="success" message="공지가 1,204세대 입주민에게 발송되었습니다." />
+          <Toast tone={toast.tone} message={toast.message} />
         </div>
       ) : null}
     </>
   );
 }
 
-function KeywordStep({ onGenerate }: { onGenerate: () => void }) {
+interface KeywordStepProps {
+  keywords: readonly string[];
+  error: string | null;
+  onAdd: (raw: string) => boolean;
+  onRemove: (index: number) => void;
+  onGenerate: () => void;
+}
+
+function KeywordStep({ keywords, error, onAdd, onRemove, onGenerate }: KeywordStepProps) {
+  const [input, setInput] = useState("");
+
+  function commit() {
+    if (onAdd(input)) setInput("");
+  }
+
   return (
     <div className="nc-card nc-card--narrow">
       <h2 className="nc-card__title">무엇을 공지할까요?</h2>
       <p className="nc-card__lede">
-        키워드와 핵심 정보를 입력하면 AI가 초안을 작성합니다. 작성된 초안은{" "}
+        키워드를 입력하면 AI가 등록된 문서를 근거로 초안을 작성합니다. 작성된 초안은{" "}
         <strong>반드시 검수 후 발송</strong>되며 자동으로 전송되지 않습니다.
       </p>
 
-      <form
-        className="nc-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          onGenerate();
-        }}
-      >
-        <div className="nc-field">
-          <label htmlFor="nc-kw">키워드</label>
+      <div className="nc-field">
+        <label htmlFor="nc-kw">키워드 (1~{MAX_KEYWORDS}개)</label>
+        <div className="nc-chipinput">
+          {keywords.map((kw, i) => (
+            <span key={kw} className="nc-chip">
+              {kw}
+              <button
+                type="button"
+                className="nc-chip__remove"
+                aria-label={`${kw} 제거`}
+                onClick={() => onRemove(i)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
           <input
             id="nc-kw"
             type="text"
-            defaultValue="단수, 배관 교체, 1203동"
+            className="nc-chipinput__field"
+            value={input}
+            placeholder={keywords.length === 0 ? "예: 단수, 배관 교체" : "키워드 추가"}
             aria-describedby="nc-kw-help"
-          />
-          <div id="nc-kw-help" className="nc-field__help">
-            쉼표로 구분해 여러 키워드를 입력하세요.
-          </div>
-        </div>
-
-        <div className="nc-field-row">
-          <div className="nc-field">
-            <label htmlFor="nc-cat">말머리</label>
-            <select id="nc-cat" defaultValue="중요">
-              <option>중요</option>
-              <option>생활</option>
-              <option>공사</option>
-              <option>행사</option>
-            </select>
-          </div>
-          <div className="nc-field">
-            <label htmlFor="nc-scope">대상 범위</label>
-            <select id="nc-scope" defaultValue="1203동 전 세대">
-              <option>1203동 전 세대</option>
-              <option>단지 전체</option>
-              <option>특정 라인</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="nc-field">
-          <label htmlFor="nc-info">핵심 정보 (일시·유의사항 등)</label>
-          <textarea
-            id="nc-info"
-            rows={3}
-            defaultValue="6/22(월) 03:00~05:00, 노후 배관 교체로 약 2시간 단수 예정"
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === ",") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Backspace" && input === "" && keywords.length > 0) {
+                onRemove(keywords.length - 1);
+              }
+            }}
           />
         </div>
+        <div id="nc-kw-help" className="nc-field__help">
+          Enter 또는 쉼표로 키워드를 추가하세요.
+        </div>
+        {error ? (
+          <p className="nc-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
 
-        <Button type="submit" variant="primary" className="nc-generate">
-          <span aria-hidden="true">✨</span> AI 초안 생성
-        </Button>
-      </form>
+      <Button
+        type="button"
+        variant="primary"
+        className="nc-generate"
+        disabled={!canGenerate(keywords)}
+        onClick={onGenerate}
+      >
+        <span aria-hidden="true">✨</span> AI 초안 생성
+      </Button>
     </div>
   );
 }
@@ -187,13 +302,27 @@ function DraftingStep() {
   );
 }
 
-function ReviewStep({ onSend, onBack }: { onSend: () => void; onBack: () => void }) {
+interface ReviewStepProps {
+  draft: NoticeDraft;
+  title: string;
+  body: string;
+  canSend: boolean;
+  onTitle: (value: string) => void;
+  onBody: (value: string) => void;
+  onSend: () => void;
+  onBack: () => void;
+}
+
+function ReviewStep({ draft, title, body, canSend, onTitle, onBody, onSend, onBack }: ReviewStepProps) {
   return (
     <div className="nc-review">
       <div className="nc-card nc-editor">
-        <span className="nc-badge">
-          <span aria-hidden="true">✨</span> AI 초안 · 검토 후 발송하세요
-        </span>
+        <div className="nc-editor__head">
+          <span className="nc-badge">
+            <span aria-hidden="true">✨</span> AI 초안 · 검토 후 발송하세요
+          </span>
+          <ConfidenceBadge status={confidenceStatus(draft.confidence)} />
+        </div>
 
         <div className="nc-field">
           <label htmlFor="nc-title">제목</label>
@@ -201,13 +330,20 @@ function ReviewStep({ onSend, onBack }: { onSend: () => void; onBack: () => void
             id="nc-title"
             type="text"
             className="nc-editor__title"
-            defaultValue="[중요] 6/22(월) 새벽 단수 안내 — 노후 배관 교체 공사"
+            value={title}
+            onChange={(e) => onTitle(e.target.value)}
           />
         </div>
 
         <div className="nc-field">
           <label htmlFor="nc-body">본문</label>
-          <textarea id="nc-body" rows={13} className="nc-editor__body" defaultValue={DRAFT_BODY} />
+          <textarea
+            id="nc-body"
+            rows={13}
+            className="nc-editor__body"
+            value={body}
+            onChange={(e) => onBody(e.target.value)}
+          />
         </div>
 
         <p className="nc-mask">
@@ -218,38 +354,18 @@ function ReviewStep({ onSend, onBack }: { onSend: () => void; onBack: () => void
 
       <aside className="nc-side">
         <div className="nc-card">
-          <h3 className="nc-side__title">발송 전 검수</h3>
-          <ul className="nc-check">
-            <li>
-              <span className="nc-check__ok" aria-hidden="true">
-                ✓
-              </span>
-              <span>일시·대상 정보가 입력값과 일치</span>
-            </li>
-            <li>
-              <span className="nc-check__ok" aria-hidden="true">
-                ✓
-              </span>
-              <span>개인정보 마스킹 적용됨</span>
-            </li>
-            <li>
-              <span className="nc-check__warn" aria-hidden="true">
-                !
-              </span>
-              <span className="nc-check__muted">종료 시각 변동 가능 문구 확인 권장</span>
-            </li>
-          </ul>
-          <div className="nc-target">
-            <span>발송 대상</span>
-            <span className="nc-target__count">1,204세대</span>
+          <h3 className="nc-side__title">근거 문서</h3>
+          <div className="nc-citations">
+            {draft.citations.map((c) => (
+              <CitationCard key={c.chunkId} title={c.documentTitle} meta={c.quote} href="#" />
+            ))}
           </div>
         </div>
 
         <div className="nc-side__actions">
-          <Button variant="primary" onClick={onSend}>
+          <Button variant="primary" disabled={!canSend} onClick={onSend}>
             검수 완료 · 발송하기
           </Button>
-          <Button variant="secondary">임시저장</Button>
           <button type="button" className="nc-back" onClick={onBack}>
             ← 키워드 다시 입력
           </button>

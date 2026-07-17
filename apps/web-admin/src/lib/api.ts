@@ -243,3 +243,82 @@ export async function updateInquiryStatus(id: string, status: InquiryStatus): Pr
   await ensureOk(response);
   return toInquiry(await response.json());
 }
+
+// ── 공지 초안·발행 (docs/01 §13, 규칙 6 — 발송은 사람 확정) ────────────────────
+
+export interface NoticeCitation {
+  documentId: string;
+  documentTitle: string;
+  chunkId: string;
+  quote: string;
+}
+
+export interface NoticeDraft {
+  draftId: string;
+  title: string;
+  body: string;
+  citations: NoticeCitation[];
+  confidence: number;
+}
+
+export interface PublishNoticeInput {
+  draftId: string;
+  title: string;
+  body: string;
+}
+
+interface RawCitation {
+  document_id: string;
+  document_title: string;
+  chunk_id: string;
+  quote: string;
+}
+
+interface RawDraft {
+  draft_id: string;
+  title: string;
+  body: string;
+  citations: RawCitation[];
+  confidence: number;
+}
+
+function toDraft(raw: RawDraft): NoticeDraft {
+  return {
+    draftId: raw.draft_id,
+    title: raw.title,
+    body: raw.body,
+    citations: raw.citations.map((c) => ({
+      documentId: c.document_id,
+      documentTitle: c.document_title,
+      chunkId: c.chunk_id,
+      quote: c.quote,
+    })),
+    confidence: raw.confidence,
+  };
+}
+
+/** 키워드에서 AI 초안 생성. 422=근거 없음·503=LLM 불가는 ApiError.status 로 분기. */
+export async function createNoticeDraft(keywords: string[]): Promise<NoticeDraft> {
+  const response = await fetch(`${API_BASE_URL}/admin/notices/drafts`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ keywords }),
+  });
+  await ensureOk(response);
+  return toDraft(await response.json());
+}
+
+/** 검수 완료한 초안을 발행(사람 확정). audience 는 현재 ALL 만. 409=이미 처리된 초안. */
+export async function publishNotice(input: PublishNoticeInput): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/admin/notices`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      draft_id: input.draftId,
+      title: input.title,
+      body: input.body,
+      audience: "ALL",
+    }),
+  });
+  await ensureOk(response);
+}
