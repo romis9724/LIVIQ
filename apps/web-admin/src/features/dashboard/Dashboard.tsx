@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, EmptyState, Skeleton } from "@liviq/ui";
+import { Button, EmptyState, Skeleton, StatusPill } from "@liviq/ui";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError, getDashboardStats, type DashboardStats } from "@/lib/api";
@@ -8,6 +8,7 @@ import {
   FACILITY_STATUS_META,
   INQUIRY_STATUS_META,
   barWidth,
+  budgetWidth,
   formatCount,
   formatPercent,
   formatTokens,
@@ -111,7 +112,7 @@ interface Kpi {
 }
 
 function DashboardContent({ stats }: { stats: DashboardStats }) {
-  const { ai, cache, inquiries, facilities } = stats;
+  const { ai, cache, budget, inquiries, facilities } = stats;
   const kpis: readonly Kpi[] = [
     { label: "AI 질의 수", value: formatCount(ai.queryCount) },
     { label: "답변률", value: formatPercent(ai.answerRate) },
@@ -129,6 +130,33 @@ function DashboardContent({ stats }: { stats: DashboardStats }) {
           </div>
         ))}
       </div>
+
+      {budget.enabled ? (
+        <section
+          className={`surface-card dash-budget${budget.exceeded ? " dash-budget--over" : ""}`}
+        >
+          <div className="dash-card__head">
+            <h2 className="dash-card__title">일일 토큰 예산</h2>
+            {budget.exceeded ? (
+              <StatusPill status="fault" label="예산 초과" />
+            ) : (
+              <span className="dash-card__meta">경고 기준 — 질의 차단 없음</span>
+            )}
+          </div>
+          <div className="dash-token__big">
+            <span className="dash-token__value">{formatCount(budget.usedToday)}</span>
+            <span className="dash-token__unit">
+              / {formatCount(budget.budget)} 토큰 (오늘)
+            </span>
+          </div>
+          <div className="dash-complaint__track">
+            <span
+              className="dash-budget__fill"
+              style={{ width: budgetWidth(budget.usedToday, budget.budget) }}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <div className="dash-charts">
         <StatusDistribution

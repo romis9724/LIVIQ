@@ -796,6 +796,7 @@ export interface DashboardStats {
     needsReviewRate: number | null;
   };
   cache: { hits: number; misses: number; hitRate: number | null };
+  budget: { enabled: boolean; budget: number; usedToday: number; exceeded: boolean };
   inquiries: Record<string, number>;
   facilities: Record<string, number>;
 }
@@ -811,6 +812,7 @@ interface RawDashboardStats {
     needs_review_rate: number | null;
   };
   cache: { hits: number; misses: number; hit_rate: number | null };
+  budget: { enabled: boolean; budget: number; used_today: number; exceeded: boolean };
   inquiries: Record<string, number>;
   facilities: Record<string, number>;
 }
@@ -832,6 +834,12 @@ export async function getDashboardStats(days: number): Promise<DashboardStats> {
       needsReviewRate: raw.ai.needs_review_rate,
     },
     cache: { hits: raw.cache.hits, misses: raw.cache.misses, hitRate: raw.cache.hit_rate },
+    budget: {
+      enabled: raw.budget.enabled,
+      budget: raw.budget.budget,
+      usedToday: raw.budget.used_today,
+      exceeded: raw.budget.exceeded,
+    },
     inquiries: raw.inquiries,
     facilities: raw.facilities,
   };

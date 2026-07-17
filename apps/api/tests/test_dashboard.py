@@ -6,10 +6,14 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import datetime
+import logging
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
+import pytest
 import pytest_asyncio
+from app.config import get_settings
 from app.deps import RequestContext, get_context, get_tenant_session
 from app.main import create_app
 from app.session import get_redis
@@ -181,3 +185,111 @@ async def test_days_param_out_of_range_returns_422(dash_client: httpx.AsyncClien
     assert (await dash_client.get("/admin/dashboard/stats?days=0")).status_code == 422
     assert (await dash_client.get("/admin/dashboard/stats?days=91")).status_code == 422
     assert (await dash_client.get("/admin/dashboard/stats?days=90")).status_code == 200
+
+
+# ── 일일 토큰 예산 (H4-4, NFR-COST-01 — 경고만·차단 없음) ──────────────────────
+# 시드 assistant 토큰 합계: (100+200)+(300+400)=1000, fallback 은 null→0.
+_SEED_USED_TODAY = 1000
+
+
+@pytest.fixture(autouse=True)
+def _reset_settings_cache() -> Iterator[None]:
+    """예산 env 오버라이드가 다른 테스트로 새지 않도록 lru_cache 초기화."""
+    yield
+    get_settings.cache_clear()
+
+
+def _set_budget(monkeypatch: pytest.MonkeyPatch, value: int) -> None:
+    monkeypatch.setenv("LLM_DAILY_TOKEN_BUDGET", str(value))
+    get_settings.cache_clear()
+
+
+async def test_budget_disabled_by_default(dash_client: httpx.AsyncClient) -> None:
+    """예산 미설정(0)이면 enabled·exceeded 모두 false — used_today 는 그대로 집계."""
+    body = (await dash_client.get("/admin/dashboard/stats")).json()
+    assert body["budget"] == {
+        "enabled": False,
+        "budget": 0,
+        "used_today": _SEED_USED_TODAY,
+        "exceeded": False,
+    }
+
+
+async def test_budget_within_limit_not_exceeded(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """예산 내 사용이면 enabled true·exceeded false."""
+    await _seed_dashboard(db_session)
+    _set_budget(monkeypatch, 100_000)
+    async with _client(db_session) as c:
+        body = (await c.get("/admin/dashboard/stats")).json()
+    assert body["budget"] == {
+        "enabled": True,
+        "budget": 100_000,
+        "used_today": _SEED_USED_TODAY,
+        "exceeded": False,
+    }
+
+
+async def test_budget_exceeded_flags_and_logs_warning(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """예산 초과면 exceeded true + 구조화 warning 로그(tenant·used·budget) — 차단은 없음."""
+    await _seed_dashboard(db_session)
+    _set_budget(monkeypatch, 500)  # used 1000 > 500
+    with caplog.at_level(logging.WARNING, logger="app.dashboard"):
+        async with _client(db_session) as c:
+            response = await c.get("/admin/dashboard/stats")
+    assert response.status_code == 200  # 초과해도 200 — 차단 금지
+    assert response.json()["budget"]["exceeded"] is True
+
+    warnings = [r for r in caplog.records if "daily-token-budget" in r.getMessage()]
+    assert len(warnings) == 1
+    message = warnings[0].getMessage()
+    assert str(TENANT_ID) in message
+    assert "used=1000" in message
+    assert "budget=500" in message
+
+
+async def test_budget_used_today_excludes_earlier_days(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """used_today 는 UTC 자정 이후만 — 어제 메시지 토큰은 제외(cutoff 경계)."""
+    await seed_tenant(db_session)
+    conversation = Conversation(tenant_id=TENANT_ID, user_id=MANAGER_USER_ID, channel="admin")
+    db_session.add(conversation)
+    await db_session.flush()
+    yesterday = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=1)
+    db_session.add(
+        Message(
+            tenant_id=TENANT_ID,
+            conversation_id=conversation.id,
+            role="assistant",
+            content="어제",
+            status="answered",
+            token_input=5000,
+            token_output=5000,
+            created_at=yesterday,
+        )
+    )
+    db_session.add(
+        Message(
+            tenant_id=TENANT_ID,
+            conversation_id=conversation.id,
+            role="assistant",
+            content="오늘",
+            status="answered",
+            token_input=100,
+            token_output=100,
+        )
+    )
+    await db_session.flush()
+
+    _set_budget(monkeypatch, 1000)
+    async with _client(db_session) as c:
+        body = (await c.get("/admin/dashboard/stats")).json()
+    # 오늘 200 만 집계(어제 10000 제외) → 예산 1000 내라 미초과.
+    assert body["budget"]["used_today"] == 200
+    assert body["budget"]["exceeded"] is False

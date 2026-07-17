@@ -27,6 +27,10 @@ class ApiSettings(BaseSettings):
     # 히트 시 LLM 호출 0으로 SSE 재생 — 격리는 키(tenant·user/roles·visibilities·gen)로 보장.
     answer_cache_ttl_s: int = Field(3600, validation_alias="CACHE_TTL_S")
 
+    # 단지 일일 토큰 예산(docs/09 §8.5 H4-4, NFR-COST-01). 0=비활성.
+    # 경고만 — 초과해도 질의를 차단하지 않는다(실비용 상한은 파일럿 측정 후).
+    llm_daily_token_budget: int = Field(0, validation_alias="LLM_DAILY_TOKEN_BUDGET")
+
     # pii_vault 봉투 암호화 마스터 키(KEK) — 32byte base64. 필수(fail-closed, ADR-0010).
     # 유실 = pii_vault 복호 불능. 시크릿 매니저 + 오프라인 백업(docs/09 §7).
     pii_master_key: str = Field(..., validation_alias="PII_MASTER_KEY")

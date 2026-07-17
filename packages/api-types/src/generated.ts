@@ -805,6 +805,20 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * BudgetStats
+         * @description 단지 일일 토큰 예산 대비 사용량(H4-4, NFR-COST-01). 경고만 — 차단 없음.
+         */
+        BudgetStats: {
+            /** Budget */
+            budget: number;
+            /** Enabled */
+            enabled: boolean;
+            /** Exceeded */
+            exceeded: boolean;
+            /** Used Today */
+            used_today: number;
+        };
         /** CacheStats */
         CacheStats: {
             /** Hit Rate */
@@ -824,6 +838,7 @@ export interface components {
         /** DashboardStatsOut */
         DashboardStatsOut: {
             ai: components["schemas"]["AiStats"];
+            budget: components["schemas"]["BudgetStats"];
             cache: components["schemas"]["CacheStats"];
             /** Days */
             days: number;

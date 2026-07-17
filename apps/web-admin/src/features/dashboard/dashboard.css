@@ -203,6 +203,20 @@
   border-radius: 999px;
 }
 
+/* 일일 토큰 예산 게이지 (H4-4 — 경고만·차단 없음) */
+.dash-budget__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+.dash-budget--over .dash-budget__fill {
+  background: var(--color-danger);
+}
+.dash-budget--over {
+  border-color: var(--color-danger);
+}
+
 /* 검수 대기 위젯 */
 .dash-link {
   font-size: var(--text-sm);

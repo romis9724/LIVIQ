@@ -46,3 +46,9 @@ export function barWidth(count: number, counts: readonly number[]): string {
   if (max === 0) return "0%";
   return `${Math.round((count / max) * 100)}%`;
 }
+
+/** 예산 사용 게이지 폭 % — used/budget, 0~100 클램프(초과해도 막대는 100%). */
+export function budgetWidth(used: number, budget: number): string {
+  if (budget <= 0) return "0%";
+  return `${Math.min(100, Math.round((used / budget) * 100))}%`;
+}
