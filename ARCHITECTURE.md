@@ -65,7 +65,8 @@ ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
 화면 실연동: web-resident **비서·민원·공지·관리비**, web-admin **문서·민원·공지 초안·관리비·검수 큐·시설**(H3-1) — 온보딩·홈/나·대시보드 연동은 백로그.
-시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 graph-sync(H3-2 예정)가 outbox 폴링으로 단독 수행.
+시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
+outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
