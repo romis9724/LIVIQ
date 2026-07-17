@@ -7,16 +7,34 @@
 .fac-head__text {
   flex: 1;
 }
-.fac-legend {
+.fac-filters {
   display: flex;
-  gap: var(--space-3);
+  gap: var(--space-2);
   flex-wrap: wrap;
+  padding: var(--space-3) var(--space-8) 0;
 }
-.fac-legend__item {
+.fac-filter {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
   font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.fac-filter[data-active] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+.fac-filter__count {
+  font-size: 0.72rem;
+  font-weight: 700;
   color: var(--color-text-muted);
 }
 
@@ -196,95 +214,135 @@
   line-height: 1.6;
 }
 
-.fac-causes {
-  background: var(--color-citation);
-  border: 1px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-}
-.fac-causes__head {
+/* 상태 변경 바 */
+.fac-statusbar {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: var(--space-2);
+  flex-direction: column;
+  gap: var(--space-2);
 }
-.fac-causes__mark {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.8rem;
-}
-.fac-causes__label {
-  font-weight: 700;
-  color: var(--color-accent);
-}
-.fac-causes__disclaimer {
-  margin: 0 0 var(--space-4);
+.fac-statusbar__label {
   font-size: var(--text-sm);
+  font-weight: 600;
   color: var(--color-text-muted);
-  line-height: 1.6;
 }
-.fac-causes__disclaimer strong {
+.fac-statusbar__opts {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.fac-statusbtn {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   color: var(--color-text);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.fac-statusbtn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+}
+.fac-statusbtn[data-active] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
   font-weight: 600;
 }
-.fac-causes__list {
+.fac-statusbtn:disabled:not([data-active]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 이력 타임라인 */
+.fac-history__title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: var(--space-2);
+}
+.fac-history__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.fac-history__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-.fac-cause {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-3) var(--space-4);
-}
-.fac-cause__top {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
-  margin-bottom: 4px;
 }
-.fac-cause__title {
-  font-weight: 600;
-  flex: 1;
+.fac-history__item {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
 }
-.fac-cause__likelihood {
+.fac-history__date {
+  flex: none;
   font-size: 0.74rem;
   font-weight: 700;
   color: var(--color-text-muted);
+  padding-top: 2px;
 }
-.fac-cause__desc {
+.fac-history__body {
+  min-width: 0;
+}
+.fac-history__primary {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  line-height: 1.55;
+  color: var(--color-text);
+  line-height: 1.5;
 }
-.fac-causes__sources {
-  margin-top: var(--space-4);
+.fac-history__secondary {
+  margin-top: 2px;
   font-size: 0.78rem;
   color: var(--color-text-muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
-.fac-note {
-  background: var(--color-surface-sunken);
+/* 다이얼로그 폼 필드 */
+.fac-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: var(--space-4) 0;
+}
+.fac-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fac-select,
+.fac-textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-4);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  line-height: 1.6;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.fac-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.fac-select:focus-visible,
+.fac-textarea:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.fac-toast {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
 }
 
 .fac-detail__actions {

@@ -55,6 +55,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/facilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Facilities */
+        get: operations["list_facilities_admin_facilities_get"];
+        put?: never;
+        /** Create Facility */
+        post: operations["create_facility_admin_facilities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/facilities/{facility_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Facility */
+        get: operations["get_facility_admin_facilities__facility_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Facility */
+        patch: operations["patch_facility_admin_facilities__facility_id__patch"];
+        trace?: never;
+    };
+    "/admin/facilities/{facility_id}/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Incident */
+        post: operations["create_incident_admin_facilities__facility_id__incidents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/facilities/{facility_id}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Maintenance */
+        post: operations["create_maintenance_admin_facilities__facility_id__maintenance_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/fees": {
         parameters: {
             query?: never;
@@ -804,6 +874,109 @@ export interface components {
             /** Keywords */
             keywords: string[];
         };
+        /** FacilityCreateIn */
+        FacilityCreateIn: {
+            /** Location */
+            location?: string | null;
+            /** Name */
+            name: string;
+            /** Next Check At */
+            next_check_at?: string | null;
+            /**
+             * Status
+             * @default normal
+             * @enum {string}
+             */
+            status: "normal" | "check" | "fault" | "risk";
+            /** Type */
+            type?: string | null;
+        };
+        /** FacilityDetailOut */
+        FacilityDetailOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Incidents */
+            incidents: components["schemas"]["IncidentOut"][];
+            /** Location */
+            location: string | null;
+            /** Maintenance Logs */
+            maintenance_logs: components["schemas"]["MaintenanceOut"][];
+            /** Name */
+            name: string;
+            /** Next Check At */
+            next_check_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "normal" | "check" | "fault" | "risk";
+            /** Type */
+            type: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FacilityListOut */
+        FacilityListOut: {
+            /** Items */
+            items: components["schemas"]["FacilityOut"][];
+            /** Total */
+            total: number;
+        };
+        /** FacilityOut */
+        FacilityOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Location */
+            location: string | null;
+            /** Name */
+            name: string;
+            /** Next Check At */
+            next_check_at: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "normal" | "check" | "fault" | "risk";
+            /** Type */
+            type: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** FacilityPatchIn */
+        FacilityPatchIn: {
+            /** Location */
+            location?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Next Check At */
+            next_check_at?: string | null;
+            /** Status */
+            status?: ("normal" | "check" | "fault" | "risk") | null;
+            /** Type */
+            type?: string | null;
+        };
         /** FeeApplyOut */
         FeeApplyOut: {
             /** Applied */
@@ -906,6 +1079,43 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** IncidentCreateIn */
+        IncidentCreateIn: {
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Resolution */
+            resolution?: string | null;
+            /** Root Cause */
+            root_cause?: string | null;
+            /** Symptom */
+            symptom: string;
+        };
+        /** IncidentOut */
+        IncidentOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Facility Id
+             * Format: uuid
+             */
+            facility_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Occurred At */
+            occurred_at: string | null;
+            /** Resolution */
+            resolution: string | null;
+            /** Root Cause */
+            root_cause: string | null;
+            /** Symptom */
+            symptom: string;
+        };
         /** InquiryCreateIn */
         InquiryCreateIn: {
             /** Body */
@@ -988,6 +1198,47 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** MaintenanceCreateIn */
+        MaintenanceCreateIn: {
+            /** Parts */
+            parts?: {
+                [key: string]: unknown;
+            } | null;
+            /** Performed At */
+            performed_at?: string | null;
+            /** Performer */
+            performer?: string | null;
+            /** Work */
+            work: string;
+        };
+        /** MaintenanceOut */
+        MaintenanceOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Facility Id
+             * Format: uuid
+             */
+            facility_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Parts */
+            parts: {
+                [key: string]: unknown;
+            } | null;
+            /** Performed At */
+            performed_at: string | null;
+            /** Performer */
+            performer: string | null;
+            /** Work */
+            work: string;
         };
         /** MeOut */
         MeOut: {
@@ -1316,6 +1567,239 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_facilities_admin_facilities_get: {
+        parameters: {
+            query?: {
+                status?: ("normal" | "check" | "fault" | "risk") | null;
+                type?: string | null;
+                page?: number;
+                limit?: number;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilityListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_facility_admin_facilities_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FacilityCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_facility_admin_facilities__facility_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                facility_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilityDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_facility_admin_facilities__facility_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                facility_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FacilityPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_incident_admin_facilities__facility_id__incidents_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                facility_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IncidentCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_maintenance_admin_facilities__facility_id__maintenance_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                facility_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceOut"];
+                };
             };
             /** @description Validation Error */
             422: {
