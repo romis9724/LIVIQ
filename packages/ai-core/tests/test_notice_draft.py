@@ -11,7 +11,7 @@ import pytest
 from ai_core.config import AiCoreSettings
 from ai_core.llm.client import LlmClient
 from ai_core.masking import MaskingFailedError
-from ai_core.notice_draft import NoEvidenceError, draft_notice
+from ai_core.notice_draft import NoEvidenceError, NoticeDraftResult, draft_notice
 from ai_core.rag.retrieval import RetrievedChunk
 
 TENANT = uuid.uuid4()
@@ -60,7 +60,7 @@ def _llm(settings: AiCoreSettings, answer: str) -> LlmClient:
     return LlmClient(settings, transport=httpx.MockTransport(handler), retry_backoff_s=0.0)
 
 
-async def _run(llm: LlmClient, retriever: FakeRetriever) -> object:
+async def _run(llm: LlmClient, retriever: FakeRetriever) -> NoticeDraftResult:
     return await draft_notice(
         ["주차장", "개방"],
         llm=llm,
