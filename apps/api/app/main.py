@@ -7,6 +7,7 @@ H2-4: notices(발행 공지 조회 + AI 초안 생성·검수 발행·알림).
 H2-5: fees(관리비 엑셀 업로드·검증·확정 적재 + 조회 + AI 설명 SSE).
 H2-6: review_queue(AI 검수 큐 — 사후 검수 목록·승인/반려).
 H3-1: facilities(시설 CRUD·장애/정비 이력 + outbox 원자 기록).
+H4-3: dashboard(운영 통계 집계 — 질의·토큰·폴백·검수·캐시·민원·시설, MANAGER 전용).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from app.routers import (
     approvals,
     assistant,
     auth,
+    dashboard,
     documents,
     facilities,
     fees,
@@ -69,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(fees.admin_router)
     app.include_router(review_queue.router)
     app.include_router(facilities.router)
+    app.include_router(dashboard.router)
     return app
 
 

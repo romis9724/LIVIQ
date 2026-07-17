@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/dashboard/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dashboard Stats */
+        get: operations["dashboard_stats_admin_dashboard_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/facilities": {
         parameters: {
             query?: never;
@@ -703,6 +720,21 @@ export interface components {
             /** Unit No */
             unit_no: number;
         };
+        /** AiStats */
+        AiStats: {
+            /** Answer Rate */
+            answer_rate: number | null;
+            /** Avg Token Input */
+            avg_token_input: number | null;
+            /** Avg Token Output */
+            avg_token_output: number | null;
+            /** Fallback Rate */
+            fallback_rate: number | null;
+            /** Needs Review Rate */
+            needs_review_rate: number | null;
+            /** Query Count */
+            query_count: number;
+        };
         /** ApprovalListOut */
         ApprovalListOut: {
             /** Items */
@@ -773,12 +805,36 @@ export interface components {
             /** File */
             file: string;
         };
+        /** CacheStats */
+        CacheStats: {
+            /** Hit Rate */
+            hit_rate: number | null;
+            /** Hits */
+            hits: number;
+            /** Misses */
+            misses: number;
+        };
         /** ConsentIn */
         ConsentIn: {
             /** Granted */
             granted: boolean;
             /** Purpose */
             purpose: string;
+        };
+        /** DashboardStatsOut */
+        DashboardStatsOut: {
+            ai: components["schemas"]["AiStats"];
+            cache: components["schemas"]["CacheStats"];
+            /** Days */
+            days: number;
+            /** Facilities */
+            facilities: {
+                [key: string]: number;
+            };
+            /** Inquiries */
+            inquiries: {
+                [key: string]: number;
+            };
         };
         /** DecideIn */
         DecideIn: {
@@ -1590,6 +1646,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_stats_admin_dashboard_stats_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardStatsOut"];
+                };
             };
             /** @description Validation Error */
             422: {
