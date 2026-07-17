@@ -19,6 +19,7 @@ import {
   type IncidentInput,
   type MaintenanceInput,
 } from "@/lib/api";
+import { FacilityAssistantPanel } from "./FacilityAssistantPanel";
 import { IncidentDialog, MaintenanceDialog, RegisterDialog } from "./FacilityDialogs";
 import { FILTERS, STATUS_META, STATUS_ORDER, countByStatus, shortDate, type FilterId } from "./data";
 import "./facilities.css";
@@ -248,6 +249,8 @@ export function FacilityManager() {
           onRecordMaintenance={() => setDialog("maintenance")}
         />
       </main>
+
+      <FacilityAssistantPanel />
 
       {dialog === "register" ? (
         <RegisterDialog busy={busy} onCancel={() => setDialog(null)} onSubmit={handleRegister} />

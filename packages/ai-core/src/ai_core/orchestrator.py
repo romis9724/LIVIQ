@@ -97,6 +97,8 @@ class DoneEvent:
     citations: tuple[Citation, ...] = field(default_factory=tuple)
     tool_citations: tuple[ToolCitation, ...] = field(default_factory=tuple)
     answer: str = ""
+    # 호출한 도구 이름 순서(골든셋 회귀·규칙 8 관측용, H3-4). additive 필드 — SSE 4종 불변.
+    tool_path: tuple[str, ...] = field(default_factory=tuple)
 
 
 AssistantEvent = StatusEvent | TokenEvent | CitationEvent | ToolCitationEvent | DoneEvent
@@ -114,8 +116,13 @@ async def answer_question(
     deps: ToolDeps,
     ctx: ToolContext,
     extra_names: Sequence[str] = (),
+    answer_prompt: str = ANSWER_SYSTEM_PROMPT,
 ) -> AsyncIterator[AssistantEvent]:
-    """질의 1건 처리(도구 에이전트). 항상 마지막에 DoneEvent를 낸다."""
+    """질의 1건 처리(도구 에이전트). 항상 마지막에 DoneEvent를 낸다.
+
+    answer_prompt: 최종 답변 turn의 시스템 프롬프트(기본 = 일반 응대). 시설 도우미(H3-4)는
+    FACILITY_ANSWER_SYSTEM_PROMPT를 주입해 원인 후보 형식을 강제한다 — 나머지 경로는 공유.
+    """
     llm = deps.llm
     yield StatusEvent(stage="searching")
 
@@ -162,27 +169,28 @@ async def answer_question(
         "assistant tool_path", extra={"tool_path": tool_path, "tenant_id": str(ctx.tenant_id)}
     )
 
+    path = tuple(tool_path)
     if llm_down and not doc_chunks and not cards:
-        yield _fallback(FALLBACK_LLM_UNAVAILABLE)
+        yield _fallback(FALLBACK_LLM_UNAVAILABLE, tool_path=path)
         return
 
     # ── 근거 조립 ──────────────────────────────────────────────────────
     evidence = _fit(doc_chunks)
     if not evidence and not cards:
-        yield _fallback(FALLBACK_NO_EVIDENCE)
+        yield _fallback(FALLBACK_NO_EVIDENCE, tool_path=path)
         return
 
     final_user = _build_final_user_message(question, evidence, cards)
     try:
         masked_final = ensure_masked(final_user, extra_names=extra_names)
     except MaskingFailedError:
-        yield _fallback(FALLBACK_MASKING, needs_review=True)
+        yield _fallback(FALLBACK_MASKING, needs_review=True, tool_path=path)
         return
 
     # ── 최종 답변(스트리밍) ────────────────────────────────────────────
     yield StatusEvent(stage="generating")
     final_messages = [
-        {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+        {"role": "system", "content": answer_prompt},
         {"role": "user", "content": masked_final.masked_text},
     ]
     parts: list[str] = []
@@ -191,7 +199,7 @@ async def answer_question(
             parts.append(delta)
             yield TokenEvent(text=delta)
     except LlmUnavailableError:
-        async for event in _excerpt_fallback(evidence, cards):
+        async for event in _excerpt_fallback(evidence, cards, tool_path=path):
             yield event
         return
 
@@ -205,14 +213,14 @@ async def answer_question(
     # ── 인용검증·신뢰도 ────────────────────────────────────────────────
     yield StatusEvent(stage="verifying")
     if not answer or NO_EVIDENCE_MARKER in answer:
-        yield _fallback(FALLBACK_NO_EVIDENCE, usage=usage)
+        yield _fallback(FALLBACK_NO_EVIDENCE, usage=usage, tool_path=path)
         return
 
     check = verify_citations(answer, evidence)
     doc_citations = check.citations
     if not doc_citations and not cards:
         # 답변에 유효한 [n] 인용이 없고 도구 카드도 없다 → 근거 미검증(규칙 1).
-        yield _fallback(FALLBACK_NO_EVIDENCE, usage=usage)
+        yield _fallback(FALLBACK_NO_EVIDENCE, usage=usage, tool_path=path)
         return
 
     if evidence:
@@ -232,7 +240,13 @@ async def answer_question(
         should_fallback = False
 
     if should_fallback:
-        yield _fallback(FALLBACK_LOW_CONFIDENCE, confidence=score, needs_review=True, usage=usage)
+        yield _fallback(
+            FALLBACK_LOW_CONFIDENCE,
+            confidence=score,
+            needs_review=True,
+            usage=usage,
+            tool_path=path,
+        )
         return
 
     for citation in doc_citations:
@@ -249,6 +263,7 @@ async def answer_question(
         citations=doc_citations,
         tool_citations=tool_citations,
         answer=answer,
+        tool_path=path,
     )
 
 
@@ -261,6 +276,7 @@ def _fallback(
     confidence: float = 0.0,
     needs_review: bool = False,
     usage: ChatUsage | None = None,
+    tool_path: Sequence[str] = (),
 ) -> DoneEvent:
     return DoneEvent(
         status="fallback",
@@ -268,6 +284,7 @@ def _fallback(
         needs_review=needs_review,
         usage=usage,
         fallback_reason=reason,
+        tool_path=tuple(tool_path),
     )
 
 
@@ -349,7 +366,10 @@ def _tool_citations(cards: Sequence[ToolCard], *, start: int) -> tuple[ToolCitat
 
 
 async def _excerpt_fallback(
-    evidence: Sequence[RetrievedChunk], cards: Sequence[ToolCard]
+    evidence: Sequence[RetrievedChunk],
+    cards: Sequence[ToolCard],
+    *,
+    tool_path: Sequence[str] = (),
 ) -> AsyncIterator[AssistantEvent]:
     """LLM 미가용 시 발췌 폴백 — 출처(문서 최상위 발췌 + 도구 카드)는 유지(docs/01 §10)."""
     doc_citations: tuple[Citation, ...] = ()
@@ -368,6 +388,7 @@ async def _excerpt_fallback(
         fallback_reason=FALLBACK_LLM_UNAVAILABLE,
         citations=doc_citations,
         tool_citations=tool_citations,
+        tool_path=tuple(tool_path),
     )
 
 

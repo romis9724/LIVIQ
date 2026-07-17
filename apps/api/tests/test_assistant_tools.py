@@ -118,9 +118,11 @@ async def _seed_fee(session: AsyncSession) -> None:
     await session.flush()
 
 
-def _client(db_session: AsyncSession, llm: LlmClient) -> httpx.AsyncClient:
+def _client(
+    db_session: AsyncSession, llm: LlmClient, *, roles: tuple[str, ...] = ()
+) -> httpx.AsyncClient:
     app = create_app()
-    app.dependency_overrides[get_context] = lambda: RequestContext(TENANT_ID, USER_ID)
+    app.dependency_overrides[get_context] = lambda: RequestContext(TENANT_ID, USER_ID, roles=roles)
     app.dependency_overrides[get_tenant_session] = lambda: db_session
     app.dependency_overrides[get_llm] = lambda: llm
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
@@ -172,3 +174,44 @@ async def test_tool_path_does_not_mutate_domain_data(
     await fee_client.post("/assistant/ask", json={"question": "관리비?"})
     after = await db_session.scalar(select(func.count()).select_from(Fee))
     assert before == after == 1
+
+
+async def test_ask_done_carries_tool_path(
+    fee_client: httpx.AsyncClient,
+) -> None:
+    """회귀 — /assistant/ask done 이벤트에 tool_path(호출 도구 이름) 추가(H3-4, additive)."""
+    response = await fee_client.post("/assistant/ask", json={"question": "관리비?"})
+    done = _parse_sse(response.text)[-1]
+    assert done[0] == "done"
+    assert done[1]["tool_path"] == ["get_fees"]
+
+
+# ── 시설 AI 도우미 (POST /admin/facilities/assistant, H3-4) ────────────────────
+
+
+async def test_facility_assistant_forbidden_for_resident(db_session: AsyncSession) -> None:
+    """RESIDENT는 시설 도우미 접근 불가(규칙 4 — 서버 인가, 403)."""
+    await _seed_fee(db_session)
+    async with _client(db_session, _fee_agent_llm(), roles=("RESIDENT",)) as c:
+        response = await c.post("/admin/facilities/assistant", json={"question": "승강기 소음"})
+    assert response.status_code == 403
+
+
+async def test_facility_assistant_streams_four_events_with_tool_path(
+    db_session: AsyncSession,
+) -> None:
+    """MANAGER는 시설 도우미로 SSE 4이벤트 응답 + done.tool_path 포함(계약 불변)."""
+    await _seed_fee(db_session)
+    async with _client(db_session, _fee_agent_llm(), roles=("MANAGER",)) as c:
+        response = await c.post(
+            "/admin/facilities/assistant", json={"question": "승강기 원인 후보"}
+        )
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    names = {name for name, _ in events}
+    # SSE 이벤트 타입 4종 리터럴만(status·token·citation·done) — 확장 없음.
+    assert names <= {"status", "token", "citation", "done"}
+    done = events[-1]
+    assert done[0] == "done"
+    assert done[1]["status"] == "answered"
+    assert done[1]["tool_path"] == ["get_fees"]

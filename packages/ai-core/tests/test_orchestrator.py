@@ -248,6 +248,65 @@ async def test_simple_doc_query_regression(settings: AiCoreSettings) -> None:
     assert done.usage is not None and done.usage.estimated
 
 
+async def test_done_carries_tool_path_in_call_order(settings: AiCoreSettings) -> None:
+    """DoneEvent.tool_path에 호출한 도구 이름이 순서대로 담긴다(H3-4 관측·회귀용)."""
+    retriever = FakeRetriever([_chunk()])
+    llm = _agent_llm(
+        settings, _calls_then_stop(_tc("search_documents", {"query": "주차"}), _tc("get_fees", {}))
+    )
+    done = _done(await _run(llm, retriever))
+    assert done.tool_path == ("search_documents", "get_fees")
+
+
+async def test_fallback_carries_tool_path(settings: AiCoreSettings) -> None:
+    """근거 0 폴백에도 tool_path가 남는다(스텝 상한 관측 — readonly-02)."""
+    retriever = FakeRetriever([])  # 문서 없음
+    # 도구는 호출했으나 근거를 못 모아 폴백.
+    llm = _agent_llm(settings, _calls_then_stop(_tc("search_documents", {"query": "x"})))
+    done = _done(await _run(llm, retriever))
+    assert done.status == "fallback"
+    assert done.tool_path == ("search_documents",)
+
+
+async def test_answer_prompt_override_reaches_final_turn(settings: AiCoreSettings) -> None:
+    """answer_prompt 주입 시 최종 답변(스트림) turn의 system 메시지가 교체된다(시설 도우미 배선)."""
+    retriever = FakeRetriever([_chunk()])
+    stream_systems: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if request.url.path.endswith("/embeddings"):
+            data = [{"index": 0, "embedding": [0.05] * settings.embedding_dimensions}]
+            return httpx.Response(200, json={"data": data})
+        if body.get("stream"):
+            stream_systems.extend(
+                str(m["content"]) for m in body["messages"] if m.get("role") == "system"
+            )
+            chunk = {"choices": [{"delta": {"content": "24시간 개방 [1]."}}]}
+            sse = "\n\n".join([f"data: {json.dumps(chunk)}", "data: [DONE]", ""])
+            return httpx.Response(200, content=sse.encode())
+        # 결정 turn: tool 결과가 있으면 중단, 아니면 문서 검색 호출.
+        if any(m.get("role") == "tool" for m in body["messages"]):
+            return httpx.Response(200, json=_decision(content=""))
+        return httpx.Response(
+            200, json=_decision(tool_calls=[_tc("search_documents", {"query": "주차"})])
+        )
+
+    llm = LlmClient(settings, transport=httpx.MockTransport(handler), retry_backoff_s=0.0)
+    events = [
+        event
+        async for event in answer_question(
+            "주차장?",
+            registry=default_registry(),
+            deps=_deps(retriever, llm),
+            ctx=CTX,
+            answer_prompt="시설전용테스트프롬프트",
+        )
+    ]
+    assert isinstance(events[-1], DoneEvent)
+    assert any("시설전용테스트프롬프트" in s for s in stream_systems)
+
+
 async def test_no_tool_calls_falls_back_no_evidence(settings: AiCoreSettings) -> None:
     retriever = FakeRetriever([_chunk()])
     # LLM이 도구 없이 즉답 → 근거 0 → 폴백(지어내기 금지).

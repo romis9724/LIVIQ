@@ -1,7 +1,7 @@
 // 문서 관리 — apps/api HTTP 클라이언트 (docs/01 §13).
 // api-types 전환은 백로그 — 지금은 로컬 타입. dev 헤더 경로는 web-resident 와 동일 패턴.
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 // local dev 전용 컨텍스트(정식 세션 인증 도입 전). 시드된 tenant/user 와 일치해야 함.
 // dev 헤더 경로는 roles=(RESIDENT,MANAGER,STAFF) 부여라 문서 관리(MANAGER·STAFF) 통과.
@@ -11,7 +11,7 @@ const DEV_TENANT_ID =
 export const DEV_USER_ID =
   process.env.NEXT_PUBLIC_DEV_USER_ID ?? "22222222-2222-2222-2222-222222222222";
 
-const DEV_HEADERS: Record<string, string> = {
+export const DEV_HEADERS: Record<string, string> = {
   "X-Dev-Tenant-Id": DEV_TENANT_ID,
   "X-Dev-User-Id": DEV_USER_ID,
 };

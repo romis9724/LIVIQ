@@ -25,9 +25,17 @@ from ai_core.orchestrator import (
     ToolCitationEvent,
     answer_question,
 )
+from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
-from app.deps import RequestContext, get_context, get_graph, get_llm, get_tenant_session
+from app.deps import (
+    RequestContext,
+    get_context,
+    get_graph,
+    get_llm,
+    get_tenant_session,
+    require_roles,
+)
 from app.schemas.assistant import (
     AnswerStatus,
     AskRequest,
@@ -40,8 +48,12 @@ from app.schemas.assistant import (
 from liviq_db.models import Citation, Conversation, Message
 
 _REGISTRY = default_registry()
+# 시설 AI 도우미 접근 역할(docs/01 §13 시설 표) — 시설 도구도 이 역할에만 노출된다.
+_FACILITY_ASSISTANT_ROLES = ("MANAGER", "FACILITY")
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
+# 시설 도우미는 /admin/facilities 표면에 속한다 — 스트림·영속은 아래 공유 헬퍼 재사용.
+facility_router = APIRouter(prefix="/admin/facilities", tags=["facilities"])
 
 
 @router.post("/ask")
@@ -52,7 +64,45 @@ async def ask(
     llm: Annotated[LlmClient, Depends(get_llm)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
 ) -> EventSourceResponse:
-    conversation = await _load_or_create_conversation(session, ctx, body.conversation_id)
+    return await _assistant_response(body, ctx, session, llm, graph, channel="resident")
+
+
+@facility_router.post("/assistant")
+async def facility_assistant(
+    body: AskRequest,
+    ctx: Annotated[RequestContext, Depends(require_roles(*_FACILITY_ASSISTANT_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    llm: Annotated[LlmClient, Depends(get_llm)],
+    graph: Annotated[GraphClient | None, Depends(get_graph)],
+) -> EventSourceResponse:
+    """시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
+
+    answer_question 재사용(시설 프롬프트만 주입) — 레지스트리·마스킹·스텝 상한·폴백·영속은
+    /assistant/ask와 공유. ctx.roles(MANAGER/FACILITY)가 시설 도구 노출을 결정한다.
+    """
+    return await _assistant_response(
+        body,
+        ctx,
+        session,
+        llm,
+        graph,
+        channel="admin",
+        answer_prompt=FACILITY_ANSWER_SYSTEM_PROMPT,
+    )
+
+
+async def _assistant_response(
+    body: AskRequest,
+    ctx: RequestContext,
+    session: AsyncSession,
+    llm: LlmClient,
+    graph: GraphClient | None,
+    *,
+    channel: str,
+    answer_prompt: str = ANSWER_SYSTEM_PROMPT,
+) -> EventSourceResponse:
+    """대화 적재 + 도구 에이전트 스트림 + 영속화 — /assistant/ask·시설 도우미 공유."""
+    conversation = await _load_or_create_conversation(session, ctx, body.conversation_id, channel)
     session.add(
         Message(
             tenant_id=ctx.tenant_id,
@@ -72,7 +122,11 @@ async def ask(
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         async for event in answer_question(
-            body.question, registry=_REGISTRY, deps=deps, ctx=tool_ctx
+            body.question,
+            registry=_REGISTRY,
+            deps=deps,
+            ctx=tool_ctx,
+            answer_prompt=answer_prompt,
         ):
             match event:
                 case StatusEvent(stage=stage):
@@ -116,6 +170,7 @@ async def ask(
                             confidence=done.confidence,
                             needs_review=done.needs_review,
                             fallback_reason=done.fallback_reason,
+                            tool_path=list(done.tool_path),
                         ).model_dump_json(),
                     }
 
@@ -123,7 +178,10 @@ async def ask(
 
 
 async def _load_or_create_conversation(
-    session: AsyncSession, ctx: RequestContext, conversation_id: uuid.UUID | None
+    session: AsyncSession,
+    ctx: RequestContext,
+    conversation_id: uuid.UUID | None,
+    channel: str,
 ) -> Conversation:
     if conversation_id is not None:
         conversation = await session.scalar(
@@ -136,7 +194,7 @@ async def _load_or_create_conversation(
         if conversation is None:
             raise HTTPException(status_code=404, detail="대화 없음")
         return conversation
-    conversation = Conversation(tenant_id=ctx.tenant_id, user_id=ctx.user_id, channel="resident")
+    conversation = Conversation(tenant_id=ctx.tenant_id, user_id=ctx.user_id, channel=channel)
     session.add(conversation)
     await session.flush()
     return conversation
