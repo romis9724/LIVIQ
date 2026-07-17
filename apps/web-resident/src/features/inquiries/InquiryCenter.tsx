@@ -1,54 +1,95 @@
 "use client";
 
-import { useState } from "react";
-import { Button, FormField, StatusPill, type StatusKind } from "@liviq/ui";
+import { Button, EmptyState, Skeleton, StatusPill, Toast } from "@liviq/ui";
+import type { ToastTone } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+import {
+  ApiError,
+  createInquiry,
+  listInquiryEvents,
+  listMyInquiries,
+  type Inquiry,
+  type InquiryEvent,
+} from "@/lib/api";
+import {
+  PRIORITY_LABEL,
+  eventLabel,
+  formatStatusChange,
+  sortEvents,
+  statusPill,
+} from "./data";
 import "./inquiries.css";
 
-type View = "list" | "submit" | "detail";
+const TOAST_DURATION_MS = 3200;
 
-interface Complaint {
-  id: string;
-  cat: string;
-  status: StatusKind;
-  statusLabel: string;
-  title: string;
-  date: string;
+type View = "list" | "submit";
+
+interface ToastState {
+  message: string;
+  tone: ToastTone;
 }
 
-const COMPLAINTS: readonly Complaint[] = [
-  { id: "c1", cat: "승강기", status: "progress", statusLabel: "처리중", title: "1203동 엘리베이터 소음", date: "2일 전" },
-  { id: "c2", cat: "누수", status: "done", statusLabel: "완료", title: "지하주차장 천장 누수", date: "1주 전" },
-  { id: "c3", cat: "조경", status: "received", statusLabel: "접수됨", title: "놀이터 옆 가로등 점멸", date: "3주 전" },
-];
-
-interface TimelineEvent {
-  title: string;
-  desc: string;
-  time: string;
-  current?: boolean;
-  last?: boolean;
+function errorMessage(err: unknown): string {
+  if (err instanceof ApiError || err instanceof Error) return err.message;
+  return "알 수 없는 오류가 발생했습니다.";
 }
 
-const TIMELINE: readonly TimelineEvent[] = [
-  {
-    title: "시설팀 현장 점검 예정",
-    desc: "6/14(금) 오전 방문 예정입니다. 부재 시 관리사무소로 연락 주세요.",
-    time: "방금 · 김*수 소장",
-    current: true,
-  },
-  { title: "담당자 배정", desc: "AI 분류 ‘승강기’로 시설팀에 자동 배정되었습니다.", time: "어제 14:20" },
-  { title: "민원 접수됨", desc: "사진 1장과 함께 정상 접수되었습니다.", time: "2일 전 09:05", last: true },
-];
-
-const AI_CATEGORIES = ["🛗 승강기 · 92%", "소음", "기타"];
+function shortDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
 
 export function InquiryCenter() {
   const [view, setView] = useState<View>("list");
-  const [selected, setSelected] = useState<Complaint | null>(null);
-  const [category, setCategory] = useState(0);
+  const [selected, setSelected] = useState<Inquiry | null>(null);
+  const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (view === "detail" && selected) {
-    return <InquiryDetail complaint={selected} onBack={() => setView("list")} />;
+  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
+    setToast({ message, tone });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      setInquiries(await listMyInquiries());
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const handleSubmitted = useCallback(
+    async (created: Inquiry) => {
+      showToast("민원을 접수했습니다.");
+      setView("list");
+      setInquiries((prev) => [created, ...prev]);
+      await load();
+    },
+    [load, showToast],
+  );
+
+  if (selected) {
+    return <InquiryDetail inquiry={selected} onBack={() => setSelected(null)} />;
   }
 
   return (
@@ -80,69 +121,144 @@ export function InquiryCenter() {
       </header>
 
       {view === "list" ? (
-        <main className="inq__list">
-          {COMPLAINTS.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              className="inq-card"
-              onClick={() => {
-                setSelected(c);
-                setView("detail");
-              }}
-            >
-              <div className="inq-card__top">
-                <span className="inq-card__cat">{c.cat}</span>
-                <StatusPill status={c.status} label={c.statusLabel} />
-                <span className="inq-card__date">{c.date}</span>
-              </div>
-              <div className="inq-card__title">{c.title}</div>
-            </button>
-          ))}
-        </main>
-      ) : (
-        <SubmitForm
-          category={category}
-          onCategory={setCategory}
-          onSubmit={() => setView("list")}
+        <InquiryList
+          inquiries={inquiries}
+          loading={loading}
+          loadError={loadError}
+          onSelect={setSelected}
+          onRetry={() => {
+            setLoading(true);
+            void load();
+          }}
+          onSubmitCta={() => setView("submit")}
         />
+      ) : (
+        <SubmitForm onSubmitted={handleSubmitted} onError={(m) => showToast(m, "danger")} />
       )}
+
+      {toast ? (
+        <div className="inq-toast-slot">
+          <Toast message={toast.message} tone={toast.tone} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function SubmitForm({
-  category,
-  onCategory,
-  onSubmit,
-}: {
-  category: number;
-  onCategory: (i: number) => void;
-  onSubmit: () => void;
-}) {
+interface InquiryListProps {
+  inquiries: readonly Inquiry[];
+  loading: boolean;
+  loadError: string | null;
+  onSelect: (inquiry: Inquiry) => void;
+  onRetry: () => void;
+  onSubmitCta: () => void;
+}
+
+function InquiryList({
+  inquiries,
+  loading,
+  loadError,
+  onSelect,
+  onRetry,
+  onSubmitCta,
+}: InquiryListProps) {
+  if (loading) {
+    return (
+      <main className="inq__list">
+        <Skeleton height="5rem" radius="var(--radius-md)" />
+        <Skeleton height="5rem" radius="var(--radius-md)" />
+        <Skeleton height="5rem" radius="var(--radius-md)" />
+      </main>
+    );
+  }
+  if (loadError) {
+    return (
+      <main className="inq__list">
+        <EmptyState
+          icon="⚠"
+          title="민원을 불러오지 못했습니다"
+          description={loadError}
+          action={<Button onClick={onRetry}>다시 시도</Button>}
+        />
+      </main>
+    );
+  }
+  if (inquiries.length === 0) {
+    return (
+      <main className="inq__list">
+        <EmptyState
+          icon="📝"
+          title="접수한 민원이 없습니다"
+          description="불편사항을 접수하면 처리 상황을 여기서 확인할 수 있습니다."
+          action={<Button onClick={onSubmitCta}>민원 접수하기</Button>}
+        />
+      </main>
+    );
+  }
   return (
-    <form
-      className="inq-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
-    >
+    <main className="inq__list">
+      {inquiries.map((inquiry) => {
+        const pill = statusPill(inquiry.status);
+        return (
+          <button
+            key={inquiry.id}
+            type="button"
+            className="inq-card"
+            onClick={() => onSelect(inquiry)}
+          >
+            <div className="inq-card__top">
+              {inquiry.aiPriority ? (
+                <span className="inq-card__cat">{PRIORITY_LABEL[inquiry.aiPriority]}</span>
+              ) : null}
+              <StatusPill status={pill.status} label={pill.label} />
+              <span className="inq-card__date">{shortDate(inquiry.createdAt)}</span>
+            </div>
+            <div className="inq-card__title">{inquiry.title}</div>
+          </button>
+        );
+      })}
+    </main>
+  );
+}
+
+interface SubmitFormProps {
+  onSubmitted: (created: Inquiry) => void | Promise<void>;
+  onError: (message: string) => void;
+}
+
+function SubmitForm({ onSubmitted, onError }: SubmitFormProps) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!title.trim() || !body.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      const created = await createInquiry({ title: title.trim(), body: body.trim() });
+      setTitle("");
+      setBody("");
+      await onSubmitted(created);
+    } catch (err) {
+      onError(err instanceof ApiError || err instanceof Error ? err.message : "접수에 실패했습니다.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="inq-form" onSubmit={handleSubmit}>
       <div className="inq-form__scroll">
-        <div className="inq-field-label">사진 첨부</div>
-        <div className="inq-photos">
-          <div className="inq-photo">
-            <span aria-hidden="true" className="inq-photo__ph">
-              🛗
-            </span>
-            <button type="button" className="inq-photo__del" aria-label="사진 삭제">
-              ×
+        <div className="inq-field">
+          <div className="inq-field-label">사진 첨부</div>
+          <div className="inq-photos" aria-disabled="true">
+            <button type="button" className="inq-photo-add" disabled>
+              <span aria-hidden="true">＋</span>
+              <span>사진</span>
             </button>
           </div>
-          <button type="button" className="inq-photo-add">
-            <span aria-hidden="true">＋</span>
-            <span>사진</span>
-          </button>
+          <div className="inq-field-help">사진 첨부는 추후 지원될 예정입니다.</div>
         </div>
 
         <div className="inq-ai">
@@ -150,25 +266,27 @@ function SubmitForm({
             <span className="inq-ai__mark" aria-hidden="true">
               L
             </span>
-            <span className="inq-ai__label">AI 추천 분류</span>
+            <span className="inq-ai__label">AI가 분류합니다</span>
           </div>
-          <div className="inq-ai__chips">
-            {AI_CATEGORIES.map((c, i) => (
-              <button
-                key={c}
-                type="button"
-                className="inq-cat"
-                aria-pressed={category === i}
-                data-active={category === i || undefined}
-                onClick={() => onCategory(i)}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
+          <p className="inq-field-help">
+            접수하면 AI가 카테고리와 우선순위를 자동으로 분류해 담당자에게 전달합니다.
+          </p>
         </div>
 
-        <FormField label="제목" defaultValue="1203동 엘리베이터 소음" wrapperClassName="inq-field" />
+        <div className="inq-field">
+          <label htmlFor="inq-title" className="inq-field-label">
+            제목
+          </label>
+          <input
+            id="inq-title"
+            className="inq-input"
+            value={title}
+            maxLength={200}
+            required
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="예: 1203동 엘리베이터 소음"
+          />
+        </div>
 
         <div className="inq-field">
           <label htmlFor="inq-body" className="inq-field-label">
@@ -178,8 +296,12 @@ function SubmitForm({
             id="inq-body"
             className="inq-textarea"
             rows={4}
+            maxLength={4000}
+            required
             aria-describedby="inq-body-help"
-            defaultValue="최근 일주일째 저층 운행 시 ‘덜컹’ 소음이 납니다. 특히 야간에 심합니다."
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="불편사항을 자세히 적어주세요."
           />
           <div id="inq-body-help" className="inq-field-help">
             <span aria-hidden="true">🔒</span> 이름·연락처는 자동 마스킹되어 담당자에게 전달됩니다.
@@ -188,15 +310,32 @@ function SubmitForm({
       </div>
 
       <div className="inq-form__footer">
-        <Button type="submit" variant="primary" className="inq-submit">
-          접수하기
+        <Button type="submit" variant="primary" className="inq-submit" disabled={submitting}>
+          {submitting ? "접수 중…" : "접수하기"}
         </Button>
       </div>
     </form>
   );
 }
 
-function InquiryDetail({ complaint, onBack }: { complaint: Complaint; onBack: () => void }) {
+function InquiryDetail({ inquiry, onBack }: { inquiry: Inquiry; onBack: () => void }) {
+  const [events, setEvents] = useState<InquiryEvent[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const pill = statusPill(inquiry.status);
+
+  const load = useCallback(async () => {
+    try {
+      setError(null);
+      setEvents(sortEvents(await listInquiryEvents(inquiry.id)));
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }, [inquiry.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   return (
     <div className="inq">
       <header className="inq-detail__bar">
@@ -207,34 +346,73 @@ function InquiryDetail({ complaint, onBack }: { complaint: Complaint; onBack: ()
       </header>
       <main id="main" className="inq-detail">
         <div className="inq-detail__meta">
-          <span className="inq-card__cat">{complaint.cat}</span>
-          <StatusPill status={complaint.status} label={complaint.statusLabel} />
+          {inquiry.aiPriority ? (
+            <span className="inq-card__cat">{PRIORITY_LABEL[inquiry.aiPriority]}</span>
+          ) : null}
+          <StatusPill status={pill.status} label={pill.label} />
         </div>
-        <h1 className="inq-detail__title">{complaint.title}</h1>
-        <div className="inq-detail__sub">접수번호 C-2026-0612 · 담당 시설팀</div>
+        <h1 className="inq-detail__title">{inquiry.title}</h1>
+        <div className="inq-detail__sub">접수 · {shortDate(inquiry.createdAt)}</div>
+        <p className="inq-detail__body">{inquiry.body}</p>
 
-        <ol className="inq-timeline">
-          {TIMELINE.map((ev, i) => (
-            <li key={i} className="inq-timeline__item">
-              <div className="inq-timeline__rail">
-                <span
-                  className="inq-timeline__dot"
-                  data-current={ev.current || undefined}
-                  aria-hidden="true"
-                />
-                {!ev.last ? <span className="inq-timeline__line" aria-hidden="true" /> : null}
-              </div>
-              <div className="inq-timeline__body">
-                <div className="inq-timeline__title" data-muted={!ev.current || undefined}>
-                  {ev.title}
-                </div>
-                <div className="inq-timeline__desc">{ev.desc}</div>
-                <div className="inq-timeline__time">{ev.time}</div>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <Timeline events={events} error={error} onRetry={load} />
       </main>
     </div>
+  );
+}
+
+function Timeline({
+  events,
+  error,
+  onRetry,
+}: {
+  events: InquiryEvent[] | null;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  if (error) {
+    return (
+      <EmptyState
+        icon="⚠"
+        title="처리 내역을 불러오지 못했습니다"
+        description={error}
+        action={<Button onClick={onRetry}>다시 시도</Button>}
+      />
+    );
+  }
+  if (events === null) {
+    return (
+      <div className="inq-timeline-loading">
+        <Skeleton height="3rem" />
+        <Skeleton height="3rem" />
+      </div>
+    );
+  }
+  return (
+    <ol className="inq-timeline">
+      {events.map((ev, i) => {
+        const last = i === events.length - 1; // 시간순 오름차순 → 마지막이 최신
+        const desc = ev.type === "status_changed" ? formatStatusChange(ev.payload) : null;
+        return (
+          <li key={ev.id} className="inq-timeline__item">
+            <div className="inq-timeline__rail">
+              <span
+                className="inq-timeline__dot"
+                data-current={last || undefined}
+                aria-hidden="true"
+              />
+              {!last ? <span className="inq-timeline__line" aria-hidden="true" /> : null}
+            </div>
+            <div className="inq-timeline__body">
+              <div className="inq-timeline__title" data-muted={!last || undefined}>
+                {eventLabel(ev.type)}
+              </div>
+              {desc ? <div className="inq-timeline__desc">{desc}</div> : null}
+              <div className="inq-timeline__time">{shortDate(ev.createdAt)}</div>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

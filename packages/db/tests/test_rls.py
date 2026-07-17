@@ -369,3 +369,40 @@ async def test_tenant_keys_insert_allowed(owner_conn: AsyncConnection, seed: See
         ).bindparams(t=seed.a.tenant_id, d=b"wrapped-app")
     )
     assert result.rowcount == 1
+
+
+# ── inquiry_events: tenant 격리 + append-only(권한으로 강제, docs/03 §4.4) ──
+
+
+async def _seed_inquiry_event(conn: AsyncConnection, tf: object) -> None:
+    fixture = tf  # TenantFixture — tenant_id·inquiry_id 사용
+    await conn.execute(
+        text(
+            "INSERT INTO inquiry_events(tenant_id, inquiry_id, type, payload) "
+            "VALUES(:t, :i, 'created', '{}'::jsonb)"
+        ).bindparams(t=fixture.tenant_id, i=fixture.inquiry_id)  # type: ignore[attr-defined]
+    )
+
+
+async def test_inquiry_events_tenant_isolation(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """A는 자기 민원 타임라인만 — B의 이벤트는 안 보인다(격리)."""
+    await _seed_inquiry_event(owner_conn, seed.a)
+    await _seed_inquiry_event(owner_conn, seed.b)
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    assert await _count(owner_conn, "inquiry_events") == 1, "타 단지 민원 이벤트가 노출됨"
+
+
+async def test_inquiry_events_update_denied(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """타임라인은 append-only — liviq_app에 UPDATE 권한 없음(§4.4)."""
+    await _seed_inquiry_event(owner_conn, seed.a)
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    async def update_event() -> object:
+        return await owner_conn.execute(
+            text("UPDATE inquiry_events SET type = 'tampered' WHERE tenant_id = :t").bindparams(
+                t=seed.a.tenant_id
+            )
+        )
+
+    await _assert_denied(owner_conn, update_event)

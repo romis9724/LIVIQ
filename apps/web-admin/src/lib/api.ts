@@ -7,7 +7,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8
 // dev 헤더 경로는 roles=(RESIDENT,MANAGER,STAFF) 부여라 문서 관리(MANAGER·STAFF) 통과.
 const DEV_TENANT_ID =
   process.env.NEXT_PUBLIC_DEV_TENANT_ID ?? "11111111-1111-1111-1111-111111111111";
-const DEV_USER_ID =
+// 배정 대상 사용자 목록 api 가 없어 "나에게 배정" 에 사용 — dev user 는 시드에서 MANAGER 역할 보유.
+export const DEV_USER_ID =
   process.env.NEXT_PUBLIC_DEV_USER_ID ?? "22222222-2222-2222-2222-222222222222";
 
 const DEV_HEADERS: Record<string, string> = {
@@ -152,4 +153,93 @@ export async function reindexDocument(id: string): Promise<DocumentItem> {
   });
   await ensureOk(response);
   return toItem(await response.json());
+}
+
+// ── 민원 관리 (docs/01 §13) ────────────────────────────────────────────────
+
+export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
+export type AiPriority = "urgent" | "normal" | "low";
+
+export interface Inquiry {
+  id: string;
+  title: string;
+  body: string;
+  status: InquiryStatus;
+  aiPriority: AiPriority | null;
+  categoryId: string | null;
+  aiSuggestedCategoryId: string | null;
+  assigneeUserId: string | null;
+  authorUserId: string;
+  createdAt: string;
+}
+
+export interface AdminInquiryParams {
+  status?: InquiryStatus;
+  categoryId?: string;
+}
+
+interface RawInquiry {
+  id: string;
+  title: string;
+  body: string;
+  status: InquiryStatus;
+  ai_priority: AiPriority | null;
+  category_id: string | null;
+  ai_suggested_category_id: string | null;
+  assignee_user_id: string | null;
+  author_user_id: string;
+  created_at: string;
+}
+
+function toInquiry(raw: RawInquiry): Inquiry {
+  return {
+    id: raw.id,
+    title: raw.title,
+    body: raw.body,
+    status: raw.status,
+    aiPriority: raw.ai_priority,
+    categoryId: raw.category_id,
+    aiSuggestedCategoryId: raw.ai_suggested_category_id,
+    assigneeUserId: raw.assignee_user_id,
+    authorUserId: raw.author_user_id,
+    createdAt: raw.created_at,
+  };
+}
+
+/** AdminInquiryParams → 쿼리스트링(빈 값 생략). 순수 함수 — 테스트 대상. */
+export function buildInquiryQuery(params: AdminInquiryParams): string {
+  const search = new URLSearchParams();
+  if (params.status) search.set("status", params.status);
+  if (params.categoryId) search.set("category_id", params.categoryId);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function listAdminInquiries(params: AdminInquiryParams = {}): Promise<Inquiry[]> {
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries${buildInquiryQuery(params)}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawInquiry[]).map(toInquiry);
+}
+
+export async function assignInquiry(id: string, assigneeUserId: string): Promise<Inquiry> {
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}/assign`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ assignee_user_id: assigneeUserId }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+export async function updateInquiryStatus(id: string, status: InquiryStatus): Promise<Inquiry> {
+  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}/status`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
 }
