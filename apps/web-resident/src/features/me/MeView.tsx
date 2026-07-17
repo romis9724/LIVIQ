@@ -2,13 +2,8 @@
 
 import { useState } from "react";
 import { Switch } from "@liviq/ui";
+import { NotificationInbox } from "./NotificationInbox";
 import "./me.css";
-
-const ACTIVITIES = [
-  { icon: "💬", title: "AI 비서 — 인테리어 공사 가능 시간 질문", meta: "오늘 09:12" },
-  { icon: "🛠", title: "민원 접수 — 1203동 엘리베이터 소음", meta: "2일 전" },
-  { icon: "🧾", title: "관리비 6월분 자동납부 등록", meta: "1주 전" },
-] as const;
 
 type SettingKey = "push" | "ai" | "dark";
 type ConsentKey = "quality" | "alerts";
@@ -41,25 +36,7 @@ export function MeView() {
         </div>
       </div>
 
-      <section className="me-section">
-        <h2 className="me-section__title">활동 이력</h2>
-        <div className="me-group">
-          {ACTIVITIES.map((a) => (
-            <a key={a.title} href="#" className="me-row me-row--link">
-              <span className="me-row__icon" aria-hidden="true">
-                {a.icon}
-              </span>
-              <span className="me-row__body">
-                <span className="me-row__title">{a.title}</span>
-                <span className="me-row__meta">{a.meta}</span>
-              </span>
-              <span aria-hidden="true" className="me-row__chevron">
-                ›
-              </span>
-            </a>
-          ))}
-        </div>
-      </section>
+      <NotificationInbox />
 
       <section className="me-section">
         <h2 className="me-section__title">설정</h2>

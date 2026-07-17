@@ -25,11 +25,18 @@ from app.schemas.review_queue import (
     ReviewListOut,
     ReviewStatus,
 )
-from liviq_db.models import Citation, Document, Message
+from liviq_db.models import Citation, Conversation, Document, Message, Notification
 
 router = APIRouter(prefix="/admin/review-queue", tags=["review-queue"])
 
 _READ_ROLES = ("MANAGER", "STAFF")
+
+# 반려 정정 알림 문구 — 검수 메모(review_note) 원문은 넣지 않는다(PII·내부 정보 노출 방지,
+# ADR-0012). 입주민은 인앱 함에서 확인하고 필요 시 관리사무소로 문의한다.
+_REJECT_NOTICE_TITLE = "AI 답변이 검수 결과 정정되었습니다"
+_REJECT_NOTICE_BODY = (
+    "이전 AI 답변에 정정이 필요한 것으로 확인되었습니다. 자세한 내용은 관리사무소로 문의해 주세요."
+)
 
 
 @router.get("", response_model=ReviewListOut)
@@ -85,11 +92,41 @@ async def decide_review(
     message.reviewed_by = ctx.user_id
     message.reviewed_at = datetime.datetime.now(datetime.UTC)
     message.review_note = body.note
+    if body.action == "reject":
+        # 사후 검수 루프 폐합 — 반려 시 대화 소유자에게 인앱 정정 알림(같은 트랜잭션).
+        await _notify_conversation_owner(session, ctx.tenant_id, message.conversation_id)
     await session.flush()
 
     questions = await _questions_for(session, ctx.tenant_id, [message])
     citations = await _citations_for(session, ctx.tenant_id, [message.id])
     return _to_item(message, questions.get(message.id), citations.get(message.id, []))
+
+
+async def _notify_conversation_owner(
+    session: AsyncSession, tenant_id: uuid.UUID, conversation_id: uuid.UUID
+) -> None:
+    """대화 소유 입주민에게 인앱 정정 알림 생성 — 자동 외부발송 아님(ADR-0012).
+
+    link는 web-resident에 실존하는 AI 비서 화면(/assistant)으로 건다.
+    """
+    owner_id = await session.scalar(
+        select(Conversation.user_id).where(
+            Conversation.id == conversation_id,
+            Conversation.tenant_id == tenant_id,
+        )
+    )
+    if owner_id is None:  # pragma: no cover — 메시지의 대화는 항상 존재(FK)
+        return
+    session.add(
+        Notification(
+            tenant_id=tenant_id,
+            user_id=owner_id,
+            type="system",
+            title=_REJECT_NOTICE_TITLE,
+            body=_REJECT_NOTICE_BODY,
+            link="/assistant",
+        )
+    )
 
 
 async def _questions_for(
