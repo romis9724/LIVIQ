@@ -354,3 +354,111 @@
 .fac-detail__actions .btn {
   width: 100%;
 }
+
+/* ── 시설 AI 도우미 패널 (H3-4) ─────────────────────────────────────────── */
+.fac-ai {
+  margin: var(--space-4) var(--space-8) var(--space-8);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.fac-ai__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.fac-ai__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+}
+.fac-ai__title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.fac-ai__sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.fac-ai__composer {
+  display: flex;
+  gap: var(--space-2);
+}
+.fac-ai__input {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+}
+.fac-ai__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.fac-ai__chips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.fac-ai__chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.fac-ai__chip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.fac-ai__answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.fac-ai__text {
+  color: var(--color-text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.fac-ai__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.fac-ai__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-accent);
+  animation: fac-ai-blink 1s steps(2) infinite;
+}
+@keyframes fac-ai-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fac-ai__caret {
+    animation: none;
+  }
+}

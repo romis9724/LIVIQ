@@ -45,3 +45,5 @@ class DoneData(BaseModel):
     confidence: float
     needs_review: bool
     fallback_reason: str | None = None
+    # 호출한 도구 이름 순서(H3-4) — additive 필드, SSE 이벤트 4종 계약 불변.
+    tool_path: list[str] = Field(default_factory=list)

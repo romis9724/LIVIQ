@@ -73,6 +73,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/facilities/assistant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Facility Assistant
+         * @description 시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
+         *
+         *     answer_question 재사용(시설 프롬프트만 주입) — 레지스트리·마스킹·스텝 상한·폴백·영속은
+         *     /assistant/ask와 공유. ctx.roles(MANAGER/FACILITY)가 시설 도구 노출을 결정한다.
+         */
+        post: operations["facility_assistant_admin_facilities_assistant_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/facilities/{facility_id}": {
         parameters: {
             query?: never;
@@ -1643,6 +1666,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FacilityOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    facility_assistant_admin_facilities_assistant_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
