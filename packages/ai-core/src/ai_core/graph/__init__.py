@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from ai_core.graph.client import GraphClient, IncidentHit
+from ai_core.graph.client import GraphClient, IncidentContext, IncidentHit
 from ai_core.graph.config import GraphSettings, get_graph_settings
 
-__all__ = ["GraphClient", "IncidentHit", "GraphSettings", "get_graph_settings"]
+__all__ = [
+    "GraphClient",
+    "GraphSettings",
+    "IncidentContext",
+    "IncidentHit",
+    "get_graph_settings",
+]

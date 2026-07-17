@@ -126,6 +126,87 @@ async def test_chat_stream_parses_sse_deltas(settings: AiCoreSettings) -> None:
     assert chunks == ["관리", "비"]
 
 
+async def test_chat_parses_tool_calls_with_null_content(settings: AiCoreSettings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "get_fees",
+                                        "arguments": '{"period": "2026-06"}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    response = await _client(settings, handler).chat(
+        [{"role": "user", "content": "관리비"}], tools=[{"type": "function"}]
+    )
+    assert response.text == ""  # content=None → 빈 문자열
+    assert response.tool_calls is not None
+    assert response.tool_calls[0].name == "get_fees"
+    assert response.tool_calls[0].arguments == '{"period": "2026-06"}'
+
+
+async def test_chat_includes_tools_in_payload(settings: AiCoreSettings) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_chat_body("ok"))
+
+    tools = [{"type": "function", "function": {"name": "t"}}]
+    await _client(settings, handler).chat(
+        [{"role": "user", "content": "q"}], tools=tools, tool_choice="auto"
+    )
+    assert captured["tools"] == tools
+    assert captured["tool_choice"] == "auto"
+
+
+async def test_chat_without_tools_omits_tool_calls(settings: AiCoreSettings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "tools" not in json.loads(request.content)
+        return httpx.Response(200, json=_chat_body("답"))
+
+    response = await _client(settings, handler).chat([{"role": "user", "content": "q"}])
+    assert response.tool_calls is None
+
+
+async def test_chat_normalizes_dict_arguments(settings: AiCoreSettings) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {"id": "c", "function": {"name": "get_fees", "arguments": {}}}
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    response = await _client(settings, handler).chat([{"role": "user", "content": "q"}])
+    assert response.tool_calls is not None
+    assert response.tool_calls[0].arguments == "{}"
+
+
 async def test_embed_returns_vectors_in_index_order(settings: AiCoreSettings) -> None:
     vec = [0.1] * settings.embedding_dimensions
 

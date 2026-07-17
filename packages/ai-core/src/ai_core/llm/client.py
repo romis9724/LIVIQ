@@ -11,6 +11,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -20,7 +21,8 @@ from ai_core.llm.tokens import estimate_tokens
 RETRY_MAX = 2  # 최초 시도 외 재시도 횟수 상한
 DEFAULT_TEMPERATURE = 0.2
 
-ChatMessage = Mapping[str, str]  # {"role": ..., "content": ...}
+# tool-calling 메시지(assistant tool_calls·role=tool)는 content 외 필드를 담는다 → Any 값 허용.
+ChatMessage = Mapping[str, Any]  # {"role": ..., "content": ..., "tool_calls"?: ...}
 
 
 class LlmError(Exception):
@@ -39,9 +41,19 @@ class ChatUsage:
 
 
 @dataclass(frozen=True)
+class ToolCallRequest:
+    """LLM이 요청한 도구 호출 1건. arguments는 미검증 JSON 문자열(호출자가 Pydantic 검증)."""
+
+    id: str
+    name: str
+    arguments: str
+
+
+@dataclass(frozen=True)
 class ChatResponse:
     text: str
     usage: ChatUsage
+    tool_calls: tuple[ToolCallRequest, ...] | None = None
 
 
 class LlmClient:
@@ -100,6 +112,8 @@ class LlmClient:
         *,
         max_tokens: int | None = None,
         temperature: float = DEFAULT_TEMPERATURE,
+        tools: Sequence[Mapping[str, Any]] | None = None,
+        tool_choice: str | None = None,
     ) -> ChatResponse:
         payload: dict[str, object] = {
             "model": self._settings.llm_model,
@@ -108,14 +122,25 @@ class LlmClient:
             "temperature": temperature,
             "stream": False,
         }
+        if tools is not None:
+            payload["tools"] = list(tools)
+            if tool_choice is not None:
+                payload["tool_choice"] = tool_choice
         async with self._client(self._settings.llm_base_url, self._settings.llm_api_key) as c:
             response = await self._post_with_retry(c, "/chat/completions", payload)
         body = response.json()
         try:
-            text = body["choices"][0]["message"]["content"]
+            message = body["choices"][0]["message"]
         except (KeyError, IndexError, TypeError) as exc:
             raise LlmError(f"LLM 응답 형식 오류: {exc}") from exc
-        return ChatResponse(text=text, usage=self._usage_from(body, messages, text))
+        if not isinstance(message, Mapping):
+            raise LlmError("LLM 응답 형식 오류: message 없음")
+        # tool_calls만 있고 content가 null인 경우가 정상(function calling) → text는 빈 문자열.
+        text = message.get("content") or ""
+        tool_calls = _parse_tool_calls(message.get("tool_calls"))
+        return ChatResponse(
+            text=text, usage=self._usage_from(body, messages, text), tool_calls=tool_calls
+        )
 
     async def chat_stream(
         self,
@@ -156,7 +181,8 @@ class LlmClient:
             if isinstance(prompt, int) and isinstance(completion, int):
                 return ChatUsage(input_tokens=prompt, output_tokens=completion)
         # usage 미제공 프로바이더 → 추정치로 대체(비용 기록 공백 방지, docs/08 §9)
-        input_est = sum(estimate_tokens(m.get("content", "")) for m in messages)
+        # content가 None인 tool_calls 메시지도 안전하게 처리(빈 문자열로 추정).
+        input_est = sum(estimate_tokens(m.get("content") or "") for m in messages)
         return ChatUsage(
             input_tokens=input_est, output_tokens=estimate_tokens(text), estimated=True
         )
@@ -186,6 +212,32 @@ class LlmClient:
             if len(vector) != expected:
                 raise LlmError(f"임베딩 차원 불일치: expected={expected} got={len(vector)}")
         return vectors
+
+
+def _parse_tool_calls(raw: object) -> tuple[ToolCallRequest, ...] | None:
+    """응답 message.tool_calls를 파싱. arguments는 JSON 문자열 그대로(검증은 호출자)."""
+    if not isinstance(raw, list):
+        return None
+    calls: list[ToolCallRequest] = []
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        function = item.get("function")
+        if not isinstance(function, Mapping):
+            continue
+        name = function.get("name")
+        if not isinstance(name, str):
+            continue
+        arguments = function.get("arguments")
+        calls.append(
+            ToolCallRequest(
+                id=str(item.get("id") or ""),
+                name=name,
+                # 일부 프로바이더는 arguments를 dict로 준다 → 문자열로 정규화.
+                arguments=arguments if isinstance(arguments, str) else json.dumps(arguments or {}),
+            )
+        )
+    return tuple(calls) or None
 
 
 def _parse_sse_line(line: str) -> str | None:

@@ -15,16 +15,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from ai_core.graph import GraphClient
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import (
     CitationEvent,
     DoneEvent,
     StatusEvent,
     TokenEvent,
+    ToolCitationEvent,
     answer_question,
 )
 from ai_core.rag.retrieval import PgVectorRetriever
-from app.deps import RequestContext, get_context, get_llm, get_tenant_session
+from ai_core.tools import ToolContext, ToolDeps, default_registry
+from app.deps import RequestContext, get_context, get_graph, get_llm, get_tenant_session
 from app.schemas.assistant import (
     AnswerStatus,
     AskRequest,
@@ -36,6 +39,8 @@ from app.schemas.assistant import (
 )
 from liviq_db.models import Citation, Conversation, Message
 
+_REGISTRY = default_registry()
+
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 
 
@@ -45,6 +50,7 @@ async def ask(
     ctx: Annotated[RequestContext, Depends(get_context)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     llm: Annotated[LlmClient, Depends(get_llm)],
+    graph: Annotated[GraphClient | None, Depends(get_graph)],
 ) -> EventSourceResponse:
     conversation = await _load_or_create_conversation(session, ctx, body.conversation_id)
     session.add(
@@ -56,15 +62,17 @@ async def ask(
         )
     )
     await session.flush()
-    retriever = PgVectorRetriever(session)
+    deps = ToolDeps(session=session, llm=llm, retriever=PgVectorRetriever(session), graph=graph)
+    tool_ctx = ToolContext(
+        tenant_id=ctx.tenant_id,
+        user_id=ctx.user_id,
+        roles=ctx.roles,
+        visibilities=ctx.visibilities,
+    )
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         async for event in answer_question(
-            body.question,
-            llm=llm,
-            retriever=retriever,
-            tenant_id=ctx.tenant_id,
-            visibilities=list(ctx.visibilities),
+            body.question, registry=_REGISTRY, deps=deps, ctx=tool_ctx
         ):
             match event:
                 case StatusEvent(stage=stage):
@@ -82,6 +90,17 @@ async def ask(
                             quote=c.quote,
                             page=c.page,
                             clause=c.clause,
+                        ).model_dump_json(),
+                    }
+                case ToolCitationEvent(citation=tc):
+                    # 도구 결과 인용 — document_id 없음(H2-5 완화 재사용), title로 표기.
+                    yield {
+                        "event": "citation",
+                        "data": CitationData(
+                            ref=tc.ref,
+                            document_id=None,
+                            document_title=tc.title,
+                            quote=tc.quote,
                         ).model_dump_json(),
                     }
                 case DoneEvent() as done:
@@ -152,6 +171,17 @@ async def _persist_assistant_message(
                 quote=c.quote,
                 page=c.page,
                 clause=c.clause,
+            )
+        )
+    # 도구 결과 인용 영속(source_kind=tool:*, document_id/chunk_id 없음 — source_ref=title).
+    for tc in done.tool_citations:
+        session.add(
+            Citation(
+                tenant_id=ctx.tenant_id,
+                message_id=message.id,
+                source_kind=tc.source_kind,
+                source_ref=tc.title,
+                quote=tc.quote,
             )
         )
     await session.flush()

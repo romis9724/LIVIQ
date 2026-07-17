@@ -33,6 +33,17 @@ class IncidentHit:
     score: float
 
 
+@dataclass(frozen=True)
+class IncidentContext:
+    """장애 이웃 확장 결과 — 소속 시설·최근 정비(H3-3 search_facility_graph)."""
+
+    incident_id: str
+    symptom: str
+    facility_name: str | None
+    facility_status: str | None
+    recent_work: tuple[str, ...]
+
+
 class GraphClient:
     """시설 그래프 접근점. 드라이버 주입으로 테스트(Neo4jContainer)."""
 
@@ -193,6 +204,33 @@ class GraphClient:
         )
         return [
             IncidentHit(pg_id=r["pg_id"], symptom=r["symptom"], score=r["score"]) for r in records
+        ]
+
+    async def expand_incidents(
+        self, *, tenant_id: str, pg_ids: Sequence[str]
+    ) -> list[IncidentContext]:
+        """장애들의 이웃(소속 시설·상태 + 최근 정비 작업 3건) 확장. tenant 구조 강제."""
+        if not pg_ids:
+            return []
+        records = await self._run(
+            "MATCH (f:Facility {tenant_id: $tenant})-[:HAS_INCIDENT]->(i:Incident) "
+            "WHERE i.pg_id IN $ids "
+            "OPTIONAL MATCH (f)-[:HAS_MAINTENANCE]->(m:MaintenanceLog) "
+            "WITH i, f, m ORDER BY m.performed_at DESC "
+            "RETURN i.pg_id AS incident_id, i.symptom AS symptom, "
+            "       f.name AS facility_name, f.status AS facility_status, "
+            "       [w IN collect(m.work) WHERE w IS NOT NULL][..3] AS recent_work",
+            {"tenant": tenant_id, "ids": list(pg_ids)},
+        )
+        return [
+            IncidentContext(
+                incident_id=r["incident_id"],
+                symptom=r["symptom"],
+                facility_name=r["facility_name"],
+                facility_status=r["facility_status"],
+                recent_work=tuple(r["recent_work"]),
+            )
+            for r in records
         ]
 
 

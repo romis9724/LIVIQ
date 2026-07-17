@@ -35,7 +35,7 @@ apps/      web-resident                      # Next.js — 비서(SSE)·민원·
            ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
 packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
-           ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·오케스트레이터 (liviq-ai-core)
+           ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·도구 에이전트(읽기 전용 6종)·그래프 (liviq-ai-core)
            db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
 evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·5·6)
