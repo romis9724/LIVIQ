@@ -15,6 +15,7 @@ import httpx
 import pytest_asyncio
 from app.deps import RequestContext, get_context, get_llm, get_tenant_session
 from app.main import create_app
+from app.session import get_redis
 from conftest import BUILDING_ID, EMBED_DIM, TENANT_ID, USER_ID
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
@@ -119,12 +120,20 @@ async def _seed_fee(session: AsyncSession) -> None:
 
 
 def _client(
-    db_session: AsyncSession, llm: LlmClient, *, roles: tuple[str, ...] = ()
+    db_session: AsyncSession,
+    llm: LlmClient,
+    *,
+    roles: tuple[str, ...] = (),
+    redis: object | None = None,
 ) -> httpx.AsyncClient:
+    from fakeredis.aioredis import FakeRedis
+
     app = create_app()
     app.dependency_overrides[get_context] = lambda: RequestContext(TENANT_ID, USER_ID, roles=roles)
     app.dependency_overrides[get_tenant_session] = lambda: db_session
     app.dependency_overrides[get_llm] = lambda: llm
+    # 레이트 리밋용 Redis — 기본은 fakeredis(한도 넉넉, 결정론). 초과 시나리오는 스텁 주입.
+    app.dependency_overrides[get_redis] = lambda: redis or FakeRedis(decode_responses=True)
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -215,3 +224,35 @@ async def test_facility_assistant_streams_four_events_with_tool_path(
     assert done[0] == "done"
     assert done[1]["status"] == "answered"
     assert done[1]["tool_path"] == ["get_fees"]
+
+
+# ── 레이트 리밋 엔드포인트 배선 (H4-1) ──────────────────────────────────────────
+
+
+class _OverLimitRedis:
+    """INCR가 항상 상한을 넘는 값을 돌려주는 스텁 — 429 배선 검증용."""
+
+    async def incr(self, key: str) -> int:
+        return 10_000
+
+    async def expire(self, key: str, ttl: int) -> bool:  # pragma: no cover — 도달 안 함
+        return True
+
+
+async def test_ask_returns_429_when_rate_limited(db_session: AsyncSession) -> None:
+    """/assistant/ask에 레이트 리밋 의존성이 배선돼 초과 시 429 + Retry-After."""
+    await _seed_fee(db_session)
+    async with _client(db_session, _fee_agent_llm(), redis=_OverLimitRedis()) as c:
+        response = await c.post("/assistant/ask", json={"question": "관리비?"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+
+
+async def test_facility_assistant_returns_429_when_rate_limited(db_session: AsyncSession) -> None:
+    """시설 도우미 엔드포인트도 레이트 리밋 배선 — 초과 시 429(역할 통과 후에도)."""
+    await _seed_fee(db_session)
+    async with _client(
+        db_session, _fee_agent_llm(), roles=("MANAGER",), redis=_OverLimitRedis()
+    ) as c:
+        response = await c.post("/admin/facilities/assistant", json={"question": "승강기?"})
+    assert response.status_code == 429
