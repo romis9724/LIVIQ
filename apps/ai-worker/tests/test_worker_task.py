@@ -24,7 +24,15 @@ async def test_ingest_task_runs_with_tenant_context(pg_dsn: str, fake_llm: LlmCl
     async def download(storage_key: str) -> bytes:
         return RULES_TEXT.encode()
 
-    ctx = {"session_factory": factory, "llm": fake_llm, "download": download}
+    from fakeredis.aioredis import FakeRedis
+
+    redis = FakeRedis(decode_responses=True)
+    ctx = {
+        "session_factory": factory,
+        "llm": fake_llm,
+        "download": download,
+        "redis": redis,
+    }
     try:
         result = await ingest_document_task(ctx, str(doc_id), str(tenant_id))
         assert result["status"] == "indexed"
@@ -33,7 +41,11 @@ async def test_ingest_task_runs_with_tenant_context(pg_dsn: str, fake_llm: LlmCl
         async with factory() as check:
             status = await check.scalar(select(Document.index_status).where(Document.id == doc_id))
         assert status == "indexed"
+
+        # 색인 성공 → 캐시 세대 증가(H4-2 무효화). 키 포맷은 answer_cache와 동일.
+        assert await redis.get(f"cache:gen:{tenant_id}") == "1"
     finally:
+        await redis.aclose()
         # 커밋된 시드 정리(tenant CASCADE로 문서·청크까지)
         async with factory() as cleanup, cleanup.begin():
             tenant = await cleanup.get(Tenant, tenant_id)
