@@ -12,10 +12,18 @@ from app.deps import RequestContext, get_context, get_tenant_session
 from app.main import create_app
 from conftest import TENANT_ID
 from httpx import ASGITransport
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import Citation, Conversation, Document, Message, Tenant, User
+from liviq_db.models import (
+    Citation,
+    Conversation,
+    Document,
+    Message,
+    Notification,
+    Tenant,
+    User,
+)
 
 MANAGER_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
 STAFF_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000002")
@@ -214,6 +222,38 @@ async def test_reject_requires_note(seeded: AsyncSession) -> None:
         assert ok.status_code == 200
         assert ok.json()["review_status"] == "rejected"
         assert ok.json()["review_note"] == "근거 없는 추측"
+
+
+async def test_reject_creates_correction_notification_for_conversation_owner(
+    seeded: AsyncSession,
+) -> None:
+    # 사후 검수 루프 폐합 — 반려 시 대화 소유자(RESIDENT_ID)에게 인앱 정정 알림(같은 트랜잭션).
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as c:
+        res = await c.post(
+            f"/admin/review-queue/{MSG_B}/decide",
+            json={"action": "reject", "note": "근거 없는 추측"},
+        )
+        assert res.status_code == 200, res.text
+
+    notif = await seeded.scalar(select(Notification).where(Notification.user_id == RESIDENT_ID))
+    assert notif is not None
+    assert notif.type == "system"
+    assert notif.link == "/assistant"
+    # 검수 메모 원문은 알림에 노출하지 않는다(PII·내부 정보 방지, ADR-0012).
+    assert "근거 없는 추측" not in (notif.body or "")
+
+
+async def test_approve_does_not_create_notification(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as c:
+        res = await c.post(f"/admin/review-queue/{MSG_A}/decide", json={"action": "approve"})
+        assert res.status_code == 200, res.text
+
+    count = await seeded.scalar(
+        select(func.count()).select_from(
+            select(Notification).where(Notification.tenant_id == TENANT_ID).subquery()
+        )
+    )
+    assert count == 0
 
 
 async def test_decide_already_processed_returns_409(seeded: AsyncSession) -> None:

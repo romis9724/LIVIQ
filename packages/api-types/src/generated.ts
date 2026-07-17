@@ -672,6 +672,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List My Notifications
+         * @description 본인 알림 최신순. 소유권 필터가 쿼리에 박힘 — 파라미터로 우회 불가(규칙 4).
+         */
+        get: operations["list_my_notifications_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Read
+         * @description 읽음 스탬프 — 본인 알림만. 이미 읽었으면 기존 시각 유지(멱등).
+         */
+        post: operations["mark_read_notifications__notification_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/onboarding/profile": {
         parameters: {
             query?: never;
@@ -1406,6 +1446,43 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /** NotificationListOut */
+        NotificationListOut: {
+            /** Items */
+            items: components["schemas"]["NotificationOut"][];
+            /** Limit */
+            limit: number;
+            /** Page */
+            page: number;
+            /** Total */
+            total: number;
+        };
+        /** NotificationOut */
+        NotificationOut: {
+            /** Body */
+            body: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Link */
+            link: string | null;
+            /** Read At */
+            read_at: string | null;
+            /** Title */
+            title: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "notice" | "inquiry_status" | "approval" | "system";
         };
         /** ProfileIn */
         ProfileIn: {
@@ -3069,6 +3146,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_notifications_notifications_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_notifications__notification_id__read_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationOut"];
                 };
             };
             /** @description Validation Error */

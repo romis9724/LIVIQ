@@ -183,3 +183,55 @@ export async function listNotices(): Promise<Notice[]> {
   const body = await response.json();
   return (body.items as RawNotice[]).map(toNotice);
 }
+
+// ── 알림함 (ADR-0012) — 인앱 함 조회·읽음. 외부 발송 아님 ──────────────────────
+
+export type NotificationType = "notice" | "inquiry_status" | "approval" | "system";
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+interface RawNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+function toNotification(raw: RawNotification): AppNotification {
+  return {
+    id: raw.id,
+    type: raw.type,
+    title: raw.title,
+    body: raw.body,
+    link: raw.link,
+    readAt: raw.read_at,
+    createdAt: raw.created_at,
+  };
+}
+
+export async function listNotifications(): Promise<AppNotification[]> {
+  const response = await fetch(`${API_BASE_URL}/notifications`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawNotification[]).map(toNotification);
+}
+
+export async function markNotificationRead(id: string): Promise<AppNotification> {
+  const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  return toNotification(await response.json());
+}
