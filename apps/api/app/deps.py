@@ -201,6 +201,7 @@ class Storage(Protocol):
     """원본 파일 저장 인터페이스 — 테스트는 인메모리, 운영은 S3(MinIO)."""
 
     async def put(self, key: str, data: bytes) -> None: ...
+    async def get(self, key: str) -> bytes: ...
 
 
 class Queue(Protocol):
@@ -227,6 +228,11 @@ def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트
             await asyncio.to_thread(
                 client.put_object, Bucket=settings.s3_bucket, Key=key, Body=data
             )
+
+        async def get(self, key: str) -> bytes:
+            obj = await asyncio.to_thread(client.get_object, Bucket=settings.s3_bucket, Key=key)
+            body: bytes = await asyncio.to_thread(obj["Body"].read)
+            return body
 
     return S3Storage()
 

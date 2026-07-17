@@ -55,6 +55,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Fees */
+        get: operations["list_fees_admin_fees_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/fees/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Fees */
+        post: operations["upload_fees_admin_fees_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/fees/uploads/{upload_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Upload */
+        get: operations["get_upload_admin_fees_uploads__upload_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/fees/uploads/{upload_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Fees */
+        post: operations["apply_fees_admin_fees_uploads__upload_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inquiries": {
         parameters: {
             query?: never;
@@ -297,6 +365,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Fees */
+        get: operations["get_my_fees_fees_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/fees/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Explain */
+        post: operations["explain_fees_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -441,6 +543,33 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdminFeeListOut */
+        AdminFeeListOut: {
+            /** Household Count */
+            household_count: number;
+            /** Households */
+            households: components["schemas"]["AdminFeeRow"][];
+            /** Period */
+            period: string;
+            /** Total Sum */
+            total_sum: number;
+        };
+        /** AdminFeeRow */
+        AdminFeeRow: {
+            /** Building Name */
+            building_name: string;
+            /** Floor */
+            floor: number;
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /** Total */
+            total: number;
+            /** Unit No */
+            unit_no: number;
+        };
         /** ApprovalListOut */
         ApprovalListOut: {
             /** Items */
@@ -500,6 +629,11 @@ export interface components {
              * @enum {string}
              */
             visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+        };
+        /** Body_upload_fees_admin_fees_uploads_post */
+        Body_upload_fees_admin_fees_uploads_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_roster_admin_roster_upload_post */
         Body_upload_roster_admin_roster_upload_post: {
@@ -619,6 +753,98 @@ export interface components {
         DraftRequestIn: {
             /** Keywords */
             keywords: string[];
+        };
+        /** FeeApplyOut */
+        FeeApplyOut: {
+            /** Applied */
+            applied: number;
+            /** Period */
+            period: string;
+            /** Status */
+            status: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /** FeeExplainRequest */
+        FeeExplainRequest: {
+            /** Period */
+            period: string;
+        };
+        /** FeeOut */
+        FeeOut: {
+            /** Breakdown */
+            breakdown: {
+                [key: string]: number;
+            } | null;
+            /** Period */
+            period: string;
+            /** Prev Total */
+            prev_total: number | null;
+            /** Total */
+            total: number | null;
+        };
+        /** FeePreviewRow */
+        FeePreviewRow: {
+            /** Breakdown */
+            breakdown: {
+                [key: string]: number;
+            };
+            /** Building Name */
+            building_name: string;
+            /** Floor */
+            floor: number;
+            /** Total */
+            total: number;
+            /** Unit No */
+            unit_no: number;
+        };
+        /** FeeRowErrorOut */
+        FeeRowErrorOut: {
+            /** Reason */
+            reason: string;
+            /** Row */
+            row: number;
+        };
+        /** FeeUploadDetailOut */
+        FeeUploadDetailOut: {
+            /** Errors */
+            errors: components["schemas"]["FeeRowErrorOut"][];
+            /** Period */
+            period: string | null;
+            /** Row Count */
+            row_count: number | null;
+            /** Status */
+            status: string;
+            /** Type */
+            type: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+        };
+        /** FeeUploadOut */
+        FeeUploadOut: {
+            /** Errors */
+            errors: components["schemas"]["FeeRowErrorOut"][];
+            /** Period */
+            period: string;
+            /** Preview */
+            preview: components["schemas"]["FeePreviewRow"][];
+            /** Row Count */
+            row_count: number;
+            /** Status */
+            status: string;
+            /**
+             * Upload Id
+             * Format: uuid
+             */
+            upload_id: string;
+            /** Valid Rows */
+            valid_rows: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -990,6 +1216,154 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_fees_admin_fees_get: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeeListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_fees_admin_fees_uploads_post: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_fees_admin_fees_uploads_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeUploadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_upload_admin_fees_uploads__upload_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                upload_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeUploadDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_fees_admin_fees_uploads__upload_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                upload_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeApplyOut"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -1526,6 +1900,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_fees_fees_get: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_fees_explain_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeExplainRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

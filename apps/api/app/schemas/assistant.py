@@ -31,7 +31,7 @@ class TokenData(BaseModel):
 
 class CitationData(BaseModel):
     ref: int
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None = None  # 문서 인용은 UUID, 확정 데이터(관리비 등) 인용은 null
     document_title: str
     quote: str
     page: int | None = None
