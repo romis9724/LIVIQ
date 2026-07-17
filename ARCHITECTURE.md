@@ -72,6 +72,8 @@ outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed qu
 (SSE citation은 document_id null). Neo4j env 없으면 그래프 도구만 제외(PG 폴백).
 시설 AI 도우미 `POST /admin/facilities/assistant`(H3-4)는 같은 에이전트에 시설 프롬프트(원인 후보·단정 금지)만
 주입해 공유 — done 이벤트 `tool_path`로 도구 경로 관측(evals 규칙 8 실측).
+AI 질의 앞단(H4): Redis 레이트 리밋(사용자·단지, 429·fail-open)과 정확 캐시([docs/08 §2.0](docs/08-llm-token-optimization.md)
+스코프 키+인제스트 세대 무효화, 히트 시 LLM 0) — 운영 대시보드 `GET /admin/dashboard/stats`(집계·캐시 적중률·일일 토큰 예산 경고).
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
