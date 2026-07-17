@@ -70,6 +70,8 @@ outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed qu
 `/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
 레지스트리 6종(역할·그래프 가용성 필터, tenant·user는 코드 주입), 스텝 상한 3, 도구 인용은 `source_kind=tool:*`
 (SSE citation은 document_id null). Neo4j env 없으면 그래프 도구만 제외(PG 폴백).
+시설 AI 도우미 `POST /admin/facilities/assistant`(H3-4)는 같은 에이전트에 시설 프롬프트(원인 후보·단정 금지)만
+주입해 공유 — done 이벤트 `tool_path`로 도구 경로 관측(evals 규칙 8 실측).
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 

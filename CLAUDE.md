@@ -26,7 +26,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1(RAG MVP)+H2(입주민/관리자 기능) 완료):
+현재 구현된 것(현실, H1(RAG MVP)+H2(입주민/관리자 기능)+H3(시설 그래프·AI 도우미) 완료):
 
 ```text
 apps/      web-resident                      # Next.js — 비서(SSE)·민원·공지·관리비 실연동, 나머지 화면은 목업
@@ -38,7 +38,7 @@ packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·도구 에이전트(읽기 전용 6종)·그래프 (liviq-ai-core)
            db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
-evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·5·6)
+evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·5·6·8)
 tests/     e2e                               # Playwright 결정론 여정 (@liviq/e2e — @llm 태그는 로컬 전용)
 docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
