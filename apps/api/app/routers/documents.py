@@ -10,7 +10,7 @@ import hashlib
 import uuid
 from typing import Annotated, cast
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +26,7 @@ from app.deps import (
 from app.schemas.documents import (
     DocumentListOut,
     DocumentOut,
+    DocumentPatchIn,
     DocumentUploadOut,
     IndexStatus,
     SourceType,
@@ -39,16 +40,39 @@ ALLOWED_SUFFIXES = {".txt", ".md", ".markdown", ".pdf"}
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024  # 20MB — 초대형 업로드 차단
 
 
+async def _get_owned_document(
+    session: AsyncSession, tenant_id: uuid.UUID, document_id: uuid.UUID
+) -> Document:
+    """tenant 소유의 미삭제 문서 조회 — 없으면 404(격리 유지 위해 존재 여부 노출 안 함)."""
+    document = await session.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.tenant_id == tenant_id,
+            Document.deleted_at.is_(None),
+        )
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="문서를 찾을 수 없음")
+    return document
+
+
 @router.get("", response_model=DocumentListOut)
 async def list_documents(
     ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    index_status: Annotated[IndexStatus | None, Query()] = None,
+    q: Annotated[str | None, Query(max_length=200)] = None,
 ) -> DocumentListOut:
-    rows = await session.scalars(
-        select(Document)
-        .where(Document.tenant_id == ctx.tenant_id, Document.deleted_at.is_(None))
-        .order_by(Document.created_at.desc())
+    stmt = select(Document).where(
+        Document.tenant_id == ctx.tenant_id, Document.deleted_at.is_(None)
     )
+    if index_status is not None:
+        stmt = stmt.where(Document.index_status == index_status)
+    if q:
+        # 제목 부분일치 필터(목록 좁히기용 — 자연어 검색 아님, docs/09 §8.3 백로그).
+        # ILIKE 이스케이프 생략 — %,_ 는 매치를 넓힐 뿐이고 파라미터 바인딩으로 주입 없음.
+        stmt = stmt.where(Document.title.ilike(f"%{q}%"))
+    rows = await session.scalars(stmt.order_by(Document.created_at.desc()))
     return DocumentListOut(
         items=[DocumentOut.model_validate(row, from_attributes=True) for row in rows]
     )
@@ -112,3 +136,44 @@ async def upload_document(
     await session.flush()
     await queue.enqueue("ingest_document_task", str(doc_id), str(ctx.tenant_id))
     return DocumentUploadOut(id=doc_id, index_status="pending")
+
+
+@router.patch("/{document_id}", response_model=DocumentOut)
+async def patch_document(
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    document_id: uuid.UUID,
+    body: DocumentPatchIn,
+) -> DocumentOut:
+    document = await _get_owned_document(session, ctx.tenant_id, document_id)
+    if body.title is not None:
+        document.title = body.title
+    if body.visibility is not None:
+        document.visibility = body.visibility
+    await session.flush()
+    return DocumentOut.model_validate(document, from_attributes=True)
+
+
+@router.post("/{document_id}/reindex", response_model=DocumentOut)
+async def reindex_document(
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER", "STAFF"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    queue: Annotated[Queue, Depends(get_queue)],
+    document_id: uuid.UUID,
+) -> DocumentOut:
+    document = await _get_owned_document(session, ctx.tenant_id, document_id)
+    if document.index_status == "indexing":
+        raise HTTPException(status_code=409, detail="색인 진행 중 — 완료 후 재색인")
+    document.index_status = "pending"
+    session.add(
+        Job(
+            tenant_id=ctx.tenant_id,
+            type="ingest",
+            ref_id=document.id,
+            status="queued",
+            attempts=0,
+        )
+    )
+    await session.flush()
+    await queue.enqueue("ingest_document_task", str(document.id), str(ctx.tenant_id))
+    return DocumentOut.model_validate(document, from_attributes=True)

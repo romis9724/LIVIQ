@@ -35,6 +35,13 @@ def _ensure_docker_host() -> None:
 _ensure_docker_host()
 os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
+# ai_worker.worker가 import 시점에 WorkerSettings.redis_settings를 평가(env 필요) —
+# 더미 env 선설정(연결 안 함, apps/api conftest와 동일 패턴).
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379")
+os.environ.setdefault("S3_ENDPOINT_URL", "http://localhost:9002")
+os.environ.setdefault("S3_ACCESS_KEY_ID", "test")
+os.environ.setdefault("S3_SECRET_ACCESS_KEY", "test")
+
 
 @pytest.fixture(scope="session")
 def pg_dsn() -> Iterator[str]:
