@@ -29,7 +29,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고) 완료):
 
 ```text
-apps/      web-resident                      # Next.js — 비서(SSE)·민원·공지·관리비 실연동, 나머지 화면은 목업
+apps/      web-resident                      # Next.js — 비서(SSE)·민원·공지·관리비·알림함 실연동, 나머지 화면은 목업
            web-admin                         # Next.js — 문서·민원·공지 초안·관리비·검수 큐·시설 실연동, 나머지 화면 목업
            api                               # FastAPI — documents·assistant·inquiries·notices·fees·review-queue·facilities(+outbox)·dashboard + 인증·레이트리밋·정확캐시 (liviq-api)
            ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
