@@ -21,7 +21,7 @@
 **웹(TypeScript)** Next.js(web-resident·web-admin) · Turborepo + pnpm · 공유 `@liviq/ui`·`config-ts`.
 **백엔드(Python 3.12+)** FastAPI + Pydantic v2(경계 검증) · SQLAlchemy 2.0(async) + Alembic(RLS SQL) · arq(Redis 큐) · uv workspace ([ADR-0013](docs/adr/0013-python-backend.md)).
 데이터: PostgreSQL 16 + pgvector · Neo4j(시설 그래프, 파생) · Redis(세션·캐시·큐) · MinIO.
-LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) · 임베딩 bge-m3(1024).
+LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) · **파일럿 확정 모델 llama3.1:8b**(H5-1 실측 — tool calling·인용 규율·지연 3단계 통과, [docs/09 §8.6](docs/09-implementation-harness.md)) · 임베딩 bge-m3(1024).
 타입 공유: FastAPI OpenAPI → openapi-typescript 생성(`packages/api-types`).
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
