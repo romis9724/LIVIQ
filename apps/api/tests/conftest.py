@@ -87,7 +87,14 @@ async def db_session(pg_dsn: str) -> AsyncIterator[AsyncSession]:
 
 @pytest.fixture
 def fake_llm() -> LlmClient:
-    """임베딩 고정 벡터 + chat_stream은 요청별 지정 응답(디폴트: 근거 [1] 인용)."""
+    """도구호출 에이전트용 가짜 LLM(ADR-0007).
+
+    - 임베딩: 고정 벡터.
+    - 첫 도구 결정 turn(비스트림 chat, tools 포함): search_documents+get_fees 호출.
+    - 도구 결과가 대화에 들어온 뒤 결정 turn: 도구 호출 중단(content 없음).
+    - 최종 답변 turn(스트림): `_TEST_LLM_ANSWER`(디폴트 근거 [1] 인용).
+    호출 도구는 `_TEST_LLM_TOOLS`("search_documents,get_fees" 형식)로 조정.
+    """
     settings = AiCoreSettings(  # type: ignore[call-arg]
         LLM_BASE_URL="http://llm.test/v1",
         LLM_MODEL="test",
@@ -95,22 +102,44 @@ def fake_llm() -> LlmClient:
         EMBEDDING_MODEL="bge-m3",
     )
     answer = os.environ.get("_TEST_LLM_ANSWER", "24시간 개방합니다 [1].")
+    tool_names = os.environ.get("_TEST_LLM_TOOLS", "search_documents,get_fees").split(",")
 
     def handler(request: httpx.Request) -> httpx.Response:
         import json
 
+        body = json.loads(request.content)
         if request.url.path.endswith("/embeddings"):
-            texts = json.loads(request.content)["input"]
+            texts = body["input"]
             data = [{"index": i, "embedding": [0.05] * EMBED_DIM} for i in range(len(texts))]
             return httpx.Response(200, json={"data": data})
-        sse = "\n\n".join(
-            [
-                f"data: {json.dumps({'choices': [{'delta': {'content': answer}}]})}",
-                "data: [DONE]",
-                "",
-            ]
+        if body.get("stream"):
+            sse = "\n\n".join(
+                [
+                    f"data: {json.dumps({'choices': [{'delta': {'content': answer}}]})}",
+                    "data: [DONE]",
+                    "",
+                ]
+            )
+            return httpx.Response(200, content=sse.encode())
+        # 비스트림 도구 결정 turn.
+        messages = body.get("messages", [])
+        if any(m.get("role") == "tool" for m in messages):
+            return httpx.Response(200, json={"choices": [{"message": {"content": None}}]})
+        tool_calls = [
+            {
+                "id": f"call_{name}",
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": "{}" if name != "search_documents" else '{"query": "질의"}',
+                },
+            }
+            for name in tool_names
+            if name
+        ]
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": None, "tool_calls": tool_calls}}]}
         )
-        return httpx.Response(200, content=sse.encode())
 
     return LlmClient(settings, transport=httpx.MockTransport(handler), retry_backoff_s=0.0)
 

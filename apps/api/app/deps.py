@@ -253,3 +253,25 @@ def get_queue() -> Queue:  # pragma: no cover — arq 배선(테스트는 오버
 
 def get_llm() -> LlmClient:  # pragma: no cover — env 배선(테스트는 오버라이드)
     return LlmClient()
+
+
+async def get_graph() -> AsyncIterator[Any]:  # pragma: no cover — Neo4j 배선(테스트는 오버라이드)
+    """요청별 GraphClient. NEO4J_* env 없거나 드라이버 생성 실패 시 None(그래프 도구 제외).
+
+    Neo4j 미가용은 치명 오류가 아니다 — 그래프 도구만 레지스트리에서 빠지고 나머지는 동작한다
+    ([11 §4] PG 폴백). 드라이버는 요청 종료 시 닫는다.
+    """
+    from pydantic import ValidationError
+
+    from ai_core.graph import GraphClient, get_graph_settings
+
+    try:
+        settings = get_graph_settings()
+    except ValidationError:
+        yield None
+        return
+    client = GraphClient.from_settings(settings)
+    try:
+        yield client
+    finally:
+        await client.close()

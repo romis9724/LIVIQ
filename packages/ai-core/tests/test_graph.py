@@ -108,6 +108,43 @@ async def test_cross_tenant_incident_isolation(graph: GraphClient) -> None:
     assert incident_a in ids
 
 
+async def test_expand_incidents_returns_facility_and_recent_work(graph: GraphClient) -> None:
+    tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
+    incident = str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=facility,
+        props={"name": "지하펌프", "status": "fault"},
+        version=1,
+    )
+    await graph.merge_incident(
+        tenant_id=tenant,
+        pg_id=incident,
+        facility_id=facility,
+        props={"symptom": "누수"},
+        version=1,
+        embedding=_vec(1),
+    )
+    await graph.merge_maintenance(
+        tenant_id=tenant,
+        pg_id=str(uuid.uuid4()),
+        facility_id=facility,
+        props={"work": "패킹 교체"},
+        version=1,
+    )
+
+    contexts = await graph.expand_incidents(tenant_id=tenant, pg_ids=[incident])
+    assert len(contexts) == 1
+    ctx = contexts[0]
+    assert ctx.facility_name == "지하펌프"
+    assert ctx.facility_status == "fault"
+    assert "패킹 교체" in ctx.recent_work
+
+
+async def test_expand_incidents_empty_ids_returns_empty(graph: GraphClient) -> None:
+    assert await graph.expand_incidents(tenant_id=str(uuid.uuid4()), pg_ids=[]) == []
+
+
 async def test_maintenance_parts_create_replaced(graph: GraphClient) -> None:
     tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
     log_id = str(uuid.uuid4())
