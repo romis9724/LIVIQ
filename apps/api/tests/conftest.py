@@ -140,6 +140,9 @@ class FakeStorage:
     async def put(self, key: str, data: bytes) -> None:
         self.objects[key] = data
 
+    async def get(self, key: str) -> bytes:
+        return self.objects[key]
+
 
 class FakeQueue:
     def __init__(self) -> None:

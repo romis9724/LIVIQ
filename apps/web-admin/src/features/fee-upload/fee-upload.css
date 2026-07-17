@@ -392,3 +392,16 @@
   bottom: var(--space-6);
   z-index: 20;
 }
+.fu-toast-slot {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+}
+.fu-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
