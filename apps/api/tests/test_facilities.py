@@ -64,9 +64,7 @@ async def _create_facility(
     return response.json()
 
 
-async def _outbox_rows(
-    session: AsyncSession, aggregate_id: uuid.UUID
-) -> list[OutboxEvent]:
+async def _outbox_rows(session: AsyncSession, aggregate_id: uuid.UUID) -> list[OutboxEvent]:
     rows = await session.scalars(
         select(OutboxEvent)
         .where(OutboxEvent.aggregate_id == aggregate_id)
@@ -239,9 +237,7 @@ async def test_staff_can_read_but_not_write(seeded: AsyncSession) -> None:
 
 async def test_facility_role_can_write(seeded: AsyncSession) -> None:
     async with _make_client(seeded, user_id=FACILITY_ID, roles=("FACILITY",)) as c:
-        response = await c.post(
-            "/admin/facilities", json={"name": "보안등", "status": "normal"}
-        )
+        response = await c.post("/admin/facilities", json={"name": "보안등", "status": "normal"})
     assert response.status_code == 201
 
 
@@ -253,6 +249,6 @@ async def test_other_tenant_cannot_read_facility(seeded: AsyncSession) -> None:
         created = await _create_facility(owner)
     async with _make_client(seeded, tenant_id=OTHER_TENANT_ID) as other:
         assert (await other.get(f"/admin/facilities/{created['id']}")).status_code == 404
-        assert (await other.patch(
-            f"/admin/facilities/{created['id']}", json={"status": "check"}
-        )).status_code == 404
+        assert (
+            await other.patch(f"/admin/facilities/{created['id']}", json={"status": "check"})
+        ).status_code == 404
