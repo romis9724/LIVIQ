@@ -3,6 +3,7 @@
 H1: documents(업로드·인제스트 트리거)·assistant(SSE 질의) 라우터.
 H2-1: auth(OAuth·세션)·onboarding(제출·명부 대조)·approvals(승인)·roster(명부 업로드).
 H2-3: inquiries(접수·조회·배정·상태 + 키워드 분류·타임라인·알림).
+H2-4: notices(발행 공지 조회 + AI 초안 생성·검수 발행·알림).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from app.routers import (
     auth,
     documents,
     inquiries,
+    notices,
     onboarding,
     roster,
 )
@@ -54,6 +56,8 @@ def create_app() -> FastAPI:
     app.include_router(assistant.router)
     app.include_router(inquiries.router)
     app.include_router(inquiries.admin_router)
+    app.include_router(notices.router)
+    app.include_router(notices.admin_router)
     return app
 
 

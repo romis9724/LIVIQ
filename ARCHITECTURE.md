@@ -64,7 +64,7 @@ ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는
 **정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·Google OAuth PKCE·역할 인가 가드(`require_roles`)·
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
-화면 실연동: web-resident **비서·민원**, web-admin **문서 관리·민원 관리**(H2-3) — 나머지 화면·온보딩 연동은 H2-4+.
+화면 실연동: web-resident **비서·민원·공지**, web-admin **문서·민원·공지 초안**(H2-4) — 나머지 화면·온보딩 연동은 H2-5+.
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 
 ## Cross-Module 의존성 표

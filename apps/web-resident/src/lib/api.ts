@@ -145,3 +145,41 @@ export async function listInquiryEvents(id: string): Promise<InquiryEvent[]> {
   const body = await response.json();
   return (body.items as RawEvent[]).map(toEvent);
 }
+
+// ── 공지 (docs/01 §13) — 발행된 공지만 노출 ──────────────────────────────────
+
+export interface Notice {
+  id: string;
+  title: string;
+  body: string;
+  audience: string;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
+interface RawNotice {
+  id: string;
+  title: string;
+  body: string;
+  audience: string;
+  published_at: string | null;
+  created_at: string;
+}
+
+function toNotice(raw: RawNotice): Notice {
+  return {
+    id: raw.id,
+    title: raw.title,
+    body: raw.body,
+    audience: raw.audience,
+    publishedAt: raw.published_at,
+    createdAt: raw.created_at,
+  };
+}
+
+export async function listNotices(): Promise<Notice[]> {
+  const response = await fetch(`${API_BASE_URL}/notices`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawNotice[]).map(toNotice);
+}
