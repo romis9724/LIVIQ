@@ -110,6 +110,26 @@ def test_get_oauth_provider_builds_google_when_configured(
         get_settings.cache_clear()
 
 
+def test_get_oauth_provider_applies_url_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """GOOGLE_OAUTH_AUTH_URL/TOKEN_URL 오버라이드가 authorize_url에 반영된다(mock IdP 주입)."""
+    from app.config import get_settings
+
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_ID", "cid")
+    monkeypatch.setenv("GOOGLE_OAUTH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("GOOGLE_OAUTH_REDIRECT_URI", "https://app/cb")
+    monkeypatch.setenv("GOOGLE_OAUTH_AUTH_URL", "http://localhost:9099/authorize")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN_URL", "http://localhost:9099/token")
+    get_settings.cache_clear()
+    try:
+        provider = get_oauth_provider()
+        url = provider.authorize_url("st", "chal")
+        assert url.startswith("http://localhost:9099/authorize?")
+    finally:
+        get_settings.cache_clear()
+
+
 # ── 콜백·세션 경로 (실 PG + fakeredis) ─────────────────────────────────
 
 

@@ -1,7 +1,7 @@
 // 민원 — apps/api HTTP 클라이언트 (docs/01 §13). dev 헤더는 dev-context 공유.
 // api-types 전환은 백로그 — 지금은 로컬 타입.
 
-import { API_BASE_URL, DEV_HEADERS } from "@/lib/dev-context";
+import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 
 export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
 export type AiPriority = "urgent" | "normal" | "low";
@@ -113,7 +113,7 @@ async function ensureOk(response: Response): Promise<void> {
 }
 
 export async function createInquiry(input: CreateInquiryInput): Promise<Inquiry> {
-  const response = await fetch(`${API_BASE_URL}/inquiries`, {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -127,20 +127,20 @@ export async function createInquiry(input: CreateInquiryInput): Promise<Inquiry>
 }
 
 export async function listMyInquiries(): Promise<Inquiry[]> {
-  const response = await fetch(`${API_BASE_URL}/inquiries`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/inquiries`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawInquiry[]).map(toInquiry);
 }
 
 export async function getInquiry(id: string): Promise<Inquiry> {
-  const response = await fetch(`${API_BASE_URL}/inquiries/${id}`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}`, { headers: DEV_HEADERS });
   await ensureOk(response);
   return toInquiry(await response.json());
 }
 
 export async function listInquiryEvents(id: string): Promise<InquiryEvent[]> {
-  const response = await fetch(`${API_BASE_URL}/inquiries/${id}/events`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}/events`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawEvent[]).map(toEvent);
@@ -178,7 +178,7 @@ function toNotice(raw: RawNotice): Notice {
 }
 
 export async function listNotices(): Promise<Notice[]> {
-  const response = await fetch(`${API_BASE_URL}/notices`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/notices`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawNotice[]).map(toNotice);
@@ -221,14 +221,14 @@ function toNotification(raw: RawNotification): AppNotification {
 }
 
 export async function listNotifications(): Promise<AppNotification[]> {
-  const response = await fetch(`${API_BASE_URL}/notifications`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/notifications`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawNotification[]).map(toNotification);
 }
 
 export async function markNotificationRead(id: string): Promise<AppNotification> {
-  const response = await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/${id}/read`, {
     method: "POST",
     headers: DEV_HEADERS,
   });

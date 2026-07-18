@@ -7,13 +7,17 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 
-import { E2E, PORTS } from "./fixtures";
+import { E2E, PORTS, STORAGE_STATE } from "./fixtures";
 
 const HERE = __dirname;
 const REPO_ROOT = path.resolve(HERE, "..", "..");
 const API_DIR = path.join(REPO_ROOT, "apps", "api");
 
 const isCI = !!process.env.CI;
+
+// mock OAuth IdP(실 구글 대신) — 세션 로그인 셋업(auth.setup.ts)에서만 사용.
+const MOCK_IDP_PORT = 9099;
+const MOCK_IDP = `http://localhost:${MOCK_IDP_PORT}`;
 
 // PII_MASTER_KEY — 32byte base64 더미(ADR-0010 fail-closed 검증용, apps/api conftest 패턴).
 const PII_MASTER_KEY = Buffer.alloc(32, 0).toString("base64");
@@ -34,13 +38,26 @@ const apiEnv: Record<string, string> = {
   LLM_MODEL: process.env.LLM_MODEL ?? "qwen2.5:7b-instruct",
   EMBEDDING_BASE_URL: process.env.EMBEDDING_BASE_URL ?? OLLAMA,
   EMBEDDING_MODEL: process.env.EMBEDDING_MODEL ?? "bge-m3",
+  // OAuth(PKCE) — mock IdP로 AUTH/TOKEN URL을 주입(더미 client id/secret). 세션 로그인 셋업용.
+  GOOGLE_OAUTH_CLIENT_ID: "e2e-client",
+  GOOGLE_OAUTH_CLIENT_SECRET: "e2e-secret",
+  GOOGLE_OAUTH_REDIRECT_URI: `http://localhost:${PORTS.api}/auth/google/callback`,
+  GOOGLE_OAUTH_AUTH_URL: `${MOCK_IDP}/authorize`,
+  GOOGLE_OAUTH_TOKEN_URL: `${MOCK_IDP}/token`,
+  // 콜백 후 웹 앱으로 복귀 + credentials CORS 허용 오리진.
+  WEB_BASE_URL: `http://localhost:${PORTS.resident}`,
+  WEB_ORIGINS: `http://localhost:${PORTS.resident},http://localhost:${PORTS.admin}`,
 };
 
-// 웹 앱은 dev 헤더 컨텍스트를 E2E 전용 UUID로 오버라이드(dev-context.ts·web-admin api.ts 지원).
+// 웹 앱은 세션 쿠키 인증만 사용(dev 헤더 미주입 — NEXT_PUBLIC_DEV_* 제거).
 const webEnv: Record<string, string> = {
   NEXT_PUBLIC_API_BASE_URL: `http://localhost:${PORTS.api}`,
-  NEXT_PUBLIC_DEV_TENANT_ID: E2E.tenantId,
-  NEXT_PUBLIC_DEV_USER_ID: E2E.userId,
+};
+
+// mock IdP는 시드 user.login_id(E2E.googleSub)와 동일한 sub를 반환해 신원을 일치시킨다.
+const mockIdpEnv: Record<string, string> = {
+  MOCK_IDP_PORT: String(MOCK_IDP_PORT),
+  MOCK_IDP_SUB: E2E.googleSub,
 };
 
 export default defineConfig({
@@ -61,8 +78,23 @@ export default defineConfig({
     screenshot: "only-on-failure",
     navigationTimeout: 60_000,
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // 세션 로그인 셋업 — storageState 생성. 여정 프로젝트가 의존한다.
+    { name: "setup", testMatch: /auth\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: STORAGE_STATE },
+      dependencies: ["setup"],
+    },
+  ],
   webServer: [
+    {
+      command: `node ${path.join(HERE, "mock-idp.mjs")}`,
+      url: `${MOCK_IDP}/health`,
+      env: mockIdpEnv,
+      reuseExistingServer: !isCI,
+      timeout: 30_000,
+    },
     {
       command: "uv run --no-sync uvicorn app.main:app --port 8000",
       cwd: API_DIR,

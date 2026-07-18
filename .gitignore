@@ -38,6 +38,7 @@ pnpm-debug.log*
 coverage/
 playwright-report/
 test-results/
+tests/e2e/.auth/
 
 # secrets / credentials (절대 커밋 금지)
 mcp/service-credential.json

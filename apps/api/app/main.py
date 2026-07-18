@@ -34,9 +34,6 @@ from app.routers import (
     roster,
 )
 
-# local 개발 웹 오리진(web-resident 3000·web-admin 3001). 운영 CORS는 배포 설정에서.
-LOCAL_WEB_ORIGINS = ["http://localhost:3000", "http://localhost:3001"]
-
 
 class HealthResponse(BaseModel):
     status: str
@@ -46,13 +43,15 @@ def create_app() -> FastAPI:
     settings = get_settings()  # 부팅 시 env 검증 트리거(fail-closed)
     app = FastAPI(title="LIVIQ API", version="0.1.0")
 
-    if settings.api_env == "local":
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=LOCAL_WEB_ORIGINS,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
+    # 웹 앱은 별도 출처(3000·3001)라 세션 쿠키 전송에 credentials CORS 필수(ADR-0011).
+    # allow_credentials=True는 와일드카드 오리진과 양립 불가 — WEB_ORIGINS로 명시.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins(),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.get("/health")
     def health() -> HealthResponse:

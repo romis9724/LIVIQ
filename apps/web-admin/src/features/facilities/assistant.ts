@@ -1,7 +1,7 @@
 // 시설 AI 도우미 — POST /admin/facilities/assistant SSE 스트림 클라이언트 (docs/09 §1.1).
 // web-resident assistant/api.ts 파서 패턴 재사용(로컬 타입 정의) — POST SSE는 fetch로 직접 파싱.
 
-import { API_BASE_URL, DEV_HEADERS } from "@/lib/api";
+import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/api";
 
 export type Stage = "searching" | "generating" | "verifying";
 
@@ -108,7 +108,7 @@ export async function* streamFacilityAssistant(
   question: string,
   opts: AskOptions = {},
 ): AsyncGenerator<AssistantEvent> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities/assistant`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/assistant`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...DEV_HEADERS },
     body: JSON.stringify({ question, conversation_id: opts.conversationId ?? null }),

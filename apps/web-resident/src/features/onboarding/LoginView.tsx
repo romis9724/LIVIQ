@@ -1,13 +1,11 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Button } from "@liviq/ui";
+import { API_BASE_URL } from "@/lib/dev-context";
 import "./onboarding.css";
 
-/** 로그인 진입 — 구글 OAuth 목업. 클릭 시 가입 플로우로 이동. */
+/** 로그인 진입 — 구글 OAuth. 클릭 시 api 로그인(PKCE)으로 이동, 콜백이 세션 확립 후 복귀. */
 export function LoginView() {
-  const router = useRouter();
-
   return (
     <main id="main" className="auth-shell">
       <div className="auth-inner auth-inner--center">
@@ -26,7 +24,9 @@ export function LoginView() {
           type="button"
           variant="secondary"
           className="auth-google"
-          onClick={() => router.push("/signup")}
+          onClick={() => {
+            window.location.href = `${API_BASE_URL}/auth/google/login`;
+          }}
         >
           <span className="auth-google__mark" aria-hidden="true">
             G

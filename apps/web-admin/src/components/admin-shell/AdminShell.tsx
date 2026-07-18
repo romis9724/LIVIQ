@@ -3,7 +3,17 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { API_BASE_URL } from "@/lib/api";
 import "./admin-shell.css";
+
+/** 로그아웃 — 세션 revoke(멱등) 후 로그인 화면으로. 실패해도 로그인으로 이동. */
+async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  } finally {
+    window.location.href = "/login";
+  }
+}
 
 interface NavItem {
   href: string;
@@ -27,6 +37,11 @@ const NAV: readonly NavItem[] = [
 /** 관리자 콘솔 셸 — 좌측 사이드바 내비 + 사용자 + 메인 영역. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+
+  // 로그인 화면은 셸(사이드바) 없이 전체 화면으로 — 미인증 진입점.
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
 
   return (
     <div className="admin-shell">
@@ -70,6 +85,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <span className="admin-sidebar__user-name">김*수 소장</span>
             <span className="admin-sidebar__user-org">관리사무소</span>
           </span>
+          <button
+            type="button"
+            className="admin-sidebar__logout"
+            onClick={() => void logout()}
+          >
+            로그아웃
+          </button>
         </div>
       </aside>
 

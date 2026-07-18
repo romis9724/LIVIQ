@@ -3,18 +3,39 @@
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
-// local dev 전용 컨텍스트(정식 세션 인증 도입 전). 시드된 tenant/user 와 일치해야 함.
-// dev 헤더 경로는 roles=(RESIDENT,MANAGER,STAFF) 부여라 문서 관리(MANAGER·STAFF) 통과.
-const DEV_TENANT_ID =
-  process.env.NEXT_PUBLIC_DEV_TENANT_ID ?? "11111111-1111-1111-1111-111111111111";
-// 배정 대상 사용자 목록 api 가 없어 "나에게 배정" 에 사용 — dev user 는 시드에서 MANAGER 역할 보유.
-export const DEV_USER_ID =
-  process.env.NEXT_PUBLIC_DEV_USER_ID ?? "22222222-2222-2222-2222-222222222222";
+// dev 헤더는 NEXT_PUBLIC_DEV_TENANT_ID가 설정된 local 편의 환경에서만 부착한다.
+// 기본(미설정)은 세션 쿠키 인증만 사용 — api는 local에서만 dev 헤더를 허용(deps.get_context).
+const DEV_TENANT_ID = process.env.NEXT_PUBLIC_DEV_TENANT_ID;
+// 배정 대상 사용자 목록 api 가 없어 "나에게 배정" 에 사용 — 미설정 시 빈 문자열.
+export const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID ?? "";
 
-export const DEV_HEADERS: Record<string, string> = {
-  "X-Dev-Tenant-Id": DEV_TENANT_ID,
-  "X-Dev-User-Id": DEV_USER_ID,
-};
+export const DEV_HEADERS: Record<string, string> =
+  DEV_TENANT_ID && DEV_USER_ID
+    ? { "X-Dev-Tenant-Id": DEV_TENANT_ID, "X-Dev-User-Id": DEV_USER_ID }
+    : {};
+
+/**
+ * 세션 쿠키를 실어 api를 호출하는 fetch 래퍼.
+ * - credentials:"include" — 교차 출처(3001→8000) 세션 쿠키 전송(ADR-0011).
+ * - DEV_HEADERS 병합(local 보조) + 호출자 헤더가 우선.
+ * - 401(미인증·만료)이면 로그인 화면으로 유도(이미 /login이면 루프 방지).
+ *   403(권한 없음)은 그대로 반환 — 화면이 ApiError로 안내(MANAGER 아닌 세션).
+ */
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const response = await fetch(input, {
+    ...init,
+    credentials: "include",
+    headers: { ...DEV_HEADERS, ...(init.headers as Record<string, string> | undefined) },
+  });
+  if (
+    response.status === 401 &&
+    typeof window !== "undefined" &&
+    window.location.pathname !== "/login"
+  ) {
+    window.location.href = "/login";
+  }
+  return response;
+}
 
 export type IndexStatus = "pending" | "indexing" | "indexed" | "failed";
 export type SourceType = "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
@@ -108,7 +129,7 @@ async function ensureOk(response: Response): Promise<void> {
 export async function listDocuments(
   params: ListDocumentsParams = {},
 ): Promise<DocumentItem[]> {
-  const response = await fetch(`${API_BASE_URL}/documents${buildListQuery(params)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/documents${buildListQuery(params)}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
@@ -123,7 +144,7 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
   form.set("source_type", input.sourceType);
   form.set("visibility", input.visibility);
   // Content-Type 는 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
-  const response = await fetch(`${API_BASE_URL}/documents`, {
+  const response = await apiFetch(`${API_BASE_URL}/documents`, {
     method: "POST",
     headers: DEV_HEADERS,
     body: form,
@@ -137,7 +158,7 @@ export async function patchDocument(
   id: string,
   input: PatchInput,
 ): Promise<DocumentItem> {
-  const response = await fetch(`${API_BASE_URL}/documents/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/documents/${id}`, {
     method: "PATCH",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -147,7 +168,7 @@ export async function patchDocument(
 }
 
 export async function reindexDocument(id: string): Promise<DocumentItem> {
-  const response = await fetch(`${API_BASE_URL}/documents/${id}/reindex`, {
+  const response = await apiFetch(`${API_BASE_URL}/documents/${id}/reindex`, {
     method: "POST",
     headers: DEV_HEADERS,
   });
@@ -216,7 +237,7 @@ export function buildInquiryQuery(params: AdminInquiryParams): string {
 }
 
 export async function listAdminInquiries(params: AdminInquiryParams = {}): Promise<Inquiry[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/inquiries${buildInquiryQuery(params)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries${buildInquiryQuery(params)}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
@@ -225,7 +246,7 @@ export async function listAdminInquiries(params: AdminInquiryParams = {}): Promi
 }
 
 export async function assignInquiry(id: string, assigneeUserId: string): Promise<Inquiry> {
-  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}/assign`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/assign`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ assignee_user_id: assigneeUserId }),
@@ -235,7 +256,7 @@ export async function assignInquiry(id: string, assigneeUserId: string): Promise
 }
 
 export async function updateInquiryStatus(id: string, status: InquiryStatus): Promise<Inquiry> {
-  const response = await fetch(`${API_BASE_URL}/admin/inquiries/${id}/status`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/status`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -299,7 +320,7 @@ function toDraft(raw: RawDraft): NoticeDraft {
 
 /** 키워드에서 AI 초안 생성. 422=근거 없음·503=LLM 불가는 ApiError.status 로 분기. */
 export async function createNoticeDraft(keywords: string[]): Promise<NoticeDraft> {
-  const response = await fetch(`${API_BASE_URL}/admin/notices/drafts`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices/drafts`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ keywords }),
@@ -310,7 +331,7 @@ export async function createNoticeDraft(keywords: string[]): Promise<NoticeDraft
 
 /** 검수 완료한 초안을 발행(사람 확정). audience 는 현재 ALL 만. 409=이미 처리된 초안. */
 export async function publishNotice(input: PublishNoticeInput): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/admin/notices`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -410,7 +431,7 @@ function toFeeUpload(raw: RawFeeUpload): FeeUploadResult {
 export async function uploadFeeExcel(file: File, period: string): Promise<FeeUploadResult> {
   const form = new FormData();
   form.set("file", file);
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/admin/fees/uploads?period=${encodeURIComponent(period)}`,
     { method: "POST", headers: DEV_HEADERS, body: form },
   );
@@ -420,7 +441,7 @@ export async function uploadFeeExcel(file: File, period: string): Promise<FeeUpl
 
 /** 검증된 업로드를 확정 적재(해당 월 전체 교체·MANAGER). 409=validated 아님. */
 export async function applyFeeUpload(uploadId: string): Promise<FeeApplyResult> {
-  const response = await fetch(`${API_BASE_URL}/admin/fees/uploads/${uploadId}/apply`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/fees/uploads/${uploadId}/apply`, {
     method: "POST",
     headers: DEV_HEADERS,
   });
@@ -436,7 +457,7 @@ export async function applyFeeUpload(uploadId: string): Promise<FeeApplyResult> 
 
 /** 월별 세대 부과 현황(관리자). */
 export async function listAdminFees(period: string): Promise<AdminFeeList> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/admin/fees?period=${encodeURIComponent(period)}`,
     { headers: DEV_HEADERS },
   );
@@ -538,7 +559,7 @@ export async function listReviewQueue(
     page: String(page),
     limit: String(limit),
   });
-  const response = await fetch(`${API_BASE_URL}/admin/review-queue?${search.toString()}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/review-queue?${search.toString()}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
@@ -557,7 +578,7 @@ export async function decideReview(
   action: ReviewAction,
   note?: string,
 ): Promise<ReviewItem> {
-  const response = await fetch(`${API_BASE_URL}/admin/review-queue/${messageId}/decide`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/review-queue/${messageId}/decide`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ action, note: note ?? null }),
@@ -711,7 +732,7 @@ export function buildFacilityQuery(filter: FacilityFilter): string {
 }
 
 export async function listFacilities(filter: FacilityFilter = {}): Promise<Facility[]> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities${buildFacilityQuery(filter)}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities${buildFacilityQuery(filter)}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
@@ -720,7 +741,7 @@ export async function listFacilities(filter: FacilityFilter = {}): Promise<Facil
 }
 
 export async function getFacility(id: string): Promise<FacilityDetail> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities/${id}`, { headers: DEV_HEADERS });
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/${id}`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const raw = await response.json();
   return {
@@ -731,7 +752,7 @@ export async function getFacility(id: string): Promise<FacilityDetail> {
 }
 
 export async function createFacility(input: FacilityCreateInput): Promise<Facility> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -746,7 +767,7 @@ export async function createFacility(input: FacilityCreateInput): Promise<Facili
 }
 
 export async function patchFacility(id: string, input: FacilityPatchInput): Promise<Facility> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities/${id}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/${id}`, {
     method: "PATCH",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -756,7 +777,7 @@ export async function patchFacility(id: string, input: FacilityPatchInput): Prom
 }
 
 export async function createIncident(facilityId: string, input: IncidentInput): Promise<Incident> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities/${facilityId}/incidents`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/${facilityId}/incidents`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -773,7 +794,7 @@ export async function createMaintenance(
   facilityId: string,
   input: MaintenanceInput,
 ): Promise<MaintenanceLog> {
-  const response = await fetch(`${API_BASE_URL}/admin/facilities/${facilityId}/maintenance`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/${facilityId}/maintenance`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ work: input.work, performer: input.performer ?? null }),
@@ -818,7 +839,7 @@ interface RawDashboardStats {
 }
 
 export async function getDashboardStats(days: number): Promise<DashboardStats> {
-  const response = await fetch(`${API_BASE_URL}/admin/dashboard/stats?days=${days}`, {
+  const response = await apiFetch(`${API_BASE_URL}/admin/dashboard/stats?days=${days}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);

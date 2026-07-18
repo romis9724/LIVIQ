@@ -59,11 +59,16 @@ class GoogleOAuth:
         client_secret: str,
         redirect_uri: str,
         *,
+        auth_url: str | None = None,
+        token_url: str | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
         self._redirect_uri = redirect_uri
+        # URL 오버라이드(mock IdP·사설 IdP) — 미지정 시 구글 기본. 신원 확인 로직은 불변.
+        self._auth_url = auth_url or _AUTH_URL
+        self._token_url = token_url or _TOKEN_URL
         self._transport = transport
 
     def authorize_url(self, state: str, code_challenge: str) -> str:
@@ -76,7 +81,7 @@ class GoogleOAuth:
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
         }
-        return f"{_AUTH_URL}?{urlencode(params)}"
+        return f"{self._auth_url}?{urlencode(params)}"
 
     async def exchange(self, code: str, code_verifier: str) -> OAuthIdentity:
         data = {
@@ -88,7 +93,7 @@ class GoogleOAuth:
             "code_verifier": code_verifier,
         }
         async with httpx.AsyncClient(transport=self._transport, timeout=10.0) as client:
-            resp = await client.post(_TOKEN_URL, data=data)
+            resp = await client.post(self._token_url, data=data)
             resp.raise_for_status()
             payload = _decode_id_token(resp.json()["id_token"])
         # 구글 토큰은 여기서 폐기 — 저장하지 않는다(ADR-0011).
@@ -106,4 +111,6 @@ def get_oauth_provider() -> OAuthProvider:
         s.google_oauth_client_id,
         s.google_oauth_client_secret,
         s.google_oauth_redirect_uri,
+        auth_url=s.google_oauth_auth_url,
+        token_url=s.google_oauth_token_url,
     )

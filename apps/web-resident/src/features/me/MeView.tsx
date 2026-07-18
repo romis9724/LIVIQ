@@ -2,8 +2,18 @@
 
 import { useState } from "react";
 import { Switch } from "@liviq/ui";
+import { API_BASE_URL } from "@/lib/dev-context";
 import { NotificationInbox } from "./NotificationInbox";
 import "./me.css";
+
+/** 로그아웃 — 세션 revoke(멱등) 후 로그인 화면으로. 실패해도 로그인으로 이동. */
+async function logout(): Promise<void> {
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, { method: "POST", credentials: "include" });
+  } finally {
+    window.location.href = "/login";
+  }
+}
 
 type SettingKey = "push" | "ai" | "dark";
 type ConsentKey = "quality" | "alerts";
@@ -96,7 +106,7 @@ export function MeView() {
             개인정보 처리방침 보기 →
           </a>
         </div>
-        <button type="button" className="me-logout">
+        <button type="button" className="me-logout" onClick={() => void logout()}>
           로그아웃
         </button>
       </section>

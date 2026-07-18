@@ -1,9 +1,16 @@
 // E2E 전용 고정 상수 — 시드·config·spec 공유 (docs/09 §8.2 H2-7).
 // dev 시드(1111…·2222…)와 충돌하지 않도록 ee2e… 네임스페이스 UUID를 쓴다.
 
+import path from "node:path";
+
+// 세션 로그인 셋업(auth.setup.ts)이 저장하고 여정 프로젝트가 재사용하는 storageState 경로.
+export const STORAGE_STATE = path.join(__dirname, ".auth", "session.json");
+
 export const E2E = {
   tenantId: "ee2e0000-0000-4000-8000-000000000001",
   userId: "ee2e0000-0000-4000-8000-000000000002",
+  // 시드 user.login_id = mock IdP가 반환하는 google sub. 로그인 흐름이 이 값으로 신원을 확정.
+  googleSub: "e2e-google-sub-0001",
   buildingId: "ee2e0000-0000-4000-8000-000000000003",
   householdId: "ee2e0000-0000-4000-8000-000000000004",
   notice1Id: "ee2e0000-0000-4000-8000-000000000005",
