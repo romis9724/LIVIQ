@@ -135,3 +135,60 @@ async def test_stored_dek_decrypts_previously_encrypted(db_session: AsyncSession
     reloaded = await crypto.get_dek(db_session, tenant_id)
 
     assert crypto.decrypt(reloaded, blob) == _NAME
+
+
+# ── get_dek: 최초 생성 동시성(경합) — H6-4 E2E가 실측한 시나리오 ──────────
+
+
+async def test_get_dek_concurrent_first_creation_returns_same_key(pg_dsn: str) -> None:
+    """동시 트랜잭션 2건이 최초 DEK를 경합해도 둘 다 같은 키를 얻는다(uq 위반 없음).
+
+    결정론 재현: A가 INSERT 후 미커밋 상태에서 B가 진입 → B의 INSERT는 uq 인덱스
+    대기(ON CONFLICT는 A 커밋까지 블록) → A 커밋 → B는 DO NOTHING 후 재조회로
+    A의 행을 unwrap. 수정 전(read-then-insert)에는 B가 IntegrityError로 죽는다.
+    """
+    import asyncio
+
+    from sqlalchemy import delete
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    engine = create_async_engine(pg_dsn, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    crypto = PiiCrypto(_KEK)
+    tenant_id = uuid.uuid4()
+
+    # 두 세션이 모두 보도록 tenant는 선커밋.
+    async with factory() as setup, setup.begin():
+        setup.add(Tenant(id=tenant_id, name="경합단지", status="active"))
+
+    try:
+        async with factory() as sa, factory() as sb:
+            await sa.begin()
+            dek_a = await crypto.get_dek(sa, tenant_id)  # INSERT, 미커밋 — B를 블록시킴
+
+            async def loser() -> bytes:
+                await sb.begin()
+                dek = await crypto.get_dek(sb, tenant_id)
+                await sb.commit()
+                return dek
+
+            task = asyncio.create_task(loser())
+            # B가 uq 인덱스 대기에 들어갔는지 확인(즉시 끝나면 경합 미재현).
+            done, _ = await asyncio.wait([task], timeout=0.3)
+            assert not done, "B가 대기 없이 통과 — 경합이 재현되지 않음"
+
+            await sa.commit()  # 승자 커밋 → B 해제
+            dek_b = await asyncio.wait_for(task, timeout=5)
+
+        assert dek_a == dek_b, "경합 후 서로 다른 DEK — 복호 불가 데이터 발생"
+        async with factory() as check:
+            count = await check.scalar(
+                select(func.count()).select_from(TenantKey).where(TenantKey.tenant_id == tenant_id)
+            )
+        assert count == 1, "경합이 중복 키 행을 생성함"
+    finally:
+        async with factory() as cleanup, cleanup.begin():
+            await cleanup.execute(delete(TenantKey).where(TenantKey.tenant_id == tenant_id))
+            await cleanup.execute(delete(Tenant).where(Tenant.id == tenant_id))
+        await engine.dispose()
