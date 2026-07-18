@@ -22,6 +22,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.hashes import SHA256
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -68,6 +69,11 @@ class PiiCrypto:
 
         호출부는 app.tenant_id가 설정된 세션을 넘겨야 한다(RLS·§5). 멱등 —
         기존 키가 있으면 같은 DEK를 재반환.
+
+        최초 생성은 동시 요청 2건이 경합할 수 있다(H6-4 E2E에서 실측) —
+        `INSERT ... ON CONFLICT DO NOTHING` 후 재조회로 원자화한다. 패자는
+        승자 커밋을 기다렸다가(uq 인덱스 대기) 승자의 행을 unwrap해 반환하므로
+        양쪽 모두 같은 DEK를 얻는다(READ COMMITTED — 문장 단위 새 스냅샷).
         """
         wrapped = await session.scalar(
             select(TenantKey.dek_wrapped)
@@ -77,12 +83,23 @@ class PiiCrypto:
         )
         if wrapped is not None:
             return self._unwrap(wrapped)
-        # ponytail: 최초 생성 시 동시성 없음(단일 단지 파일럿). 경쟁 발생하면
-        # UNIQUE(tenant_id, key_version) 위반으로 드러남 — 그때 재시도 배선.
-        dek = os.urandom(_KEY_BYTES)
-        session.add(TenantKey(tenant_id=tenant_id, key_version=1, dek_wrapped=self._wrap(dek)))
-        await session.flush()
-        return dek
+
+        await session.execute(
+            pg_insert(TenantKey)
+            .values(
+                tenant_id=tenant_id, key_version=1, dek_wrapped=self._wrap(os.urandom(_KEY_BYTES))
+            )
+            .on_conflict_do_nothing(index_elements=["tenant_id", "key_version"])
+        )
+        # 자기 행(승자) 또는 경쟁 승자의 행 — 어느 쪽이든 재조회가 정본.
+        wrapped = await session.scalar(
+            select(TenantKey.dek_wrapped).where(
+                TenantKey.tenant_id == tenant_id, TenantKey.key_version == 1
+            )
+        )
+        if wrapped is None:  # pragma: no cover — 방어(승자 롤백 + 자체 실패 동시엔 불가)
+            raise RuntimeError("tenant DEK 생성 실패")
+        return self._unwrap(wrapped)
 
     def _wrap(self, dek: bytes) -> bytes:
         nonce = os.urandom(_NONCE_BYTES)
