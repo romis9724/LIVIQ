@@ -803,6 +803,128 @@ export async function createMaintenance(
   return toMaintenance(await response.json());
 }
 
+// ── 가입 승인 (docs/01 §13, docs/06 §2 · MANAGER 전용) ─────────────────────────
+// 이름은 서버가 마스킹해서 준다 — 웹에서 재마스킹하지 않는다(원문 미보유).
+
+export interface Approval {
+  userId: string;
+  nameMasked: string;
+  rosterMatched: boolean;
+  buildingName: string | null;
+  floor: number | null;
+  unitNo: number | null;
+  requestedAt: string;
+}
+
+interface RawApproval {
+  user_id: string;
+  name_masked: string;
+  roster_matched: boolean;
+  building_name: string | null;
+  floor: number | null;
+  unit_no: number | null;
+  requested_at: string;
+}
+
+function toApproval(raw: RawApproval): Approval {
+  return {
+    userId: raw.user_id,
+    nameMasked: raw.name_masked,
+    rosterMatched: raw.roster_matched,
+    buildingName: raw.building_name,
+    floor: raw.floor,
+    unitNo: raw.unit_no,
+    requestedAt: raw.requested_at,
+  };
+}
+
+/** 가입 대기 목록(MANAGER). 403=권한 없음. */
+export async function listApprovals(status = "pending"): Promise<Approval[]> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/admin/approvals?status=${encodeURIComponent(status)}`,
+    { headers: DEV_HEADERS },
+  );
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawApproval[]).map(toApproval);
+}
+
+/** 가입 승인 — RESIDENT 역할 부여·세션 폐기(재로그인 시 반영). 409=대기 중 아님. */
+export async function approveSignup(userId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/approvals/${userId}/approve`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 가입 거절 — 사유 필수(신청자에게 알림함으로 전달). 409=대기 중 아님. */
+export async function rejectSignup(userId: string, reason: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/approvals/${userId}/reject`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  await ensureOk(response);
+}
+
+// ── 명부 업로드 (docs/01 §13, docs/03 §4.1 diff 병합 · MANAGER 전용) ────────────
+
+export interface RosterRowError {
+  row: number;
+  reason: string;
+}
+
+export interface RosterUploadResult {
+  uploadId: string;
+  applied: number; // 신규 사전등록된 행 수
+  markedInactive: number; // 명부에서 사라져 inactive 표시된 행 수
+  errors: RosterRowError[];
+}
+
+function toRosterResult(raw: {
+  upload_id: string;
+  applied: number;
+  marked_inactive: number;
+  errors: RosterRowError[];
+}): RosterUploadResult {
+  return {
+    uploadId: raw.upload_id,
+    applied: raw.applied,
+    markedInactive: raw.marked_inactive,
+    errors: raw.errors,
+  };
+}
+
+/** 명부 엑셀 업로드 — 신규만 추가, 기존 세대 불변, 사라진 세대는 inactive. 413=용량·422=형식오류. */
+export async function uploadRoster(file: File): Promise<RosterUploadResult> {
+  const form = new FormData();
+  form.set("file", file);
+  const response = await apiFetch(`${API_BASE_URL}/admin/roster/upload`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: form,
+  });
+  await ensureOk(response);
+  return toRosterResult(await response.json());
+}
+
+// ── 계정 (ADR-0011) — 로그인 세션의 자기 신원. '나에게 배정' 등에 사용 ────────────
+
+export interface Me {
+  kind: "user" | "onboarding";
+  status: string;
+  userId: string | null;
+  roles: string[];
+}
+
+export async function getMe(): Promise<Me> {
+  const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return { kind: body.kind, status: body.status, userId: body.user_id, roles: body.roles };
+}
+
 // ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────
 // 비율(0~1 분수·null)은 서버 값 그대로 — 표기 변환은 features/dashboard/data.ts.
 

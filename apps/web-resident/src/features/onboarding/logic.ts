@@ -1,7 +1,9 @@
 /**
- * 온보딩 순수 로직 — 가입 게이트 판정. UI·네트워크 의존 없음(테스트 용이).
- * 실제 검증은 서버에서 재수행한다(프론트 판정은 보조). 여기 값은 데모 목업용.
+ * 온보딩 순수 로직 — 가입 게이트 판정·서버 페이로드 변환. UI·네트워크 의존 없음(테스트 용이).
+ * 실제 검증은 서버에서 재수행한다(프론트 판정은 보조).
  */
+
+import type { AppNotification, Me, ProfilePayload } from "@/lib/api";
 
 /** 데모 유효 초대코드. 실서비스에서는 서버가 단지별 코드를 검증한다. */
 export const VALID_INVITE_CODE = "LIVIQ1";
@@ -59,4 +61,63 @@ export function maskKoreanName(name: string): string {
   const first = trimmed[0];
   const last = trimmed[trimmed.length - 1];
   return `${first}${"*".repeat(trimmed.length - 2)}${last}`;
+}
+
+/** 계정 상태 → PendingView 카드 분기. onboarding=미제출, unknown=예상 밖 상태(방어적). */
+export type AccountView = "pending" | "rejected" | "active" | "inactive" | "onboarding" | "unknown";
+
+export function accountView(me: Pick<Me, "kind" | "status">): AccountView {
+  if (me.kind === "onboarding") return "onboarding";
+  switch (me.status) {
+    case "pending":
+    case "rejected":
+    case "active":
+    case "inactive":
+      return me.status;
+    default:
+      return "unknown";
+  }
+}
+
+/**
+ * 반려 사유 추출 — /me 는 사유를 주지 않으므로 인앱 알림에서 가져온다.
+ * approvals.reject 는 type="approval" + body=사유 알림을 남긴다(승인 알림은 body 없음).
+ * 가장 최근 사유를 반환하고, 없으면 null.
+ */
+export function rejectionReasonFrom(notifications: readonly AppNotification[]): string | null {
+  const rejections = notifications
+    .filter((n) => n.type === "approval" && n.body)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return rejections[0]?.body ?? null;
+}
+
+/** 가입 폼 입력값(camelCase, UI 상태). 동·호는 select 문자열. */
+export interface SignupFormValues {
+  inviteCode: string;
+  name: string;
+  birthDate: string; // YYYY-MM-DD
+  dong: string; // 동(건물명) — 예: "101"
+  ho: string; // 호 — 예: "1002" (층·호 결합 표기)
+  privacyConsent: boolean;
+  alertsConsent: boolean;
+}
+
+/**
+ * 폼 입력 → 서버 계약(ProfilePayload) 변환. 층은 호수 상위 자리에서 파생한다.
+ * 예: "1002호" → unit_no=1002, floor=10 · "301호" → unit_no=301, floor=3.
+ */
+export function buildProfilePayload(values: SignupFormValues): ProfilePayload {
+  const unitNo = Number.parseInt(values.ho, 10);
+  return {
+    invite_code: values.inviteCode.trim(),
+    consents: [
+      { purpose: "privacy_required", granted: values.privacyConsent },
+      { purpose: "alerts", granted: values.alertsConsent },
+    ],
+    name: values.name.trim(),
+    birth_date: values.birthDate,
+    building_name: values.dong,
+    floor: Math.floor(unitNo / 100),
+    unit_no: unitNo,
+  };
 }

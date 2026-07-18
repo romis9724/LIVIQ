@@ -1,9 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, listApprovals, listReviewQueue } from "@/lib/api";
 import "./admin-shell.css";
 
 /** 로그아웃 — 세션 revoke(멱등) 후 로그인 화면으로. 실패해도 로그인으로 이동. */
@@ -19,27 +19,49 @@ interface NavItem {
   href: string;
   icon: string;
   label: string;
-  badge?: string;
 }
 
-// ponytail: 배지 카운트는 목업(하드코딩) — 셸 전역 실시간 카운트 배선은 범위 밖(별도 작업).
 const NAV: readonly NavItem[] = [
   { href: "/dashboard", icon: "📊", label: "대시보드" },
-  { href: "/approvals", icon: "👥", label: "가입 승인", badge: "5" },
-  { href: "/review-queue", icon: "✅", label: "AI 검수 큐", badge: "7" },
+  { href: "/approvals", icon: "👥", label: "가입 승인" },
+  { href: "/review-queue", icon: "✅", label: "AI 검수 큐" },
   { href: "/notices/new", icon: "📢", label: "공지 초안" },
-  { href: "/inquiries", icon: "🛠", label: "민원 관리", badge: "3" },
+  { href: "/inquiries", icon: "🛠", label: "민원 관리" },
   { href: "/documents", icon: "📁", label: "문서 관리" },
   { href: "/fees", icon: "💰", label: "관리비 관리" },
   { href: "/facilities", icon: "🏢", label: "시설 관리" },
 ];
 
+/** 처리 대기 카운트(href → 배지). 실패 항목은 배지를 숨긴다(정보 노출 최소·오해 방지). */
+function usePendingBadges(enabled: boolean): Record<string, number> {
+  const [badges, setBadges] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    // 마운트 시 1회 조회(폴링 없음). 각 카운트는 독립 — 하나가 실패해도 나머지는 표시.
+    void listApprovals()
+      .then((items) => alive && setBadges((prev) => ({ ...prev, "/approvals": items.length })))
+      .catch(() => undefined);
+    void listReviewQueue()
+      .then((list) => alive && setBadges((prev) => ({ ...prev, "/review-queue": list.total })))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [enabled]);
+
+  return badges;
+}
+
 /** 관리자 콘솔 셸 — 좌측 사이드바 내비 + 사용자 + 메인 영역. */
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const isLogin = pathname === "/login";
+  const badges = usePendingBadges(!isLogin);
 
   // 로그인 화면은 셸(사이드바) 없이 전체 화면으로 — 미인증 진입점.
-  if (pathname === "/login") {
+  if (isLogin) {
     return <>{children}</>;
   }
 
@@ -59,6 +81,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <nav className="admin-nav" aria-label="관리 메뉴">
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const badge = badges[item.href];
             return (
               <Link
                 key={item.href}
@@ -71,7 +94,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   {item.icon}
                 </span>
                 <span className="admin-nav__label">{item.label}</span>
-                {item.badge ? <span className="admin-nav__badge">{item.badge}</span> : null}
+                {badge ? <span className="admin-nav__badge">{badge}</span> : null}
               </Link>
             );
           })}

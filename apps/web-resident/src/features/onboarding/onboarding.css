@@ -77,6 +77,9 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
+.auth-hint--error {
+  color: var(--color-danger);
+}
 
 /* google button (secondary variant + brand mark) */
 .auth-google {

@@ -1,42 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import {
-  summarizeDiff,
-  deactivateCandidate,
-  validateRoster,
-  decideSignup,
-  pendingCount,
-  maskName,
-  maskBirth,
-  ROSTER_MAX_BYTES,
-  type RosterDiffResult,
-  type PendingSignup,
-} from "./logic";
-
-const diff: RosterDiffResult = {
-  newRegistered: 12,
-  matchedKept: 74,
-  moveOutCandidates: [
-    { id: "m1", unit: "101동 302호", name: "김영희" },
-    { id: "m2", unit: "102동 1101호", name: "박철수" },
-  ],
-};
-
-describe("summarizeDiff", () => {
-  it("전출 후보 수를 목록 길이에서 파생한다", () => {
-    const s = summarizeDiff(diff);
-    expect(s.newRegistered).toBe(12);
-    expect(s.matchedKept).toBe(74);
-    expect(s.moveOutCandidates).toBe(2);
-  });
-
-  it("전출 후보를 비활성화하면 요약 수치가 줄어든다", () => {
-    const next = { ...diff, moveOutCandidates: deactivateCandidate(diff.moveOutCandidates, "m1") };
-    expect(summarizeDiff(next).moveOutCandidates).toBe(1);
-    // 원본 불변
-    expect(diff.moveOutCandidates).toHaveLength(2);
-  });
-});
+import { ROSTER_MAX_BYTES, formatUnit, isValidRejectReason, validateRoster } from "./logic";
 
 describe("validateRoster (경계 입력)", () => {
   it("xlsx 파일은 통과", () => {
@@ -52,35 +16,28 @@ describe("validateRoster (경계 입력)", () => {
   });
 });
 
-describe("decideSignup / pendingCount (상태 전이)", () => {
-  const items: PendingSignup[] = [
-    { id: "s1", name: "홍길동", birth: "1985-03-12", unit: "103동 1502호", appliedAt: "2026-07-13", policyVersion: "v1.2", rosterMatch: true, status: "pending" },
-    { id: "s2", name: "이순신", birth: "1990-11-01", unit: "101동 204호", appliedAt: "2026-07-12", policyVersion: "v1.2", rosterMatch: false, status: "pending" },
-  ];
-
-  it("승인은 해당 항목 status만 바꾸고 원본을 변형하지 않는다", () => {
-    const next = decideSignup(items, "s1", "approved");
-    expect(next.find((i) => i.id === "s1")?.status).toBe("approved");
-    expect(next.find((i) => i.id === "s2")?.status).toBe("pending");
-    expect(items[0]!.status).toBe("pending"); // 불변
+describe("isValidRejectReason (거절 사유 필수)", () => {
+  it("내용이 있으면 통과", () => {
+    expect(isValidRejectReason("명부 미등록 세대")).toBe(true);
   });
 
-  it("모두 처리하면 대기 건수가 0이 된다", () => {
-    let next = decideSignup(items, "s1", "approved");
-    expect(pendingCount(next)).toBe(1);
-    next = decideSignup(next, "s2", "rejected");
-    expect(pendingCount(next)).toBe(0);
+  it("공백만 있으면 거부", () => {
+    expect(isValidRejectReason("   ")).toBe(false);
+    expect(isValidRejectReason("")).toBe(false);
   });
 });
 
-describe("PII 마스킹 (docs/06)", () => {
-  it("성함은 가운데를 가린다", () => {
-    expect(maskName("홍길동")).toBe("홍*동");
-    expect(maskName("김수")).toBe("김*");
-    expect(maskName("남궁민수")).toBe("남**수");
+describe("formatUnit (세대 표기)", () => {
+  it("동·호를 결합한다", () => {
+    expect(formatUnit("101", 1002)).toBe("101동 1002호");
   });
 
-  it("생년월일은 앞 2자리만 남긴다", () => {
-    expect(maskBirth("1985-03-12")).toBe("19**-**-**");
+  it("일부만 있으면 남는 정보만 조합한다", () => {
+    expect(formatUnit("103", null)).toBe("103동");
+    expect(formatUnit(null, 301)).toBe("301호");
+  });
+
+  it("정보가 없으면 안내 문구", () => {
+    expect(formatUnit(null, null)).toBe("세대 정보 없음");
   });
 });

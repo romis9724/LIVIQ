@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 
+import type { AppNotification } from "@/lib/api";
 import {
   MIN_SIGNUP_AGE,
   VALID_INVITE_CODE,
+  accountView,
+  buildProfilePayload,
   fullAge,
   isUnderMinAge,
   isValidInviteCode,
   maskKoreanName,
+  rejectionReasonFrom,
 } from "./logic";
 
 describe("isValidInviteCode", () => {
@@ -71,6 +75,91 @@ describe("isUnderMinAge (만 14세 게이트)", () => {
 
   it("경계값 상수와 일치한다", () => {
     expect(MIN_SIGNUP_AGE).toBe(14);
+  });
+});
+
+describe("buildProfilePayload (폼 → 서버 계약)", () => {
+  const base = {
+    inviteCode: "  liviq1 ",
+    name: "  김입주 ",
+    birthDate: "1990-05-05",
+    dong: "101",
+    ho: "1002",
+    privacyConsent: true,
+    alertsConsent: false,
+  };
+
+  it("호수 상위 자리에서 층을 파생한다 (1002 → floor 10)", () => {
+    const p = buildProfilePayload(base);
+    expect(p.unit_no).toBe(1002);
+    expect(p.floor).toBe(10);
+    expect(p.building_name).toBe("101");
+  });
+
+  it("301호는 floor 3 · unit_no 301", () => {
+    const p = buildProfilePayload({ ...base, ho: "301" });
+    expect(p.floor).toBe(3);
+    expect(p.unit_no).toBe(301);
+  });
+
+  it("초대코드·성명 공백을 다듬는다", () => {
+    const p = buildProfilePayload(base);
+    expect(p.invite_code).toBe("liviq1");
+    expect(p.name).toBe("김입주");
+  });
+
+  it("필수·선택 동의를 각각 consents 로 담는다", () => {
+    const p = buildProfilePayload({ ...base, alertsConsent: true });
+    expect(p.consents).toEqual([
+      { purpose: "privacy_required", granted: true },
+      { purpose: "alerts", granted: true },
+    ]);
+  });
+});
+
+describe("accountView (계정 상태 분기)", () => {
+  it("온보딩 세션은 onboarding", () => {
+    expect(accountView({ kind: "onboarding", status: "onboarding" })).toBe("onboarding");
+  });
+
+  it("user 세션은 status 를 그대로 매핑한다", () => {
+    expect(accountView({ kind: "user", status: "pending" })).toBe("pending");
+    expect(accountView({ kind: "user", status: "rejected" })).toBe("rejected");
+    expect(accountView({ kind: "user", status: "active" })).toBe("active");
+    expect(accountView({ kind: "user", status: "inactive" })).toBe("inactive");
+  });
+
+  it("예상 밖 상태는 unknown", () => {
+    expect(accountView({ kind: "user", status: "weird" })).toBe("unknown");
+  });
+});
+
+describe("rejectionReasonFrom (알림에서 반려 사유)", () => {
+  const notif = (over: Partial<AppNotification>): AppNotification => ({
+    id: "n",
+    type: "approval",
+    title: "가입이 거절되었습니다",
+    body: null,
+    link: null,
+    readAt: null,
+    createdAt: "2026-07-13T00:00:00Z",
+    ...over,
+  });
+
+  it("가장 최근 반려 알림의 body 를 반환한다", () => {
+    const reason = rejectionReasonFrom([
+      notif({ id: "old", body: "예전 사유", createdAt: "2026-07-10T00:00:00Z" }),
+      notif({ id: "new", body: "동·호가 명부와 다릅니다", createdAt: "2026-07-13T00:00:00Z" }),
+    ]);
+    expect(reason).toBe("동·호가 명부와 다릅니다");
+  });
+
+  it("body 없는 승인 알림은 무시한다", () => {
+    expect(rejectionReasonFrom([notif({ type: "approval", body: null })])).toBeNull();
+  });
+
+  it("반려 알림이 없으면 null", () => {
+    expect(rejectionReasonFrom([notif({ type: "notice", body: "공지" })])).toBeNull();
   });
 });
 

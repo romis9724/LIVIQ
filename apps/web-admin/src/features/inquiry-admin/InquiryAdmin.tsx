@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   ApiError,
-  DEV_USER_ID,
   assignInquiry,
+  getMe,
   listAdminInquiries,
   updateInquiryStatus,
   type Inquiry,
@@ -38,6 +38,8 @@ function errorMessage(err: unknown): string {
 
 export function InquiryAdmin() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  // 로그인 세션의 자기 user id — '나에게 배정' 대상. /me 로 취득(로드 전엔 null).
+  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterId>("all");
@@ -65,6 +67,10 @@ export function InquiryAdmin() {
 
   useEffect(() => {
     void load();
+    // 자기 신원은 배정에만 필요 — 실패해도 목록 로드는 막지 않는다.
+    void getMe()
+      .then((me) => setMyUserId(me.userId))
+      .catch(() => undefined);
   }, [load]);
 
   useEffect(
@@ -101,9 +107,13 @@ export function InquiryAdmin() {
   }
 
   async function handleAssign(id: string) {
+    if (!myUserId) {
+      showToast("로그인 정보를 확인할 수 없어 배정할 수 없습니다.", "danger");
+      return;
+    }
     setBusyId(id);
     try {
-      patchLocal(await assignInquiry(id, DEV_USER_ID));
+      patchLocal(await assignInquiry(id, myUserId));
       showToast("나에게 배정했습니다.");
     } catch (err) {
       showToast(errorMessage(err), "danger");
