@@ -16,6 +16,8 @@ import {
   FEE_CURRENT_TOTAL,
   FEE_PREV_TOTAL,
   FLOOR,
+  INVITE_CODE,
+  MISMATCH_PERSON,
   NOTICE1,
   NOTICE2,
   REVIEW,
@@ -28,7 +30,9 @@ const DEFAULT_DSN = "postgresql://liviq:liviq@localhost:15432/liviq";
 
 /** asyncpg 드라이버 접두사를 제거해 node-postgres가 이해하는 DSN으로 정규화. */
 function toPgDsn(url: string): string {
-  return url.replace("+asyncpg", "").replace("postgresql+asyncpg", "postgresql");
+  return url
+    .replace("+asyncpg", "")
+    .replace("postgresql+asyncpg", "postgresql");
 }
 
 // FK 역순 삭제 대상(전부 tenant_id 컬럼 보유 — 시드가 안 만드는 테이블도 방어적으로 포함해
@@ -57,10 +61,11 @@ const CHILD_TABLES = [
   "jobs",
   "outbox_events",
   "ai_eval_golden",
-  "pii_vault",
   "user_roles",
   "consents",
+  // users.pii_ref → pii_vault FK — users를 pii_vault보다 먼저 지워야 한다(가입 여정이 pii_ref 보유 계정 생성).
   "users",
+  "pii_vault",
   "tenant_keys",
   "households",
   "unit_types",
@@ -69,16 +74,20 @@ const CHILD_TABLES = [
 
 async function wipe(client: Client): Promise<void> {
   for (const table of CHILD_TABLES) {
-    await client.query(`DELETE FROM ${table} WHERE tenant_id = $1`, [E2E.tenantId]);
+    await client.query(`DELETE FROM ${table} WHERE tenant_id = $1`, [
+      E2E.tenantId,
+    ]);
   }
   await client.query(`DELETE FROM tenants WHERE id = $1`, [E2E.tenantId]);
 }
 
 async function insert(client: Client): Promise<void> {
+  // invite_code = 클라이언트 데모 코드(logic.ts VALID_INVITE_CODE). 가입 여정이 UI 검증을 통과하려면
+  // 이 코드로 E2E 단지에 매핑돼야 한다. e2e DB는 이 단지만 시드하므로 dev 단지와 충돌하지 않는다.
   await client.query(
     `INSERT INTO tenants (id, name, status, settings)
-     VALUES ($1, 'E2E 단지', 'active', '{"invite_code": "E2E-0000"}'::jsonb)`,
-    [E2E.tenantId],
+     VALUES ($1, 'E2E 단지', 'active', $2::jsonb)`,
+    [E2E.tenantId, JSON.stringify({ invite_code: INVITE_CODE })],
   );
 
   await client.query(
@@ -90,6 +99,19 @@ async function insert(client: Client): Promise<void> {
     `INSERT INTO households (id, tenant_id, building_id, floor, unit_no, status)
      VALUES ($1, $2, $3, $4, $5, 'active')`,
     [E2E.householdId, E2E.tenantId, E2E.buildingId, FLOOR, UNIT_NO],
+  );
+
+  // 2호 세대 — 가입 여정의 명부 불일치 신청자가 붙는 유효 세대(존재해야 세대 조회가 성공).
+  await client.query(
+    `INSERT INTO households (id, tenant_id, building_id, floor, unit_no, status)
+     VALUES ($1, $2, $3, $4, $5, 'active')`,
+    [
+      E2E.household2Id,
+      E2E.tenantId,
+      E2E.buildingId,
+      FLOOR,
+      Number(MISMATCH_PERSON.ho),
+    ],
   );
 
   // 승인 완료 입주민(approved_at 과거) — 관리비 조회 스코프(FR-FEE-03)와 민원 접수 통과.

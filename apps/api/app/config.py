@@ -40,6 +40,9 @@ class ApiSettings(BaseSettings):
     s3_access_key_id: str = Field(..., validation_alias="S3_ACCESS_KEY_ID")
     s3_secret_access_key: str = Field(..., validation_alias="S3_SECRET_ACCESS_KEY")
     s3_bucket: str = Field("liviq", validation_alias="S3_BUCKET")
+    # 스토리지 백엔드 — "s3"(기본, MinIO) · "memory"(인메모리, E2E/테스트: MinIO 미기동 환경).
+    # Storage Protocol의 "테스트는 인메모리" 배선을 실행 프로세스에서도 선택 가능하게 한다.
+    storage_backend: str = Field("s3", validation_alias="STORAGE_BACKEND")
 
     # Google OAuth(PKCE) — optional. 미설정 시 /auth/google/* 503(부팅은 성공, ADR-0011).
     google_oauth_client_id: str | None = Field(None, validation_alias="GOOGLE_OAUTH_CLIENT_ID")
