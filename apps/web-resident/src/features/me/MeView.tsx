@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Switch } from "@liviq/ui";
+import { useEffect, useState } from "react";
+import { Skeleton, Switch } from "@liviq/ui";
 import { API_BASE_URL } from "@/lib/dev-context";
+import { ApiError, getMe, type Me } from "@/lib/api";
 import { NotificationInbox } from "./NotificationInbox";
+import { accountStatusLabel, roleLabel } from "./logic";
 import "./me.css";
 
 /** 로그아웃 — 세션 revoke(멱등) 후 로그인 화면으로. 실패해도 로그인으로 이동. */
@@ -16,33 +18,50 @@ async function logout(): Promise<void> {
 }
 
 type SettingKey = "push" | "ai" | "dark";
-type ConsentKey = "quality" | "alerts";
 
 export function MeView() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [meError, setMeError] = useState(false);
   const [settings, setSettings] = useState<Record<SettingKey, boolean>>({
     push: true,
     ai: true,
     dark: false,
   });
-  const [consent, setConsent] = useState<Record<ConsentKey, boolean>>({
-    quality: true,
-    alerts: true,
-  });
+
+  useEffect(() => {
+    let alive = true;
+    getMe()
+      .then((data) => alive && setMe(data))
+      .catch((err) => {
+        // 401 은 apiFetch 가 /login 으로 유도. 그 외 오류만 표시.
+        if (!alive || (err instanceof ApiError && err.status === 401)) return;
+        setMeError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const toggleSetting = (key: SettingKey) =>
     setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
-  const toggleConsent = (key: ConsentKey) =>
-    setConsent((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
     <main id="main" className="me">
       <div className="me-profile">
         <span className="me-profile__avatar" aria-hidden="true">
-          홍
+          👤
         </span>
-        <div>
-          <div className="me-profile__name">홍*동님</div>
-          <div className="me-profile__sub">1203동 1502호 · 입주민 인증됨</div>
+        <div className="me-profile__info">
+          {me ? (
+            <>
+              <div className="me-profile__name">{roleLabel(me.roles)}</div>
+              <div className="me-profile__sub">{accountStatusLabel(me.status)}</div>
+            </>
+          ) : meError ? (
+            <div className="me-profile__sub">계정 정보를 불러오지 못했어요.</div>
+          ) : (
+            <Skeleton height="2.4rem" width="12rem" />
+          )}
         </div>
       </div>
 
@@ -84,22 +103,15 @@ export function MeView() {
               010-****-1234
             </p>
           </div>
+          {/* 동의 변경 API 는 백로그 — 가입 시 받은 동의를 표시만 한다. */}
           <div className="me-consent">
             <div className="me-consent__row">
               <span>AI 응대 품질 개선을 위한 대화 활용 동의</span>
-              <Switch
-                label="대화 활용 동의"
-                checked={consent.quality}
-                onChange={() => toggleConsent("quality")}
-              />
+              <span className="me-consent__state">가입 시 동의 완료</span>
             </div>
             <div className="me-consent__row">
               <span>단지 공지·관리비 알림 수신 동의</span>
-              <Switch
-                label="알림 수신 동의"
-                checked={consent.alerts}
-                onChange={() => toggleConsent("alerts")}
-              />
+              <span className="me-consent__state">가입 시 동의 완료</span>
             </div>
           </div>
           <a href="#" className="me-privacy__link">

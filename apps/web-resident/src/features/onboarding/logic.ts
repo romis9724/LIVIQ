@@ -80,6 +80,18 @@ export function accountView(me: Pick<Me, "kind" | "status">): AccountView {
 }
 
 /**
+ * 루트(/) 진입 시 상태별 목적지. OAuth 콜백이 / 로 복귀할 때 상태에 맞는 화면으로 보낸다.
+ * 401(미로그인)은 apiFetch 가 /login 으로 유도하므로 여기 도달하지 않는다.
+ * pending·rejected·inactive·unknown 은 계정 상태 화면(/pending)이 각 상태를 안내한다.
+ */
+export function rootDestination(me: Pick<Me, "kind" | "status">): string {
+  const view = accountView(me);
+  if (view === "active") return "/home";
+  if (view === "onboarding") return "/onboarding";
+  return "/pending";
+}
+
+/**
  * 반려 사유 추출 — /me 는 사유를 주지 않으므로 인앱 알림에서 가져온다.
  * approvals.reject 는 type="approval" + body=사유 알림을 남긴다(승인 알림은 body 없음).
  * 가장 최근 사유를 반환하고, 없으면 null.
