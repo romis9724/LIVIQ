@@ -1,101 +1,47 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import {
-  ADMIN_SCREENS,
-  ONBOARDING_SCREENS,
-  priorityColor,
-  RESIDENT_SCREENS,
-  type ScreenItem,
-} from "@/lib/screens";
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Skeleton } from "@liviq/ui";
+import { ApiError, getMe } from "@/lib/api";
+import { rootDestination } from "@/features/onboarding/logic";
 import "./page.css";
 
-export const metadata: Metadata = {
-  title: "전체 화면",
-  description:
-    "아파트 관리의 AI 검색·응대·요약 계층. 입주민 모바일 앱 6화면, 관리자 데스크톱 콘솔 7화면.",
-};
+/**
+ * 루트(/) 디스패처 — OAuth 콜백 복귀 지점(auth.py _HOME_PATH="/").
+ * /me 계정 상태로 분기해 replace 한다: active→/home · onboarding→/onboarding ·
+ * 그 외(pending·rejected·inactive)→/pending. 401(미로그인)은 apiFetch 가 /login 으로 유도.
+ */
+export default function RootPage() {
+  const router = useRouter();
 
-function ScreenCard({ screen }: { screen: ScreenItem }) {
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const me = await getMe();
+        if (!alive) return;
+        router.replace(rootDestination(me));
+      } catch (err) {
+        // 401 은 apiFetch 가 이미 /login 으로 보냄. 그 외 오류도 로그인으로 폴백.
+        if (!alive) return;
+        if (err instanceof ApiError && err.status === 401) return;
+        router.replace("/login");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [router]);
+
   return (
-    <Link className="screen-card" href={screen.href}>
-      <span className="screen-card__icon" aria-hidden="true">
-        {screen.icon}
+    <main id="main" className="root-splash" aria-busy="true">
+      <span className="root-splash__logo" aria-hidden="true">
+        L
       </span>
-      <span className="screen-card__title">{screen.title}</span>
-      <span className="screen-card__desc">{screen.desc}</span>
-      <span className="screen-card__priority" style={{ color: priorityColor(screen.priority) }}>
-        {screen.priority}
-      </span>
-    </Link>
-  );
-}
-
-export default function OverviewPage() {
-  return (
-    <main id="main" className="overview">
-      <header className="overview__header">
-        <div className="overview__brand">
-          <span className="overview__logo" aria-hidden="true">
-            L
-          </span>
-          <span className="overview__wordmark">LIVIQ</span>
-        </div>
-        <h1 className="overview__title">전체 화면</h1>
-        <p className="overview__lede">
-          아파트 관리의 AI 검색·응대·요약 계층. 입주민 모바일 앱 6화면, 관리자 데스크톱 콘솔
-          7화면. 각 카드를 눌러 해당 화면으로 이동하세요.
-        </p>
-      </header>
-
-      <section className="overview__section" aria-labelledby="resident-heading">
-        <div className="overview__section-head">
-          <h2 id="resident-heading" className="overview__section-title">
-            입주민 앱
-          </h2>
-          <span className="overview__section-meta">모바일 우선 · 하단 탭 5</span>
-        </div>
-        <div className="screen-grid">
-          {RESIDENT_SCREENS.map((screen) => (
-            <ScreenCard key={screen.href} screen={screen} />
-          ))}
-        </div>
-      </section>
-
-      <section className="overview__section" aria-labelledby="onboarding-heading">
-        <div className="overview__section-head">
-          <h2 id="onboarding-heading" className="overview__section-title">
-            온보딩
-          </h2>
-          <span className="overview__section-meta">가입·승인 · 하단 탭 밖</span>
-        </div>
-        <div className="screen-grid">
-          {ONBOARDING_SCREENS.map((screen) => (
-            <ScreenCard key={screen.href} screen={screen} />
-          ))}
-        </div>
-      </section>
-
-      <section className="overview__section" aria-labelledby="admin-heading">
-        <div className="overview__section-head">
-          <h2 id="admin-heading" className="overview__section-title">
-            관리자 콘솔
-          </h2>
-          <span className="overview__section-meta">데스크톱 우선 · 좌측 사이드바</span>
-        </div>
-        <div className="screen-grid">
-          {ADMIN_SCREENS.map((screen) => (
-            <ScreenCard key={screen.href} screen={screen} />
-          ))}
-        </div>
-      </section>
-
-      <footer className="overview__footer">
-        토큰 정의·핵심 컴포넌트는{" "}
-        <Link className="overview__footer-link" href="/foundation">
-          파운데이션
-        </Link>
-        에서 확인할 수 있습니다.
-      </footer>
+      <span className="root-splash__label">불러오는 중…</span>
+      <Skeleton height="3rem" radius="var(--radius-md)" />
+      <Skeleton height="8rem" radius="var(--radius-md)" />
     </main>
   );
 }

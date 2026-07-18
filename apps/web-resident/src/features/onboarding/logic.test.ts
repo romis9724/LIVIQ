@@ -11,6 +11,7 @@ import {
   isValidInviteCode,
   maskKoreanName,
   rejectionReasonFrom,
+  rootDestination,
 } from "./logic";
 
 describe("isValidInviteCode", () => {
@@ -131,6 +132,23 @@ describe("accountView (계정 상태 분기)", () => {
 
   it("예상 밖 상태는 unknown", () => {
     expect(accountView({ kind: "user", status: "weird" })).toBe("unknown");
+  });
+});
+
+describe("rootDestination (루트 상태별 라우팅)", () => {
+  it("활성 계정은 홈으로", () => {
+    expect(rootDestination({ kind: "user", status: "active" })).toBe("/home");
+  });
+
+  it("온보딩 세션은 가입 화면으로", () => {
+    expect(rootDestination({ kind: "onboarding", status: "onboarding" })).toBe("/onboarding");
+  });
+
+  it("대기·반려·비활성·예상밖 상태는 계정 상태 화면으로", () => {
+    expect(rootDestination({ kind: "user", status: "pending" })).toBe("/pending");
+    expect(rootDestination({ kind: "user", status: "rejected" })).toBe("/pending");
+    expect(rootDestination({ kind: "user", status: "inactive" })).toBe("/pending");
+    expect(rootDestination({ kind: "user", status: "weird" })).toBe("/pending");
   });
 });
 
