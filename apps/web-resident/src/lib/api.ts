@@ -235,3 +235,50 @@ export async function markNotificationRead(id: string): Promise<AppNotification>
   await ensureOk(response);
   return toNotification(await response.json());
 }
+
+// ── 온보딩·계정 상태 (docs/04 §2, ADR-0011) ─────────────────────────────────
+// /onboarding/profile 은 온보딩 세션(역할 없음)으로만 접근 가능. /me 는 상태 무관.
+
+/** POST /onboarding/profile 본문 — 서버 계약(snake_case). floor·unit_no 는 독립 필드. */
+export interface ProfilePayload {
+  invite_code: string;
+  consents: { purpose: string; granted: boolean }[];
+  name: string;
+  birth_date: string; // YYYY-MM-DD
+  building_name: string;
+  floor: number;
+  unit_no: number;
+}
+
+export interface ProfileResult {
+  userId: string;
+  status: string;
+  rosterMatched: boolean;
+}
+
+/** 가입 정보 제출. 성공 시 온보딩 세션 → pending 세션 승격(쿠키 재발급). 422/404/409=검증 실패. */
+export async function submitProfile(payload: ProfilePayload): Promise<ProfileResult> {
+  const response = await apiFetch(`${API_BASE_URL}/onboarding/profile`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return { userId: body.user_id, status: body.status, rosterMatched: body.roster_matched };
+}
+
+/** 계정 상태(화면 분기 단일 출처). onboarding=미가입, user=가입(status: pending|active|rejected|inactive). */
+export interface Me {
+  kind: "user" | "onboarding";
+  status: string;
+  userId: string | null;
+  roles: string[];
+}
+
+export async function getMe(): Promise<Me> {
+  const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return { kind: body.kind, status: body.status, userId: body.user_id, roles: body.roles };
+}

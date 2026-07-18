@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, FormField } from "@liviq/ui";
-import { isUnderMinAge, isValidInviteCode } from "./logic";
+import { ApiError, submitProfile } from "@/lib/api";
+import { buildProfilePayload, isUnderMinAge, isValidInviteCode } from "./logic";
 import "./onboarding.css";
 
 /** 동의받은 개인정보 처리방침 버전. FR-ONB: policy_version 기록 대상. */
@@ -62,7 +63,11 @@ export function SignupView() {
             onNext={() => setStep(2)}
           />
         ) : (
-          <InfoStep onBack={() => setStep(1)} onDone={() => router.push("/pending")} />
+          <InfoStep
+            consents={consents}
+            onBack={() => setStep(1)}
+            onDone={() => router.push("/pending")}
+          />
         )}
       </div>
     </main>
@@ -144,15 +149,26 @@ function ConsentRow({
   );
 }
 
-function InfoStep({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+function InfoStep({
+  consents,
+  onBack,
+  onDone,
+}: {
+  consents: Consents;
+  onBack: () => void;
+  onDone: () => void;
+}) {
   const [invite, setInvite] = useState("");
   const [name, setName] = useState("");
   const [birth, setBirth] = useState("");
   const [dong, setDong] = useState("");
   const [ho, setHo] = useState("");
   const [errors, setErrors] = useState<InfoErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  // 서버 검증 실패(초대코드·명부·연령 등) 메시지. 최종 판정은 서버(클라 검증은 즉시 피드백 보조).
+  const [serverError, setServerError] = useState<string | null>(null);
 
-  const submit = () => {
+  const submit = async () => {
     const next: InfoErrors = {};
     if (!isValidInviteCode(invite)) next.invite = "유효하지 않은 초대코드입니다.";
     if (!name.trim()) next.name = "성명을 입력해 주세요.";
@@ -162,7 +178,33 @@ function InfoStep({ onBack, onDone }: { onBack: () => void; onDone: () => void }
     if (!ho) next.ho = "호를 선택해 주세요.";
 
     setErrors(next);
-    if (Object.keys(next).length === 0) onDone();
+    setServerError(null);
+    if (Object.keys(next).length > 0) return;
+
+    setSubmitting(true);
+    try {
+      await submitProfile(
+        buildProfilePayload({
+          inviteCode: invite,
+          name,
+          birthDate: birth,
+          dong,
+          ho,
+          privacyConsent: consents.privacy,
+          alertsConsent: consents.alerts,
+        }),
+      );
+      onDone();
+    } catch (err) {
+      // 401 은 apiFetch 가 /login 으로 유도(온보딩 세션 없음). 그 외는 서버 메시지 노출.
+      setServerError(
+        err instanceof ApiError || err instanceof Error
+          ? err.message
+          : "가입 신청 중 오류가 발생했습니다.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -170,7 +212,7 @@ function InfoStep({ onBack, onDone }: { onBack: () => void; onDone: () => void }
       className="auth-form"
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
       noValidate
     >
@@ -227,12 +269,18 @@ function InfoStep({ onBack, onDone }: { onBack: () => void; onDone: () => void }
         />
       </div>
 
+      {serverError ? (
+        <p className="auth-hint auth-hint--error" role="alert">
+          {serverError}
+        </p>
+      ) : null}
+
       <div className="auth-actions">
-        <Button type="button" variant="ghost" onClick={onBack}>
+        <Button type="button" variant="ghost" onClick={onBack} disabled={submitting}>
           이전
         </Button>
-        <Button type="submit" variant="primary" className="auth-submit">
-          가입 신청
+        <Button type="submit" variant="primary" className="auth-submit" disabled={submitting}>
+          {submitting ? "신청 중…" : "가입 신청"}
         </Button>
       </div>
     </form>
