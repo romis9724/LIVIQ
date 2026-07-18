@@ -222,10 +222,10 @@ function InfoStep({
         label="단지 초대코드"
         value={invite}
         onChange={(e) => setInvite(e.target.value)}
-        maxLength={6}
+        maxLength={12}
         autoCapitalize="characters"
-        placeholder="6자리 코드"
-        help="관리사무소에서 받은 코드를 입력하세요. (데모: LIVIQ1)"
+        placeholder="초대코드"
+        help="관리사무소에서 받은 코드를 입력하세요."
         error={errors.invite}
         wrapperClassName="auth-field"
       />

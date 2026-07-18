@@ -5,15 +5,16 @@
 
 import type { AppNotification, Me, ProfilePayload } from "@/lib/api";
 
-/** 데모 유효 초대코드. 실서비스에서는 서버가 단지별 코드를 검증한다. */
-export const VALID_INVITE_CODE = "LIVIQ1";
-
 /** 만 나이 하한. FR-ONB: 만 14세 미만 가입 차단. */
 export const MIN_SIGNUP_AGE = 14;
 
-/** 초대코드 검증(데모). 공백 제거·대문자 정규화 후 비교. */
+/**
+ * 초대코드 형식 검증 — 비어있지 않은지만 확인한다. 실제 유효성(단지 매핑)은 서버가 정본으로
+ * 판정한다(H6-2). 과거엔 데모 코드(LIVIQ1)를 클라에 하드코딩해 다른 단지 코드(예: dev의
+ * HANGANG) 제출을 막았다 — 서버 검증 정본 원칙에 맞춰 완화한다.
+ */
 export function isValidInviteCode(code: string): boolean {
-  return code.trim().toUpperCase() === VALID_INVITE_CODE;
+  return code.trim().length > 0;
 }
 
 /** ISO 날짜 문자열(YYYY-MM-DD)을 타임존 영향 없이 파싱. 형식 불일치는 null. */

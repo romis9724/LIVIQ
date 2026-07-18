@@ -15,9 +15,76 @@ import http from "node:http";
 
 const PORT = Number(process.env.MOCK_IDP_PORT ?? 9099);
 const SUB = process.env.MOCK_IDP_SUB ?? "e2e-google-sub-0001";
-const EMAIL = process.env.MOCK_IDP_EMAIL ?? "e2e@example.com";
+// 명시 override가 없으면 sub에서 파생(sub@demo.liviq) — 계정마다 다른 이메일 클레임.
+// 콜백은 email을 저장하지 않으므로(sub만 신원 확정) 값은 표시용에 가깝다.
+const EMAIL_OVERRIDE = process.env.MOCK_IDP_EMAIL ?? null;
+// 수동 통합테스트 계정 선택 화면 토글. 미설정 시 기존 즉시 302(E2E 무회귀).
+const INTERACTIVE = process.env.MOCK_IDP_INTERACTIVE === "1";
 
 const CODE_PREFIX = "mock-code.";
+
+// 계정 선택 화면 목록 — apps/api/scripts/seed_demo.py 의 ACTIVE_ACCOUNTS·ROSTER_PEOPLE 와 일치.
+// 신규 가입용 sub(demo-signup-*)는 users에 없음 → 로그인 시 온보딩 여정으로 진입한다.
+const ACCOUNTS = [
+  { sub: "demo-manager", label: "김소장", hint: "관리소장 (MANAGER)" },
+  { sub: "demo-staff", label: "박직원", hint: "일반직원 (STAFF)" },
+  { sub: "demo-facility", label: "이기사", hint: "시설기사 (FACILITY)" },
+  { sub: "demo-resident", label: "최주민", hint: "입주민 (RESIDENT)" },
+  { sub: "demo-signup-1", label: "정가입", hint: "신규 가입 — 명부 대조 (정가입)" },
+  { sub: "demo-signup-2", label: "한신규", hint: "신규 가입 — 명부 대조 (한신규)" },
+];
+
+/** HTML 특수문자 이스케이프(속성·본문 삽입 안전). */
+function esc(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+}
+
+/** 구글식 계정 선택 페이지 — 각 계정/직접 입력이 같은 /authorize 로 sub를 실어 재요청. */
+function accountPickerHtml(redirectUri, state) {
+  const hidden = `<input type="hidden" name="redirect_uri" value="${esc(redirectUri)}"><input type="hidden" name="state" value="${esc(state)}">`;
+  const rows = ACCOUNTS.map(
+    (a) => `
+      <form method="GET" action="/authorize" class="row">
+        ${hidden}
+        <button type="submit" name="sub" value="${esc(a.sub)}" class="acct">
+          <span class="avatar">${esc(a.label[0])}</span>
+          <span class="meta"><b>${esc(a.label)}</b><small>${esc(a.hint)} · ${esc(a.sub)}@demo.liviq</small></span>
+        </button>
+      </form>`,
+  ).join("");
+  return `<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>계정 선택 — LIVIQ mock IdP</title>
+<style>
+  body{font-family:system-ui,sans-serif;background:#f6f8fc;margin:0;padding:2rem;color:#202124}
+  .card{max-width:420px;margin:0 auto;background:#fff;border:1px solid #dadce0;border-radius:12px;overflow:hidden}
+  h1{font-size:1.25rem;padding:1.5rem 1.5rem 0.5rem;margin:0}
+  p.sub{padding:0 1.5rem 1rem;margin:0;color:#5f6368;font-size:.9rem}
+  .acct{display:flex;align-items:center;gap:12px;width:100%;padding:12px 1.5rem;border:0;border-top:1px solid #ecedef;background:#fff;text-align:left;cursor:pointer;font:inherit}
+  .acct:hover{background:#f1f3f4}
+  .avatar{width:36px;height:36px;border-radius:50%;background:#1a73e8;color:#fff;display:grid;place-items:center;font-weight:600}
+  .meta{display:flex;flex-direction:column}
+  .meta small{color:#5f6368;font-size:.8rem}
+  .custom{display:flex;gap:8px;padding:12px 1.5rem;border-top:1px solid #ecedef}
+  .custom input{flex:1;padding:8px;border:1px solid #dadce0;border-radius:6px;font:inherit}
+  .custom button{padding:8px 12px;border:0;border-radius:6px;background:#1a73e8;color:#fff;cursor:pointer}
+</style></head><body>
+  <div class="card">
+    <h1>계정 선택</h1>
+    <p class="sub">LIVIQ mock IdP — 계속하려면 계정을 선택하세요.</p>
+    ${rows}
+    <form method="GET" action="/authorize" class="custom">
+      ${hidden}
+      <input type="text" name="sub" placeholder="직접 입력 (sub)" aria-label="sub 직접 입력">
+      <button type="submit">로그인</button>
+    </form>
+  </div>
+</body></html>`;
+}
 
 /** base64url(JSON) — 무서명 JWT 세그먼트. */
 function seg(obj) {
@@ -45,7 +112,8 @@ function decodeCode(code) {
 }
 
 function idToken(sub) {
-  return `${seg({ alg: "none", typ: "JWT" })}.${seg({ sub, email: EMAIL })}.sig`;
+  const email = EMAIL_OVERRIDE ?? `${sub}@demo.liviq`;
+  return `${seg({ alg: "none", typ: "JWT" })}.${seg({ sub, email })}.sig`;
 }
 
 async function readBody(req) {
@@ -71,7 +139,15 @@ const server = http.createServer((req, res) => {
       res.end("redirect_uri required");
       return;
     }
-    const sub = readCookie(req.headers.cookie, "mock_sub") ?? SUB;
+    const chosenSub = url.searchParams.get("sub")?.trim();
+    // INTERACTIVE 모드 + 아직 계정 미선택 → 계정 선택 화면(사람이 직접 고르는 여정).
+    if (INTERACTIVE && !chosenSub) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(accountPickerHtml(redirectUri, state));
+      return;
+    }
+    // 선택된 sub(폼) 우선, 없으면 기존 경로(mock_sub 쿠키 → 기본 SUB) — E2E 무회귀.
+    const sub = chosenSub || readCookie(req.headers.cookie, "mock_sub") || SUB;
     const to = `${redirectUri}?code=${encodeCode(sub)}&state=${encodeURIComponent(state)}`;
     res.writeHead(302, { Location: to });
     res.end();

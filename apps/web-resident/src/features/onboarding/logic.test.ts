@@ -3,7 +3,6 @@ import { describe, it, expect } from "vitest";
 import type { AppNotification } from "@/lib/api";
 import {
   MIN_SIGNUP_AGE,
-  VALID_INVITE_CODE,
   accountView,
   buildProfilePayload,
   fullAge,
@@ -14,18 +13,16 @@ import {
   rootDestination,
 } from "./logic";
 
-describe("isValidInviteCode", () => {
-  it("데모 코드 LIVIQ1은 유효하다", () => {
-    expect(isValidInviteCode(VALID_INVITE_CODE)).toBe(true);
+describe("isValidInviteCode (형식만 — 유효성은 서버 정본)", () => {
+  it("비어있지 않으면 통과한다(단지별 코드는 서버가 검증)", () => {
+    expect(isValidInviteCode("LIVIQ1")).toBe(true);
+    expect(isValidInviteCode("HANGANG")).toBe(true);
+    expect(isValidInviteCode("ABC123")).toBe(true);
   });
 
-  it("공백·소문자를 정규화해 비교한다", () => {
-    expect(isValidInviteCode("  liviq1 ")).toBe(true);
-  });
-
-  it("다른 코드는 무효다", () => {
-    expect(isValidInviteCode("ABC123")).toBe(false);
+  it("빈 값·공백만은 무효다", () => {
     expect(isValidInviteCode("")).toBe(false);
+    expect(isValidInviteCode("   ")).toBe(false);
   });
 });
 
