@@ -20,7 +20,38 @@ export const E2E = {
   assistantMessageId: "ee2e0000-0000-4000-8000-000000000009",
   feeCurrentId: "ee2e0000-0000-4000-8000-00000000000a",
   feePrevId: "ee2e0000-0000-4000-8000-00000000000b",
+  // 가입 여정(H6-4)용 2호 세대 — 명부 불일치 신청자가 붙는 유효 세대(조회 성공, 매칭 실패).
+  household2Id: "ee2e0000-0000-4000-8000-00000000000c",
+  // 신규 가입자 sub — mock IdP가 mock_sub 쿠키로 이 값을 발급(신원=신규 로그인).
+  signupSub: "e2e-google-sub-signup",
+  mismatchSub: "e2e-google-sub-mismatch",
 } as const;
+
+// 클라이언트가 하드코딩한 데모 초대코드(logic.ts VALID_INVITE_CODE). E2E 단지가 이 코드로 매핑된다.
+export const INVITE_CODE = "LIVIQ1";
+
+// 명부 일치 가입자 — roster-e2e.xlsx 한 행과 동일해야 매칭(name_hash+birth_hash). 세대=101동 3층 301호.
+export const ROSTER_PERSON = {
+  name: "김입주",
+  birth: "1990-05-15",
+  dong: "101",
+  ho: "301",
+} as const;
+
+// 명부 불일치 가입자 — 명부에 없는 정보. 세대는 2호(존재하는 세대라 조회는 성공, 매칭만 실패).
+export const MISMATCH_PERSON = {
+  name: "차없음",
+  birth: "1988-08-08",
+  dong: "101",
+  ho: "302",
+} as const;
+
+/** approvals.py mask_name 과 동일 — 2자: 첫+*, 3자+: 첫+*+끝. */
+export function maskName(name: string): string {
+  if (name.length <= 1) return "*";
+  if (name.length === 2) return `${name[0]}*`;
+  return `${name[0]}*${name[name.length - 1]}`;
+}
 
 export const PORTS = {
   api: 8000,

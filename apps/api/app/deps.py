@@ -210,12 +210,29 @@ class Queue(Protocol):
     async def enqueue(self, task: str, *args: Any) -> None: ...
 
 
+# 인메모리 스토리지 백엔드 저장소 — 프로세스 수명 동안 유지(E2E는 되읽기 없음, MinIO 미기동 환경용).
+_MEMORY_STORE: dict[str, bytes] = {}
+
+
 def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트는 오버라이드)
     import asyncio
 
+    settings = get_settings()
+
+    # E2E/테스트 환경(MinIO 미기동)은 인메모리 백엔드 — Storage Protocol의 문서화된 배선.
+    if settings.storage_backend == "memory":
+
+        class MemoryStorage:
+            async def put(self, key: str, data: bytes) -> None:
+                _MEMORY_STORE[key] = data
+
+            async def get(self, key: str) -> bytes:
+                return _MEMORY_STORE[key]
+
+        return MemoryStorage()
+
     import boto3
 
-    settings = get_settings()
     client = boto3.client(
         "s3",
         endpoint_url=settings.s3_endpoint_url,

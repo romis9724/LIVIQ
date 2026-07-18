@@ -27,11 +27,15 @@ const OLLAMA = process.env.LLM_BASE_URL ?? "http://localhost:11434/v1";
 const apiEnv: Record<string, string> = {
   API_ENV: "local",
   DATABASE_URL:
-    process.env.DATABASE_URL ?? "postgresql+asyncpg://liviq:liviq@localhost:15432/liviq",
+    process.env.DATABASE_URL ??
+    "postgresql+asyncpg://liviq:liviq@localhost:15432/liviq",
   REDIS_URL: process.env.REDIS_URL ?? "redis://localhost:6381",
   S3_ENDPOINT_URL: process.env.S3_ENDPOINT_URL ?? "http://localhost:9002",
   S3_ACCESS_KEY_ID: process.env.S3_ACCESS_KEY_ID ?? "e2e",
   S3_SECRET_ACCESS_KEY: process.env.S3_SECRET_ACCESS_KEY ?? "e2e",
+  // 스토리지 인메모리 — 명부 업로드(H6-4)가 S3에 원본을 archive하는데 e2e(CI 포함)는 MinIO를
+  // 기동하지 않는다. 여정은 archive 파일을 되읽지 않으므로 인메모리로 충분(deps.get_storage).
+  STORAGE_BACKEND: "memory",
   PII_MASTER_KEY: process.env.PII_MASTER_KEY ?? PII_MASTER_KEY,
   // @llm 여정에서만 실제 호출 — 그 외 여정은 boot 시 lazy라 사용 안 됨.
   LLM_BASE_URL: OLLAMA,
