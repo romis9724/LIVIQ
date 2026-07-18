@@ -93,10 +93,11 @@ async function insert(client: Client): Promise<void> {
   );
 
   // 승인 완료 입주민(approved_at 과거) — 관리비 조회 스코프(FR-FEE-03)와 민원 접수 통과.
+  // login_id = mock IdP sub — 세션 로그인(auth.setup.ts)이 이 행으로 신원을 확정한다.
   await client.query(
-    `INSERT INTO users (id, tenant_id, household_id, status, roster_matched, approved_at)
-     VALUES ($1, $2, $3, 'active', true, '2020-01-01T00:00:00Z')`,
-    [E2E.userId, E2E.tenantId, E2E.householdId],
+    `INSERT INTO users (id, tenant_id, household_id, status, roster_matched, approved_at, login_id)
+     VALUES ($1, $2, $3, 'active', true, '2020-01-01T00:00:00Z', $4)`,
+    [E2E.userId, E2E.tenantId, E2E.householdId, E2E.googleSub],
   );
   for (const role of ["RESIDENT", "MANAGER"]) {
     await client.query(

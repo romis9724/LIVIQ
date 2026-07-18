@@ -1,7 +1,7 @@
 // AI 비서 — api SSE 스트림 클라이언트 (docs/09 §1.1 이벤트 계약).
 // 브라우저 EventSource는 GET만 지원 → POST SSE는 fetch + ReadableStream으로 직접 파싱.
 
-import { API_BASE_URL, DEV_HEADERS } from "@/lib/dev-context";
+import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 
 export type Stage = "searching" | "generating" | "verifying";
 
@@ -107,7 +107,7 @@ export async function* streamAsk(
   question: string,
   opts: AskOptions = {},
 ): AsyncGenerator<AssistantEvent> {
-  const response = await fetch(`${API_BASE_URL}/assistant/ask`, {
+  const response = await apiFetch(`${API_BASE_URL}/assistant/ask`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

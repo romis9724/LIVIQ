@@ -1,7 +1,7 @@
 // 관리비 — apps/api HTTP·SSE 클라이언트 (docs/01 §13, 규칙 5 — 표시 전용).
 // 조회는 서버 확정 데이터 그대로, AI 설명은 SSE 스트림. SSE 프레임 파싱은 assistant 재사용.
 
-import { API_BASE_URL, DEV_HEADERS } from "@/lib/dev-context";
+import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 import { parseSseBuffer } from "../assistant/api";
 
 export interface FeeData {
@@ -36,7 +36,7 @@ async function ensureOk(response: Response): Promise<void> {
 
 /** 본인 세대 해당 월 관리비. 데이터 없는 월은 breakdown·total null. */
 export async function getFees(period: string): Promise<FeeData> {
-  const response = await fetch(
+  const response = await apiFetch(
     `${API_BASE_URL}/fees?period=${encodeURIComponent(period)}`,
     { headers: DEV_HEADERS },
   );
@@ -128,7 +128,7 @@ export async function* streamFeeExplain(
   period: string,
   signal?: AbortSignal,
 ): AsyncGenerator<FeeExplainEvent> {
-  const response = await fetch(`${API_BASE_URL}/fees/explain`, {
+  const response = await apiFetch(`${API_BASE_URL}/fees/explain`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ period }),

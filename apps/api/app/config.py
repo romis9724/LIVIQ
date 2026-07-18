@@ -49,6 +49,21 @@ class ApiSettings(BaseSettings):
     google_oauth_redirect_uri: str | None = Field(
         None, validation_alias="GOOGLE_OAUTH_REDIRECT_URI"
     )
+    # OAuth authorize/token 엔드포인트 오버라이드 — 미설정 시 구글 기본(oauth.py 상수).
+    # mock IdP(E2E)·사설 IdP 주입용. 백도어 아님 — URL만 교체(신원 확인 로직 불변).
+    google_oauth_auth_url: str | None = Field(None, validation_alias="GOOGLE_OAUTH_AUTH_URL")
+    google_oauth_token_url: str | None = Field(None, validation_alias="GOOGLE_OAUTH_TOKEN_URL")
+
+    # 웹 앱 CORS 허용 오리진(콤마 구분) — credentials(세션 쿠키) 교차 출처 필수(ADR-0011).
+    web_origins: str = Field(
+        "http://localhost:3000,http://localhost:3001", validation_alias="WEB_ORIGINS"
+    )
+    # OAuth 콜백 후 웹 앱으로 되돌릴 베이스 URL. 빈 문자열=상대 경로(api 동일 출처·테스트).
+    web_base_url: str = Field("", validation_alias="WEB_BASE_URL")
+
+    def cors_origins(self) -> list[str]:
+        """web_origins를 리스트로 파싱(공백·빈 항목 제거)."""
+        return [o.strip() for o in self.web_origins.split(",") if o.strip()]
 
 
 @lru_cache

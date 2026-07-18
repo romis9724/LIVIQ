@@ -15,6 +15,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.deps import (
     clear_session_cookie,
     get_auth_lookup_session,
@@ -57,13 +58,16 @@ async def google_callback(
         raise HTTPException(status_code=400, detail="state 검증 실패")
     identity = await provider.exchange(code, verifier)
 
+    # 콜백 후 웹 앱으로 되돌릴 베이스 URL(빈 문자열=상대 경로 — api 동일 출처·테스트).
+    web_base = get_settings().web_base_url
+
     # auth_lookup 플래그가 켜진 세션 — users의 login_id 전역 조회만 허용(docs/03 §5).
     user = await session.scalar(
         select(User).where(User.login_id == identity.sub, User.deleted_at.is_(None))
     )
     if user is None:
         sid = await session_store.create_onboarding(identity.sub)
-        redirect = RedirectResponse(_ONBOARDING_PATH, status_code=302)
+        redirect = RedirectResponse(f"{web_base}{_ONBOARDING_PATH}", status_code=302)
     else:
         # 신원 확정 → 그 tenant_id로 정상 격리 경로 전환 후 역할 조회(§5).
         await session.execute(
@@ -79,7 +83,7 @@ async def google_callback(
         sid = await session_store.create(
             str(user.tenant_id), str(user.id), roles, status=user.status
         )
-        redirect = RedirectResponse(_HOME_PATH, status_code=302)
+        redirect = RedirectResponse(f"{web_base}{_HOME_PATH}", status_code=302)
     set_session_cookie(redirect, sid)
     return redirect
 
