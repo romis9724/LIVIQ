@@ -32,7 +32,7 @@ router = APIRouter(prefix="/inquiries", tags=["inquiries"])
 admin_router = APIRouter(prefix="/admin/inquiries", tags=["inquiries"])
 
 _ADMIN_ROLES = ("MANAGER", "STAFF")
-_ASSIGNABLE_ROLES = ("MANAGER", "STAFF", "FACILITY")
+_ASSIGNABLE_ROLES = ("MANAGER", "STAFF")  # H7-2에서 FACILITY 제거(docs/04 §4)
 # 상태 머신 전진 순서 — 역행(index 감소)은 MANAGER만(§13.2).
 STATUS_ORDER = ("received", "assigned", "in_progress", "done")
 

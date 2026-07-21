@@ -29,7 +29,7 @@ from liviq_db.models import Citation, Conversation, Document, Message, Notificat
 
 router = APIRouter(prefix="/admin/review-queue", tags=["review-queue"])
 
-_READ_ROLES = ("MANAGER", "STAFF")
+_READ_ROLES = ("MANAGER",)  # 검수 큐 소장 전용(H7-2에서 STAFF 제거, docs/04 §4)
 
 # 반려 정정 알림 문구 — 검수 메모(review_note) 원문은 넣지 않는다(PII·내부 정보 노출 방지,
 # ADR-0012). 입주민은 인앱 함에서 확인하고 필요 시 관리사무소로 문의한다.

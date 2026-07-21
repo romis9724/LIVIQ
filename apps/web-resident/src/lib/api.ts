@@ -276,11 +276,17 @@ export interface Me {
   status: string;
   userId: string | null;
   roles: string[];
+  mustChangePassword: boolean; // true면 비밀번호 변경 강제(H7-2, 주민 흐름은 미사용)
 }
 
 export async function getMe(): Promise<Me> {
   const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
-  return { status: body.status, userId: body.user_id, roles: body.roles };
+  return {
+    status: body.status,
+    userId: body.user_id,
+    roles: body.roles,
+    mustChangePassword: body.must_change_password ?? false,
+  };
 }

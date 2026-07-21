@@ -32,9 +32,11 @@ from app.password import dummy_verify, hash_password, verify_password
 from app.pii import PiiCrypto, get_pii_crypto
 from app.rate_limit import check_rate_limit
 from app.schemas.auth import (
+    InviteAcceptIn,
     LoginIn,
     LoginOut,
     MeOut,
+    PasswordChangeIn,
     PasswordResetConfirmIn,
     PasswordResetIn,
     SignupIn,
@@ -163,7 +165,13 @@ async def login(
             )
         )
     )
-    sid = await session_store.create(str(user.tenant_id), str(user.id), roles, status=user.status)
+    sid = await session_store.create(
+        str(user.tenant_id),
+        str(user.id),
+        roles,
+        status=user.status,
+        must_change_password=user.must_change_password,
+    )
     set_session_cookie(response, sid)
     return LoginOut(status=user.status)
 
@@ -266,6 +274,78 @@ async def logout(
     return response
 
 
+@router.post("/auth/invite/accept", status_code=204)
+async def invite_accept(
+    body: InviteAcceptIn,
+    session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
+) -> Response:
+    """초대 토큰 + 비밀번호 → 계정 활성화(H7-2, ADR-0014).
+
+    consume(invite) → tenant 전환 → password_hash 설정·email_verified_at(수락=이메일 소유
+    증명)·status='active'·토큰 소진. status가 invited가 아니면 400(중복 수락·오상태 방지).
+    """
+    token_obj = await auth_tokens.consume(session, body.token, "invite")
+    if token_obj is None:  # 없음·만료·이미 사용
+        raise HTTPException(status_code=400, detail="토큰이 유효하지 않습니다")
+
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(token_obj.tenant_id))
+    )
+    user = await session.scalar(select(User).where(User.id == token_obj.user_id))
+    if user is None or user.status != "invited":
+        raise HTTPException(status_code=400, detail="초대 상태가 아닙니다")
+    now = datetime.now(UTC)
+    user.password_hash = hash_password(body.password)
+    user.email_verified_at = now  # 초대 링크 수락 = 이메일 소유 증명(별도 검증 메일 불필요)
+    user.status = "active"
+    token_obj.used_at = now
+    await session.flush()
+    return Response(status_code=204)
+
+
+@router.post("/auth/password-change", status_code=204)
+async def password_change(
+    body: PasswordChangeIn,
+    session_data: Annotated[SessionData, Depends(get_session_raw)],
+    session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
+    session_store: Annotated[SessionStore, Depends(get_session_store)],
+    liviq_session: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    """세션 사용자 비밀번호 교체(임시 비밀번호 강제 변경 포함, H7-2).
+
+    현재 비밀번호 검증(오류 401) → 교체·must_change_password 해제 → 세션 재발급(플래그
+    갱신, 본인 세션 유지). 본인 외 세션 revoke는 하지 않는다(재설정과 달리 탈취 대응 아님).
+    """
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=session_data.tenant_id)
+    )
+    user = await session.scalar(
+        select(User).where(User.id == uuid.UUID(session_data.user_id), User.deleted_at.is_(None))
+    )
+    if (
+        user is None
+        or user.password_hash is None
+        or not verify_password(user.password_hash, body.current_password)
+    ):
+        raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
+    user.password_hash = hash_password(body.new_password)
+    user.must_change_password = False
+    await session.flush()
+
+    # 세션 재발급 — must_change_password=False를 세션에 반영(본인 세션 유지).
+    if liviq_session:
+        await session_store.revoke(liviq_session)
+    sid = await session_store.create(
+        session_data.tenant_id,
+        session_data.user_id,
+        list(session_data.roles),
+        status=session_data.status,
+    )
+    response = Response(status_code=204)
+    set_session_cookie(response, sid)
+    return response
+
+
 @router.get("/me", response_model=MeOut)
 async def me(session: Annotated[SessionData, Depends(get_session_raw)]) -> MeOut:
     """계정 상태 무관 — registered·pending 등 모든 상태의 화면 분기 단일 출처."""
@@ -274,4 +354,5 @@ async def me(session: Annotated[SessionData, Depends(get_session_raw)]) -> MeOut
         tenant_id=uuid.UUID(session.tenant_id),
         user_id=uuid.UUID(session.user_id),
         roles=list(session.roles),
+        must_change_password=session.must_change_password,
     )

@@ -224,21 +224,19 @@ async def test_resident_forbidden_on_writes(seeded: AsyncSession) -> None:
         assert (await c.get("/admin/facilities")).status_code == 403  # 읽기도 RESIDENT 제외
 
 
-async def test_staff_can_read_but_not_write(seeded: AsyncSession) -> None:
+async def test_staff_cannot_read_or_write(seeded: AsyncSession) -> None:
+    """시설은 소장 전용(H7-2) — STAFF는 조회·수정 모두 403(CRITICAL 역할 축소)."""
     async with _make_client(seeded, roles=("MANAGER",)) as mgr:
         created = await _create_facility(mgr)
-    async with _make_client(seeded, roles=("STAFF",)) as staff:
-        assert (await staff.get("/admin/facilities")).status_code == 200
-        assert (await staff.get(f"/admin/facilities/{created['id']}")).status_code == 200
+    async with _make_client(seeded, user_id=FACILITY_ID, roles=("STAFF",)) as staff:
+        assert (await staff.get("/admin/facilities")).status_code == 403
+        assert (await staff.get(f"/admin/facilities/{created['id']}")).status_code == 403
         assert (
             await staff.patch(f"/admin/facilities/{created['id']}", json={"status": "check"})
         ).status_code == 403
-
-
-async def test_facility_role_can_write(seeded: AsyncSession) -> None:
-    async with _make_client(seeded, user_id=FACILITY_ID, roles=("FACILITY",)) as c:
-        response = await c.post("/admin/facilities", json={"name": "보안등", "status": "normal"})
-    assert response.status_code == 201
+        assert (
+            await staff.post("/admin/facilities", json={"name": "보안등", "status": "normal"})
+        ).status_code == 403
 
 
 # ── tenant 격리 ──────────────────────────────────────────────────────────────

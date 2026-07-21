@@ -45,6 +45,9 @@ class SessionData:
     roles: tuple[str, ...]
     kind: str = "user"
     status: str = "active"
+    # 임시 비밀번호 강제 변경 중(부트스트랩 SYS_ADMIN) — True면 password-change·logout·me만
+    # 허용, 나머지는 403(app.deps.get_context 가드, ADR-0014·H7-2).
+    must_change_password: bool = False
 
 
 def _session_key(session_id: str) -> str:
@@ -62,7 +65,12 @@ class SessionStore:
         self._redis = redis
 
     async def create(
-        self, tenant_id: str, user_id: str, roles: list[str], status: str = "active"
+        self,
+        tenant_id: str,
+        user_id: str,
+        roles: list[str],
+        status: str = "active",
+        must_change_password: bool = False,
     ) -> str:
         session_id = secrets.token_urlsafe(32)
         now = time.time()
@@ -74,6 +82,7 @@ class SessionStore:
                 "user_id": user_id,
                 "roles": list(roles),
                 "status": status,
+                "must_change_password": must_change_password,
                 "created_at": now,
                 "expires_at": expires_at,  # 절대 만료 판정은 값 기준(TTL은 idle)
             }
@@ -107,6 +116,7 @@ class SessionStore:
             roles=tuple(payload.get("roles", ())),
             kind=payload.get("kind", "user"),
             status=payload.get("status", "active"),
+            must_change_password=payload.get("must_change_password", False),
         )
 
     async def revoke(self, session_id: str) -> None:

@@ -147,6 +147,16 @@
   min-width: 0;
 }
 
+/* /me 로딩·역할 라우팅 중 — 오노출 방지용 전체 화면 로딩 */
+.admin-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
 /* 페이지 공통 크롬 — 헤더(고정) + 본문(스크롤) */
 .admin-page__header {
   flex: none;

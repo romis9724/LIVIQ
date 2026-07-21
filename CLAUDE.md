@@ -26,11 +26,11 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E) 완료):
+현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7-1·2(자체 이메일 인증·SYS_ADMIN/초대 위계·역할 축소 — 진행 중, §8.8) 완료):
 
 ```text
 apps/      web-resident                      # Next.js — 전 화면 실연동(홈·비서 SSE·민원·공지·관리비·나/알림함·온보딩), 세션 쿠키 인증
-           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부), 세션 쿠키 인증
+           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
            api                               # FastAPI — documents·assistant·inquiries·notices·fees·review-queue·facilities(+outbox)·dashboard + 인증·레이트리밋·정확캐시 (liviq-api)
            ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
 packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)

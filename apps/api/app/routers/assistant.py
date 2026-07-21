@@ -52,8 +52,8 @@ from app.session import get_redis
 from liviq_db.models import Citation, Conversation, Message
 
 _REGISTRY = default_registry()
-# 시설 AI 도우미 접근 역할(docs/01 §13 시설 표) — 시설 도구도 이 역할에만 노출된다.
-_FACILITY_ASSISTANT_ROLES = ("MANAGER", "FACILITY")
+# 시설 AI 도우미 접근 역할(docs/04 §4) — 시설은 소장 전용(H7-2에서 FACILITY 제거).
+_FACILITY_ASSISTANT_ROLES = ("MANAGER",)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
 # 시설 도우미는 /admin/facilities 표면에 속한다 — 스트림·영속은 아래 공유 헬퍼 재사용.
@@ -84,7 +84,7 @@ async def facility_assistant(
     """시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
 
     answer_question 재사용(시설 프롬프트만 주입) — 레지스트리·마스킹·스텝 상한·폴백·영속은
-    /assistant/ask와 공유. ctx.roles(MANAGER/FACILITY)가 시설 도구 노출을 결정한다.
+    /assistant/ask와 공유. ctx.roles(MANAGER)가 시설 도구 노출을 결정한다.
     """
     return await _assistant_response(
         body,

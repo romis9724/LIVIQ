@@ -916,13 +916,145 @@ export interface Me {
   status: string;
   userId: string | null;
   roles: string[];
+  mustChangePassword: boolean; // true면 비밀번호 변경 화면으로 강제(H7-2)
 }
 
 export async function getMe(): Promise<Me> {
   const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
-  return { status: body.status, userId: body.user_id, roles: body.roles };
+  return {
+    status: body.status,
+    userId: body.user_id,
+    roles: body.roles,
+    mustChangePassword: body.must_change_password ?? false,
+  };
+}
+
+// ── 단지 관리 (SYS_ADMIN 전용 · H7-2, ADR-0014) ───────────────────────────────
+
+export interface Tenant {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+function toTenant(raw: { id: string; name: string; created_at: string }): Tenant {
+  return { id: raw.id, name: raw.name, createdAt: raw.created_at };
+}
+
+/** 단지 목록(생성 순). 403=권한 없음. */
+export async function listTenants(): Promise<Tenant[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (
+    body.items as { id: string; name: string; created_at: string }[]
+  ).map(toTenant);
+}
+
+/** 단지 생성(이름). 응답에는 created_at이 없어 목록 재조회로 갱신한다. */
+export async function createTenant(name: string): Promise<{ id: string; name: string }> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return { id: body.id, name: body.name };
+}
+
+/** 대상 단지에 소장(MANAGER) 초대 메일 발송. 202. 409=이미 등록된 이메일. */
+export async function inviteManager(tenantId: string, email: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants/${tenantId}/invite-manager`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  await ensureOk(response);
+}
+
+// ── 직원 관리 (MANAGER 전용 · H7-2, ADR-0014) ─────────────────────────────────
+// 이메일·이름은 PII라 목록에 노출하지 않는다 — 역할·상태·초대일만.
+
+export interface StaffMember {
+  userId: string;
+  roles: string[];
+  status: string; // invited|active|inactive
+  invitedAt: string;
+}
+
+function toStaff(raw: {
+  user_id: string;
+  roles: string[];
+  status: string;
+  invited_at: string;
+}): StaffMember {
+  return {
+    userId: raw.user_id,
+    roles: raw.roles,
+    status: raw.status,
+    invitedAt: raw.invited_at,
+  };
+}
+
+/** 직원 목록(소장·직원, 생성 순). 403=권한 없음. */
+export async function listStaff(): Promise<StaffMember[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/staff`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (
+    body.items as { user_id: string; roles: string[]; status: string; invited_at: string }[]
+  ).map(toStaff);
+}
+
+/** 자기 단지에 직원(STAFF) 초대 메일 발송. 202. 409=이미 등록된 이메일. */
+export async function inviteStaff(email: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/staff/invite`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  await ensureOk(response);
+}
+
+/** 직원 비활성화 + 세션 즉시 revoke. 400=자기 자신·소장 대상·직원 아님. */
+export async function deactivateStaff(userId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/staff/${userId}/deactivate`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+// ── 초대 수락·비밀번호 변경 (공개/세션 · H7-2) ────────────────────────────────
+// apiFetch(401→로그인 리다이렉트)를 쓰지 않는다 — 초대는 세션 없이, 비밀번호 변경은
+// 401(현재 비밀번호 오류)을 화면에서 직접 안내해야 하므로 plain fetch로 상태코드를 보존.
+
+/** 초대 토큰 + 새 비밀번호로 계정 활성화. 204. 400=만료·사용됨. */
+export async function acceptInvite(token: string, password: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/invite/accept`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  await ensureOk(response);
+}
+
+/** 현재·새 비밀번호로 교체(세션 재발급). 204. 401=현재 비밀번호 오류. */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-change`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  await ensureOk(response);
 }
 
 // ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────

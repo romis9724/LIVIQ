@@ -26,12 +26,12 @@ SESSION_COOKIE_NAME = "liviq_session"
 
 # 역할→문서 공개범위(docs/03 §4.2 visibility 매핑).
 RESIDENT_VISIBILITIES = ("ALL", "RESIDENT")
+# role은 RESIDENT|MANAGER|STAFF|SYS_ADMIN(H7-2에서 FACILITY·COUNCIL 제거). "COUNCIL"·
+# "ADMIN" 등 값은 문서 분류(visibility) enum이지 역할이 아니므로 유지한다.
 _ROLE_VISIBILITIES: dict[str, tuple[str, ...]] = {
     "RESIDENT": ("ALL", "RESIDENT"),
     "MANAGER": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
     "STAFF": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
-    "FACILITY": ("ALL", "ADMIN"),
-    "COUNCIL": ("ALL", "RESIDENT", "COUNCIL"),
 }
 _VISIBILITY_ORDER = ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
 # local dev 헤더 컨텍스트에 부여할 역할 — 기존 로컬 워크플로·테스트 보존.
@@ -74,6 +74,10 @@ async def get_context(
             raise HTTPException(status_code=401, detail="세션 검증 실패") from exc
         if data is None:
             raise HTTPException(status_code=401, detail="세션 만료 또는 무효")
+        # 임시 비밀번호 미변경 계정(부트스트랩 SYS_ADMIN)은 password-change·logout·me만
+        # 허용 — 그 3개는 get_session_raw를 쓰므로 여기(get_context)만 막으면 충분(H7-2).
+        if data.must_change_password:
+            raise HTTPException(status_code=403, detail="password_change_required")
         if data.status != "active":  # registered/pending/rejected/inactive → 상태별 안내만
             raise HTTPException(status_code=403, detail=data.status)
         return RequestContext(

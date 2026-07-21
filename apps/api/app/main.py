@@ -9,6 +9,7 @@ H2-6: review_queue(AI 검수 큐 — 사후 검수 목록·승인/반려).
 H3-1: facilities(시설 CRUD·장애/정비 이력 + outbox 원자 기록).
 H4-3: dashboard(운영 통계 집계 — 질의·토큰·폴백·검수·캐시·민원·시설, MANAGER 전용).
 H5-3: notifications(인앱 알림함 조회·읽음 처리 + 검수 반려 시 정정 알림 생성).
+H7-2: admin_tenants(단지 생성·소장 초대, SYS_ADMIN)·staff(직원 초대·목록·비활성화, MANAGER).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.routers import (
+    admin_tenants,
     approvals,
     assistant,
     auth,
@@ -32,6 +34,7 @@ from app.routers import (
     onboarding,
     review_queue,
     roster,
+    staff,
 )
 
 
@@ -60,6 +63,8 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(onboarding.router)
     app.include_router(approvals.router)
+    app.include_router(admin_tenants.router)
+    app.include_router(staff.router)
     app.include_router(roster.router)
     app.include_router(documents.router)
     app.include_router(assistant.router)

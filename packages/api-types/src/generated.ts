@@ -104,7 +104,7 @@ export interface paths {
          * @description 시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
          *
          *     answer_question 재사용(시설 프롬프트만 주입) — 레지스트리·마스킹·스텝 상한·폴백·영속은
-         *     /assistant/ask와 공유. ctx.roles(MANAGER/FACILITY)가 시설 도구 노출을 결정한다.
+         *     /assistant/ask와 공유. ctx.roles(MANAGER)가 시설 도구 노출을 결정한다.
          */
         post: operations["facility_assistant_admin_facilities_assistant_post"];
         delete?: never;
@@ -392,6 +392,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Staff
+         * @description 직원 목록 — STAFF·MANAGER 역할 사용자(생성 순). 사용자별 역할을 합쳐 반환.
+         */
+        get: operations["list_staff_admin_staff_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/staff/invite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite Staff
+         * @description 자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+         */
+        post: operations["invite_staff_admin_staff_invite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/staff/{user_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate Staff
+         * @description 자기 단지 STAFF만 비활성화 + 세션 즉시 revoke. 자기 자신·소장 대상은 400.
+         */
+        post: operations["deactivate_staff_admin_staff__user_id__deactivate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tenants
+         * @description 단지 목록(생성 순). 시스템 테넌트는 제외 — 소장 초대 대상이 아니다.
+         */
+        get: operations["list_tenants_admin_tenants_get"];
+        put?: never;
+        /**
+         * Create Tenant
+         * @description 단지 생성. tenants는 RLS 예외라 SYS_ADMIN(시스템 테넌트 컨텍스트)이 전역 INSERT 가능.
+         */
+        post: operations["create_tenant_admin_tenants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenant_id}/invite-manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite Manager
+         * @description 대상 단지에 소장(MANAGER) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+         */
+        post: operations["invite_manager_admin_tenants__tenant_id__invite_manager_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/ask": {
         parameters: {
             query?: never;
@@ -403,6 +507,29 @@ export interface paths {
         put?: never;
         /** Ask */
         post: operations["ask_assistant_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invite/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite Accept
+         * @description 초대 토큰 + 비밀번호 → 계정 활성화(H7-2, ADR-0014).
+         *
+         *     consume(invite) → tenant 전환 → password_hash 설정·email_verified_at(수락=이메일 소유
+         *     증명)·status='active'·토큰 소진. status가 invited가 아니면 400(중복 수락·오상태 방지).
+         */
+        post: operations["invite_accept_auth_invite_accept_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -443,6 +570,29 @@ export interface paths {
          * @description 멱등 — 쿠키 유무와 무관하게 204. 쿠키 있으면 세션 revoke + 쿠키 제거.
          */
         post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Password Change
+         * @description 세션 사용자 비밀번호 교체(임시 비밀번호 강제 변경 포함, H7-2).
+         *
+         *     현재 비밀번호 검증(오류 401) → 교체·must_change_password 해제 → 세션 재발급(플래그
+         *     갱신, 본인 세션 유지). 본인 외 세션 revoke는 하지 않는다(재설정과 달리 탈취 대응 아님).
+         */
+        post: operations["password_change_auth_password_change_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1401,6 +1551,21 @@ export interface components {
              */
             updated_at: string;
         };
+        /** InviteAcceptIn */
+        InviteAcceptIn: {
+            /** Password */
+            password: string;
+            /** Token */
+            token: string;
+        };
+        /** InviteIn */
+        InviteIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -1459,6 +1624,11 @@ export interface components {
         };
         /** MeOut */
         MeOut: {
+            /**
+             * Must Change Password
+             * @default false
+             */
+            must_change_password: boolean;
             /** Roles */
             roles: string[];
             /** Status */
@@ -1561,6 +1731,13 @@ export interface components {
              * @enum {string}
              */
             type: "notice" | "inquiry_status" | "approval" | "system";
+        };
+        /** PasswordChangeIn */
+        PasswordChangeIn: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /** PasswordResetConfirmIn */
         PasswordResetConfirmIn: {
@@ -1726,6 +1903,28 @@ export interface components {
              */
             user_id: string;
         };
+        /** StaffItem */
+        StaffItem: {
+            /**
+             * Invited At
+             * Format: date-time
+             */
+            invited_at: string;
+            /** Roles */
+            roles: string[];
+            /** Status */
+            status: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** StaffListOut */
+        StaffListOut: {
+            /** Items */
+            items: components["schemas"]["StaffItem"][];
+        };
         /** StatusChangeIn */
         StatusChangeIn: {
             /**
@@ -1733,6 +1932,41 @@ export interface components {
              * @enum {string}
              */
             status: "received" | "assigned" | "in_progress" | "done";
+        };
+        /** TenantCreateIn */
+        TenantCreateIn: {
+            /** Name */
+            name: string;
+        };
+        /** TenantItem */
+        TenantItem: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** TenantListOut */
+        TenantListOut: {
+            /** Items */
+            items: components["schemas"]["TenantItem"][];
+        };
+        /** TenantOut */
+        TenantOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -2664,6 +2898,224 @@ export interface operations {
             };
         };
     };
+    list_staff_admin_staff_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_staff_admin_staff_invite_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deactivate_staff_admin_staff__user_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tenants_admin_tenants_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_tenant_admin_tenants_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_manager_admin_tenants__tenant_id__invite_manager_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ask_assistant_ask_post: {
         parameters: {
             query?: never;
@@ -2690,6 +3142,37 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invite_accept_auth_invite_accept_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteAcceptIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -2745,6 +3228,39 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    password_change_auth_password_change_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {
