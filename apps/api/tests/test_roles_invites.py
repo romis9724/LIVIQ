@@ -318,6 +318,22 @@ async def test_list_staff_returns_managers_and_staff(
     assert str(MANAGER_USER_ID) in ids and str(staff_id) in ids
 
 
+async def test_list_staff_includes_decrypted_email(
+    seeded: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """직원 목록에 이메일 표시(ADR-0014 개정, H7-5) — PII 부재 행은 None으로 유지."""
+    async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
+        invite = await mgr.post("/admin/staff/invite", json={"email": "new-staff@example.com"})
+        assert invite.status_code == 202
+        resp = await mgr.get("/admin/staff")
+
+    assert resp.status_code == 200
+    by_email = {item["email"]: item for item in resp.json()["items"]}
+    assert "new-staff@example.com" in by_email  # 초대 행은 복호 이메일
+    assert by_email["new-staff@example.com"]["status"] == "invited"
+    assert None in by_email  # vault 없는 시드 소장 행은 None(행 유지)
+
+
 # ── 임시 비밀번호 강제 변경 게이트 (부트스트랩 SYS_ADMIN) ─────────────────────
 
 

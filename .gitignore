@@ -39,6 +39,7 @@ coverage/
 playwright-report/
 test-results/
 tests/e2e/.auth/
+tests/e2e/.visual-sweep/
 
 # secrets / credentials (절대 커밋 금지)
 mcp/service-credential.json

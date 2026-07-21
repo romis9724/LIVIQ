@@ -48,10 +48,19 @@ describe("parseTenantId (가입 링크 ?t)", () => {
 });
 
 describe("validateAccountSignup (계정 가입 검증)", () => {
-  const valid = { email: "kim@example.com", password: "verylongpass", passwordConfirm: "verylongpass" };
+  const valid = {
+    tenantId: "11111111-1111-1111-1111-111111111111",
+    email: "kim@example.com",
+    password: "verylongpass",
+    passwordConfirm: "verylongpass",
+  };
 
   it("정상 입력은 오류 없음", () => {
     expect(validateAccountSignup(valid)).toEqual({});
+  });
+
+  it("단지 미선택을 잡는다 (H7-5)", () => {
+    expect(validateAccountSignup({ ...valid, tenantId: "" }).tenantId).toBeDefined();
   });
 
   it("이메일 형식 오류를 잡는다", () => {

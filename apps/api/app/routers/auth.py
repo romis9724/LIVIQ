@@ -20,7 +20,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import auth_tokens
-from app.config import get_settings
+from app.config import SYSTEM_TENANT_ID, get_settings
 from app.deps import (
     clear_session_cookie,
     get_auth_lookup_session,
@@ -41,6 +41,8 @@ from app.schemas.auth import (
     PasswordResetIn,
     SignupIn,
     SignupOut,
+    TenantDirectoryItem,
+    TenantDirectoryOut,
 )
 from app.session import SessionData, SessionStore, get_redis, get_session_store
 from liviq_db.models import PiiVault, Tenant, User, UserRole
@@ -171,6 +173,7 @@ async def login(
         roles,
         status=user.status,
         must_change_password=user.must_change_password,
+        email=_normalize_email(body.email),
     )
     set_session_cookie(response, sid)
     return LoginOut(status=user.status)
@@ -340,6 +343,7 @@ async def password_change(
         session_data.user_id,
         list(session_data.roles),
         status=session_data.status,
+        email=session_data.email,
     )
     response = Response(status_code=204)
     set_session_cookie(response, sid)
@@ -355,4 +359,23 @@ async def me(session: Annotated[SessionData, Depends(get_session_raw)]) -> MeOut
         user_id=uuid.UUID(session.user_id),
         roles=list(session.roles),
         must_change_password=session.must_change_password,
+        email=session.email or None,
     )
+
+
+@router.get("/auth/tenants", response_model=TenantDirectoryOut)
+async def tenant_directory(
+    session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
+) -> TenantDirectoryOut:
+    """가입 단지 선택용 공개 단지 목록 — 이름만 노출(ADR-0014 개정, H7-5).
+
+    인증 불필요(가입 전 호출). 시스템 테넌트 제외. 오가입은 소장 승인이 걸러낸다.
+    """
+    rows = (
+        await session.execute(
+            select(Tenant.id, Tenant.name)
+            .where(Tenant.id != SYSTEM_TENANT_ID)
+            .order_by(Tenant.name)
+        )
+    ).all()
+    return TenantDirectoryOut(items=[TenantDirectoryItem(id=r.id, name=r.name) for r in rows])

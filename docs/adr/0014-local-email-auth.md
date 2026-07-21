@@ -20,12 +20,13 @@
 - **비밀번호**: **Argon2id**(argon2-cffi)로 해시 저장(평문·복호가능 형태 금지). 정책은 복잡도 규칙 대신 **길이 기준**(최소 10자, 초기값 — 파일럿 보정, NIST 계열).
 - **이메일은 PII**: 평문 컬럼 금지 — `pii_vault.email_enc` 암호화 저장 + 로그인·중복체크는 **keyed HMAC 해시**(`users.login_id` ← email_hash, 기존 partial unique 인덱스 재사용). 이메일 전역 유니크(파일럿 단일 단지 수용).
 - **이메일 검증**: 가입 시 검증 메일 필수 — **검증 전 로그인 불가**. 비밀번호 재설정 흐름도 같은 메일 인프라 재사용.
-- **tenant 확정(초대코드 대체)**: 주민 가입은 **단지별 가입 링크**(관리사무소 게시 QR/URL의 단지 식별자)로 진입 — 초대코드 배포·회수 운영 제거.
+- **tenant 확정(초대코드 대체)**: 주민 가입은 로그인 화면의 **회원가입 버튼**으로 진입해 **단지를 직접 선택**한다(공개 단지 목록 — 이름만 노출, 소장 승인이 최종 게이트). 관리사무소 게시 QR/URL(**단지별 가입 링크** `?t={tenant_id}`)은 단지를 **사전 선택**하는 딥링크로 유지. *(개정 2026-07-21 H7-5 — 최초 결정은 "가입 링크 전용 진입"이었으나, 운영자 피드백으로 버튼 진입+단지 선택을 정본으로 변경. 오가입은 승인 단계에서 걸러진다.)*
 - **토큰(`auth_tokens`)**: purpose(`verify_email`|`invite`|`reset_password`)·`token_hash`(SHA-256, 원문은 URL로만 전달·DB 미저장)·`expires_at`·`used_at`·`user_id`·`tenant_id`. TTL 초기값: verify 24h · invite 7d · reset 1h.
 - **계정 생성 위계**: 최초 SYS_ADMIN은 설치 시드 스크립트가 생성(임시 비밀번호 출력, 첫 로그인 시 변경 강제, 시스템 테넌트 소속). SYS_ADMIN→소장, 소장→직원은 **초대 링크 메일**(purpose=`invite`)로 등록 → 수신자가 링크에서 비밀번호 설정. 주민은 자가 가입 → 소장 수동 승인.
 - **역할 축소**: `FACILITY`·`COUNCIL` 제거(Phase 2 재도입 여지). 남는 역할 `SYS_ADMIN`·`MANAGER`·`STAFF`·`RESIDENT`.
 - **메일 발송**: 어댑터 인터페이스(Protocol) 뒤 — `MAIL_BACKEND=console|smtp`(local 기본 console — 링크 로그 출력), SMTP는 env(`SMTP_HOST/PORT/USER/PASSWORD/FROM`). 파일럿 프로바이더: **Gmail SMTP**(`smtp.gmail.com:587` STARTTLS, 발신 계정 sllm14628@gmail.com — 2단계 인증 + **앱 비밀번호** 필요, 일반 비밀번호 불가. 앱 비밀번호는 env로만 주입).
 - **세션**: [ADR-0011] 그대로 유지 — 인증 수단만 교체, 상태 전환 시 즉시 revoke 불변. 2FA는 파일럿 제외.
+- **관리 화면 이메일 표시(개정 2026-07-21, H7-5)**: 직원 목록(`/admin/staff`)과 `/me`에 **이메일을 표시**한다 — 이메일 없는 목록은 행 식별이 불가해 운영 불능(운영자 피드백). 근거: 초대 주체(소장·SYS_ADMIN)가 이미 아는 정보이고, 서버 인가(MANAGER·본인) 뒤에서만 반환. `/me`는 로그인 시점 평문을 세션에 저장해 반환(복호 조회 없음), 직원 목록은 요청 시 `pii_vault` 복호. 규칙 2(LLM 전송 금지)와 무관 — LLM 경계는 그대로 차단.
 
 ## 대안
 

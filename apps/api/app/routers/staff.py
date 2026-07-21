@@ -20,7 +20,7 @@ from app.mail import Mailer, get_mailer
 from app.pii import PiiCrypto, get_pii_crypto
 from app.schemas.admin import InviteIn, StaffItem, StaffListOut
 from app.session import SessionStore, get_session_store
-from liviq_db.models import User, UserRole
+from liviq_db.models import PiiVault, User, UserRole
 
 router = APIRouter(prefix="/admin/staff", tags=["staff"])
 
@@ -52,14 +52,22 @@ async def invite_staff(
 async def list_staff(
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
 ) -> StaffListOut:
-    """직원 목록 — STAFF·MANAGER 역할 사용자(생성 순). 사용자별 역할을 합쳐 반환."""
+    """직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
+
+    이메일은 pii_vault 복호로 채운다 — MANAGER 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+    """
     rows = (
         await session.execute(
-            select(User.id, User.status, User.created_at, UserRole.role)
+            select(User.id, User.status, User.created_at, UserRole.role, PiiVault.email_enc)
             .join(
                 UserRole,
                 and_(UserRole.user_id == User.id, UserRole.tenant_id == User.tenant_id),
+            )
+            .outerjoin(
+                PiiVault,
+                and_(PiiVault.id == User.pii_ref, PiiVault.tenant_id == User.tenant_id),
             )
             .where(
                 User.tenant_id == ctx.tenant_id,
@@ -70,13 +78,27 @@ async def list_staff(
         )
     ).all()
 
+    dek = await crypto.get_dek(session, ctx.tenant_id) if rows else b""
+
+    def decrypt_email(blob: bytes | None) -> str | None:
+        if blob is None:
+            return None
+        try:
+            return crypto.decrypt(dek, blob)
+        except Exception:  # noqa: BLE001 — 키 교체 등 복호 실패는 행 유지가 우선
+            return None
+
     # 사용자별 역할 집계(등장 순 유지) — 조인이 역할 수만큼 행을 낸다.
     by_user: dict[uuid.UUID, StaffItem] = {}
-    for user_id, status, created_at, role in rows:
+    for user_id, status, created_at, role, email_enc in rows:
         item = by_user.get(user_id)
         if item is None:
             by_user[user_id] = StaffItem(
-                user_id=user_id, roles=[role], status=status, invited_at=created_at
+                user_id=user_id,
+                roles=[role],
+                status=status,
+                invited_at=created_at,
+                email=decrypt_email(email_enc),
             )
         elif role not in item.roles:
             item.roles.append(role)

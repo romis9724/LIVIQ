@@ -48,6 +48,9 @@ class SessionData:
     # 임시 비밀번호 강제 변경 중(부트스트랩 SYS_ADMIN) — True면 password-change·logout·me만
     # 허용, 나머지는 403(app.deps.get_context 가드, ADR-0014·H7-2).
     must_change_password: bool = False
+    # 로그인 이메일(정규형) — /me 표시용(ADR-0014 개정, H7-5). 로그인 시점 평문을 담아
+    # 매 요청 pii_vault 복호를 피한다. 구버전 세션은 빈 문자열(표시 폴백).
+    email: str = ""
 
 
 def _session_key(session_id: str) -> str:
@@ -71,6 +74,7 @@ class SessionStore:
         roles: list[str],
         status: str = "active",
         must_change_password: bool = False,
+        email: str = "",
     ) -> str:
         session_id = secrets.token_urlsafe(32)
         now = time.time()
@@ -83,6 +87,7 @@ class SessionStore:
                 "roles": list(roles),
                 "status": status,
                 "must_change_password": must_change_password,
+                "email": email,
                 "created_at": now,
                 "expires_at": expires_at,  # 절대 만료 판정은 값 기준(TTL은 idle)
             }
@@ -117,6 +122,7 @@ class SessionStore:
             kind=payload.get("kind", "user"),
             status=payload.get("status", "active"),
             must_change_password=payload.get("must_change_password", False),
+            email=payload.get("email", ""),
         )
 
     async def revoke(self, session_id: str) -> None:

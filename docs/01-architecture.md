@@ -217,14 +217,15 @@
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `POST /auth/signup` | 공개 | 이메일+비밀번호 가입(단지별 가입 링크의 단지 식별자로 tenant 확정) → 이메일 검증 메일 발송(검증 전 로그인 불가) |
+| `GET /auth/tenants` | 공개 | 가입 단지 선택 목록(이름만, 시스템 테넌트 제외 — H7-5, [ADR-0014](adr/0014-local-email-auth.md) 개정) |
+| `POST /auth/signup` | 공개 | 단지 선택(또는 가입 링크 `?t=` 사전 선택) + 이메일+비밀번호 가입 → 이메일 검증 메일 발송(검증 전 로그인 불가) |
 | `POST /auth/login` | 공개 | 이메일+비밀번호 검증 → 세션 확립. 계정 상태별 분기(신규→온보딩, pending→대기, active→홈) |
 | `GET /auth/verify-email` | 공개 | 검증 토큰(`auth_tokens`) 확인 → `email_verified_at` 기록 |
 | `POST /auth/password-reset` · `/password-reset/confirm` | 공개 | 재설정 토큰 메일 발송 → 링크에서 새 비밀번호 설정 |
 | `POST /auth/invite/accept` | 공개 | 초대 토큰(소장·직원) 확인 → 비밀번호 설정·계정 활성화(수락=이메일 소유 증명) |
 | `POST /auth/password-change` | 세션 | 현재+새 비밀번호. `must_change_password`(임시비번) 계정은 이 호출 전까지 콘텐츠 403 |
 | `POST /auth/logout` | 세션 | 세션 revoke |
-| `GET /me` | 세션(모든 상태) | 프로필·역할·계정 상태 — 상태별 화면 분기의 단일 출처 |
+| `GET /me` | 세션(모든 상태) | 역할·계정 상태·로그인 이메일 — 상태별 화면 분기의 단일 출처 |
 | `POST /onboarding/profile` | 세션(신규) | 동의·성함·생년월일·동·호 → 명부 자동 대조 → `pending`(초대코드 제거) |
 
 **계정 승인·명부·초대** (H2-1·H7-2, 화면: 관리자 가입 승인·직원 관리·SYS_ADMIN 뷰)

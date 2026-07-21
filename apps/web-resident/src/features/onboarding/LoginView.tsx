@@ -140,11 +140,18 @@ export function LoginView() {
           </Link>
         </form>
 
+        <Button
+          type="button"
+          variant="secondary"
+          className="auth-submit"
+          onClick={() => {
+            window.location.href = "/signup";
+          }}
+        >
+          회원가입
+        </Button>
         <p className="auth-foot">
-          처음이신가요? 단지 안내문의 가입 링크로 가입하세요.
-        </p>
-        <p className="auth-foot">
-          <span aria-hidden="true">🔒</span> 가입 후 관리소장 승인이 필요합니다.
+          <span aria-hidden="true">🔒</span> 가입 후 관리소장 승인을 거쳐 이용할 수 있습니다.
         </p>
       </div>
     </main>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button, FormField } from "@liviq/ui";
@@ -16,25 +16,45 @@ import "./onboarding.css";
 /** 가입 상태 코드 → 폼 상단 안내. 필드 오류는 별도. */
 function signupErrorMessage(status: number): string {
   if (status === 409) return "이미 가입된 이메일입니다. 아래에서 로그인해 주세요.";
-  if (status === 404) return "가입 링크가 유효하지 않습니다. 관리사무소에 문의해 주세요.";
+  if (status === 404) return "선택한 단지를 찾을 수 없습니다. 다시 선택해 주세요.";
   if (status === 422) return "입력 형식을 확인해 주세요.";
   return "가입 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+interface TenantOption {
+  id: string;
+  name: string;
+}
+
 /**
- * 계정 가입 진입 — 단지별 가입 링크(?t={tenant_id})로 접속해 이메일+비밀번호로 계정을 만든다.
- * t 가 없거나 형식이 아니면 폼 대신 안내 화면. 성공(201) 시 검증 메일 안내로 전환한다(ADR-0014).
+ * 계정 가입 진입 — 단지 선택 + 이메일 + 비밀번호(ADR-0014 개정, H7-5).
+ * 로그인 화면의 회원가입 버튼으로 진입하며, 단지 안내문의 가입 링크(?t={tenant_id})는
+ * 단지를 사전 선택한다. 성공(201) 시 검증 메일 안내로 전환한다.
  */
 export function AccountSignupView() {
   useRedirectIfAuthed();
 
-  // undefined=파싱 전(SSR 불일치 회피) · null=링크 오류 · string=유효 단지.
-  const [tenantId, setTenantId] = useState<string | null | undefined>(undefined);
+  // undefined=로딩 · null=목록 조회 실패(재시도 버튼) · []=등록된 단지 없음.
+  const [tenants, setTenants] = useState<TenantOption[] | null | undefined>(undefined);
+  const [preselected, setPreselected] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setTenants(undefined);
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/tenants`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = (await res.json()) as { items: TenantOption[] };
+      setTenants(body.items);
+    } catch {
+      setTenants(null);
+    }
+  }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    setTenantId(parseTenantId(params.get("t")));
-  }, []);
+    // 가입 링크 ?t — SSR 불일치 회피 위해 마운트 후 URL에서 읽어 사전 선택만 한다.
+    setPreselected(parseTenantId(new URLSearchParams(window.location.search).get("t")));
+    void load();
+  }, [load]);
 
   return (
     <main id="main" className="auth-shell">
@@ -46,45 +66,43 @@ export function AccountSignupView() {
           <span className="auth-brand__wordmark">LIVIQ</span>
         </div>
 
-        {tenantId === undefined ? (
+        {tenants === undefined ? (
           <p className="auth-hint" role="status">
-            가입 링크를 확인하고 있어요…
+            단지 목록을 불러오고 있어요…
           </p>
-        ) : tenantId === null ? (
-          <InvalidLink />
+        ) : tenants === null ? (
+          <section className="auth-status" aria-live="polite">
+            <div className="auth-state-card">
+              <div className="auth-state__icon" aria-hidden="true">
+                ⚠️
+              </div>
+              <h1 className="auth-state__title">단지 목록을 불러오지 못했습니다</h1>
+              <p className="auth-state__desc">네트워크 상태를 확인한 뒤 다시 시도해 주세요.</p>
+              <Button type="button" variant="primary" onClick={() => void load()}>
+                다시 시도
+              </Button>
+            </div>
+          </section>
         ) : (
-          <SignupForm tenantId={tenantId} />
+          <SignupForm tenants={tenants} preselected={preselected} />
         )}
       </div>
     </main>
   );
 }
 
-function InvalidLink() {
-  return (
-    <section className="auth-status" aria-live="polite">
-      <div className="auth-state-card">
-        <div className="auth-state__icon" aria-hidden="true">
-          🔗
-        </div>
-        <h1 className="auth-state__title">가입 링크로 접속해 주세요</h1>
-        <p className="auth-state__desc">
-          단지에서 안내받은 가입 링크(QR·URL)로 접속해야 가입할 수 있습니다. 관리사무소 게시물을
-          확인해 주세요.
-        </p>
-        <p className="auth-hint">
-          이미 계정이 있으신가요?{" "}
-          <Link className="auth-consent__view" href="/login">
-            로그인
-          </Link>
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function SignupForm({ tenantId }: { tenantId: string }) {
+function SignupForm({
+  tenants,
+  preselected,
+}: {
+  tenants: TenantOption[];
+  preselected: string | null;
+}) {
   const router = useRouter();
+  // 사전 선택(가입 링크)이 목록에 실제로 있을 때만 반영 — 삭제된 단지 링크 방어.
+  const [tenantId, setTenantId] = useState(() =>
+    preselected && tenants.some((t) => t.id === preselected) ? preselected : "",
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -94,7 +112,7 @@ function SignupForm({ tenantId }: { tenantId: string }) {
   const [sentTo, setSentTo] = useState<string | null>(null);
 
   const submit = async () => {
-    const next = validateAccountSignup({ email, password, passwordConfirm });
+    const next = validateAccountSignup({ tenantId, email, password, passwordConfirm });
     setErrors(next);
     setFormError(null);
     if (Object.keys(next).length > 0) return;
@@ -147,9 +165,10 @@ function SignupForm({ tenantId }: { tenantId: string }) {
 
   return (
     <>
-      <h1 className="auth-title auth-title--sm">계정을 만들어 주세요</h1>
+      <h1 className="auth-title auth-title--sm">회원가입</h1>
       <p className="auth-lede">
-        이메일로 가입한 뒤 인증 메일을 확인하면 입주민 정보를 입력할 수 있습니다.
+        단지를 선택하고 이메일로 가입하세요. 인증 메일 확인 후 입주민 정보를 입력하면 관리소장
+        승인을 거쳐 이용할 수 있습니다.
       </p>
 
       <form
@@ -160,6 +179,33 @@ function SignupForm({ tenantId }: { tenantId: string }) {
         }}
         noValidate
       >
+        <div className="auth-select auth-field">
+          <label className="form-field__label" htmlFor="signup-tenant">
+            단지
+          </label>
+          <select
+            id="signup-tenant"
+            className="auth-select__input"
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            aria-invalid={errors.tenantId ? true : undefined}
+            aria-describedby={errors.tenantId ? "signup-tenant-error" : undefined}
+          >
+            <option value="" disabled>
+              거주하시는 단지를 선택해 주세요
+            </option>
+            {tenants.map((tenant) => (
+              <option key={tenant.id} value={tenant.id}>
+                {tenant.name}
+              </option>
+            ))}
+          </select>
+          {errors.tenantId ? (
+            <div id="signup-tenant-error" className="form-field__error">
+              {errors.tenantId}
+            </div>
+          ) : null}
+        </div>
         <FormField
           label="이메일"
           type="email"

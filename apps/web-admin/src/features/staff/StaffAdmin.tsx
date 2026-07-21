@@ -120,11 +120,11 @@ export function StaffAdmin() {
     <>
       <header className="admin-page__header">
         <h1 id="main" className="admin-page__title">
-          설정 · 직원 관리
+          직원 관리
         </h1>
         <p className="admin-page__lede">
           단지 직원을 초대하고 관리합니다. 초대 메일의 링크로 직원이 비밀번호를 설정하면 계정이
-          활성화됩니다. 개인정보 보호를 위해 이메일·성함은 목록에 표시하지 않습니다.
+          활성화됩니다.
         </p>
       </header>
 
@@ -181,6 +181,7 @@ export function StaffAdmin() {
               {staff.map((member) => (
                 <li key={member.userId} className="sf-row">
                   <div className="sf-row__main">
+                    <span className="sf-row__email">{member.email ?? "이메일 미기록"}</span>
                     <span className="sf-row__roles">{roleText(member.roles)}</span>
                     <span className={`sf-status sf-status--${member.status}`}>
                       {STATUS_LABEL[member.status] ?? member.status}

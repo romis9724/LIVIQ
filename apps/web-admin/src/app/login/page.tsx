@@ -76,12 +76,10 @@ export default function AdminLoginPage() {
           <span className="admin-login__logo" aria-hidden="true">
             L
           </span>
-          <span className="admin-login__wordmark">LIVIQ 관리자 콘솔</span>
+          <span className="admin-login__wordmark">LIVIQ</span>
         </div>
-        <h1 className="admin-login__title">관리사무소 로그인</h1>
-        <p className="admin-login__lede">
-          등록된 이메일로 로그인하세요. 관리자 권한은 서버에서 확인합니다.
-        </p>
+        <h1 className="admin-login__title">관리자 로그인</h1>
+        <p className="admin-login__lede">관리소장·직원·시스템 관리자 계정으로 로그인하세요.</p>
 
         {banner ? (
           <p

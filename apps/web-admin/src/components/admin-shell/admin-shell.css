@@ -113,6 +113,8 @@
   flex-direction: column;
   font-size: var(--text-sm);
   line-height: 1.2;
+  flex: 1;
+  min-width: 0; /* 이메일 말줄임의 전제 — flex 자식 기본 min-width:auto 해제 */
 }
 .admin-sidebar__user-name {
   font-weight: 600;
@@ -120,6 +122,9 @@
 .admin-sidebar__user-org {
   color: var(--color-text-muted);
   font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .admin-sidebar__logout {
   margin-left: auto;

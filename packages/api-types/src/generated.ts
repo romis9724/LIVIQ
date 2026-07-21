@@ -401,7 +401,9 @@ export interface paths {
         };
         /**
          * List Staff
-         * @description 직원 목록 — STAFF·MANAGER 역할 사용자(생성 순). 사용자별 역할을 합쳐 반환.
+         * @description 직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
+         *
+         *     이메일은 pii_vault 복호로 채운다 — MANAGER 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
          */
         get: operations["list_staff_admin_staff_get"];
         put?: never;
@@ -655,6 +657,28 @@ export interface paths {
          *     발송 실패는 예외 전파 → 트랜잭션 롤백 + 500(계정이 검증 불가 상태로 남지 않게).
          */
         post: operations["signup_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tenant Directory
+         * @description 가입 단지 선택용 공개 단지 목록 — 이름만 노출(ADR-0014 개정, H7-5).
+         *
+         *     인증 불필요(가입 전 호출). 시스템 테넌트 제외. 오가입은 소장 승인이 걸러낸다.
+         */
+        get: operations["tenant_directory_auth_tenants_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1624,6 +1648,8 @@ export interface components {
         };
         /** MeOut */
         MeOut: {
+            /** Email */
+            email?: string | null;
             /**
              * Must Change Password
              * @default false
@@ -1905,6 +1931,8 @@ export interface components {
         };
         /** StaffItem */
         StaffItem: {
+            /** Email */
+            email?: string | null;
             /**
              * Invited At
              * Format: date-time
@@ -1937,6 +1965,24 @@ export interface components {
         TenantCreateIn: {
             /** Name */
             name: string;
+        };
+        /** TenantDirectoryItem */
+        TenantDirectoryItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * TenantDirectoryOut
+         * @description 가입 단지 선택용 공개 목록 — 이름만(시스템 테넌트 제외, H7-5).
+         */
+        TenantDirectoryOut: {
+            /** Items */
+            items: components["schemas"]["TenantDirectoryItem"][];
         };
         /** TenantItem */
         TenantItem: {
@@ -3373,6 +3419,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    tenant_directory_auth_tenants_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantDirectoryOut"];
                 };
             };
         };

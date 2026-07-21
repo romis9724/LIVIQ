@@ -90,7 +90,9 @@ async def submit_profile(
     # 세션 상태 갱신: registered → pending. 즉시 revoke 후 재발급(ADR-0011).
     if liviq_session:
         await session_store.revoke(liviq_session)
-    new_sid = await session_store.create(str(tenant_id), str(user.id), [], status="pending")
+    new_sid = await session_store.create(
+        str(tenant_id), str(user.id), [], status="pending", email=auth.email
+    )
     set_session_cookie(response, new_sid)
     return ProfileOut(user_id=user.id, status="pending", roster_matched=roster_matched)
 
