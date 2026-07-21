@@ -52,11 +52,11 @@ export function navForRoles(roles: readonly string[]): readonly NavItem[] {
   return MANAGER_NAV;
 }
 
-/** 역할 → 첫 진입 경로. SYS_ADMIN=단지 관리 · STAFF=민원 · 그 외=검수 큐. */
+/** 역할 → 첫 진입 경로. SYS_ADMIN=단지 관리 · STAFF=민원 · 그 외=대시보드(H7-6). */
 export function roleHome(roles: readonly string[]): string {
   if (isSysAdmin(roles)) return TENANTS.href;
   if (isStaffOnly(roles)) return INQUIRIES.href;
-  return REVIEW.href;
+  return DASHBOARD.href;
 }
 
 /** 역할 → 사이드바 표시 라벨(H7-5 — 하드코딩 "관리자/관리사무소" 대체). */

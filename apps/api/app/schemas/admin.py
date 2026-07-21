@@ -18,6 +18,7 @@ __all__ = [
     "TenantCreateIn",
     "TenantItem",
     "TenantListOut",
+    "TenantManagerItem",
     "TenantOut",
 ]
 
@@ -31,10 +32,20 @@ class TenantOut(BaseModel):
     name: str
 
 
+class TenantManagerItem(BaseModel):
+    """단지의 현재 소장(H7-6) — 이메일은 복호 실패·PII 부재 시 None."""
+
+    user_id: uuid.UUID
+    email: str | None = None
+    status: str  # invited=수락 대기 · active=활동 중
+
+
 class TenantItem(BaseModel):
     id: uuid.UUID
     name: str
     created_at: datetime.datetime
+    status: str = "active"  # active | inactive(비활성화 — 소속 로그인 차단, H7-6)
+    manager: TenantManagerItem | None = None
 
 
 class TenantListOut(BaseModel):

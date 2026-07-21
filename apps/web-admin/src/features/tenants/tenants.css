@@ -42,9 +42,12 @@
   flex-direction: column;
   gap: var(--space-3);
 }
+.tn-row[data-inactive] {
+  background: var(--color-surface-sunken);
+}
 .tn-row__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
@@ -56,6 +59,59 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+}
+.tn-row__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* 단지 상태 배지 */
+.tn-status {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.tn-status--inactive {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+/* 현재 소장(정원 1) — 이메일·상태·제거 */
+.tn-manager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.tn-manager__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.tn-manager__email {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  flex: 1;
+  min-width: 0;
+}
+.tn-manager__status {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.tn-manager__status--invited {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  color: var(--color-accent);
 }
 
 .tn-invite {

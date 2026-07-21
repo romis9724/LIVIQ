@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.accounts import soft_delete_user
 from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session, require_roles
 from app.invites import create_invite
 from app.mail import Mailer, get_mailer
@@ -138,4 +139,39 @@ async def deactivate_staff(
     await session.flush()
     # 재로그인 시 inactive가 반영되도록 기존 세션 폐기(ADR-0011).
     await session_store.revoke_all_for_user(str(ctx.tenant_id), str(user_id))
+    return Response(status_code=204)
+
+
+@router.delete("/{user_id}", status_code=204)
+async def delete_staff(
+    user_id: uuid.UUID,
+    ctx: Annotated[RequestContext, Depends(_MANAGER)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    session_store: Annotated[SessionStore, Depends(get_session_store)],
+) -> Response:
+    """직원·타 소장 삭제 — 소프트 삭제+PII 비식별(H7-6, FR-ONB-12). 자기 자신 400.
+
+    소장이 타 소장을 제거할 수 있다(운영자 결정 2026-07-22). 상호 잠금 사고는
+    SYS_ADMIN의 단지 관리(소장 제거+재초대)가 escape hatch.
+    """
+    if user_id == ctx.user_id:
+        raise HTTPException(status_code=400, detail="자기 자신은 삭제할 수 없습니다")
+    user = await session.scalar(
+        select(User).where(
+            User.tenant_id == ctx.tenant_id, User.id == user_id, User.deleted_at.is_(None)
+        )
+    )
+    if user is None:  # 없음·타 단지(RLS 미조회) → 격리 위해 존재 노출 안 함
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+    roles = set(
+        await session.scalars(
+            select(UserRole.role).where(
+                UserRole.tenant_id == ctx.tenant_id, UserRole.user_id == user_id
+            )
+        )
+    )
+    if not roles & {"STAFF", "MANAGER"}:  # 주민 계정은 이 경로로 삭제 불가(탈퇴는 본인)
+        raise HTTPException(status_code=400, detail="관리 계정이 아닙니다")
+
+    await soft_delete_user(session, session_store, user)
     return Response(status_code=204)

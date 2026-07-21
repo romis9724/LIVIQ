@@ -6,6 +6,8 @@ import type { ToastTone } from "@liviq/ui";
 import {
   ApiError,
   deactivateStaff,
+  deleteStaff,
+  getMe,
   inviteStaff,
   listStaff,
   type StaffMember,
@@ -49,6 +51,8 @@ export function StaffAdmin() {
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const [inviting, setInviting] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,6 +75,10 @@ export function StaffAdmin() {
 
   useEffect(() => {
     void load();
+    // 자기 자신 행에는 삭제 버튼을 숨긴다(서버도 400) — 실패해도 목록은 동작.
+    void getMe()
+      .then((me) => setMeId(me.userId))
+      .catch(() => setMeId(null));
   }, [load]);
 
   useEffect(
@@ -109,6 +117,22 @@ export function StaffAdmin() {
       setDeactivateTarget(null);
       await load();
       showToast("직원을 비활성화했습니다. 진행 중이던 세션은 즉시 종료됩니다.", "neutral");
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const userId = deleteTarget.userId;
+    setBusyId(userId);
+    try {
+      await deleteStaff(userId);
+      setDeleteTarget(null);
+      await load();
+      showToast("계정을 삭제했습니다. 같은 이메일로 다시 초대할 수 있습니다.", "neutral");
     } catch (err) {
       showToast(errorMessage(err), "danger");
     } finally {
@@ -190,12 +214,22 @@ export function StaffAdmin() {
                   <span className="sf-row__date">초대 {member.invitedAt.slice(0, 10)}</span>
                   {canDeactivate(member) ? (
                     <Button
-                      variant="danger"
+                      variant="secondary"
                       size="sm"
                       disabled={busyId === member.userId}
                       onClick={() => setDeactivateTarget(member)}
                     >
                       비활성화
+                    </Button>
+                  ) : null}
+                  {member.userId !== meId ? (
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      disabled={busyId === member.userId}
+                      onClick={() => setDeleteTarget(member)}
+                    >
+                      삭제
                     </Button>
                   ) : null}
                 </li>
@@ -214,6 +248,17 @@ export function StaffAdmin() {
         danger
         onConfirm={() => void confirmDeactivate()}
         onCancel={() => setDeactivateTarget(null)}
+      />
+
+      <Dialog
+        open={deleteTarget !== null}
+        title="계정을 삭제할까요?"
+        description={`${deleteTarget?.email ?? "이 계정"}을(를) 삭제합니다. 개인정보가 비식별 처리되고 복구할 수 없습니다. 같은 이메일로 다시 초대하는 것은 가능합니다.`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        danger
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => setDeleteTarget(null)}
       />
 
       {toast ? (

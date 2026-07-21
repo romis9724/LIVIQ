@@ -434,6 +434,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/staff/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Staff
+         * @description 직원·타 소장 삭제 — 소프트 삭제+PII 비식별(H7-6, FR-ONB-12). 자기 자신 400.
+         *
+         *     소장이 타 소장을 제거할 수 있다(운영자 결정 2026-07-22). 상호 잠금 사고는
+         *     SYS_ADMIN의 단지 관리(소장 제거+재초대)가 escape hatch.
+         */
+        delete: operations["delete_staff_admin_staff__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/staff/{user_id}/deactivate": {
         parameters: {
             query?: never;
@@ -463,7 +486,10 @@ export interface paths {
         };
         /**
          * List Tenants
-         * @description 단지 목록(생성 순). 시스템 테넌트는 제외 — 소장 초대 대상이 아니다.
+         * @description 단지 목록(생성 순) — 상태·현재 소장(이메일·상태) 포함(H7-6). 시스템 테넌트 제외.
+         *
+         *     소장 이메일은 단지별 tenant 컨텍스트 전환 후 pii_vault 복호 — SYS_ADMIN에게
+         *     노출되는 건 자신이 초대한 소장 이메일뿐(단지 콘텐츠 비열람 원칙 유지).
          */
         get: operations["list_tenants_admin_tenants_get"];
         put?: never;
@@ -472,6 +498,68 @@ export interface paths {
          * @description 단지 생성. tenants는 RLS 예외라 SYS_ADMIN(시스템 테넌트 컨텍스트)이 전역 INSERT 가능.
          */
         post: operations["create_tenant_admin_tenants_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Tenant
+         * @description 빈 단지만 완전 삭제(H7-6) — 비삭제 계정 또는 콘텐츠가 있으면 409.
+         *
+         *     잘못 생성한 단지 정리 용도. 운영 중 단지의 파기는 보존기간 정책과 함께 Phase 2.
+         */
+        delete: operations["delete_tenant_admin_tenants__tenant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenant_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Activate Tenant
+         * @description 단지 재활성화 — 로그인·가입 목록 복귀(H7-6).
+         */
+        post: operations["activate_tenant_admin_tenants__tenant_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenant_id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deactivate Tenant
+         * @description 단지 비활성화 — 소속 계정 로그인 403 + 가입 단지 목록 제외 + 전 세션 revoke(H7-6).
+         */
+        post: operations["deactivate_tenant_admin_tenants__tenant_id__deactivate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -489,10 +577,30 @@ export interface paths {
         put?: never;
         /**
          * Invite Manager
-         * @description 대상 단지에 소장(MANAGER) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+         * @description 소장(MANAGER) 초대 — 단지당 1명(H7-6). 이미 있으면(활성·초대중) 409.
          */
         post: operations["invite_manager_admin_tenants__tenant_id__invite_manager_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenant_id}/manager": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Manager
+         * @description 현재 소장 삭제(소프트 삭제+PII 비식별) — 소장 교체·오초대 해소의 escape hatch(H7-6).
+         */
+        delete: operations["remove_manager_admin_tenants__tenant_id__manager_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1996,13 +2104,34 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            manager?: components["schemas"]["TenantManagerItem"] | null;
             /** Name */
             name: string;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
         };
         /** TenantListOut */
         TenantListOut: {
             /** Items */
             items: components["schemas"]["TenantItem"][];
+        };
+        /**
+         * TenantManagerItem
+         * @description 단지의 현재 소장(H7-6) — 이메일은 복호 실패·PII 부재 시 None.
+         */
+        TenantManagerItem: {
+            /** Email */
+            email?: string | null;
+            /** Status */
+            status: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /** TenantOut */
         TenantOut: {
@@ -3016,6 +3145,40 @@ export interface operations {
             };
         };
     };
+    delete_staff_admin_staff__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     deactivate_staff_admin_staff__user_id__deactivate_post: {
         parameters: {
             query?: never;
@@ -3122,6 +3285,108 @@ export interface operations {
             };
         };
     };
+    delete_tenant_admin_tenants__tenant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_tenant_admin_tenants__tenant_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    deactivate_tenant_admin_tenants__tenant_id__deactivate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     invite_manager_admin_tenants__tenant_id__invite_manager_post: {
         parameters: {
             query?: never;
@@ -3150,6 +3415,40 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_manager_admin_tenants__tenant_id__manager_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                tenant_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

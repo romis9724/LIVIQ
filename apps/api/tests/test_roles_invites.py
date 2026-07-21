@@ -420,3 +420,168 @@ async def test_active_user_without_flag_not_gated(
             await c.post("/auth/login", json={"email": email, "password": password})
         ).status_code == 200
         assert (await c.get("/admin/tenants")).status_code == 200
+
+
+# ── H7-6: 계정·단지 수명주기 (FR-ONB-08·12, CRITICAL) ────────────────────────
+
+
+async def _seed_login_user(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    email: str,
+    password: str,
+    role: str = "MANAGER",
+) -> uuid.UUID:
+    """검증 완료·비밀번호 설정된 로그인 가능 계정을 시드(PII vault 포함)."""
+    crypto = _crypto()
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
+    )
+    dek = await crypto.get_dek(session, tenant_id)
+    vault_id = uuid.uuid4()
+    session.add(
+        PiiVault(
+            id=vault_id, tenant_id=tenant_id, email_enc=crypto.encrypt(dek, email), key_version=1
+        )
+    )
+    user_id = uuid.uuid4()
+    session.add(
+        User(
+            id=user_id,
+            tenant_id=tenant_id,
+            login_id=crypto.hmac_hash(email),
+            password_hash=hash_password(password),
+            status="active",
+            email_verified_at=datetime.now(UTC),
+            pii_ref=vault_id,
+        )
+    )
+    await session.flush()
+    session.add(UserRole(tenant_id=tenant_id, user_id=user_id, role=role))
+    await session.flush()
+    return user_id
+
+
+async def test_delete_staff_soft_deletes_and_scrubs_pii(
+    seeded: AsyncSession, fake_redis: FakeRedis, session_store: SessionStore
+) -> None:
+    """삭제 = 소프트 삭제 + PII 비식별 + 세션 revoke(CRITICAL — 평문·해시 잔존 0)."""
+    email = "target-staff@example.com"
+    target_id = await _seed_login_user(seeded, TENANT_ID, email, "target-staff-pass", role="STAFF")
+    sid = await session_store.create(str(TENANT_ID), str(target_id), ["STAFF"], status="active")
+
+    async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
+        resp = await mgr.delete(f"/admin/staff/{target_id}")
+        assert resp.status_code == 204
+        listed = await mgr.get("/admin/staff")
+
+    user = await seeded.scalar(select(User).where(User.id == target_id))
+    assert user is not None
+    assert user.deleted_at is not None and user.status == "withdrawn"
+    assert user.login_id is None and user.password_hash is None  # 식별자·자격 말소
+    vault = await seeded.scalar(select(PiiVault).where(PiiVault.id == user.pii_ref))
+    assert vault is not None and vault.email_enc is None  # 암호문도 말소(비식별)
+    assert await session_store.get(sid) is None  # 세션 즉시 revoke
+    assert all(item["user_id"] != str(target_id) for item in listed.json()["items"])
+
+
+async def test_delete_other_manager_allowed_self_rejected(
+    seeded: AsyncSession, fake_redis: FakeRedis, session_store: SessionStore
+) -> None:
+    """소장은 타 소장 삭제 가능(운영자 결정), 자기 자신은 400(CRITICAL)."""
+    other = await _seed_login_user(
+        seeded, TENANT_ID, "other-mgr@example.com", "other-mgr-pass", role="MANAGER"
+    )
+    async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
+        assert (await mgr.delete(f"/admin/staff/{MANAGER_USER_ID}")).status_code == 400  # 자신
+        assert (await mgr.delete(f"/admin/staff/{other}")).status_code == 204
+
+    user = await seeded.scalar(select(User).where(User.id == other))
+    assert user is not None and user.deleted_at is not None
+
+
+async def test_invite_manager_capacity_one(
+    seeded: AsyncSession, fake_redis: FakeRedis, session_store: SessionStore
+) -> None:
+    """단지당 소장 1명 — 존재 시 409, SYS_ADMIN이 제거하면 재초대 가능(교체 흐름)."""
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as c:
+        # seed_tenant이 MANAGER를 이미 심었다 → 초대 차단.
+        blocked = await c.post(
+            f"/admin/tenants/{TENANT_ID}/invite-manager", json={"email": "new@example.com"}
+        )
+        assert blocked.status_code == 409
+
+        # 목록에 현재 소장 표시.
+        listed = await c.get("/admin/tenants")
+        row = next(t for t in listed.json()["items"] if t["id"] == str(TENANT_ID))
+        assert row["manager"] is not None and row["manager"]["status"] == "active"
+
+        # 소장 제거(소프트 삭제) → 재초대 202.
+        assert (await c.delete(f"/admin/tenants/{TENANT_ID}/manager")).status_code == 204
+        retry = await c.post(
+            f"/admin/tenants/{TENANT_ID}/invite-manager", json={"email": "new@example.com"}
+        )
+        assert retry.status_code == 202
+
+    manager = await seeded.scalar(select(User).where(User.id == MANAGER_USER_ID))
+    assert manager is not None and manager.deleted_at is not None  # 구 소장 비식별 삭제
+
+
+async def test_delete_tenant_only_when_empty(
+    seeded: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """빈 단지만 완전 삭제 — 계정 있는 단지는 409(CRITICAL — 데이터 통삭제 방지)."""
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as c:
+        # seed 단지엔 MANAGER 계정 존재 → 409.
+        assert (await c.delete(f"/admin/tenants/{TENANT_ID}")).status_code == 409
+
+        # 빈 단지는 204 + 목록에서 사라짐.
+        created = await c.post("/admin/tenants", json={"name": "빈단지"})
+        empty_id = created.json()["id"]
+        assert (await c.delete(f"/admin/tenants/{empty_id}")).status_code == 204
+        listed = await c.get("/admin/tenants")
+        assert all(t["id"] != empty_id for t in listed.json()["items"])
+
+
+async def test_tenant_deactivate_blocks_login_and_directory(
+    seeded: AsyncSession, fake_redis: FakeRedis, session_store: SessionStore
+) -> None:
+    """단지 비활성화 → 소속 로그인 403 tenant_inactive + 가입 목록 제외 + 세션 revoke,
+    재활성화 → 로그인 복귀(CRITICAL)."""
+    email = "tenant-user@example.com"
+    password = "tenant-user-pass!"
+    user_id = await _seed_login_user(seeded, TENANT_ID, email, password)
+    sid = await session_store.create(str(TENANT_ID), str(user_id), ["MANAGER"], status="active")
+
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as admin:
+        assert (await admin.post(f"/admin/tenants/{TENANT_ID}/deactivate")).status_code == 204
+
+    assert await session_store.get(sid) is None  # 비활성화 즉시 세션 revoke
+
+    async with _make_app(seeded, fake_redis, FakeMailer()) as c:
+        login = await c.post("/auth/login", json={"email": email, "password": password})
+        assert login.status_code == 403
+        assert login.json()["detail"] == "tenant_inactive"
+        directory = await c.get("/auth/tenants")
+        assert all(t["id"] != str(TENANT_ID) for t in directory.json()["items"])
+        signup = await c.post(
+            "/auth/signup",
+            json={"tenant_id": str(TENANT_ID), "email": "x@example.com", "password": "p" * 12},
+        )
+        assert signup.status_code == 404  # 비활성 단지 직접 가입도 차단
+
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as admin:
+        assert (await admin.post(f"/admin/tenants/{TENANT_ID}/activate")).status_code == 204
+
+    async with _make_app(seeded, fake_redis, FakeMailer()) as c:
+        assert (
+            await c.post("/auth/login", json={"email": email, "password": password})
+        ).status_code == 200
