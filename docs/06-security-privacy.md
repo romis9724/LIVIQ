@@ -17,10 +17,12 @@
 
 ## 2. 인증 / 인가
 
-- **인증**: **Google OAuth 2.0 + PKCE**(자체 비밀번호 미보관). OAuth 콜백은 **api(FastAPI)**가 처리하며 `state`(CSRF)·PKCE 검증. Google **access/refresh 토큰은 저장하지 않는다**(로그인 식별용 `sub`만 사용). 최초 로그인 후 세대정보 입력 → `pending`, 소장 승인 시 `active`. `pending`/`rejected`/`inactive`/`withdrawn` 계정은 API 접근 차단(대기·거절 안내 화면만).
-- **세션**: **Redis 서버 세션 + httpOnly·Secure·SameSite 쿠키**(쿠키엔 세션 ID만, 상태는 서버 보관). 수명(초기값 — 파일럿 보정): access 세션 24h · idle 타임아웃 2h. `inactive`/`rejected`/`withdrawn` 전환 시 해당 사용자 세션을 서버 세션 스토어에서 **즉시 revoke**.
-- **MANAGER 2FA**: 관리자(MANAGER) 계정은 Google **2단계 인증 사용 권장**(탈취 시 영향 범위 큼).
-- **MANAGER 초대(결정 F)**: 테넌트 생성 시 소장 이메일을 시드 초대 행으로 등록 → 해당 이메일로 로그인 시 **자동 MANAGER 역할** 부여([03 §8](03-database-design.md)).
+- **인증**: **이메일+비밀번호 자체 인증**([ADR-0014](adr/0014-local-email-auth.md) — Google OAuth 대체). 비밀번호는 **Argon2id**(argon2-cffi)로 해시 저장(평문·복호가능 형태 금지). 정책: 최소 10자(초기값 — 파일럿 보정, 복잡도 규칙 대신 길이 기준 NIST 계열). **이메일은 PII로 평문 컬럼 금지** — `pii_vault.email_enc` 암호화 저장 + 로그인·중복체크는 **keyed HMAC 해시**(`users.login_id` ← email_hash, 기존 partial unique 인덱스 재사용, [03 §4.1](03-database-design.md)). 이메일 전역 유니크(파일럿 단일 단지 수용). 가입 시 **이메일 검증 메일** 필수(검증 전 로그인 차단), 비밀번호 재설정 흐름 포함. 주민 가입의 tenant 확정은 **단지별 가입 링크**(관리사무소 게시 QR/URL — 초대코드 대체). 세대정보 입력 → `pending`, 소장 승인 시 `active`. `pending`/`rejected`/`inactive`/`withdrawn` 계정은 API 접근 차단(대기·거절 안내 화면만).
+- **인증 토큰(`auth_tokens`)**: purpose(`verify_email`|`invite`|`reset_password`) · `token_hash`(SHA-256, **원문은 URL로만 전달·DB 미저장**) · `expires_at` · `used_at` · `user_id` · `tenant_id`. TTL 초기값: verify 24h · invite 7d · reset 1h([03 §4.1](03-database-design.md)).
+- **메일 발송**: 어댑터 인터페이스(Protocol) 뒤. `MAIL_BACKEND=console|smtp`(local 기본 console — 링크를 로그 출력), SMTP는 env(`SMTP_HOST/PORT/USER/PASSWORD/FROM`). 파일럿은 **Gmail SMTP**(STARTTLS·앱 비밀번호 — [ADR-0014](adr/0014-local-email-auth.md)). 앱 비밀번호는 시크릿(§7) — env로만 주입, 커밋 금지.
+- **세션**: **Redis 서버 세션 + httpOnly·Secure·SameSite 쿠키**([ADR-0011](adr/0011-redis-server-session.md) — 인증 수단만 교체, 세션 모델 불변). 쿠키엔 세션 ID만, 상태는 서버 보관. 수명(초기값 — 파일럿 보정): access 세션 24h · idle 타임아웃 2h. `inactive`/`rejected`/`withdrawn` 전환 시 해당 사용자 세션을 서버 세션 스토어에서 **즉시 revoke**.
+- **2FA**: 파일럿 **제외**(관리자 계정 탈취 영향 큼 — 재도입 신호로만 표기).
+- **계정 생성 위계(초대 토큰)**: 최초 SYS_ADMIN은 설치 시드 스크립트가 생성(임시 비밀번호 출력, 첫 로그인 시 변경 강제) — **시스템 테넌트**(고정 UUID) 소속으로 RLS 정합, 권한은 **단지 생성 + 소장 초대만**(단지 콘텐츠 비열람). SYS_ADMIN→소장, 소장→직원(STAFF)은 **초대 링크 메일**(`auth_tokens` purpose=`invite`) → 수신자가 링크에서 비밀번호 설정. 소장 교체 = 신임 초대 + 구 계정 비활성화(escape hatch: SYS_ADMIN 재초대)([03 §8](03-database-design.md)).
 - **인가(RBAC)**: FastAPI **의존성 주입 기반 가드**(역할·테넌트·소유권을 검증하는 dependency). **프론트 메뉴 숨김은 보조일 뿐**, 모든 엔드포인트가 서버에서 역할·테넌트·소유권을 검증.
 - **소유권 검증**: 입주민은 본인/본인 세대 리소스만. (예: `inquiry.author_user_id === me` 또는 같은 household. 평면도는 `floor_plans`/`plan_devices`를 본인 `household_id`로만 조회 — 타 세대 접근 차단)
 - **세대 승계 경계(결정 E)**: 세대 전출입으로 신규 입주민이 들어와도 — 민원 등 작성물은 **작성자 본인**(`author_user_id`)에게만 귀속(이전 거주자 민원 열람 불가), 관리비는 **입주 승인(`approved_at`) 이후 월(period)**만 조회 가능(승인 전·이전 거주자 기간 차단).
@@ -80,7 +82,7 @@
 
 ### 4.6 명부 사전등록 (가입 전 개인정보)
 - 소장이 명부 엑셀(성함·생년월일·동·호)을 업로드하면 `users`가 `pre_registered`로 사전 생성되고, PII는 `pii_vault`에 **암호화** 저장.
-- 처리 근거: **공동주택 관리 목적**(위탁·이용 고지). 가입 시 Google OAuth + 입력값 자동 대조("명부 일치")에만 사용 — **대조 목적 외 사용 금지**.
+- 처리 근거: **공동주택 관리 목적**(위탁·이용 고지). 가입 시 입력값(성함·생일·동·호) 자동 대조("명부 일치")에만 사용 — **대조 목적 외 사용 금지**.
 - 미가입 사전등록 데이터도 보관기간·파기 정책(§4.4)을 동일 적용.
 - **파일럿 개시 체크리스트(사전등록 개인정보 고지)**:
   - [ ] 정보주체 고지 — 게시판 공고·안내문 등으로 명부 기반 사전등록·이용 목적 통지.

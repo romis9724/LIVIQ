@@ -18,7 +18,7 @@
 LIVIQ/
 ├── apps/
 │   ├── web-resident/      # 입주민 반응형 웹/PWA (Next.js, TS)
-│   ├── web-admin/         # 관리자·시설·입대의 콘솔 (Next.js, TS)
+│   ├── web-admin/         # 관리자 콘솔(MANAGER·STAFF + SYS_ADMIN 뷰) (Next.js, TS)
 │   ├── api/               # FastAPI (도메인 API + BFF + AI 오케스트레이션 진입, Python)
 │   └── ai-worker/         # arq 워커 (인제스트/OCR/임베딩/평가/graph-sync, Python)
 ├── packages/

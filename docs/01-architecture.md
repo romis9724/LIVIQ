@@ -52,7 +52,7 @@
 | 컨테이너 | 역할 | 스택 |
 |----------|------|------|
 | `web-resident` | 입주민 반응형 웹/PWA | Next.js(App Router), React, TS |
-| `web-admin` | 관리자/시설/입대의 콘솔 | Next.js, React, TS |
+| `web-admin` | 관리자 콘솔(MANAGER·STAFF·SYS_ADMIN 뷰) | Next.js, React, TS |
 | `api` | 인증·인가·도메인 API·BFF, AI 오케스트레이션 진입점 | FastAPI, Python |
 | `ai-worker` | 비동기 인제스트(청킹/임베딩/OCR), graph-sync(outbox→Neo4j), 평가 배치 | Python, arq |
 | `db` | 관계형 + 벡터 색인 (SoR) | PostgreSQL 16 + pgvector(HNSW) |
@@ -171,7 +171,7 @@
 | 그래프 | Neo4j | 시설 그래프·시설 텍스트 벡터, 파생/재생성 가능 |
 | 캐시/큐 | Redis + arq | 캐시·세션·비동기(async·cron 내장) |
 | 검증 | Pydantic v2(서버) + Zod(웹 폼) | 경계 입력 검증, 계약은 OpenAPI 생성 |
-| 인증 | Google OAuth(+명부 대조 승인) | 역할 기반, 자체 비밀번호 미보관([00 FR-ONB]) |
+| 인증 | 이메일+비밀번호 자체 인증(+명부 대조 승인) | Argon2id 해시·이메일 검증·초대 토큰([ADR-0014](adr/0014-local-email-auth.md), [00 FR-ONB]) |
 | LLM | OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) | 벤더 중립, 성능비교 용이, [08] |
 | 임베딩 | bge-m3(1024, Ollama/vLLM 로컬 실행) | 한국어 강함, 차원 고정([03]) |
 | 스토리지 | S3 호환 | 원본 문서·이미지 |
@@ -200,7 +200,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -213,23 +213,29 @@
 
 ### 13.2 엔드포인트 (도메인별)
 
-**인증·온보딩** (H2-1 · [ADR-0011](adr/0011-redis-server-session.md), [06 §2](06-security-privacy.md), 화면: 입주민 온보딩 3종)
+**인증·온보딩** (H7-1 · [ADR-0011](adr/0011-redis-server-session.md)·[ADR-0014](adr/0014-local-email-auth.md), [06 §2](06-security-privacy.md), 화면: 온보딩)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `GET /auth/google/login` | 공개 | PKCE·state 생성 → Google 리다이렉트 |
-| `GET /auth/google/callback` | 공개 | 세션 확립. 계정 상태별 분기(신규→온보딩, pending→대기 화면, active→홈) |
+| `POST /auth/signup` | 공개 | 이메일+비밀번호 가입(단지별 가입 링크의 단지 식별자로 tenant 확정) → 이메일 검증 메일 발송(검증 전 로그인 불가) |
+| `POST /auth/login` | 공개 | 이메일+비밀번호 검증 → 세션 확립. 계정 상태별 분기(신규→온보딩, pending→대기, active→홈) |
+| `GET /auth/verify-email` | 공개 | 검증 토큰(`auth_tokens`) 확인 → `email_verified_at` 기록 |
+| `POST /auth/password-reset` · `/password-reset/confirm` | 공개 | 재설정 토큰 메일 발송 → 링크에서 새 비밀번호 설정 |
+| `POST /auth/invite/accept` | 공개 | 초대 토큰(소장·직원) 확인 → 비밀번호 설정·계정 활성화 |
 | `POST /auth/logout` | 세션 | 세션 revoke |
 | `GET /me` | 세션(모든 상태) | 프로필·역할·계정 상태 — 상태별 화면 분기의 단일 출처 |
-| `POST /onboarding/profile` | 세션(신규) | 초대코드(tenant 확정)·동의·성함·생년월일·동·호 → 명부 자동 대조 → `pending` |
+| `POST /onboarding/profile` | 세션(신규) | 동의·성함·생년월일·동·호 → 명부 자동 대조 → `pending`(초대코드 제거) |
 
-**계정 승인·명부** (H2-1, 화면: 관리자 가입 승인)
+**계정 승인·명부·초대** (H2-1·H7-2, 화면: 관리자 가입 승인·직원 관리·SYS_ADMIN 뷰)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `GET /admin/approvals` | MANAGER | 대기 목록(명부 일치 배지 = `roster_matched`) |
+| `GET /admin/approvals` | MANAGER | 대기 목록(명부 일치 배지 = `roster_matched`) — 자동 승격 없음 |
 | `POST /admin/approvals/{user_id}/approve` · `/reject` | MANAGER | 거절은 사유 필수. 상태 전환 시 대상 세션 즉시 revoke + 알림 생성 |
 | `POST /admin/roster/upload` | MANAGER | 명부 엑셀 → `excel_uploads(type=roster)` → 사전등록 diff 병합([03 §4.1](03-database-design.md)) |
+| `POST /admin/staff/invite` | MANAGER | 직원(STAFF) 초대 링크 메일(`auth_tokens` invite, TTL 7d) |
+| `POST /admin/tenants` | SYS_ADMIN | 단지 생성(시스템 테넌트 권한, 단지 콘텐츠 비열람) |
+| `POST /admin/tenants/{id}/invite-manager` | SYS_ADMIN | 소장(MANAGER) 초대 링크 메일(`auth_tokens` invite) |
 
 **AI 비서** (H1 구현됨, 화면: 입주민 AI 비서)
 
@@ -287,13 +293,13 @@
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `GET /admin/facilities` | MANAGER·STAFF·FACILITY | 설비 목록(상태·유형 필터) |
-| `POST /admin/facilities` | MANAGER·FACILITY | 설비 등록 — **도메인 행 + `outbox_events` 원자 기록**([03 §4.9](03-database-design.md), 이중 쓰기 금지) |
-| `GET /admin/facilities/{id}` | MANAGER·STAFF·FACILITY | 상세 + 장애·정비 이력 |
-| `PATCH /admin/facilities/{id}` | MANAGER·FACILITY | 상태(normal\|check\|fault\|risk)·정보 수정(+outbox) |
-| `POST /admin/facilities/{id}/incidents` | MANAGER·FACILITY | 장애 기록(증상·조치) — outbox 경유로 Neo4j 임베딩 반영 |
-| `POST /admin/facilities/{id}/maintenance` | MANAGER·FACILITY | 정비 기록(작업·교체 부품, +outbox) |
-| `POST /admin/facilities/assistant` | MANAGER·FACILITY | AI 도우미(SSE 4이벤트) — 도구 에이전트 경로([ADR-0007](adr/0007-readonly-tool-agent.md)), 유사 장애→**원인 후보 제시(단정 금지**, FR-FAC-02). Neo4j 미가용 시 그래프 도구 제외 폴백 |
+| `GET /admin/facilities` | MANAGER | 설비 목록(상태·유형 필터) |
+| `POST /admin/facilities` | MANAGER | 설비 등록 — **도메인 행 + `outbox_events` 원자 기록**([03 §4.9](03-database-design.md), 이중 쓰기 금지) |
+| `GET /admin/facilities/{id}` | MANAGER | 상세 + 장애·정비 이력 |
+| `PATCH /admin/facilities/{id}` | MANAGER | 상태(normal\|check\|fault\|risk)·정보 수정(+outbox) |
+| `POST /admin/facilities/{id}/incidents` | MANAGER | 장애 기록(증상·조치) — outbox 경유로 Neo4j 임베딩 반영 |
+| `POST /admin/facilities/{id}/maintenance` | MANAGER | 정비 기록(작업·교체 부품, +outbox) |
+| `POST /admin/facilities/assistant` | MANAGER | AI 도우미(SSE 4이벤트) — 도구 에이전트 경로([ADR-0007](adr/0007-readonly-tool-agent.md)), 유사 장애→**원인 후보 제시(단정 금지**, FR-FAC-02). Neo4j 미가용 시 그래프 도구 제외 폴백 |
 
 > Neo4j에 직접 쓰는 엔드포인트는 없다 — 모든 시설 쓰기는 PG 트랜잭션+outbox 한 경로, 그래프 반영은 ai-worker 단독([11 §3.5](11-data-architecture.md)).
 
