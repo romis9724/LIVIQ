@@ -63,8 +63,9 @@ async def get_context(
 ) -> RequestContext:
     """세션 쿠키 우선, 없으면 local dev 헤더. 둘 다 없으면 401(fail-closed).
 
-    온보딩 세션·비활성 상태(pending/rejected/inactive)는 일반 API 접근 403 —
-    상태별 화면 분기는 /me가 담당(docs/06 §2). 상태 무관 조회는 get_session_raw.
+    비활성 상태(registered/pending/rejected/inactive)는 일반 API 접근 403 —
+    registered는 온보딩 제출만, 그 외 상태별 화면 분기는 /me가 담당(docs/06 §2).
+    상태 무관 조회는 get_session_raw.
     """
     if liviq_session:
         try:
@@ -73,9 +74,7 @@ async def get_context(
             raise HTTPException(status_code=401, detail="세션 검증 실패") from exc
         if data is None:
             raise HTTPException(status_code=401, detail="세션 만료 또는 무효")
-        if data.kind != "user":  # 온보딩 세션은 일반 API 접근 불가(온보딩 제출만)
-            raise HTTPException(status_code=403, detail="온보딩 필요")
-        if data.status != "active":  # pending/rejected/inactive → 상태별 안내 화면만
+        if data.status != "active":  # registered/pending/rejected/inactive → 상태별 안내만
             raise HTTPException(status_code=403, detail=data.status)
         return RequestContext(
             tenant_id=uuid.UUID(data.tenant_id),
@@ -173,10 +172,10 @@ async def get_tenant_session(
 async def get_onboarding_session() -> AsyncIterator[AsyncSession]:
     """온보딩 제출 전용 트랜잭션 세션 — 컨텍스트 미설정으로 시작.
 
-    온보딩은 아직 tenant가 확정되지 않았다(초대코드로 확정). tenants는 RLS 예외라
-    코드가 초대코드로 조회하고, 확정 후 라우터가 같은 트랜잭션에서 app.tenant_id를
-    설정해 households·users·pii_vault를 정상 격리 경로로 읽고 쓴다(auth_lookup 아님 —
-    users 전역 SELECT를 열지 않아 명부 대조가 단지 밖으로 새지 않는다, docs/03 §5).
+    가입자(status='registered')의 tenant는 세션에 이미 담겨 있다(가입 시 확정, ADR-0014).
+    라우터가 같은 트랜잭션에서 그 tenant_id로 app.tenant_id를 설정해 households·users·
+    pii_vault를 정상 격리 경로로 읽고 쓴다(auth_lookup 아님 — 명부 대조가 단지 밖으로
+    새지 않는다, docs/03 §5).
     """
     factory = _get_session_factory()
     async with factory() as session, session.begin():
@@ -184,12 +183,12 @@ async def get_onboarding_session() -> AsyncIterator[AsyncSession]:
 
 
 async def get_auth_lookup_session() -> AsyncIterator[AsyncSession]:
-    """OAuth 콜백의 login_id(google sub) 전역 조회 전용 트랜잭션 세션.
+    """이메일 해시(login_id)·토큰 해시 전역 조회 전용 트랜잭션 세션(ADR-0014).
 
-    login_id는 글로벌 partial-unique라 tenant 확정 전 조회가 불가피 = 표준 격리 예외.
-    `app.auth_lookup='on'` 플래그로 users의 `auth_lookup` permissive 정책(SELECT 전용)을
-    켠다(docs/03 §5). 행을 찾으면 콜백이 같은 트랜잭션에서 그 tenant_id로 app.tenant_id를
-    설정해 정상 격리 경로로 전환한다(user_roles 등 조회).
+    login_id·token_hash는 tenant 확정 전 조회가 불가피 = 표준 격리 예외.
+    `app.auth_lookup='on'` 플래그로 users·auth_tokens의 `auth_lookup` permissive 정책
+    (SELECT 전용)을 켠다(docs/03 §5). 행을 찾으면 라우터가 같은 트랜잭션에서 그 tenant_id로
+    app.tenant_id를 설정해 정상 격리 경로로 전환한다(user_roles 조회·행 생성·소진).
     """
     factory = _get_session_factory()
     async with factory() as session, session.begin():

@@ -406,3 +406,62 @@ async def test_inquiry_events_update_denied(owner_conn: AsyncConnection, seed: S
         )
 
     await _assert_denied(owner_conn, update_event)
+
+
+# ── auth_tokens: tenant 격리 + auth_lookup SELECT(토큰 전역 조회, ADR-0014) ──
+
+
+async def _seed_auth_token(conn: AsyncConnection, tf: object, label: str) -> None:
+    fixture = tf  # TenantFixture — tenant_id·user_id 사용
+    await conn.execute(
+        text(
+            "INSERT INTO auth_tokens(tenant_id, user_id, purpose, token_hash, expires_at) "
+            "VALUES(:t, :u, 'verify_email', :h, now() + interval '1 day')"
+        ).bindparams(
+            t=fixture.tenant_id,  # type: ignore[attr-defined]
+            u=fixture.user_id,  # type: ignore[attr-defined]
+            h=f"tokenhash-{label}",
+        )
+    )
+
+
+async def test_auth_tokens_tenant_isolation(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """A는 자기 토큰만 — B의 토큰은 안 보인다(격리)."""
+    await _seed_auth_token(owner_conn, seed.a, "a")
+    await _seed_auth_token(owner_conn, seed.b, "b")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    assert await _count(owner_conn, "auth_tokens") == 1, "타 단지 토큰이 노출됨(격리 실패)"
+
+
+async def test_auth_tokens_visible_with_auth_lookup_flag(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """auth_lookup='on'이면 tenant 무관 전역 SELECT(클릭 시점 token_hash 조회)."""
+    await _seed_auth_token(owner_conn, seed.a, "a")
+    await _seed_auth_token(owner_conn, seed.b, "b")
+    await _set_auth_lookup(owner_conn, "liviq_app")
+
+    assert await _count(owner_conn, "auth_tokens") == 2, "auth_lookup 플래그로 전역 조회가 안 됨"
+
+
+async def test_auth_tokens_no_context_reads_zero(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """플래그·컨텍스트 모두 없으면 0행(fail-closed)."""
+    await _seed_auth_token(owner_conn, seed.a, "a")
+    await set_context(owner_conn, "liviq_app", tenant_id=None)
+
+    assert await _count(owner_conn, "auth_tokens") == 0
+
+
+async def test_auth_tokens_auth_lookup_does_not_enable_writes(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """auth_lookup은 FOR SELECT — 소진(used_at)은 tenant 전환 후에만(CRITICAL)."""
+    await _seed_auth_token(owner_conn, seed.a, "a")
+    await _set_auth_lookup(owner_conn, "liviq_app")
+
+    # tenant 미설정 → tenant_isolation USING만 평가 → 대상 행 0(소진 불가).
+    result = await owner_conn.execute(
+        text("UPDATE auth_tokens SET used_at = now() WHERE token_hash = 'tokenhash-a'")
+    )
+    assert result.rowcount == 0, "auth_lookup 플래그로 UPDATE가 새어나감"

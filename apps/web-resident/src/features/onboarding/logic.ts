@@ -66,9 +66,11 @@ export function maskKoreanName(name: string): string {
 /** 계정 상태 → PendingView 카드 분기. onboarding=미제출, unknown=예상 밖 상태(방어적). */
 export type AccountView = "pending" | "rejected" | "active" | "inactive" | "onboarding" | "unknown";
 
-export function accountView(me: Pick<Me, "kind" | "status">): AccountView {
-  if (me.kind === "onboarding") return "onboarding";
+export function accountView(me: Pick<Me, "status">): AccountView {
   switch (me.status) {
+    // registered=가입 완료·프로필 미제출 → 온보딩 필요(자체 인증, ADR-0014 · kind 폐기).
+    case "registered":
+      return "onboarding";
     case "pending":
     case "rejected":
     case "active":
@@ -84,7 +86,7 @@ export function accountView(me: Pick<Me, "kind" | "status">): AccountView {
  * 401(미로그인)은 apiFetch 가 /login 으로 유도하므로 여기 도달하지 않는다.
  * pending·rejected·inactive·unknown 은 계정 상태 화면(/pending)이 각 상태를 안내한다.
  */
-export function rootDestination(me: Pick<Me, "kind" | "status">): string {
+export function rootDestination(me: Pick<Me, "status">): string {
   const view = accountView(me);
   if (view === "active") return "/home";
   if (view === "onboarding") return "/onboarding";

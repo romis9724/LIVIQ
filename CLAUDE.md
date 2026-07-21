@@ -44,7 +44,7 @@ docs/ refs/                                  # 설계 문서 · 참조 자료
 ```
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
-인증: Redis 세션+Google OAuth PKCE+역할 가드 — 웹은 세션 쿠키 1차(H6-1, credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 mock IdP(OAuth URL env 오버라이드)로 실 세션 로그인 — 가입→AI 전 여정 커버(H6-4). 다음 단계·백로그: [docs/09 §8.2·§8.3](docs/09-implementation-harness.md).
+인증: Redis 세션+**자체 이메일+비밀번호**(Argon2id·검증 메일·auth_tokens — H7-1, [ADR-0014](docs/adr/0014-local-email-auth.md))+역할 가드 — 웹은 세션 쿠키 1차(credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 시드 계정 API 로그인(mock IdP 제거) — 가입 여정 E2E는 H7-3·H7-4에서 재작성(그전까지 skip). 다음 단계·백로그: [docs/09 §8.8·§8.3](docs/09-implementation-harness.md).
 로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
 
 ## 자주 쓰는 명령

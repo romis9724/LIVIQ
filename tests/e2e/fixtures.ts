@@ -9,8 +9,11 @@ export const STORAGE_STATE = path.join(__dirname, ".auth", "session.json");
 export const E2E = {
   tenantId: "ee2e0000-0000-4000-8000-000000000001",
   userId: "ee2e0000-0000-4000-8000-000000000002",
-  // 시드 user.login_id = mock IdP가 반환하는 google sub. 로그인 흐름이 이 값으로 신원을 확정.
-  googleSub: "e2e-google-sub-0001",
+  // 시드 user.login_id = email 의 keyed HMAC(seed.ts가 pii.py와 동일하게 계산).
+  // auth.setup.ts 가 아래 email/password 로 /auth/login 을 호출해 세션을 확립한다.
+  // example.com — .test/.example 등 특수용도 TLD는 pydantic EmailStr(email-validator)이 거부한다.
+  email: "e2e-resident@example.com",
+  password: "e2e-password-liviq-1",
   buildingId: "ee2e0000-0000-4000-8000-000000000003",
   householdId: "ee2e0000-0000-4000-8000-000000000004",
   notice1Id: "ee2e0000-0000-4000-8000-000000000005",

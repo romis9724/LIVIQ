@@ -71,78 +71,83 @@ async function completeSignup(page: Page, person: Applicant): Promise<void> {
   await expect(page.getByText("관리소장 승인을 기다리고 있어요")).toBeVisible();
 }
 
-test.beforeAll(async () => {
-  await reseed();
-});
+// H7-1에서 mock IdP·초대코드 기반 인증을 폐기 → 이 여정은 현시점 실행 불가라 전체 skip한다.
+// H7-3(가입 UI)·H7-4(E2E 재작성)에서 새 이메일 가입 여정으로 대체한다(docs/09 §8.8).
+// 파일은 승인·명부 대조·상태 분기의 참조로 보존한다. describe.skip은 beforeAll(reseed)도 건너뛴다.
+test.describe.skip("가입 전 구간 여정 — H7-4에서 이메일 가입으로 재작성", () => {
+  test.beforeAll(async () => {
+    await reseed();
+  });
 
-test("명부 업로드→가입 신청→승인→재로그인→앱 이용, 그리고 불일치 분기", async ({
-  page,
-  browser,
-}) => {
-  // ── 1. 관리자: 명부 엑셀 업로드 → 사전등록 1건 생성(리포트 확인) ──
-  await page.goto(`${ADMIN}/approvals`);
-  // 대기 목록 조회가 끝난 뒤 업로드 — 재시드 직후 첫 요청 2건이 단지 DEK를 동시 최초생성하며
-  // 경합(tenant_keys uq)하지 않도록 직렬화한다(목록 로드가 DEK를 먼저 확정).
-  await expect(page.getByText("대기 중인 가입 신청이 없습니다")).toBeVisible();
-  await page.setInputFiles('input[type="file"]', ROSTER_XLSX);
-  await expect(page.getByText("신규 등록 1")).toBeVisible();
+  test("명부 업로드→가입 신청→승인→재로그인→앱 이용, 그리고 불일치 분기", async ({
+    page,
+    browser,
+  }) => {
+    // ── 1. 관리자: 명부 엑셀 업로드 → 사전등록 1건 생성(리포트 확인) ──
+    await page.goto(`${ADMIN}/approvals`);
+    // 대기 목록 조회가 끝난 뒤 업로드 — 재시드 직후 첫 요청 2건이 단지 DEK를 동시 최초생성하며
+    // 경합(tenant_keys uq)하지 않도록 직렬화한다(목록 로드가 DEK를 먼저 확정).
+    await expect(page.getByText("대기 중인 가입 신청이 없습니다")).toBeVisible();
+    await page.setInputFiles('input[type="file"]', ROSTER_XLSX);
+    await expect(page.getByText("신규 등록 1")).toBeVisible();
 
-  // ── 2. 신규 가입자(명부 일치): 로그인 → 가입 신청 → 대기 ──
-  const applicant = await freshResident(browser, E2E.signupSub);
-  await completeSignup(applicant, ROSTER_PERSON);
+    // ── 2. 신규 가입자(명부 일치): 로그인 → 가입 신청 → 대기 ──
+    const applicant = await freshResident(browser, E2E.signupSub);
+    await completeSignup(applicant, ROSTER_PERSON);
 
-  // ── 3. 관리자: 대기 목록에 마스킹 이름·명부 일치로 표시 → 승인 ──
-  await page.goto(`${ADMIN}/approvals`);
-  await expect(page.getByText(maskName(ROSTER_PERSON.name))).toBeVisible();
-  await expect(page.getByText("명부 일치")).toBeVisible();
-  await page.getByRole("button", { name: "승인" }).click();
-  await expect(page.getByText("승인 완료", { exact: false })).toBeVisible();
+    // ── 3. 관리자: 대기 목록에 마스킹 이름·명부 일치로 표시 → 승인 ──
+    await page.goto(`${ADMIN}/approvals`);
+    await expect(page.getByText(maskName(ROSTER_PERSON.name))).toBeVisible();
+    await expect(page.getByText("명부 일치")).toBeVisible();
+    await page.getByRole("button", { name: "승인" }).click();
+    await expect(page.getByText("승인 완료", { exact: false })).toBeVisible();
 
-  // ── 4. 신규 가입자: 재로그인(승인으로 이전 세션 revoke됨) → 활성 → 홈 ──
-  await applicant.goto(`${API}/auth/google/login`);
-  await expect(applicant).toHaveURL(/\/home/);
-  await expect(applicant.getByText("무엇이든 물어보세요")).toBeVisible();
+    // ── 4. 신규 가입자: 재로그인(승인으로 이전 세션 revoke됨) → 활성 → 홈 ──
+    await applicant.goto(`${API}/auth/google/login`);
+    await expect(applicant).toHaveURL(/\/home/);
+    await expect(applicant.getByText("무엇이든 물어보세요")).toBeVisible();
 
-  // 공지 — 발행 공지가 목록에 표시.
-  await applicant.goto(`${RESIDENT}/notices`);
-  await expect(
-    applicant.locator(".notice-card").filter({ hasText: NOTICE1.title }),
-  ).toBeVisible();
+    // 공지 — 발행 공지가 목록에 표시.
+    await applicant.goto(`${RESIDENT}/notices`);
+    await expect(
+      applicant.locator(".notice-card").filter({ hasText: NOTICE1.title }),
+    ).toBeVisible();
 
-  // 관리비 — 세대(301호) 확정 관리비 합계 표시(표시 전용).
-  await applicant.goto(`${RESIDENT}/fees`);
-  await expect(
-    applicant.getByText(won(FEE_CURRENT_TOTAL)).first(),
-  ).toBeVisible();
+    // 관리비 — 세대(301호) 확정 관리비 합계 표시(표시 전용).
+    await applicant.goto(`${RESIDENT}/fees`);
+    await expect(
+      applicant.getByText(won(FEE_CURRENT_TOTAL)).first(),
+    ).toBeVisible();
 
-  // 민원 접수 — 폼 제출 후 접수 확인.
-  await applicant.goto(`${RESIDENT}/inquiries`);
-  await applicant.getByRole("tab", { name: "접수하기" }).click();
-  const inquiryTitle = `E2E 가입 여정 민원 ${Date.now()}`;
-  await applicant.getByLabel("제목").fill(inquiryTitle);
-  await applicant
-    .getByLabel("상세 내용")
-    .fill("가입 직후 접수한 테스트 민원입니다.");
-  await applicant.getByRole("button", { name: "접수하기" }).click();
-  await expect(applicant.getByText("민원을 접수했습니다.")).toBeVisible();
+    // 민원 접수 — 폼 제출 후 접수 확인.
+    await applicant.goto(`${RESIDENT}/inquiries`);
+    await applicant.getByRole("tab", { name: "접수하기" }).click();
+    const inquiryTitle = `E2E 가입 여정 민원 ${Date.now()}`;
+    await applicant.getByLabel("제목").fill(inquiryTitle);
+    await applicant
+      .getByLabel("상세 내용")
+      .fill("가입 직후 접수한 테스트 민원입니다.");
+    await applicant.getByRole("button", { name: "접수하기" }).click();
+    await expect(applicant.getByText("민원을 접수했습니다.")).toBeVisible();
 
-  // 나 > 알림함 — 승인 알림 도착.
-  await applicant.goto(`${RESIDENT}/me`);
-  await expect(applicant.getByText("가입이 승인되었습니다")).toBeVisible();
+    // 나 > 알림함 — 승인 알림 도착.
+    await applicant.goto(`${RESIDENT}/me`);
+    await expect(applicant.getByText("가입이 승인되었습니다")).toBeVisible();
 
-  // ── 5. 불일치 분기: 명부에 없는 정보로 가입 → 대기(수동 확인) ──
-  const mismatch = await freshResident(browser, E2E.mismatchSub);
-  await completeSignup(mismatch, MISMATCH_PERSON);
+    // ── 5. 불일치 분기: 명부에 없는 정보로 가입 → 대기(수동 확인) ──
+    const mismatch = await freshResident(browser, E2E.mismatchSub);
+    await completeSignup(mismatch, MISMATCH_PERSON);
 
-  // 관리자 목록에 "명부 불일치"로 분류(roster_matched=false).
-  await page.goto(`${ADMIN}/approvals`);
-  await expect(page.getByText(maskName(MISMATCH_PERSON.name))).toBeVisible();
-  await expect(page.getByText("명부 불일치", { exact: false })).toBeVisible();
+    // 관리자 목록에 "명부 불일치"로 분류(roster_matched=false).
+    await page.goto(`${ADMIN}/approvals`);
+    await expect(page.getByText(maskName(MISMATCH_PERSON.name))).toBeVisible();
+    await expect(page.getByText("명부 불일치", { exact: false })).toBeVisible();
 
-  // 승인 전에는 일반 API 차단(pending 상태) — 서버가 403으로 막는다.
-  const blocked = await mismatch.request.get(`${API}/notices`);
-  expect(blocked.status()).toBe(403);
+    // 승인 전에는 일반 API 차단(pending 상태) — 서버가 403으로 막는다.
+    const blocked = await mismatch.request.get(`${API}/notices`);
+    expect(blocked.status()).toBe(403);
 
-  await applicant.context().close();
-  await mismatch.context().close();
+    await applicant.context().close();
+    await mismatch.context().close();
+  });
 });

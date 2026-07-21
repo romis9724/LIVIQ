@@ -20,7 +20,6 @@ class ConsentIn(BaseModel):
 
 
 class ProfileIn(BaseModel):
-    invite_code: str = Field(min_length=1, max_length=64)
     consents: list[ConsentIn]
     name: str = Field(min_length=1, max_length=64)
     birth_date: datetime.date

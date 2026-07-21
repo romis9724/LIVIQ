@@ -44,24 +44,21 @@ class ApiSettings(BaseSettings):
     # Storage Protocol의 "테스트는 인메모리" 배선을 실행 프로세스에서도 선택 가능하게 한다.
     storage_backend: str = Field("s3", validation_alias="STORAGE_BACKEND")
 
-    # Google OAuth(PKCE) — optional. 미설정 시 /auth/google/* 503(부팅은 성공, ADR-0011).
-    google_oauth_client_id: str | None = Field(None, validation_alias="GOOGLE_OAUTH_CLIENT_ID")
-    google_oauth_client_secret: str | None = Field(
-        None, validation_alias="GOOGLE_OAUTH_CLIENT_SECRET"
-    )
-    google_oauth_redirect_uri: str | None = Field(
-        None, validation_alias="GOOGLE_OAUTH_REDIRECT_URI"
-    )
-    # OAuth authorize/token 엔드포인트 오버라이드 — 미설정 시 구글 기본(oauth.py 상수).
-    # mock IdP(E2E)·사설 IdP 주입용. 백도어 아님 — URL만 교체(신원 확인 로직 불변).
-    google_oauth_auth_url: str | None = Field(None, validation_alias="GOOGLE_OAUTH_AUTH_URL")
-    google_oauth_token_url: str | None = Field(None, validation_alias="GOOGLE_OAUTH_TOKEN_URL")
+    # 메일 발송 어댑터(ADR-0014) — "console"(local 기본, 링크 로그 출력) · "smtp"(STARTTLS).
+    mail_backend: str = Field("console", validation_alias="MAIL_BACKEND")
+    smtp_host: str | None = Field(None, validation_alias="SMTP_HOST")
+    smtp_port: int = Field(587, validation_alias="SMTP_PORT")
+    smtp_user: str | None = Field(None, validation_alias="SMTP_USER")
+    smtp_password: str | None = Field(None, validation_alias="SMTP_PASSWORD")
+    smtp_from: str | None = Field(None, validation_alias="SMTP_FROM")
+    # 이메일 검증 링크 생성용 API 베이스 URL(ADR-0014) — 검증 콜백은 api가 받는다.
+    api_base_url: str = Field("http://localhost:8000", validation_alias="API_BASE_URL")
 
     # 웹 앱 CORS 허용 오리진(콤마 구분) — credentials(세션 쿠키) 교차 출처 필수(ADR-0011).
     web_origins: str = Field(
         "http://localhost:3000,http://localhost:3001", validation_alias="WEB_ORIGINS"
     )
-    # OAuth 콜백 후 웹 앱으로 되돌릴 베이스 URL. 빈 문자열=상대 경로(api 동일 출처·테스트).
+    # 웹 앱으로 되돌릴 베이스 URL(이메일 검증·재설정 링크 목적지). 빈 문자열=상대 경로.
     web_base_url: str = Field("", validation_alias="WEB_BASE_URL")
 
     def cors_origins(self) -> list[str]:

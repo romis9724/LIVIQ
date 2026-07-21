@@ -7,6 +7,8 @@
 //
 // 멱등성: E2E tenant 하위 행을 FK 역순으로 전부 지우고 다시 넣는다(반복 실행 안전).
 
+import { createHmac, hkdfSync } from "node:crypto";
+
 import { Client } from "pg";
 
 import {
@@ -27,6 +29,26 @@ import {
 } from "./fixtures";
 
 const DEFAULT_DSN = "postgresql://liviq:liviq@localhost:15432/liviq";
+
+// KEK — playwright.config 이 api 에 주입하는 zeros 키(Buffer.alloc(32,0) base64)와 동일해야
+// login_id(이메일 HMAC)가 일치한다. env 미설정이면 같은 기본값으로 폴백(config 와 동치).
+const PII_MASTER_KEY_B64 = process.env.PII_MASTER_KEY ?? Buffer.alloc(32, 0).toString("base64");
+
+// e2e-password-liviq-1 의 Argon2id 해시(app.password 로 사전 생성 — 재계산 금지, ADR-0014).
+const PASSWORD_HASH =
+  "$argon2id$v=19$m=65536,t=3,p=4$X7gU1W3GvYUm6bpNEiVbtA$aO9H/bv9kOKI/IblIAyJoSm6DQaZBGrQPJSHXBovcOY";
+
+/** 이메일 → login_id 조회 키. apps/api/app/pii.py(HKDF salt=None + keyed HMAC-SHA256)와 동일. */
+function emailHash(email: string): string {
+  const kek = Buffer.from(PII_MASTER_KEY_B64, "base64");
+  // python cryptography HKDF(salt=None)는 zero-filled 32byte salt 와 동일.
+  const hmacKey = Buffer.from(
+    hkdfSync("sha256", kek, Buffer.alloc(32, 0), Buffer.from("pii-hmac"), 32),
+  );
+  return createHmac("sha256", hmacKey)
+    .update(email.trim().toLowerCase().normalize("NFC"), "utf8")
+    .digest("hex");
+}
 
 /** asyncpg 드라이버 접두사를 제거해 node-postgres가 이해하는 DSN으로 정규화. */
 function toPgDsn(url: string): string {
@@ -115,11 +137,14 @@ async function insert(client: Client): Promise<void> {
   );
 
   // 승인 완료 입주민(approved_at 과거) — 관리비 조회 스코프(FR-FEE-03)와 민원 접수 통과.
-  // login_id = mock IdP sub — 세션 로그인(auth.setup.ts)이 이 행으로 신원을 확정한다.
+  // login_id = 이메일 HMAC · password_hash = 고정 Argon2id · email_verified_at 기록으로
+  // 검증 게이트(403) 통과 — auth.setup.ts 가 이 계정으로 /auth/login 해 세션을 확립한다(ADR-0014).
   await client.query(
-    `INSERT INTO users (id, tenant_id, household_id, status, roster_matched, approved_at, login_id)
-     VALUES ($1, $2, $3, 'active', true, '2020-01-01T00:00:00Z', $4)`,
-    [E2E.userId, E2E.tenantId, E2E.householdId, E2E.googleSub],
+    `INSERT INTO users
+       (id, tenant_id, household_id, status, roster_matched, approved_at,
+        login_id, password_hash, email_verified_at)
+     VALUES ($1, $2, $3, 'active', true, '2020-01-01T00:00:00Z', $4, $5, NOW())`,
+    [E2E.userId, E2E.tenantId, E2E.householdId, emailHash(E2E.email), PASSWORD_HASH],
   );
   for (const role of ["RESIDENT", "MANAGER"]) {
     await client.query(
