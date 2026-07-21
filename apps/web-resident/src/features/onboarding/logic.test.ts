@@ -9,7 +9,9 @@ import {
   buildProfilePayload,
   fullAge,
   isUnderMinAge,
+  isValidDong,
   isValidEmail,
+  isValidHo,
   maskKoreanName,
   parseTenantId,
   rejectionReasonFrom,
@@ -271,5 +273,23 @@ describe("maskKoreanName", () => {
   it("한 글자·공백은 그대로", () => {
     expect(maskKoreanName("홍")).toBe("홍");
     expect(maskKoreanName("  홍길동  ")).toBe("홍*동");
+  });
+});
+
+describe("동·호 숫자 입력 검증 (H7-8)", () => {
+  it("동은 1~4자리 숫자만 허용한다", () => {
+    expect(isValidDong("401")).toBe(true);
+    expect(isValidDong(" 101 ")).toBe(true);
+    expect(isValidDong("")).toBe(false);
+    expect(isValidDong("4층")).toBe(false);
+    expect(isValidDong("40101")).toBe(false);
+  });
+
+  it("호는 100 이상 숫자만 허용한다(상위 자리=층 파생)", () => {
+    expect(isValidHo("201")).toBe(true);
+    expect(isValidHo("1502")).toBe(true);
+    expect(isValidHo("99")).toBe(false); // 층 파생 불가
+    expect(isValidHo("2층1호")).toBe(false);
+    expect(isValidHo("")).toBe(false);
   });
 });

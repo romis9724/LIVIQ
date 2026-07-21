@@ -123,8 +123,8 @@ async function completeOnboarding(page: Page, person: Applicant): Promise<void> 
 
   await page.getByLabel("성명").fill(person.name);
   await page.getByLabel("생년월일").fill(person.birth);
-  await page.locator("#signup-dong").selectOption(person.dong);
-  await page.locator("#signup-ho").selectOption(person.ho);
+  await page.locator("#signup-dong").fill(person.dong); // 숫자 직접 입력(H7-8)
+  await page.locator("#signup-ho").fill(person.ho);
   await page.getByRole("button", { name: "가입 신청" }).click();
 
   await expect(page).toHaveURL(/\/pending/);

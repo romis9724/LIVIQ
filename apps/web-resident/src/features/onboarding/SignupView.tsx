@@ -1,21 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, FormField } from "@liviq/ui";
 import { ApiError, submitProfile } from "@/lib/api";
-import { buildProfilePayload, isUnderMinAge } from "./logic";
+import { buildProfilePayload, isUnderMinAge, isValidDong, isValidHo } from "./logic";
 import "./onboarding.css";
 
 /** 동의받은 개인정보 처리방침 버전. FR-ONB: policy_version 기록 대상. */
 const POLICY_VERSION = "2026-07";
-
-const DONG_OPTIONS = ["101", "102", "103"] as const;
-
-/** 1~15층 × 1~2호 → 101 … 1502. */
-const HO_OPTIONS: readonly string[] = Array.from({ length: 15 }, (_, floorIdx) =>
-  [1, 2].map((unit) => String((floorIdx + 1) * 100 + unit)),
-).flat();
 
 type Step = 1 | 2;
 
@@ -171,8 +164,8 @@ function InfoStep({
     if (!name.trim()) next.name = "성명을 입력해 주세요.";
     if (!birth) next.birth = "생년월일을 입력해 주세요.";
     else if (isUnderMinAge(birth)) next.birth = "만 14세 미만은 가입할 수 없습니다.";
-    if (!dong) next.dong = "동을 선택해 주세요.";
-    if (!ho) next.ho = "호를 선택해 주세요.";
+    if (!isValidDong(dong)) next.dong = "동을 숫자로 입력해 주세요. (예: 401)";
+    if (!isValidHo(ho)) next.ho = "호수를 숫자로 입력해 주세요. (예: 201)";
 
     setErrors(next);
     setServerError(null);
@@ -233,22 +226,22 @@ function InfoStep({
       />
 
       <div className="auth-field auth-field--row">
-        <SelectField
+        <FormField
           id="signup-dong"
           label="동"
           value={dong}
-          onChange={setDong}
-          options={DONG_OPTIONS}
-          placeholder="선택"
+          onChange={(e) => setDong(e.target.value)}
+          inputMode="numeric"
+          placeholder="예: 401"
           error={errors.dong}
         />
-        <SelectField
+        <FormField
           id="signup-ho"
           label="호"
           value={ho}
-          onChange={setHo}
-          options={HO_OPTIONS}
-          placeholder="선택"
+          onChange={(e) => setHo(e.target.value)}
+          inputMode="numeric"
+          placeholder="예: 201"
           error={errors.ho}
         />
       </div>
@@ -271,52 +264,3 @@ function InfoStep({
   );
 }
 
-function SelectField({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-  placeholder,
-  error,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: readonly string[];
-  placeholder: string;
-  error?: string;
-}) {
-  const errorId = useMemo(() => (error ? `${id}-error` : undefined), [error, id]);
-
-  return (
-    <div className="auth-select">
-      <label className="form-field__label" htmlFor={id}>
-        {label}
-      </label>
-      <select
-        id={id}
-        className="auth-select__input"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={errorId}
-      >
-        <option value="" disabled>
-          {placeholder}
-        </option>
-        {options.map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-      {error ? (
-        <div id={errorId} className="form-field__error">
-          {error}
-        </div>
-      ) : null}
-    </div>
-  );
-}
