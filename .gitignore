@@ -4,6 +4,7 @@ node_modules/
 
 # build outputs
 .next/
+.next-build/
 out/
 dist/
 .turbo/
