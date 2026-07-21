@@ -1,13 +1,18 @@
-// E2E 멱등 시드 — Playwright globalSetup (docs/09 §8.2 H2-7).
+// E2E 멱등 시드 — Playwright globalSetup + 가입 여정 스펙 공용 헬퍼 (docs/09 §8.2·§8.8).
 //
 // superuser(liviq)로 접속하므로 RLS를 우회한다(시드는 격리 예외). 실제 격리 검증은
 // pytest 통합 테스트가 런타임 role로 수행한다. 여기서는 결정론 여정에 필요한 최소 데이터만
-// 고정 UUID로 심는다: tenant·building·household·approved user·published notice 2건·
-// 확정 fee(당월+전월)·needs_review 검수 메시지 1건.
+// 고정 UUID로 심는다: E2E tenant·building·household·approved user·published notice 2건·
+// 확정 fee(당월+전월)·needs_review 검수 메시지 1건, 그리고 시스템 테넌트 + E2E SYS_ADMIN.
 //
 // 멱등성: E2E tenant 하위 행을 FK 역순으로 전부 지우고 다시 넣는다(반복 실행 안전).
+// 가입 여정 단지(name LIKE 'E2E-%')와 그 종속 행도 함께 정리해 반복 실행 누적을 막는다.
+// SYS_ADMIN은 고정 UUID 계정만 정리·재삽입한다(공유 시스템 테넌트는 파괴하지 않는다).
+//
+// 여정 스펙(signup-journey)이 재사용하는 헬퍼도 여기서 export한다(superuser pg 연결·이메일
+// HMAC·토큰 INSERT·세대 시드). login_id/토큰 해시 계산을 앱(pii.py·auth_tokens.py)과 일치시킨다.
 
-import { createHmac, hkdfSync } from "node:crypto";
+import { createHash, createHmac, hkdfSync } from "node:crypto";
 
 import { Client } from "pg";
 
@@ -18,11 +23,12 @@ import {
   FEE_CURRENT_TOTAL,
   FEE_PREV_TOTAL,
   FLOOR,
-  INVITE_CODE,
   MISMATCH_PERSON,
   NOTICE1,
   NOTICE2,
   REVIEW,
+  ROSTER_PERSON,
+  SYS,
   UNIT_NO,
   currentMonth,
   prevMonth,
@@ -39,7 +45,7 @@ const PASSWORD_HASH =
   "$argon2id$v=19$m=65536,t=3,p=4$X7gU1W3GvYUm6bpNEiVbtA$aO9H/bv9kOKI/IblIAyJoSm6DQaZBGrQPJSHXBovcOY";
 
 /** 이메일 → login_id 조회 키. apps/api/app/pii.py(HKDF salt=None + keyed HMAC-SHA256)와 동일. */
-function emailHash(email: string): string {
+export function emailHash(email: string): string {
   const kek = Buffer.from(PII_MASTER_KEY_B64, "base64");
   // python cryptography HKDF(salt=None)는 zero-filled 32byte salt 와 동일.
   const hmacKey = Buffer.from(
@@ -85,6 +91,8 @@ const CHILD_TABLES = [
   "ai_eval_golden",
   "user_roles",
   "consents",
+  // auth_tokens.user_id → users FK(ondelete 없음) — users보다 먼저 지운다(가입 여정이 검증·초대 토큰 생성).
+  "auth_tokens",
   // users.pii_ref → pii_vault FK — users를 pii_vault보다 먼저 지워야 한다(가입 여정이 pii_ref 보유 계정 생성).
   "users",
   "pii_vault",
@@ -94,22 +102,106 @@ const CHILD_TABLES = [
   "buildings",
 ];
 
-async function wipe(client: Client): Promise<void> {
+/** 한 tenant의 하위 행을 FK 역순으로 전부 지운 뒤 tenant 자체를 삭제(멱등). */
+export async function wipeTenant(client: Client, tenantId: string): Promise<void> {
   for (const table of CHILD_TABLES) {
-    await client.query(`DELETE FROM ${table} WHERE tenant_id = $1`, [
-      E2E.tenantId,
-    ]);
+    await client.query(`DELETE FROM ${table} WHERE tenant_id = $1`, [tenantId]);
   }
-  await client.query(`DELETE FROM tenants WHERE id = $1`, [E2E.tenantId]);
+  await client.query(`DELETE FROM tenants WHERE id = $1`, [tenantId]);
+}
+
+/** 가입 여정 단지(name LIKE 'E2E-%')와 종속 행 정리 — 반복 실행 누적 방지(고정 'E2E 단지' 미포함). */
+export async function wipeJourneyTenants(client: Client): Promise<void> {
+  const { rows } = await client.query<{ id: string }>(
+    `SELECT id FROM tenants WHERE name LIKE 'E2E-%'`,
+  );
+  for (const { id } of rows) {
+    await wipeTenant(client, id);
+  }
+}
+
+/** 시스템 테넌트 확보(공유 — 파괴 금지) + 고정 UUID SYS_ADMIN 계정 정리·재삽입(멱등, H7-4). */
+async function seedSysAdmin(client: Client): Promise<void> {
+  await client.query(
+    `INSERT INTO tenants (id, name, status) VALUES ($1, 'LIVIQ 시스템', 'active')
+     ON CONFLICT (id) DO NOTHING`,
+    [SYS.tenantId],
+  );
+  // 고정 계정만 정리(다른 시스템 계정·토큰은 보존). auth_tokens는 users FK라 먼저.
+  await client.query(`DELETE FROM auth_tokens WHERE user_id = $1`, [SYS.userId]);
+  await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [SYS.userId]);
+  await client.query(`DELETE FROM users WHERE id = $1`, [SYS.userId]);
+  // pii_ref는 NULL — 로그인은 login_id만 쓰므로 SYS_ADMIN은 pii_vault 없이 충분.
+  await client.query(
+    `INSERT INTO users
+       (id, tenant_id, status, login_id, password_hash, email_verified_at, must_change_password)
+     VALUES ($1, $2, 'active', $3, $4, NOW(), false)`,
+    [SYS.userId, SYS.tenantId, emailHash(SYS.email), PASSWORD_HASH],
+  );
+  await client.query(
+    `INSERT INTO user_roles (tenant_id, user_id, role) VALUES ($1, $2, 'SYS_ADMIN')`,
+    [SYS.tenantId, SYS.userId],
+  );
+}
+
+/** superuser(liviq) pg 연결 — RLS 우회. 시드·여정 스펙 공용. */
+export async function connectPg(): Promise<Client> {
+  const client = new Client({
+    connectionString: toPgDsn(process.env.DATABASE_URL ?? DEFAULT_DSN),
+  });
+  await client.connect();
+  return client;
+}
+
+/** login_id(=이메일 HMAC)로 활성 사용자 조회 — 초대·가입 계정의 id·tenant를 여정 스펙이 얻는다. */
+export async function findUserByEmail(
+  client: Client,
+  email: string,
+): Promise<{ id: string; tenantId: string } | null> {
+  const { rows } = await client.query<{ id: string; tenant_id: string }>(
+    `SELECT id, tenant_id FROM users WHERE login_id = $1 AND deleted_at IS NULL`,
+    [emailHash(email)],
+  );
+  const row = rows[0];
+  return row ? { id: row.id, tenantId: row.tenant_id } : null;
+}
+
+/**
+ * 원문을 아는 1회용 토큰을 직접 INSERT — 메일이 console(stdout)이라 E2E가 링크를 못 읽는 대신,
+ * 원문의 sha256 hex를 저장해(auth_tokens.token_hash) 브라우저로 검증·초대 링크를 탄다(ADR-0014).
+ */
+export async function insertAuthToken(
+  client: Client,
+  opts: { tenantId: string; userId: string; purpose: string; raw: string },
+): Promise<void> {
+  const tokenHash = createHash("sha256").update(opts.raw).digest("hex");
+  await client.query(
+    `INSERT INTO auth_tokens (tenant_id, user_id, purpose, token_hash, expires_at)
+     VALUES ($1, $2, $3, $4, NOW() + interval '1 hour')`,
+    [opts.tenantId, opts.userId, opts.purpose, tokenHash],
+  );
+}
+
+/** UI로 생성한 여정 단지에 building '101' + 세대(명부 일치 301·불일치 302) 시드 — 명부·온보딩 세대 조회 전제. */
+export async function seedJourneyHouseholds(client: Client, tenantId: string): Promise<void> {
+  const { rows } = await client.query<{ id: string }>(
+    `INSERT INTO buildings (tenant_id, name, floors) VALUES ($1, $2, 15) RETURNING id`,
+    [tenantId, ROSTER_PERSON.dong],
+  );
+  const buildingId = rows[0].id;
+  for (const unit of [ROSTER_PERSON.ho, MISMATCH_PERSON.ho]) {
+    await client.query(
+      `INSERT INTO households (tenant_id, building_id, floor, unit_no, status)
+       VALUES ($1, $2, $3, $4, 'active')`,
+      [tenantId, buildingId, Math.floor(Number(unit) / 100), Number(unit)],
+    );
+  }
 }
 
 async function insert(client: Client): Promise<void> {
-  // invite_code = 클라이언트 데모 코드(logic.ts VALID_INVITE_CODE). 가입 여정이 UI 검증을 통과하려면
-  // 이 코드로 E2E 단지에 매핑돼야 한다. e2e DB는 이 단지만 시드하므로 dev 단지와 충돌하지 않는다.
   await client.query(
-    `INSERT INTO tenants (id, name, status, settings)
-     VALUES ($1, 'E2E 단지', 'active', $2::jsonb)`,
-    [E2E.tenantId, JSON.stringify({ invite_code: INVITE_CODE })],
+    `INSERT INTO tenants (id, name, status) VALUES ($1, 'E2E 단지', 'active')`,
+    [E2E.tenantId],
   );
 
   await client.query(
@@ -224,13 +316,13 @@ async function insert(client: Client): Promise<void> {
 }
 
 async function globalSetup(): Promise<void> {
-  const dsn = toPgDsn(process.env.DATABASE_URL ?? DEFAULT_DSN);
-  const client = new Client({ connectionString: dsn });
-  await client.connect();
+  const client = await connectPg();
   try {
     await client.query("BEGIN");
-    await wipe(client);
+    await wipeTenant(client, E2E.tenantId);
+    await wipeJourneyTenants(client);
     await insert(client);
+    await seedSysAdmin(client);
     await client.query("COMMIT");
   } catch (err) {
     await client.query("ROLLBACK");
