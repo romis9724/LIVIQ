@@ -28,7 +28,7 @@ AUTHOR_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
 OTHER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002")
 MANAGER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000003")
 STAFF_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000004")
-FACILITY_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000005")
+STAFF2_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000005")  # 배정 대상(H7-2: STAFF)
 CATEGORY_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
 
 
@@ -59,7 +59,7 @@ async def _seed(session: AsyncSession) -> None:
         (OTHER_ID, h2, "RESIDENT"),
         (MANAGER_ID, None, "MANAGER"),
         (STAFF_ID, None, "STAFF"),
-        (FACILITY_ID, None, "FACILITY"),
+        (STAFF2_ID, None, "STAFF"),
     )
     for uid, member_hid, _role in users:
         session.add(User(id=uid, tenant_id=TENANT_ID, household_id=member_hid, status="active"))
@@ -168,11 +168,11 @@ async def test_assign_transitions_records_event_and_notifies(seeded: AsyncSessio
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
         response = await mgr.post(
             f"/admin/inquiries/{inquiry['id']}/assign",
-            json={"assignee_user_id": str(FACILITY_ID)},
+            json={"assignee_user_id": str(STAFF2_ID)},
         )
         assert response.status_code == 200
         assert response.json()["status"] == "assigned"
-        assert response.json()["assignee_user_id"] == str(FACILITY_ID)
+        assert response.json()["assignee_user_id"] == str(STAFF2_ID)
 
         events = (await mgr.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
         assert events[-1]["type"] == "assigned"

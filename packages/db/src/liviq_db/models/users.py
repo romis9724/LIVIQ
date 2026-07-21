@@ -93,8 +93,14 @@ class User(IdMixin, TenantMixin, TimestampMixin, Base):
     email_verified_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 임시 비밀번호 강제 변경 플래그(부트스트랩 SYS_ADMIN) — True면 세션이 password-change·
+    # logout·me 외 엔드포인트에서 403(app.deps.get_context 가드, ADR-0014·H7-2)
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     # registered=가입 완료·프로필 미제출(온보딩 필요 신호). 이후 pending→active(승인)
-    # pre_registered|registered|pending|active|inactive|rejected|withdrawn
+    # invited=초대 발송·수락 전(SYS_ADMIN→소장·소장→직원, H7-2). 수락 시 active 전환
+    # pre_registered|invited|registered|pending|active|inactive|rejected|withdrawn
     status: Mapped[str] = mapped_column(String, nullable=False)
     roster_matched: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
@@ -111,7 +117,7 @@ class User(IdMixin, TenantMixin, TimestampMixin, Base):
 
 
 class UserRole(IdMixin, TenantMixin, TimestampMixin, Base):
-    """역할(다대다). role: RESIDENT|MANAGER|STAFF|FACILITY|COUNCIL|SYS_ADMIN."""
+    """역할(다대다). role: RESIDENT|MANAGER|STAFF|SYS_ADMIN(H7-2에서 FACILITY·COUNCIL 제거)."""
 
     __tablename__ = "user_roles"
     __table_args__ = (

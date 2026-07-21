@@ -6,14 +6,11 @@
 
 from __future__ import annotations
 
-import logging
 import smtplib
 from email.message import EmailMessage
 from typing import Protocol
 
 from app.config import get_settings
-
-logger = logging.getLogger("app.mail")
 
 
 class Mailer(Protocol):
@@ -28,7 +25,8 @@ class ConsoleMailer:
     """
 
     def send(self, to: str, subject: str, body: str) -> None:
-        logger.info("[ConsoleMailer] to=%s subject=%s\n%s", to, subject, body)
+        # logging이 아닌 stdout — uvicorn 기본 로깅 설정에서 앱 로거 INFO는 묻힌다.
+        print(f"[ConsoleMailer] to={to} subject={subject}\n{body}", flush=True)  # noqa: T201
 
 
 class SmtpMailer:

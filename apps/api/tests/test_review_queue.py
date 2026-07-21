@@ -269,12 +269,13 @@ async def test_decide_unknown_message_returns_404(seeded: AsyncSession) -> None:
     assert res.status_code == 404
 
 
-# ── 권한(docs/04 §3: MANAGER 결정 · STAFF 읽기 · RESIDENT 차단) ─────────────────
+# ── 권한(docs/04 §4: 검수 큐 MANAGER 전용 · STAFF·RESIDENT 차단, H7-2) ──────────
 
 
-async def test_staff_can_read_but_cannot_decide(seeded: AsyncSession) -> None:
+async def test_staff_forbidden(seeded: AsyncSession) -> None:
+    """검수 큐는 소장 전용(H7-2에서 STAFF 축소) — 조회·결정 모두 403(CRITICAL)."""
     async with _make_client(seeded, STAFF_ID, ("STAFF",)) as c:
-        assert (await c.get("/admin/review-queue")).status_code == 200
+        assert (await c.get("/admin/review-queue")).status_code == 403
         decide = await c.post(f"/admin/review-queue/{MSG_A}/decide", json={"action": "approve"})
         assert decide.status_code == 403
 

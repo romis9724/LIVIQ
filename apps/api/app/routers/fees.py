@@ -53,7 +53,7 @@ from liviq_db.models import Building, ExcelUpload, Fee, Household, User
 router = APIRouter(prefix="/fees", tags=["fees"])
 admin_router = APIRouter(prefix="/admin/fees", tags=["fees"])
 
-_ADMIN_ROLES = ("MANAGER", "STAFF")
+_ADMIN_ROLES = ("MANAGER",)  # 관리비 전체 소장 전용(H7-2에서 STAFF 제거, docs/04 §4)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 관리비 엑셀 크기 상한
 PREVIEW_ROWS = 20  # 업로드 미리보기 행 수(저장 안 함)
 

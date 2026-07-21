@@ -12,9 +12,11 @@ from pydantic import BaseModel, EmailStr, Field
 from app.password import MIN_PASSWORD_LENGTH
 
 __all__ = [
+    "InviteAcceptIn",
     "LoginIn",
     "LoginOut",
     "MeOut",
+    "PasswordChangeIn",
     "PasswordResetConfirmIn",
     "PasswordResetIn",
     "SignupIn",
@@ -50,8 +52,19 @@ class PasswordResetConfirmIn(BaseModel):
     new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
 
 
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+
+
+class InviteAcceptIn(BaseModel):
+    token: str = Field(min_length=1)
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH)
+
+
 class MeOut(BaseModel):
     status: str  # status='registered'가 온보딩 필요 신호(ADR-0014)
     tenant_id: uuid.UUID | None
     user_id: uuid.UUID | None
     roles: list[str]
+    must_change_password: bool = False  # True면 웹은 비밀번호 변경 화면으로 강제(H7-2)

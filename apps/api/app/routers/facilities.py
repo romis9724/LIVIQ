@@ -4,7 +4,7 @@
 docs/03 §4.9·docs/11 §3.5). Neo4j 반영은 ai-worker(H3-2)가 outbox를 폴링해 단독 수행 —
 이 라우터는 그래프에 직접 쓰지 않는다(§13.3). AI 제안·자동 상태 변경 없음(규칙 8).
 
-역할: 읽기 MANAGER·STAFF·FACILITY, 쓰기 MANAGER·FACILITY(docs/01 §13).
+역할: 시설은 전부 소장(MANAGER) 전용(H7-2에서 FACILITY·STAFF 제거, docs/04 §4).
 모든 조회·수정은 tenant 스코프 — 없는 tenant면 404(격리 위해 존재 여부 노출 안 함).
 """
 
@@ -36,8 +36,8 @@ from liviq_db.models import Facility, Incident, MaintenanceLog
 
 router = APIRouter(prefix="/admin/facilities", tags=["facilities"])
 
-_READ_ROLES = ("MANAGER", "STAFF", "FACILITY")
-_WRITE_ROLES = ("MANAGER", "FACILITY")
+_READ_ROLES = ("MANAGER",)
+_WRITE_ROLES = ("MANAGER",)
 
 
 def _now() -> datetime.datetime:

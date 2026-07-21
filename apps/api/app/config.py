@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
+import uuid
 from functools import lru_cache
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 시스템 테넌트(SYS_ADMIN 소속) 고정 UUID — 단지 목록·초대 대상에서 제외(ADR-0014).
+SYSTEM_TENANT_ID = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 class ApiSettings(BaseSettings):
@@ -60,6 +64,8 @@ class ApiSettings(BaseSettings):
     )
     # 웹 앱으로 되돌릴 베이스 URL(이메일 검증·재설정 링크 목적지). 빈 문자열=상대 경로.
     web_base_url: str = Field("", validation_alias="WEB_BASE_URL")
+    # 관리 웹(web-admin) 베이스 URL — 소장·직원 초대 수락 링크 목적지(H7-2).
+    web_admin_base_url: str = Field("http://localhost:3001", validation_alias="WEB_ADMIN_BASE_URL")
 
     def cors_origins(self) -> list[str]:
         """web_origins를 리스트로 파싱(공백·빈 항목 제거)."""
