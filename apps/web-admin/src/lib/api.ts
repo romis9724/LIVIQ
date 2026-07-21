@@ -935,24 +935,74 @@ export async function getMe(): Promise<Me> {
 
 // ── 단지 관리 (SYS_ADMIN 전용 · H7-2, ADR-0014) ───────────────────────────────
 
+export interface TenantManager {
+  userId: string;
+  email: string | null;
+  status: string; // invited=수락 대기 · active=활동 중
+}
+
 export interface Tenant {
   id: string;
   name: string;
   createdAt: string;
+  status: string; // active | inactive(비활성화 — 소속 로그인 차단, H7-6)
+  manager: TenantManager | null; // 단지당 1명(H7-6)
 }
 
-function toTenant(raw: { id: string; name: string; created_at: string }): Tenant {
-  return { id: raw.id, name: raw.name, createdAt: raw.created_at };
+interface TenantRaw {
+  id: string;
+  name: string;
+  created_at: string;
+  status?: string;
+  manager?: { user_id: string; email?: string | null; status: string } | null;
 }
 
-/** 단지 목록(생성 순). 403=권한 없음. */
+function toTenant(raw: TenantRaw): Tenant {
+  return {
+    id: raw.id,
+    name: raw.name,
+    createdAt: raw.created_at,
+    status: raw.status ?? "active",
+    manager: raw.manager
+      ? { userId: raw.manager.user_id, email: raw.manager.email ?? null, status: raw.manager.status }
+      : null,
+  };
+}
+
+/** 단지 목록(생성 순) — 상태·현재 소장 포함(H7-6). 403=권한 없음. */
 export async function listTenants(): Promise<Tenant[]> {
   const response = await apiFetch(`${API_BASE_URL}/admin/tenants`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
-  return (
-    body.items as { id: string; name: string; created_at: string }[]
-  ).map(toTenant);
+  return (body.items as TenantRaw[]).map(toTenant);
+}
+
+/** 현재 소장 삭제(소프트 삭제+PII 비식별) — 교체·오초대 해소(H7-6). */
+export async function removeTenantManager(tenantId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants/${tenantId}/manager`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 빈 단지 완전 삭제. 409=계정·데이터 존재(H7-6). */
+export async function deleteTenant(tenantId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants/${tenantId}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 단지 비활성화/재활성화 — 비활성화는 소속 로그인 차단+세션 즉시 종료(H7-6). */
+export async function setTenantActive(tenantId: string, active: boolean): Promise<void> {
+  const action = active ? "activate" : "deactivate";
+  const response = await apiFetch(`${API_BASE_URL}/admin/tenants/${tenantId}/${action}`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
 }
 
 /** 단지 생성(이름). 응답에는 created_at이 없어 목록 재조회로 갱신한다. */
@@ -1034,6 +1084,15 @@ export async function inviteStaff(email: string): Promise<void> {
 export async function deactivateStaff(userId: string): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/admin/staff/${userId}/deactivate`, {
     method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 직원·타 소장 삭제 — 소프트 삭제+PII 비식별, 복구 불가(H7-6). 자기 자신 400. */
+export async function deleteStaff(userId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/staff/${userId}`, {
+    method: "DELETE",
     headers: DEV_HEADERS,
   });
   await ensureOk(response);

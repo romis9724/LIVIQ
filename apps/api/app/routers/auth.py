@@ -82,8 +82,14 @@ async def signup(
     email_norm = _normalize_email(body.email)
     email_hash = crypto.hmac_hash(email_norm)
 
-    # 단지 존재 검증 — tenants는 RLS 예외라 auth_lookup 세션에서 전역 조회 가능.
-    if await session.scalar(select(Tenant.id).where(Tenant.id == body.tenant_id)) is None:
+    # 단지 존재·활성 검증 — tenants는 RLS 예외라 auth_lookup 세션에서 전역 조회 가능.
+    # 비활성 단지는 가입 불가(H7-6) — 목록 제외만으론 직접 POST를 못 막는다.
+    if (
+        await session.scalar(
+            select(Tenant.id).where(Tenant.id == body.tenant_id, Tenant.status == "active")
+        )
+        is None
+    ):
         raise HTTPException(status_code=404, detail="단지를 찾을 수 없습니다")
 
     # 이메일 전역 중복 — users의 auth_lookup permissive SELECT(파일럿 단일 단지 유니크).
@@ -154,6 +160,10 @@ async def login(
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
     if not verify_password(user.password_hash, body.password):
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
+    # 비활성화된 단지 소속은 로그인 차단(H7-6) — 비밀번호 검증 뒤에만 노출.
+    tenant_status = await session.scalar(select(Tenant.status).where(Tenant.id == user.tenant_id))
+    if tenant_status != "active":
+        raise HTTPException(status_code=403, detail="tenant_inactive")
     if user.email_verified_at is None:
         raise HTTPException(status_code=403, detail="email_not_verified")
 
@@ -374,7 +384,7 @@ async def tenant_directory(
     rows = (
         await session.execute(
             select(Tenant.id, Tenant.name)
-            .where(Tenant.id != SYSTEM_TENANT_ID)
+            .where(Tenant.id != SYSTEM_TENANT_ID, Tenant.status == "active")
             .order_by(Tenant.name)
         )
     ).all()

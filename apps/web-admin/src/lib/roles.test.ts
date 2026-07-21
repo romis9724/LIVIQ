@@ -37,8 +37,8 @@ describe("roleHome", () => {
     expect(roleHome(["STAFF"])).toBe("/inquiries");
   });
 
-  it("MANAGER는 검수 큐로 진입한다", () => {
-    expect(roleHome(["MANAGER"])).toBe("/review-queue");
+  it("MANAGER는 대시보드로 진입한다 (H7-6)", () => {
+    expect(roleHome(["MANAGER"])).toBe("/dashboard");
   });
 });
 
