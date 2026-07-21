@@ -64,7 +64,7 @@ ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는
 **정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·자체 이메일+비밀번호 인증(Argon2id·검증 메일·auth_tokens, [ADR-0014](docs/adr/0014-local-email-auth.md))·역할 인가 가드(`require_roles`)·
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
-화면 실연동(H6 완료): **양 앱 전 화면 실연동·목업 0** — web-resident 홈·비서·민원·공지·관리비·나/알림함·온보딩, web-admin 대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부. 웹 인증은 세션 쿠키 1차(credentials CORS, H6-1), 인증 수단은 H7-1에서 자체 이메일 인증으로 교체(E2E는 시드 계정 API 로그인, 가입 여정 spec은 H7-3·H7-4 재작성까지 skip).
+화면 실연동(H6 완료): **양 앱 전 화면 실연동·목업 0** — web-resident 홈·비서·민원·공지·관리비·나/알림함·온보딩, web-admin 대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부. 웹 인증은 세션 쿠키 1차(credentials CORS, H6-1), 인증 수단은 H7에서 자체 이메일 인증으로 교체 — 가입 여정 E2E(설치→단지→초대→명부→가입→승인)가 CI 게이트(H7-4).
 시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
 outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
 `/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
