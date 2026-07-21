@@ -185,9 +185,7 @@ async def test_resident_cannot_upload(seeded: None, db_session: AsyncSession) ->
 # ── 양식 다운로드 (H7-7) ─────────────────────────────────────────────────────
 
 
-async def test_template_roundtrips_through_parser(
-    seeded: None, db_session: AsyncSession
-) -> None:
+async def test_template_roundtrips_through_parser(seeded: None, db_session: AsyncSession) -> None:
     """양식은 파서와 단일 출처 — 다운로드한 파일이 그대로 업로드 파싱을 통과해야 한다."""
     from app.routers.roster import _parse_rows
 

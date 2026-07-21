@@ -146,9 +146,7 @@ async def list_roster(
             or (row.unit_no is not None and str(row.unit_no) == query)
         )
     ]
-    filtered.sort(
-        key=lambda r: (r.building_name or "", r.floor or 0, r.unit_no or 0, r.status)
-    )
+    filtered.sort(key=lambda r: (r.building_name or "", r.floor or 0, r.unit_no or 0, r.status))
     page_rows = filtered[(page - 1) * size : page * size]
 
     dek = await crypto.get_dek(session, ctx.tenant_id) if page_rows else b""
@@ -196,9 +194,7 @@ async def list_roster(
     )
 
 
-async def _get_roster_row(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> User:
+async def _get_roster_row(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> User:
     """비삭제 명부 행(가입 계정 아님) — 없음·가입완료(소진)·타 단지는 동일 404."""
     user = await session.scalar(
         select(User).where(
