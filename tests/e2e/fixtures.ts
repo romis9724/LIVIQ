@@ -23,15 +23,34 @@ export const E2E = {
   assistantMessageId: "ee2e0000-0000-4000-8000-000000000009",
   feeCurrentId: "ee2e0000-0000-4000-8000-00000000000a",
   feePrevId: "ee2e0000-0000-4000-8000-00000000000b",
-  // 가입 여정(H6-4)용 2호 세대 — 명부 불일치 신청자가 붙는 유효 세대(조회 성공, 매칭 실패).
+  // 가입 여정용 2호 세대 — 명부 불일치 신청자가 붙는 유효 세대(조회 성공, 매칭 실패).
   household2Id: "ee2e0000-0000-4000-8000-00000000000c",
-  // 신규 가입자 sub — mock IdP가 mock_sub 쿠키로 이 값을 발급(신원=신규 로그인).
-  signupSub: "e2e-google-sub-signup",
-  mismatchSub: "e2e-google-sub-mismatch",
 } as const;
 
-// 클라이언트가 하드코딩한 데모 초대코드(logic.ts VALID_INVITE_CODE). E2E 단지가 이 코드로 매핑된다.
-export const INVITE_CODE = "LIVIQ1";
+// 시스템 테넌트 + E2E SYS_ADMIN — 가입 여정 시작점(단지 생성·소장 초대, H7-4).
+// login_id = email HMAC · password_hash = E2E와 동일 상수(seed.ts) · must_change_password=false로
+// 임시 비밀번호 강제 변경을 우회한다(부트스트랩 경로는 pytest 커버, ADR-0014). seed.ts가 멱등 심음.
+export const SYS = {
+  tenantId: "00000000-0000-0000-0000-000000000000", // app.config.SYSTEM_TENANT_ID
+  userId: "ee2e0000-0000-4000-8000-0000000000f0",
+  email: "sysadmin-e2e@example.com",
+} as const;
+
+// 가입 여정 단지 — SYS_ADMIN이 UI로 생성(tenantName). seed.ts·spec beforeAll이 반복 실행 전
+// name LIKE 'E2E-%' 단지를 정리해 누적을 막는다(E2E 고정 단지 'E2E 단지'는 하이픈이 없어 미포함).
+export const JOURNEY = {
+  tenantName: "E2E-여정단지",
+  managerEmail: "e2e-manager@example.com",
+  staffEmail: "e2e-staff@example.com",
+  applicantEmail: "e2e-applicant@example.com", // 명부 일치 주민
+  mismatchEmail: "e2e-mismatch@example.com", // 명부 불일치 주민
+  password: "e2e-password-liviq-1", // ≥10자(ADR-0014). 초대 수락·가입 시 UI로 설정.
+  // 인증·초대 메일은 console 백엔드라 E2E가 stdout을 못 읽는다 — 원문을 아는 토큰을 pg로 직접
+  // INSERT하고(seed.insertAuthToken) 브라우저로 링크를 탄다(sha256 hex만 DB 저장, auth_tokens).
+  inviteToken: "e2e-invite-tok-0001",
+  applicantVerifyToken: "e2e-verify-tok-0001",
+  mismatchVerifyToken: "e2e-verify-tok-0002",
+} as const;
 
 // 명부 일치 가입자 — roster-e2e.xlsx 한 행과 동일해야 매칭(name_hash+birth_hash). 세대=101동 3층 301호.
 export const ROSTER_PERSON = {
