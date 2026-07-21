@@ -236,11 +236,15 @@
 | `POST /admin/approvals/{user_id}/approve` · `/reject` | MANAGER | 거절은 사유 필수. 상태 전환 시 대상 세션 즉시 revoke + 알림 생성 |
 | `POST /admin/roster/upload` | MANAGER | 명부 엑셀 → `excel_uploads(type=roster)` → 사전등록 diff 병합([03 §4.1](03-database-design.md)) |
 | `POST /admin/staff/invite` | MANAGER | 직원(STAFF) 초대 링크 메일(`auth_tokens` invite, TTL 7d) |
-| `GET /admin/staff` | MANAGER | 직원 목록(역할·상태·초대일 — PII 미포함) |
+| `GET /admin/staff` | MANAGER | 직원 목록(역할·상태·초대일·이메일 — 복호는 인가 뒤, H7-5) |
 | `POST /admin/staff/{user_id}/deactivate` | MANAGER | STAFF 비활성화(inactive + 세션 즉시 revoke). 자신·MANAGER 대상 400 |
+| `DELETE /admin/staff/{user_id}` | MANAGER | 직원·타 소장 **삭제**(소프트 삭제+PII 비식별+세션 revoke). 자기 자신 400 (H7-6) |
 | `POST /admin/tenants` | SYS_ADMIN | 단지 생성(시스템 테넌트 권한, 단지 콘텐츠 비열람) |
-| `GET /admin/tenants` | SYS_ADMIN | 단지 목록(시스템 테넌트 제외) |
-| `POST /admin/tenants/{id}/invite-manager` | SYS_ADMIN | 소장(MANAGER) 초대 링크 메일(`auth_tokens` invite) |
+| `GET /admin/tenants` | SYS_ADMIN | 단지 목록(시스템 테넌트 제외) — 단지 상태·현재 소장(이메일·상태) 포함 (H7-6) |
+| `POST /admin/tenants/{id}/invite-manager` | SYS_ADMIN | 소장(MANAGER) 초대 링크 메일(`auth_tokens` invite). **단지당 1명** — 활성/초대중 존재 시 409 (H7-6) |
+| `DELETE /admin/tenants/{id}/manager` | SYS_ADMIN | 현재 소장 삭제(소프트 삭제+PII 비식별) — 소장 교체·오초대 해소 (H7-6) |
+| `DELETE /admin/tenants/{id}` | SYS_ADMIN | **빈 단지만** 완전 삭제(주민·콘텐츠 존재 시 409) (H7-6) |
+| `POST /admin/tenants/{id}/deactivate` · `/activate` | SYS_ADMIN | 단지 비활성화(소속 로그인 403·가입 목록 제외·세션 revoke)/재활성화 (H7-6) |
 
 **AI 비서** (H1 구현됨, 화면: 입주민 AI 비서)
 
