@@ -5,6 +5,7 @@ import { Button, EmptyState, FileDropzone, Skeleton, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
 import {
   ApiError,
+  ROSTER_TEMPLATE_URL,
   approveSignup,
   listApprovals,
   rejectSignup,
@@ -213,6 +214,14 @@ function RosterPanel({ upload, onFile }: { upload: UploadState; onFile: (file: F
           fileName={fileName}
           errorMessage={upload.phase === "error" ? upload.message : undefined}
         />
+
+        <p className="apv-upload__template">
+          처음이신가요?{" "}
+          <a className="apv-upload__template-link" href={ROSTER_TEMPLATE_URL} download>
+            명부 양식 다운로드 (xlsx)
+          </a>{" "}
+          — 예시 행을 지우고 채워 업로드하세요.
+        </p>
 
         {upload.phase === "done" ? <RosterResult result={upload.result} /> : null}
       </div>

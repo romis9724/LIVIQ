@@ -13,8 +13,8 @@ import io
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
-from openpyxl import load_workbook
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,36 @@ router = APIRouter(prefix="/admin/roster", tags=["roster"])
 
 EXPECTED_HEADER = ("성함", "생년월일", "동", "층", "호")
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 명부 엑셀 크기 상한
+
+
+# 양식 다운로드 예시 행 — 실제 파서(EXPECTED_HEADER·RosterRowIn)와 형식이 항상 일치해야
+# 한다(라운드트립 테스트로 보증, H7-7). 동은 문자열, 층·호는 정수.
+_TEMPLATE_EXAMPLE_ROWS = (
+    ("홍길동", "1980-01-15", "101", 3, 301),
+    ("김영희", "1955-07-02", "101", 3, 302),
+    ("이철수", "1992-11-30", "102", 5, 501),
+)
+
+
+@router.get("/template")
+async def roster_template(
+    _ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+) -> Response:
+    """명부 업로드 양식 xlsx — 헤더+예시 행(H7-7). 다운로드 후 예시를 지우고 채워 쓴다."""
+    workbook = Workbook()
+    sheet = workbook.active
+    assert sheet is not None  # openpyxl 신규 워크북은 항상 활성 시트 보유
+    sheet.title = "명부"
+    sheet.append(list(EXPECTED_HEADER))
+    for row in _TEMPLATE_EXAMPLE_ROWS:
+        sheet.append(list(row))
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="liviq-roster-template.xlsx"'},
+    )
 
 
 class RosterRowIn(BaseModel):

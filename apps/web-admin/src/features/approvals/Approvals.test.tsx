@@ -12,6 +12,7 @@ const uploadRoster = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
+  ROSTER_TEMPLATE_URL: "http://test/admin/roster/template",
   listApprovals: () => listApprovals(),
   approveSignup: (id: string) => approveSignup(id),
   rejectSignup: (id: string, reason: string) => rejectSignup(id, reason),
