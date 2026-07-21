@@ -344,6 +344,8 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 4. API 재시작 후 소장 초대 1건으로 실발송 확인. 필수값 누락 시 부팅이 아닌 발송 시점에 fail-closed(RuntimeError).
 
+> 앱 비밀번호는 `xxxx xxxx xxxx xxxx`로 표시된다 — 복사하면 공백(NBSP 포함)이 섞이지만 `get_mailer`가 유니코드 공백을 제거하므로 그대로 붙여넣어도 된다(2026-07-21 실측: NBSP가 SMTP AUTH에서 UnicodeEncodeError 유발 → 코드에서 방어).
+
 무료 Gmail 일 발송 한도(약 500통)는 파일럿 규모에 충분 — 초과 시 어댑터 뒤에서 SES 등으로 교체.
 
 ## 9. 정의: "완료(Done)"
