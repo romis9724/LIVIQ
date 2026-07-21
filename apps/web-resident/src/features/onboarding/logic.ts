@@ -20,6 +20,21 @@ export function isValidEmail(email: string): boolean {
   return EMAIL_RE.test(email.trim());
 }
 
+// 동·호 숫자 입력(H7-8) — 즉시 피드백 보조. 실제 세대 존재 여부는 서버가 판정(없으면 422).
+const DONG_RE = /^\d{1,4}$/; // 예: "101", "401"
+const HO_RE = /^\d{3,5}$/; // 층+호 결합 표기 — 예: "201"(2층 1호), "1502"(15층 2호)
+
+/** 동 입력 검증 — 1~4자리 숫자. */
+export function isValidDong(dong: string): boolean {
+  return DONG_RE.test(dong.trim());
+}
+
+/** 호 입력 검증 — 3~5자리 숫자(상위 자리=층이라 100 이상이어야 층 파생 가능). */
+export function isValidHo(ho: string): boolean {
+  const trimmed = ho.trim();
+  return HO_RE.test(trimmed) && Number.parseInt(trimmed, 10) >= 100;
+}
+
 /** 가입 링크 ?t 파라미터(단지 UUID) 검증·정규화. 형식이 아니면 null(안내 화면 표시). */
 export function parseTenantId(raw: string | null | undefined): string | null {
   if (!raw) return null;
