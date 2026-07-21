@@ -261,6 +261,25 @@ async def test_login_success_after_verify(db_session: AsyncSession, fake_redis: 
     assert me.status_code == 200
 
     assert me.json()["status"] == "registered"
+    assert me.json()["email"] == EMAIL  # 세션 저장분 표시(ADR-0014 개정, H7-5)
+
+
+async def test_tenant_directory_public_excludes_system(
+    db_session: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """가입 단지 선택 목록 — 인증 없이 조회, 시스템 테넌트 제외(H7-5)."""
+    from app.config import SYSTEM_TENANT_ID
+
+    await _seed_tenant(db_session)
+    db_session.add(Tenant(id=SYSTEM_TENANT_ID, name="LIVIQ 시스템", status="active"))
+    await db_session.flush()
+
+    async with _build_client(db_session, fake_redis, FakeMailer()) as c:
+        resp = await c.get("/auth/tenants")
+
+    assert resp.status_code == 200
+    names = [t["name"] for t in resp.json()["items"]]
+    assert names == ["단지A"]  # 시스템 테넌트 미노출
 
 
 async def test_login_unverified_forbidden(db_session: AsyncSession, fake_redis: FakeRedis) -> None:

@@ -157,14 +157,16 @@ export function buildProfilePayload(values: SignupFormValues): ProfilePayload {
   };
 }
 
-/** 계정 가입 폼(이메일+비밀번호+확인) 입력값. */
+/** 계정 가입 폼(단지 선택+이메일+비밀번호+확인) 입력값. */
 export interface AccountSignupValues {
+  tenantId: string; // ""=미선택 — 가입 링크(?t)는 사전 선택만 담당(H7-5)
   email: string;
   password: string;
   passwordConfirm: string;
 }
 
 export interface AccountSignupErrors {
+  tenantId?: string;
   email?: string;
   password?: string;
   passwordConfirm?: string;
@@ -176,6 +178,7 @@ const PASSWORD_MISMATCH = "비밀번호가 일치하지 않습니다.";
 /** 계정 가입 클라 검증(즉시 피드백 보조). 서버가 최종 판정한다. */
 export function validateAccountSignup(values: AccountSignupValues): AccountSignupErrors {
   const errors: AccountSignupErrors = {};
+  if (!values.tenantId) errors.tenantId = "단지를 선택해 주세요.";
   if (!isValidEmail(values.email)) errors.email = "이메일 형식이 올바르지 않습니다.";
   if (values.password.length < MIN_PASSWORD_LENGTH) errors.password = PASSWORD_TOO_SHORT;
   if (values.passwordConfirm !== values.password) errors.passwordConfirm = PASSWORD_MISMATCH;

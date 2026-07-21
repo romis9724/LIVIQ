@@ -27,6 +27,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* ul 기본 스타일 제거 — 카드가 오른쪽으로 밀리며 잘리던 원인(H7-5) */
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 .tn-row {
   background: var(--color-surface);

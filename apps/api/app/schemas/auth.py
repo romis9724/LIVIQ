@@ -21,6 +21,8 @@ __all__ = [
     "PasswordResetIn",
     "SignupIn",
     "SignupOut",
+    "TenantDirectoryItem",
+    "TenantDirectoryOut",
 ]
 
 
@@ -68,3 +70,15 @@ class MeOut(BaseModel):
     user_id: uuid.UUID | None
     roles: list[str]
     must_change_password: bool = False  # True면 웹은 비밀번호 변경 화면으로 강제(H7-2)
+    email: str | None = None  # 로그인 이메일(세션 저장분) — 구세션은 None(ADR-0014 개정)
+
+
+class TenantDirectoryItem(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class TenantDirectoryOut(BaseModel):
+    """가입 단지 선택용 공개 목록 — 이름만(시스템 테넌트 제외, H7-5)."""
+
+    items: list[TenantDirectoryItem]

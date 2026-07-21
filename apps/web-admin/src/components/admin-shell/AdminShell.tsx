@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { API_BASE_URL, getMe, listApprovals, listReviewQueue, type Me } from "@/lib/api";
-import { isSysAdmin, navForRoles, roleHome } from "@/lib/roles";
+import { isSysAdmin, navForRoles, roleHome, roleLabel } from "@/lib/roles";
 import "./admin-shell.css";
 
 // 셸 없이 전체 화면으로 렌더하는 라우트 — 미인증/강제 전환 진입점.
@@ -148,11 +148,13 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         <div className="admin-sidebar__user">
           <span className="admin-sidebar__avatar" aria-hidden="true">
-            관
+            {(me?.email ?? "?").charAt(0).toUpperCase()}
           </span>
           <span className="admin-sidebar__user-text">
-            <span className="admin-sidebar__user-name">관리자</span>
-            <span className="admin-sidebar__user-org">관리사무소</span>
+            <span className="admin-sidebar__user-name">{roleLabel(roles)}</span>
+            <span className="admin-sidebar__user-org" title={me?.email ?? undefined}>
+              {me?.email ?? "로그인 계정"}
+            </span>
           </span>
           <button type="button" className="admin-sidebar__logout" onClick={() => void logout()}>
             로그아웃

@@ -917,6 +917,7 @@ export interface Me {
   userId: string | null;
   roles: string[];
   mustChangePassword: boolean; // true면 비밀번호 변경 화면으로 강제(H7-2)
+  email: string | null; // 로그인 이메일(세션 저장분) — 구세션은 null(H7-5)
 }
 
 export async function getMe(): Promise<Me> {
@@ -928,6 +929,7 @@ export async function getMe(): Promise<Me> {
     userId: body.user_id,
     roles: body.roles,
     mustChangePassword: body.must_change_password ?? false,
+    email: body.email ?? null,
   };
 }
 
@@ -976,13 +978,14 @@ export async function inviteManager(tenantId: string, email: string): Promise<vo
 }
 
 // ── 직원 관리 (MANAGER 전용 · H7-2, ADR-0014) ─────────────────────────────────
-// 이메일·이름은 PII라 목록에 노출하지 않는다 — 역할·상태·초대일만.
+// 목록에 이메일 표시(ADR-0014 개정, H7-5) — 서버가 MANAGER 인가 뒤에서 복호해 반환.
 
 export interface StaffMember {
   userId: string;
   roles: string[];
   status: string; // invited|active|inactive
   invitedAt: string;
+  email: string | null; // 복호 실패·PII 부재 시 null
 }
 
 function toStaff(raw: {
@@ -990,12 +993,14 @@ function toStaff(raw: {
   roles: string[];
   status: string;
   invited_at: string;
+  email?: string | null;
 }): StaffMember {
   return {
     userId: raw.user_id,
     roles: raw.roles,
     status: raw.status,
     invitedAt: raw.invited_at,
+    email: raw.email ?? null,
   };
 }
 
@@ -1005,7 +1010,13 @@ export async function listStaff(): Promise<StaffMember[]> {
   await ensureOk(response);
   const body = await response.json();
   return (
-    body.items as { user_id: string; roles: string[]; status: string; invited_at: string }[]
+    body.items as {
+      user_id: string;
+      roles: string[];
+      status: string;
+      invited_at: string;
+      email?: string | null;
+    }[]
   ).map(toStaff);
 }
 
