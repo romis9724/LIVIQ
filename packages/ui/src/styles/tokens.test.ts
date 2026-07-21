@@ -31,10 +31,15 @@ describe("디자인 토큰 정합", () => {
     const used = new Map<string, Set<string>>();
     for (const file of files) {
       const css = fs.readFileSync(file, "utf8");
-      for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/g)) defined.add(m[1]);
+      for (const m of css.matchAll(/(--[a-z0-9-]+)\s*:/g)) {
+        if (m[1]) defined.add(m[1]);
+      }
       for (const m of css.matchAll(/var\(\s*(--[a-z0-9-]+)\s*[),]/g)) {
-        if (!used.has(m[1])) used.set(m[1], new Set());
-        used.get(m[1])!.add(path.relative(REPO_ROOT, file));
+        const name = m[1];
+        if (!name) continue;
+        const files_ = used.get(name) ?? new Set<string>();
+        files_.add(path.relative(REPO_ROOT, file));
+        used.set(name, files_);
       }
     }
 
