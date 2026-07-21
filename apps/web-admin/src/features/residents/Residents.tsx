@@ -1,17 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Button, EmptyState, FileDropzone, Skeleton, Toast } from "@liviq/ui";
+import { Button, Dialog, EmptyState, FileDropzone, Skeleton, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
 import {
   ApiError,
   ROSTER_TEMPLATE_URL,
   approveSignup,
+  deleteRosterRow,
   listApprovals,
   listRoster,
   rejectSignup,
+  updateRosterState,
   uploadRoster,
   type Approval,
+  type RosterEntry,
   type RosterList,
   type RosterUploadResult,
 } from "@/lib/api";
@@ -66,6 +69,7 @@ export function Residents() {
   // 업로드 패널 열림 — 최초 로드 때 한 번만 결정(명부 없으면 펼침), 이후엔 사용자 조작만 반영.
   // 리로드마다 counts로 다시 계산하면 업로드 직후 패널이 저절로 접혀 결과가 숨는다.
   const [uploadOpen, setUploadOpen] = useState<boolean | null>(null);
+  const [rosterDeleteTarget, setRosterDeleteTarget] = useState<RosterEntry | null>(null);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -145,6 +149,34 @@ export function Residents() {
     }
   }
 
+  async function changeRosterState(entry: RosterEntry, state: string) {
+    setBusyId(entry.userId);
+    try {
+      await updateRosterState(entry.userId, state);
+      await loadRoster();
+      showToast(state === "moved_out" ? "전출 후보로 표시했습니다." : "미가입으로 복원했습니다.", "neutral");
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function confirmRosterDelete() {
+    if (!rosterDeleteTarget) return;
+    setBusyId(rosterDeleteTarget.userId);
+    try {
+      await deleteRosterRow(rosterDeleteTarget.userId);
+      setRosterDeleteTarget(null);
+      await loadRoster();
+      showToast("명부에서 삭제했습니다.", "neutral");
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function confirmReject(reason: string) {
     if (!rejectId) return;
     const userId = rejectId;
@@ -191,7 +223,7 @@ export function Residents() {
         <section className="apv-queue" aria-labelledby="apv-queue-h">
           <div className="apv-queue__head">
             <h2 id="apv-queue-h" className="apv-queue__title">
-              가입 대기
+              회원 대기자 명단
             </h2>
             <span className="apv-count">{waiting}건 대기</span>
           </div>
@@ -238,6 +270,9 @@ export function Residents() {
           }}
           page={page}
           onPage={setPage}
+          busyId={busyId}
+          onChangeState={changeRosterState}
+          onDelete={setRosterDeleteTarget}
         />
 
         <RosterPanel
@@ -257,6 +292,17 @@ export function Residents() {
           onCancel={() => setRejectId(null)}
         />
       ) : null}
+
+      <Dialog
+        open={rosterDeleteTarget !== null}
+        title="명부에서 삭제할까요?"
+        description={`${rosterDeleteTarget?.nameMasked ?? ""} (${rosterDeleteTarget?.buildingName ?? ""}동 ${rosterDeleteTarget?.unitNo ?? ""}호) 행을 명부에서 완전히 삭제합니다. 저장된 개인정보도 함께 삭제되며 복구할 수 없습니다.`}
+        confirmLabel="삭제"
+        cancelLabel="취소"
+        danger
+        onConfirm={() => void confirmRosterDelete()}
+        onCancel={() => setRosterDeleteTarget(null)}
+      />
 
       {toast ? (
         <div className="apv-toast">
@@ -294,6 +340,9 @@ interface RosterTableProps {
   onStateFilter: (value: string) => void;
   page: number;
   onPage: (value: number) => void;
+  busyId: string | null;
+  onChangeState: (entry: RosterEntry, state: string) => void;
+  onDelete: (entry: RosterEntry) => void;
 }
 
 const STATE_FILTERS = [
@@ -313,15 +362,36 @@ function RosterTable({
   onStateFilter,
   page,
   onPage,
+  busyId,
+  onChangeState,
+  onDelete,
 }: RosterTableProps) {
   const totalPages = roster ? Math.max(1, Math.ceil(roster.total / PAGE_SIZE)) : 1;
 
   return (
     <section className="surface-card apv-roster" aria-labelledby="apv-roster-h">
-      <div className="apv-roster__head">
-        <h2 id="apv-roster-h" className="apv-queue__title">
-          명부
-        </h2>
+      <h2 id="apv-roster-h" className="apv-queue__title">
+        주민 명부
+      </h2>
+
+      {/* 상태 필터 + 검색 — 한 툴바로 묶음(운영자 피드백 6). */}
+      <div className="apv-roster__toolbar">
+        <div className="apv-roster__filters" role="tablist" aria-label="명부 상태 필터">
+          {STATE_FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              role="tab"
+              aria-selected={stateFilter === filter.value}
+              className="apv-roster__filter"
+              data-state={filter.value || "all"}
+              data-active={stateFilter === filter.value || undefined}
+              onClick={() => onStateFilter(filter.value)}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
         <form
           className="apv-roster__search"
           onSubmit={(e) => {
@@ -341,22 +411,6 @@ function RosterTable({
             검색
           </Button>
         </form>
-      </div>
-
-      <div className="apv-roster__filters" role="tablist" aria-label="명부 상태 필터">
-        {STATE_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            role="tab"
-            aria-selected={stateFilter === filter.value}
-            className="apv-roster__filter"
-            data-active={stateFilter === filter.value || undefined}
-            onClick={() => onStateFilter(filter.value)}
-          >
-            {filter.label}
-          </button>
-        ))}
       </div>
 
       {error ? (
@@ -380,11 +434,14 @@ function RosterTable({
                 <th scope="col">호</th>
                 <th scope="col">성함</th>
                 <th scope="col">상태</th>
+                <th scope="col" className="apv-roster__actions-col">
+                  관리
+                </th>
               </tr>
             </thead>
             <tbody>
-              {roster.items.map((entry, index) => (
-                <tr key={`${entry.buildingName}-${entry.unitNo}-${entry.nameMasked}-${index}`}>
+              {roster.items.map((entry) => (
+                <tr key={entry.userId}>
                   <td>{entry.buildingName ?? "—"}동</td>
                   <td>{entry.unitNo ?? "—"}호</td>
                   <td>{entry.nameMasked}</td>
@@ -392,6 +449,39 @@ function RosterTable({
                     <span className={`apv-state apv-state--${entry.state}`}>
                       {STATE_LABEL[entry.state] ?? entry.state}
                     </span>
+                  </td>
+                  <td className="apv-roster__actions">
+                    {entry.state === "unregistered" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busyId === entry.userId}
+                        onClick={() => onChangeState(entry, "moved_out")}
+                      >
+                        전출 처리
+                      </Button>
+                    ) : null}
+                    {entry.state === "moved_out" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busyId === entry.userId}
+                        onClick={() => onChangeState(entry, "unregistered")}
+                      >
+                        복원
+                      </Button>
+                    ) : null}
+                    {entry.state !== "joined" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="apv-roster__delete"
+                        disabled={busyId === entry.userId}
+                        onClick={() => onDelete(entry)}
+                      >
+                        삭제
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               ))}

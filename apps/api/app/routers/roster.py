@@ -28,6 +28,7 @@ from app.schemas.roster import (
     RosterLastUpload,
     RosterListOut,
     RosterRowError,
+    RosterStateIn,
     RosterUploadOut,
 )
 from liviq_db.models import Building, ExcelUpload, Household, PiiVault, User
@@ -103,6 +104,7 @@ async def list_roster(
 
     roster_rows = (
         select(
+            User.id,
             User.status,
             User.deleted_at,
             PiiVault.name_enc,
@@ -171,6 +173,7 @@ async def list_roster(
     return RosterListOut(
         items=[
             RosterEntry(
+                user_id=row.id,
                 name_masked=masked(row.name_enc),
                 building_name=row.building_name,
                 floor=row.floor,
@@ -191,6 +194,62 @@ async def list_roster(
             else None
         ),
     )
+
+
+async def _get_roster_row(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> User:
+    """비삭제 명부 행(가입 계정 아님) — 없음·가입완료(소진)·타 단지는 동일 404."""
+    user = await session.scalar(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.id == user_id,
+            User.login_id.is_(None),
+            User.pii_ref.is_not(None),
+            User.status.in_(("pre_registered", "inactive")),
+            User.deleted_at.is_(None),
+        )
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="명부 행을 찾을 수 없습니다")
+    return user
+
+
+@router.patch("/{user_id}", status_code=204)
+async def update_roster_state(
+    user_id: uuid.UUID,
+    body: RosterStateIn,
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> Response:
+    """명부 행 상태 수동 변경(H7-9 보강) — 미가입 ↔ 전출 후보(소장 판단)."""
+    if body.state not in (_STATE_UNREGISTERED, _STATE_MOVED_OUT):
+        raise HTTPException(status_code=422, detail="상태는 미가입·전출 후보만 가능합니다")
+    user = await _get_roster_row(session, ctx.tenant_id, user_id)
+    user.status = "pre_registered" if body.state == _STATE_UNREGISTERED else "inactive"
+    await session.flush()
+    return Response(status_code=204)
+
+
+@router.delete("/{user_id}", status_code=204)
+async def delete_roster_row(
+    user_id: uuid.UUID,
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> Response:
+    """명부 행 삭제(H7-9 보강) — 가입 계정이 아닌 사전등록 행이라 PII vault째 완전 삭제."""
+    user = await _get_roster_row(session, ctx.tenant_id, user_id)
+    vault_id = user.pii_ref
+    await session.delete(user)
+    await session.flush()
+    if vault_id is not None:
+        vault = await session.scalar(
+            select(PiiVault).where(PiiVault.id == vault_id, PiiVault.tenant_id == ctx.tenant_id)
+        )
+        if vault is not None:
+            await session.delete(vault)
+            await session.flush()
+    return Response(status_code=204)
 
 
 class RosterRowIn(BaseModel):

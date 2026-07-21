@@ -435,6 +435,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/roster/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Roster Row
+         * @description 명부 행 삭제(H7-9 보강) — 가입 계정이 아닌 사전등록 행이라 PII vault째 완전 삭제.
+         */
+        delete: operations["delete_roster_row_admin_roster__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Roster State
+         * @description 명부 행 상태 수동 변경(H7-9 보강) — 미가입 ↔ 전출 후보(소장 판단).
+         */
+        patch: operations["update_roster_state_admin_roster__user_id__patch"];
+        trace?: never;
+    };
     "/admin/staff": {
         parameters: {
             query?: never;
@@ -2064,6 +2088,11 @@ export interface components {
             state: string;
             /** Unit No */
             unit_no: number | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /** RosterLastUpload */
         RosterLastUpload: {
@@ -2092,6 +2121,14 @@ export interface components {
             reason: string;
             /** Row */
             row: number;
+        };
+        /**
+         * RosterStateIn
+         * @description 명부 행 수동 상태 변경 — 미가입 ↔ 전출 후보(소장 판단, H7-9 보강).
+         */
+        RosterStateIn: {
+            /** State */
+            state: string;
         };
         /** RosterUploadOut */
         RosterUploadOut: {
@@ -3227,6 +3264,78 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RosterUploadOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_roster_row_admin_roster__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_roster_state_admin_roster__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RosterStateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

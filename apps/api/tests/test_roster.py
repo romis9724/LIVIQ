@@ -293,3 +293,38 @@ async def test_roster_list_search_filter_and_pagination(
 async def test_roster_list_requires_manager(seeded: None, db_session: AsyncSession) -> None:
     app = _build_app(db_session, FakeStorage(), roles=("STAFF",))
     assert (await _get_roster(app)).status_code == 403
+
+
+async def test_roster_state_change_and_delete(seeded: None, db_session: AsyncSession) -> None:
+    """상태 수동 변경(미가입↔전출 후보)·행 삭제(PII vault째) — 소진 행은 404(H7-9 보강)."""
+    from liviq_db.models import User as UserModel
+
+    app = _build_app(db_session, FakeStorage())
+    data = _xlsx([("김일", "1990-01-01", "101", 3, 301)])
+    assert (await _upload(app, data)).status_code == 200
+
+    listed = (await _get_roster(app)).json()
+    row = listed["items"][0]
+    user_id = row["user_id"]
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        # 전출 후보로 → 다시 미가입으로.
+        moved = await c.patch(f"/admin/roster/{user_id}", json={"state": "moved_out"})
+        assert moved.status_code == 204
+        assert (await _get_roster(app)).json()["items"][0]["state"] == "moved_out"
+        assert (
+            await c.patch(f"/admin/roster/{user_id}", json={"state": "unregistered"})
+        ).status_code == 204
+        # 허용 외 상태는 422.
+        bad = await c.patch(f"/admin/roster/{user_id}", json={"state": "joined"})
+        assert bad.status_code == 422
+
+        # 삭제 — 행·vault 완전 제거.
+        assert (await c.delete(f"/admin/roster/{user_id}")).status_code == 204
+        assert (await _get_roster(app)).json()["counts"]["total"] == 0
+        assert (await c.delete(f"/admin/roster/{user_id}")).status_code == 404
+
+    gone = await db_session.scalar(select(UserModel).where(UserModel.id == user_id))
+    assert gone is None
+    vault_count = await db_session.scalar(select(func.count()).select_from(PiiVault))
+    assert vault_count == 0  # vault 잔존 0(사전등록 행 외 vault 없음)

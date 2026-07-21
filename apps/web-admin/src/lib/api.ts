@@ -845,6 +845,7 @@ function toApproval(raw: RawApproval): Approval {
 // ── 명부 목록 (H7-9) ─────────────────────────────────────────────────────────
 
 export interface RosterEntry {
+  userId: string;
   nameMasked: string;
   buildingName: string | null;
   floor: number | null;
@@ -883,6 +884,7 @@ export async function listRoster(
   return {
     items: (
       body.items as {
+        user_id: string;
         name_masked: string;
         building_name: string | null;
         floor: number | null;
@@ -890,6 +892,7 @@ export async function listRoster(
         state: string;
       }[]
     ).map((raw) => ({
+      userId: raw.user_id,
       nameMasked: raw.name_masked,
       buildingName: raw.building_name,
       floor: raw.floor,
@@ -969,6 +972,25 @@ function toRosterResult(raw: {
     markedInactive: raw.marked_inactive,
     errors: raw.errors,
   };
+}
+
+/** 명부 행 상태 수동 변경 — 미가입(unregistered) ↔ 전출 후보(moved_out). 404=명부 행 아님. */
+export async function updateRosterState(userId: string, state: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/roster/${userId}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+  await ensureOk(response);
+}
+
+/** 명부 행 삭제 — 사전등록 행을 PII vault째 완전 삭제(가입 계정 아님). */
+export async function deleteRosterRow(userId: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/roster/${userId}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
 }
 
 /** 명부 업로드 양식 다운로드 URL — 세션 쿠키 동봉 최상위 GET이라 <a download>로 바로 쓴다(H7-7). */

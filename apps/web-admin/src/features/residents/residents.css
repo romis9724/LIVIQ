@@ -378,17 +378,39 @@
   color: var(--color-text-muted);
   font-weight: 600;
 }
+.apv-stat[data-tone="ok"] {
+  background: color-mix(in oklch, var(--color-success) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 30%, var(--color-border));
+}
 .apv-stat[data-tone="ok"] .apv-stat__value {
   color: color-mix(in oklch, var(--color-success) 70%, var(--color-text));
 }
+.apv-stat[data-tone="wait"] {
+  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 25%, var(--color-border));
+}
+.apv-stat[data-tone="wait"] .apv-stat__value {
+  color: color-mix(in oklch, var(--color-accent) 80%, var(--color-text));
+}
+.apv-stat[data-tone="warn"] {
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 25%, var(--color-border));
+}
 .apv-stat[data-tone="warn"] .apv-stat__value {
   color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
+}
+.apv-stat[data-tone="action"] {
+  background: color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-border));
 }
 .apv-stat[data-tone="action"] .apv-stat__value {
   color: var(--color-accent);
 }
 
 /* ---- 가입 대기 컴팩트 빈 상태 ---- */
+.apv-queue {
+  margin-bottom: var(--space-6);
+}
 .apv-queue__empty {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
@@ -402,12 +424,16 @@
 .apv-roster {
   margin-bottom: var(--space-6);
 }
-.apv-roster__head {
+.apv-roster__toolbar {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--space-3);
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 .apv-roster__search {
   margin-left: auto;
@@ -430,7 +456,6 @@
 .apv-roster__filters {
   display: flex;
   gap: var(--space-2);
-  margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
 .apv-roster__filter {
@@ -447,10 +472,22 @@
 .apv-roster__filter:hover {
   background: color-mix(in oklch, var(--color-text) 5%, transparent);
 }
+.apv-roster__filter[data-state="unregistered"] {
+  background: color-mix(in oklch, var(--color-text) 4%, var(--color-surface));
+}
+.apv-roster__filter[data-state="joined"] {
+  background: color-mix(in oklch, var(--color-success) 8%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 55%, var(--color-text));
+}
+.apv-roster__filter[data-state="moved_out"] {
+  background: color-mix(in oklch, var(--color-danger) 6%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-danger) 55%, var(--color-text));
+}
 .apv-roster__filter[data-active] {
-  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  background: color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
   color: var(--color-accent);
-  border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-border));
+  border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-border));
+  box-shadow: var(--shadow-card);
 }
 .apv-roster__table {
   width: 100%;
@@ -491,6 +528,16 @@
   background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
   color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
 }
+.apv-roster__actions-col {
+  text-align: right;
+}
+.apv-roster__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.apv-roster__actions > * + * {
+  margin-left: var(--space-2);
+}
 .apv-roster__pager {
   display: flex;
   align-items: center;
@@ -502,4 +549,9 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* 행 삭제 — 전 행 빨간 버튼의 시각 소음을 줄인다(텍스트만 위험색, 확인은 Dialog가 담당). */
+.apv-roster__delete {
+  color: color-mix(in oklch, var(--color-danger) 70%, var(--color-text));
 }

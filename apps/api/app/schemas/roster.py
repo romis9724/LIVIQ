@@ -13,6 +13,7 @@ __all__ = [
     "RosterLastUpload",
     "RosterListOut",
     "RosterRowError",
+    "RosterStateIn",
     "RosterUploadOut",
 ]
 
@@ -32,11 +33,18 @@ class RosterUploadOut(BaseModel):
 class RosterEntry(BaseModel):
     """명부 한 행(H7-9) — 성함 마스킹·생년월일 비표시(상시 노출 최소화, 운영자 결정)."""
 
+    user_id: uuid.UUID  # 상태 변경·삭제 대상 식별(H7-9 보강)
     name_masked: str
     building_name: str | None
     floor: int | None
     unit_no: int | None
     state: str  # unregistered=미가입 · joined=가입완료(소진) · moved_out=전출 후보
+
+
+class RosterStateIn(BaseModel):
+    """명부 행 수동 상태 변경 — 미가입 ↔ 전출 후보(소장 판단, H7-9 보강)."""
+
+    state: str  # unregistered | moved_out
 
 
 class RosterCounts(BaseModel):
