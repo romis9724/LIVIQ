@@ -810,6 +810,8 @@ export interface Approval {
   userId: string;
   nameMasked: string;
   rosterMatched: boolean;
+  // 불일치 사유(H7-9): no_household_roster | person_mismatch | all_consumed
+  mismatchReason: string | null;
   buildingName: string | null;
   floor: number | null;
   unitNo: number | null;
@@ -820,6 +822,7 @@ interface RawApproval {
   user_id: string;
   name_masked: string;
   roster_matched: boolean;
+  mismatch_reason?: string | null;
   building_name: string | null;
   floor: number | null;
   unit_no: number | null;
@@ -831,10 +834,82 @@ function toApproval(raw: RawApproval): Approval {
     userId: raw.user_id,
     nameMasked: raw.name_masked,
     rosterMatched: raw.roster_matched,
+    mismatchReason: raw.mismatch_reason ?? null,
     buildingName: raw.building_name,
     floor: raw.floor,
     unitNo: raw.unit_no,
     requestedAt: raw.requested_at,
+  };
+}
+
+// ── 명부 목록 (H7-9) ─────────────────────────────────────────────────────────
+
+export interface RosterEntry {
+  nameMasked: string;
+  buildingName: string | null;
+  floor: number | null;
+  unitNo: number | null;
+  state: string; // unregistered | joined | moved_out
+}
+
+export interface RosterCounts {
+  total: number;
+  unregistered: number;
+  joined: number;
+  movedOut: number;
+}
+
+export interface RosterList {
+  items: RosterEntry[];
+  total: number; // 필터 적용 후 건수(페이지네이션 분모)
+  counts: RosterCounts;
+  lastUpload: { uploadedAt: string; rowCount: number; errorCount: number } | null;
+}
+
+/** 명부 목록(MANAGER) — 검색(q=동·호)·상태 필터·페이지네이션. */
+export async function listRoster(
+  params: { q?: string; state?: string; page?: number; size?: number } = {},
+): Promise<RosterList> {
+  const search = new URLSearchParams();
+  if (params.q) search.set("q", params.q);
+  if (params.state) search.set("state", params.state);
+  if (params.page) search.set("page", String(params.page));
+  if (params.size) search.set("size", String(params.size));
+  const response = await apiFetch(`${API_BASE_URL}/admin/roster?${search.toString()}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    items: (
+      body.items as {
+        name_masked: string;
+        building_name: string | null;
+        floor: number | null;
+        unit_no: number | null;
+        state: string;
+      }[]
+    ).map((raw) => ({
+      nameMasked: raw.name_masked,
+      buildingName: raw.building_name,
+      floor: raw.floor,
+      unitNo: raw.unit_no,
+      state: raw.state,
+    })),
+    total: body.total,
+    counts: {
+      total: body.counts.total,
+      unregistered: body.counts.unregistered,
+      joined: body.counts.joined,
+      movedOut: body.counts.moved_out,
+    },
+    lastUpload: body.last_upload
+      ? {
+          uploadedAt: body.last_upload.uploaded_at,
+          rowCount: body.last_upload.row_count,
+          errorCount: body.last_upload.error_count,
+        }
+      : null,
   };
 }
 

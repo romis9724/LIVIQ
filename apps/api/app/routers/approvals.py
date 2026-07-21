@@ -45,6 +45,7 @@ async def list_approvals(
         await session.execute(
             select(
                 User.id,
+                User.household_id,
                 User.roster_matched,
                 User.created_at,
                 PiiVault.name_enc,
@@ -70,14 +71,54 @@ async def list_approvals(
             user_id=user_id,
             name_masked=mask_name(crypto.decrypt(dek, name_enc)) if name_enc else "*",
             roster_matched=roster_matched,
+            mismatch_reason=(
+                None
+                if roster_matched
+                else await _mismatch_reason(session, ctx.tenant_id, household_id)
+            ),
             building_name=building_name,
             floor=floor,
             unit_no=unit_no,
             requested_at=created_at,
         )
-        for user_id, roster_matched, created_at, name_enc, building_name, floor, unit_no in rows
+        for (
+            user_id,
+            household_id,
+            roster_matched,
+            created_at,
+            name_enc,
+            building_name,
+            floor,
+            unit_no,
+        ) in rows
     ]
     return ApprovalListOut(items=items)
+
+
+async def _mismatch_reason(
+    session: AsyncSession, tenant_id: uuid.UUID, household_id: uuid.UUID | None
+) -> str:
+    """명부 불일치 사유(H7-9) — 소장이 후속 확인(전화 등)을 판단할 근거.
+
+    명부 행 = 명부 출신 사용자(login_id 없음·pre_registered). 소진(soft delete)은 가입 완료.
+    """
+    if household_id is None:
+        return "no_household_roster"
+    rows = (
+        await session.execute(
+            select(User.deleted_at).where(
+                User.tenant_id == tenant_id,
+                User.household_id == household_id,
+                User.status == "pre_registered",
+                User.login_id.is_(None),
+            )
+        )
+    ).all()
+    if not rows:
+        return "no_household_roster"
+    if all(deleted_at is not None for (deleted_at,) in rows):
+        return "all_consumed"
+    return "person_mismatch"
 
 
 @router.post("/{user_id}/approve", status_code=204)

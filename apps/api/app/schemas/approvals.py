@@ -14,6 +14,9 @@ class ApprovalOut(BaseModel):
     user_id: uuid.UUID
     name_masked: str  # 복호화 후 마스킹(홍*동) — 원문 노출 금지
     roster_matched: bool
+    # 불일치 사유(H7-9) — roster_matched=False일 때만: no_household_roster(명부에 해당 세대
+    # 없음) · person_mismatch(세대는 있으나 성함·생년 불일치) · all_consumed(세대 명부 전원 가입).
+    mismatch_reason: str | None = None
     building_name: str | None
     floor: int | None
     unit_no: int | None

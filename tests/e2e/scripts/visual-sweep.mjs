@@ -32,7 +32,7 @@ const ROLES = [
     email: "demo-manager@example.com",
     password: DEMO_PASSWORD,
     base: ADMIN,
-    routes: ["/dashboard", "/approvals", "/review-queue", "/staff", "/fees"],
+    routes: ["/dashboard", "/residents", "/review-queue", "/staff", "/fees"],
   },
   {
     name: "staff",

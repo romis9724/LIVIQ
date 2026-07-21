@@ -8,16 +8,31 @@ import {
   ROSTER_TEMPLATE_URL,
   approveSignup,
   listApprovals,
+  listRoster,
   rejectSignup,
   uploadRoster,
   type Approval,
+  type RosterList,
   type RosterUploadResult,
 } from "@/lib/api";
 import { ROSTER_ACCEPT, formatUnit, isValidRejectReason, validateRoster } from "./logic";
-import "./approvals.css";
+import "./residents.css";
 
 const ROSTER_MAX_MB = 10;
 const TOAST_DURATION_MS = 3200;
+const PAGE_SIZE = 50;
+
+// 명부 상태·불일치 사유 라벨(H7-9) — 코드값은 서버 계약(schemas/roster·approvals).
+const STATE_LABEL: Record<string, string> = {
+  unregistered: "미가입",
+  joined: "가입완료",
+  moved_out: "전출 후보",
+};
+const MISMATCH_LABEL: Record<string, string> = {
+  no_household_roster: "명부에 해당 세대 없음",
+  person_mismatch: "성함·생년월일 불일치",
+  all_consumed: "세대 명부 인원 모두 가입됨",
+};
 
 type UploadState =
   | { phase: "idle" }
@@ -32,7 +47,7 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-export function Approvals() {
+export function Residents() {
   const [signups, setSignups] = useState<Approval[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [upload, setUpload] = useState<UploadState>({ phase: "idle" });
@@ -40,6 +55,17 @@ export function Approvals() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 명부 목록(H7-9) — 검색은 제출 시 적용(appliedQuery), 필터·페이지는 즉시.
+  const [roster, setRoster] = useState<RosterList | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+  const [queryInput, setQueryInput] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [page, setPage] = useState(1);
+  // 업로드 패널 열림 — 최초 로드 때 한 번만 결정(명부 없으면 펼침), 이후엔 사용자 조작만 반영.
+  // 리로드마다 counts로 다시 계산하면 업로드 직후 패널이 저절로 접혀 결과가 숨는다.
+  const [uploadOpen, setUploadOpen] = useState<boolean | null>(null);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -57,9 +83,30 @@ export function Approvals() {
     }
   }, []);
 
+  const loadRoster = useCallback(async () => {
+    try {
+      const next = await listRoster({
+        q: appliedQuery,
+        state: stateFilter,
+        page,
+        size: PAGE_SIZE,
+      });
+      setRoster(next);
+      setRosterError(null);
+      setUploadOpen((prev) => (prev === null ? next.counts.total === 0 : prev));
+    } catch (err) {
+      setRosterError(errorMessage(err));
+      setRoster(null);
+    }
+  }, [appliedQuery, stateFilter, page]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadRoster();
+  }, [loadRoster]);
 
   useEffect(
     () => () => {
@@ -79,6 +126,7 @@ export function Approvals() {
       const result = await uploadRoster(file);
       setUpload({ phase: "done", fileName: file.name, result });
       showToast(`명부 반영 완료 — 신규 ${result.applied} · 비활성 ${result.markedInactive}`);
+      await loadRoster(); // 업로드 즉시 목록·총계 반영(쓰기 전용 프로세스 해소, H7-9)
     } catch (err) {
       setUpload({ phase: "error", fileName: file.name, message: errorMessage(err) });
     }
@@ -115,21 +163,30 @@ export function Approvals() {
 
   const waiting = signups?.length ?? 0;
   const rejectTarget = signups?.find((s) => s.userId === rejectId) ?? null;
+  const counts = roster?.counts ?? null;
 
   return (
     <>
       <header className="admin-page__header">
         <h1 id="main" className="admin-page__title">
-          가입 승인
+          주민 관리
         </h1>
         <p className="admin-page__lede">
-          입주민 가입 신청을 단지 명부와 대조해 승인·거절합니다. 명부 엑셀을 올리면 신규 세대만
-          추가되고 기존 세대는 그대로 유지됩니다(diff 병합).
+          단지 명부를 관리하고 가입 신청을 명부와 대조해 승인·거절합니다. 명부 엑셀 재업로드는
+          신규 세대만 추가합니다(diff 병합).
         </p>
       </header>
 
       <main className="admin-page__main">
-        <RosterPanel upload={upload} onFile={handleFile} />
+        {counts ? (
+          <div className="apv-stats" role="status" aria-label="명부 요약">
+            <StatChip label="명부 전체" value={counts.total} />
+            <StatChip label="미가입" value={counts.unregistered} tone="wait" />
+            <StatChip label="가입완료" value={counts.joined} tone="ok" />
+            <StatChip label="전출 후보" value={counts.movedOut} tone="warn" />
+            <StatChip label="승인 대기" value={waiting} tone={waiting > 0 ? "action" : undefined} />
+          </div>
+        ) : null}
 
         <section className="apv-queue" aria-labelledby="apv-queue-h">
           <div className="apv-queue__head">
@@ -144,14 +201,12 @@ export function Approvals() {
           ) : signups === null ? (
             <div className="apv-list">
               <Skeleton height="96px" />
-              <Skeleton height="96px" />
             </div>
           ) : waiting === 0 ? (
-            <EmptyState
-              icon="✓"
-              title="대기 중인 가입 신청이 없습니다"
-              description="새 신청이 접수되면 명부 대조 결과와 함께 이곳에 모입니다."
-            />
+            <p className="apv-queue__empty">
+              대기 중인 가입 신청이 없습니다. 새 신청이 접수되면 명부 대조 결과와 함께 이곳에
+              모입니다.
+            </p>
           ) : (
             <ul className="apv-list">
               {signups.map((signup) => (
@@ -166,6 +221,32 @@ export function Approvals() {
             </ul>
           )}
         </section>
+
+        <RosterTable
+          roster={roster}
+          error={rosterError}
+          queryInput={queryInput}
+          onQueryInput={setQueryInput}
+          onSearch={() => {
+            setPage(1);
+            setAppliedQuery(queryInput.trim());
+          }}
+          stateFilter={stateFilter}
+          onStateFilter={(next) => {
+            setPage(1);
+            setStateFilter(next);
+          }}
+          page={page}
+          onPage={setPage}
+        />
+
+        <RosterPanel
+          upload={upload}
+          onFile={handleFile}
+          lastUpload={roster?.lastUpload ?? null}
+          open={uploadOpen ?? false}
+          onToggle={setUploadOpen}
+        />
       </main>
 
       {rejectTarget ? (
@@ -186,11 +267,184 @@ export function Approvals() {
   );
 }
 
-function RosterPanel({ upload, onFile }: { upload: UploadState; onFile: (file: File) => void }) {
+function StatChip({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "ok" | "warn" | "wait" | "action";
+}) {
+  return (
+    <span className="apv-stat" data-tone={tone}>
+      <span className="apv-stat__value">{value.toLocaleString()}</span>
+      <span className="apv-stat__label">{label}</span>
+    </span>
+  );
+}
+
+interface RosterTableProps {
+  roster: RosterList | null;
+  error: string | null;
+  queryInput: string;
+  onQueryInput: (value: string) => void;
+  onSearch: () => void;
+  stateFilter: string;
+  onStateFilter: (value: string) => void;
+  page: number;
+  onPage: (value: number) => void;
+}
+
+const STATE_FILTERS = [
+  { value: "", label: "전체" },
+  { value: "unregistered", label: "미가입" },
+  { value: "joined", label: "가입완료" },
+  { value: "moved_out", label: "전출 후보" },
+] as const;
+
+function RosterTable({
+  roster,
+  error,
+  queryInput,
+  onQueryInput,
+  onSearch,
+  stateFilter,
+  onStateFilter,
+  page,
+  onPage,
+}: RosterTableProps) {
+  const totalPages = roster ? Math.max(1, Math.ceil(roster.total / PAGE_SIZE)) : 1;
+
+  return (
+    <section className="surface-card apv-roster" aria-labelledby="apv-roster-h">
+      <div className="apv-roster__head">
+        <h2 id="apv-roster-h" className="apv-queue__title">
+          명부
+        </h2>
+        <form
+          className="apv-roster__search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSearch();
+          }}
+        >
+          <input
+            className="apv-roster__search-input"
+            value={queryInput}
+            onChange={(e) => onQueryInput(e.target.value)}
+            placeholder="동 또는 호수 검색 (예: 401, 201)"
+            aria-label="명부 검색"
+            inputMode="numeric"
+          />
+          <Button type="submit" variant="secondary" size="sm">
+            검색
+          </Button>
+        </form>
+      </div>
+
+      <div className="apv-roster__filters" role="tablist" aria-label="명부 상태 필터">
+        {STATE_FILTERS.map((filter) => (
+          <button
+            key={filter.value}
+            type="button"
+            role="tab"
+            aria-selected={stateFilter === filter.value}
+            className="apv-roster__filter"
+            data-active={stateFilter === filter.value || undefined}
+            onClick={() => onStateFilter(filter.value)}
+          >
+            {filter.label}
+          </button>
+        ))}
+      </div>
+
+      {error ? (
+        <EmptyState icon="⚠" title="명부를 불러오지 못했습니다" description={error} />
+      ) : roster === null ? (
+        <Skeleton height="200px" />
+      ) : roster.counts.total === 0 ? (
+        <EmptyState
+          icon="📇"
+          title="등록된 명부가 없습니다"
+          description="아래에서 명부 엑셀을 업로드하면 세대별 목록이 여기에 표시됩니다."
+        />
+      ) : roster.items.length === 0 ? (
+        <EmptyState icon="🔍" title="조건에 맞는 세대가 없습니다" description="검색어·필터를 확인해 주세요." />
+      ) : (
+        <>
+          <table className="apv-roster__table">
+            <thead>
+              <tr>
+                <th scope="col">동</th>
+                <th scope="col">호</th>
+                <th scope="col">성함</th>
+                <th scope="col">상태</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roster.items.map((entry, index) => (
+                <tr key={`${entry.buildingName}-${entry.unitNo}-${entry.nameMasked}-${index}`}>
+                  <td>{entry.buildingName ?? "—"}동</td>
+                  <td>{entry.unitNo ?? "—"}호</td>
+                  <td>{entry.nameMasked}</td>
+                  <td>
+                    <span className={`apv-state apv-state--${entry.state}`}>
+                      {STATE_LABEL[entry.state] ?? entry.state}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="apv-roster__pager">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => onPage(page - 1)}
+            >
+              이전
+            </Button>
+            <span className="apv-roster__page">
+              {page} / {totalPages} 페이지 · {roster.total.toLocaleString()}건
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={page >= totalPages}
+              onClick={() => onPage(page + 1)}
+            >
+              다음
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function RosterPanel({
+  upload,
+  onFile,
+  lastUpload,
+  open,
+  onToggle,
+}: {
+  upload: UploadState;
+  onFile: (file: File) => void;
+  lastUpload: RosterList["lastUpload"];
+  open: boolean;
+  onToggle: (open: boolean) => void;
+}) {
   const fileName = "fileName" in upload ? upload.fileName : undefined;
 
   return (
-    <details className="surface-card apv-upload" open>
+    <details
+      className="surface-card apv-upload"
+      open={open}
+      onToggle={(e) => onToggle(e.currentTarget.open)}
+    >
       <summary className="apv-upload__summary">
         <span className="apv-upload__icon" aria-hidden="true">
           📇
@@ -198,7 +452,9 @@ function RosterPanel({ upload, onFile }: { upload: UploadState; onFile: (file: F
         <span className="apv-upload__heading">
           <span className="apv-upload__title">단지 명부 업로드</span>
           <span className="apv-upload__sub">
-            사전등록 세대(성함·생년월일·동·층·호). 같은 세대는 덮어쓰지 않고 신규만 추가합니다.
+            {lastUpload
+              ? `마지막 업로드 ${lastUpload.uploadedAt.slice(0, 16).replace("T", " ")} · ${lastUpload.rowCount}행 · 오류 ${lastUpload.errorCount}건`
+              : "사전등록 세대(성함·생년월일·동·층·호). 같은 세대는 덮어쓰지 않고 신규만 추가합니다."}
           </span>
         </span>
         <span className="apv-upload__chevron" aria-hidden="true" />
@@ -273,7 +529,7 @@ function SignupCard({ signup, busy, onApprove, onReject }: SignupCardProps) {
         <div className="apv-card__idline">
           <span className="apv-card__name">{signup.nameMasked}</span>
           <span className="apv-card__unit">{formatUnit(signup.buildingName, signup.unitNo)}</span>
-          <RosterBadge match={signup.rosterMatched} />
+          <RosterBadge match={signup.rosterMatched} reason={signup.mismatchReason} />
         </div>
         <dl className="apv-card__meta">
           <div>
@@ -295,7 +551,7 @@ function SignupCard({ signup, busy, onApprove, onReject }: SignupCardProps) {
   );
 }
 
-function RosterBadge({ match }: { match: boolean }) {
+function RosterBadge({ match, reason }: { match: boolean; reason: string | null }) {
   if (match) {
     return (
       <span className="apv-match apv-match--ok">
@@ -303,9 +559,11 @@ function RosterBadge({ match }: { match: boolean }) {
       </span>
     );
   }
+  // 불일치 사유 구체화(H7-9) — 소장이 전화 확인 등 후속 판단을 할 근거.
+  const label = (reason && MISMATCH_LABEL[reason]) || "수동 확인 필요";
   return (
     <span className="apv-match apv-match--warn">
-      <span aria-hidden="true">⚠</span> 명부 불일치 · 수동 확인
+      <span aria-hidden="true">⚠</span> 명부 불일치 · {label}
     </span>
   );
 }

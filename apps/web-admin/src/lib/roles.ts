@@ -10,7 +10,7 @@ export interface NavItem {
 
 // 내비 항목 카탈로그 — 라우트별 단일 정의(중복 방지).
 const DASHBOARD: NavItem = { href: "/dashboard", icon: "📊", label: "대시보드" };
-const APPROVALS: NavItem = { href: "/approvals", icon: "👥", label: "가입 승인" };
+const RESIDENTS: NavItem = { href: "/residents", icon: "🙋", label: "주민 관리" };
 const REVIEW: NavItem = { href: "/review-queue", icon: "✅", label: "AI 검수 큐" };
 const NOTICES: NavItem = { href: "/notices/new", icon: "📢", label: "공지 초안" };
 const INQUIRIES: NavItem = { href: "/inquiries", icon: "🛠", label: "민원 관리" };
@@ -27,7 +27,7 @@ const SYS_ADMIN_NAV: readonly NavItem[] = [TENANTS];
 // MANAGER(기본): 전체 + 직원 관리(H7-5에서 설정 하위 → 최상위 승격).
 const MANAGER_NAV: readonly NavItem[] = [
   DASHBOARD,
-  APPROVALS,
+  RESIDENTS,
   REVIEW,
   NOTICES,
   INQUIRIES,
