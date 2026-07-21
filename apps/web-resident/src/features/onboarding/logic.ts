@@ -5,15 +5,26 @@
 
 import type { AppNotification, Me, ProfilePayload } from "@/lib/api";
 
-/** 데모 유효 초대코드. 실서비스에서는 서버가 단지별 코드를 검증한다. */
-export const VALID_INVITE_CODE = "LIVIQ1";
-
 /** 만 나이 하한. FR-ONB: 만 14세 미만 가입 차단. */
 export const MIN_SIGNUP_AGE = 14;
 
-/** 초대코드 검증(데모). 공백 제거·대문자 정규화 후 비교. */
-export function isValidInviteCode(code: string): boolean {
-  return code.trim().toUpperCase() === VALID_INVITE_CODE;
+/** 비밀번호 길이 하한(ADR-0014 — NIST 계열). 서버 SignupIn/PasswordReset 과 동일 값. */
+export const MIN_PASSWORD_LENGTH = 10;
+
+// 이메일 형식·UUID 는 즉시 피드백 보조 — 최종 판정은 서버(EmailStr·tenant 조회).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 이메일 형식 검증(공백 제거 후). */
+export function isValidEmail(email: string): boolean {
+  return EMAIL_RE.test(email.trim());
+}
+
+/** 가입 링크 ?t 파라미터(단지 UUID) 검증·정규화. 형식이 아니면 null(안내 화면 표시). */
+export function parseTenantId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return UUID_RE.test(trimmed) ? trimmed : null;
 }
 
 /** ISO 날짜 문자열(YYYY-MM-DD)을 타임존 영향 없이 파싱. 형식 불일치는 null. */
@@ -94,6 +105,18 @@ export function rootDestination(me: Pick<Me, "status">): string {
 }
 
 /**
+ * 이미 로그인한 사용자가 /login·/signup(인증 진입 화면)에 접근했을 때 목적지.
+ * active→홈, registered(프로필 미제출)→온보딩, 그 외(대기·반려·비활성·미로그인)는
+ * null(화면에 머무름 — 기존 흐름 유지, 로그아웃 사용자의 가입 흐름을 막지 않음).
+ */
+export function authedRedirect(status: string): string | null {
+  const view = accountView({ status });
+  if (view === "active") return "/home";
+  if (view === "onboarding") return "/onboarding";
+  return null;
+}
+
+/**
  * 반려 사유 추출 — /me 는 사유를 주지 않으므로 인앱 알림에서 가져온다.
  * approvals.reject 는 type="approval" + body=사유 알림을 남긴다(승인 알림은 body 없음).
  * 가장 최근 사유를 반환하고, 없으면 null.
@@ -105,9 +128,8 @@ export function rejectionReasonFrom(notifications: readonly AppNotification[]): 
   return rejections[0]?.body ?? null;
 }
 
-/** 가입 폼 입력값(camelCase, UI 상태). 동·호는 select 문자열. */
+/** 온보딩 프로필 폼 입력값(camelCase, UI 상태). 동·호는 select 문자열. */
 export interface SignupFormValues {
-  inviteCode: string;
   name: string;
   birthDate: string; // YYYY-MM-DD
   dong: string; // 동(건물명) — 예: "101"
@@ -123,7 +145,6 @@ export interface SignupFormValues {
 export function buildProfilePayload(values: SignupFormValues): ProfilePayload {
   const unitNo = Number.parseInt(values.ho, 10);
   return {
-    invite_code: values.inviteCode.trim(),
     consents: [
       { purpose: "privacy_required", granted: values.privacyConsent },
       { purpose: "alerts", granted: values.alertsConsent },
@@ -134,4 +155,42 @@ export function buildProfilePayload(values: SignupFormValues): ProfilePayload {
     floor: Math.floor(unitNo / 100),
     unit_no: unitNo,
   };
+}
+
+/** 계정 가입 폼(이메일+비밀번호+확인) 입력값. */
+export interface AccountSignupValues {
+  email: string;
+  password: string;
+  passwordConfirm: string;
+}
+
+export interface AccountSignupErrors {
+  email?: string;
+  password?: string;
+  passwordConfirm?: string;
+}
+
+const PASSWORD_TOO_SHORT = `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
+const PASSWORD_MISMATCH = "비밀번호가 일치하지 않습니다.";
+
+/** 계정 가입 클라 검증(즉시 피드백 보조). 서버가 최종 판정한다. */
+export function validateAccountSignup(values: AccountSignupValues): AccountSignupErrors {
+  const errors: AccountSignupErrors = {};
+  if (!isValidEmail(values.email)) errors.email = "이메일 형식이 올바르지 않습니다.";
+  if (values.password.length < MIN_PASSWORD_LENGTH) errors.password = PASSWORD_TOO_SHORT;
+  if (values.passwordConfirm !== values.password) errors.passwordConfirm = PASSWORD_MISMATCH;
+  return errors;
+}
+
+export interface NewPasswordErrors {
+  password?: string;
+  passwordConfirm?: string;
+}
+
+/** 비밀번호 재설정(새 비밀번호+확인) 클라 검증. 서버가 토큰·길이를 최종 판정한다. */
+export function validateNewPassword(password: string, passwordConfirm: string): NewPasswordErrors {
+  const errors: NewPasswordErrors = {};
+  if (password.length < MIN_PASSWORD_LENGTH) errors.password = PASSWORD_TOO_SHORT;
+  if (passwordConfirm !== password) errors.passwordConfirm = PASSWORD_MISMATCH;
+  return errors;
 }

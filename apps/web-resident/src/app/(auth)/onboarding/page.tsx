@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { SignupView } from "@/features/onboarding/SignupView";
 
-// OAuth 콜백은 신규 계정을 /onboarding 으로 되돌린다(auth.py _ONBOARDING_PATH).
-// 가입 화면(/signup)과 동일 뷰 — 콜백 복귀 경로와 앱 라우트를 정합시키는 별칭.
+// 이메일 인증·로그인 후 registered 사용자가 도달하는 입주민 정보 입력 단계(ADR-0014).
+// 계정 생성(이메일+비밀번호)은 /signup, 여기서는 프로필(성함·생년월일·동·호·동의)만 받는다.
 export const metadata: Metadata = {
-  title: "가입 신청",
+  title: "입주민 정보 입력",
   description: "약관 동의 후 입주민 정보를 입력하고 가입을 신청합니다.",
 };
 

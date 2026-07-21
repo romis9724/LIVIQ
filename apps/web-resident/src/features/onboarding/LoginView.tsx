@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button, FormField } from "@liviq/ui";
 import { API_BASE_URL } from "@/lib/dev-context";
+import { MIN_PASSWORD_LENGTH, isValidEmail } from "./logic";
+import { useRedirectIfAuthed } from "./useRedirectIfAuthed";
 import "./onboarding.css";
-
-// 이메일 형식·비밀번호 길이는 즉시 피드백 보조 — 최종 판정은 서버(자체 인증, ADR-0014).
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MIN_PASSWORD_LENGTH = 10;
 
 /** 검증 링크 복귀 배너. verified=인증 완료, verify_error=링크 무효/만료. */
 type Banner = "verified" | "verify_error" | null;
@@ -27,6 +26,8 @@ function loginErrorMessage(status: number): string {
 
 /** 로그인 진입 — 이메일+비밀번호. 성공 시 루트(/)가 /me 상태로 화면을 분기한다. */
 export function LoginView() {
+  useRedirectIfAuthed();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -43,7 +44,7 @@ export function LoginView() {
 
   const submit = async () => {
     const next: FieldErrors = {};
-    if (!EMAIL_RE.test(email.trim())) next.email = "이메일 형식이 올바르지 않습니다.";
+    if (!isValidEmail(email)) next.email = "이메일 형식이 올바르지 않습니다.";
     if (password.length < MIN_PASSWORD_LENGTH)
       next.password = `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`;
 
@@ -133,8 +134,15 @@ export function LoginView() {
           <Button type="submit" variant="primary" className="auth-submit" disabled={submitting}>
             {submitting ? "로그인 중…" : "로그인"}
           </Button>
+
+          <Link className="auth-consent__view auth-forgot" href="/reset-password">
+            비밀번호를 잊으셨나요?
+          </Link>
         </form>
 
+        <p className="auth-foot">
+          처음이신가요? 단지 안내문의 가입 링크로 가입하세요.
+        </p>
         <p className="auth-foot">
           <span aria-hidden="true">🔒</span> 가입 후 관리소장 승인이 필요합니다.
         </p>

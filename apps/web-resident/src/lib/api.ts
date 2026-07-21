@@ -241,7 +241,6 @@ export async function markNotificationRead(id: string): Promise<AppNotification>
 
 /** POST /onboarding/profile 본문 — 서버 계약(snake_case). floor·unit_no 는 독립 필드. */
 export interface ProfilePayload {
-  invite_code: string;
   consents: { purpose: string; granted: boolean }[];
   name: string;
   birth_date: string; // YYYY-MM-DD

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, FormField } from "@liviq/ui";
 import { ApiError, submitProfile } from "@/lib/api";
-import { buildProfilePayload, isUnderMinAge, isValidInviteCode } from "./logic";
+import { buildProfilePayload, isUnderMinAge } from "./logic";
 import "./onboarding.css";
 
 /** 동의받은 개인정보 처리방침 버전. FR-ONB: policy_version 기록 대상. */
@@ -25,7 +25,6 @@ interface Consents {
 }
 
 interface InfoErrors {
-  invite?: string;
   name?: string;
   birth?: string;
   dong?: string;
@@ -158,7 +157,6 @@ function InfoStep({
   onBack: () => void;
   onDone: () => void;
 }) {
-  const [invite, setInvite] = useState("");
   const [name, setName] = useState("");
   const [birth, setBirth] = useState("");
   const [dong, setDong] = useState("");
@@ -170,7 +168,6 @@ function InfoStep({
 
   const submit = async () => {
     const next: InfoErrors = {};
-    if (!isValidInviteCode(invite)) next.invite = "유효하지 않은 초대코드입니다.";
     if (!name.trim()) next.name = "성명을 입력해 주세요.";
     if (!birth) next.birth = "생년월일을 입력해 주세요.";
     else if (isUnderMinAge(birth)) next.birth = "만 14세 미만은 가입할 수 없습니다.";
@@ -185,7 +182,6 @@ function InfoStep({
     try {
       await submitProfile(
         buildProfilePayload({
-          inviteCode: invite,
           name,
           birthDate: birth,
           dong,
@@ -217,18 +213,6 @@ function InfoStep({
       noValidate
     >
       <h1 className="auth-title auth-title--sm">입주민 정보를 입력해 주세요</h1>
-
-      <FormField
-        label="단지 초대코드"
-        value={invite}
-        onChange={(e) => setInvite(e.target.value)}
-        maxLength={6}
-        autoCapitalize="characters"
-        placeholder="6자리 코드"
-        help="관리사무소에서 받은 코드를 입력하세요. (데모: LIVIQ1)"
-        error={errors.invite}
-        wrapperClassName="auth-field"
-      />
 
       <FormField
         label="성명"
