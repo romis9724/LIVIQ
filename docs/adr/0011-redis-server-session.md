@@ -3,6 +3,7 @@
 - 상태: Accepted
 - 날짜: 2026-07-13
 - 갱신: 2026-07-13 — api는 FastAPI로 전환([ADR-0013](0013-python-backend.md)), 콜백 주체=api 결정은 불변. 본문의 NestJS·BullMQ 표기는 각각 FastAPI·arq로 읽을 것.
+- 갱신: 2026-07-21 — 인증 수단이 자체 이메일 인증으로 교체([ADR-0014](0014-local-email-auth.md)). 세션 모델(본 ADR)은 **불변**, 본문의 OAuth 콜백 관련 서술(맥락·결정 §1)은 무효 — 세션 확립 주체·즉시 revoke·Redis 통합은 그대로.
 - 관련: [docs/06 §2](../06-security-privacy.md), [docs/09 §2](../09-implementation-harness.md), [ADR-0007](0007-readonly-tool-agent.md)
 
 ## 맥락

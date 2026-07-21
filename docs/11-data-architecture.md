@@ -93,13 +93,13 @@ flowchart LR
 
 ### 3.4 온보딩·명부
 
-소장 명부 엑셀이 `users`를 사전 생성. 입주민 가입은 Google OAuth → **단지 초대코드**(tenant 확정) → **개인정보 동의**(`policy_version` 기록) → 정보 입력(**만 14세 미만 차단**) → 사전등록 행과 자동 대조, 소장 최종 승인으로 `active`. 명부 재업로드는 **diff 병합**(`pre_registered`만 교체, 매칭된 `pending`/`active` 불변, 빠진 세대는 '전출 후보'로 표시). 스키마: [03 §4.1](03-database-design.md).
+소장 명부 엑셀이 `users`를 사전 생성. 입주민 가입은 이메일+비밀번호 → **이메일 검증**([ADR-0014](adr/0014-local-email-auth.md)) → **개인정보 동의**(`policy_version` 기록) → 정보 입력(**만 14세 미만 차단**) → 사전등록 행과 자동 대조, 소장 최종 승인으로 `active`(자동 승격 없음). 명부 재업로드는 **diff 병합**(`pre_registered`만 교체, 매칭된 `pending`/`active` 불변, 빠진 세대는 '전출 후보'로 표시). 스키마: [03 §4.1](03-database-design.md).
 
 ```mermaid
 flowchart TD
   RX[소장 명부 엑셀] --> PR[(users 사전생성 pre_registered · login_id NULL)]
-  G[입주민 Google 로그인] --> IV[단지 초대코드 입력 tenant 확정]
-  IV --> CS[개인정보 동의 필수·선택 policy_version 기록]
+  G[입주민 이메일+비밀번호 가입] --> EV[이메일 검증 링크 확인]
+  EV --> CS[개인정보 동의 필수·선택 policy_version 기록]
   CS --> INF[정보 입력 성함·생일·동·호]
   INF --> AGE{만 14세 이상?}
   AGE -->|미만| BLK[가입 차단]

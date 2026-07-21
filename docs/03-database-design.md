@@ -30,6 +30,7 @@ erDiagram
   tenants ||--o{ audit_logs : "감사"
   tenants ||--o{ jobs : "작업"
   tenants ||--o{ notifications : "알림"
+  tenants ||--o{ auth_tokens : "토큰"
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
   unit_types ||--o{ floor_plans : "평면도"
@@ -42,6 +43,7 @@ erDiagram
   users ||--o{ user_roles : "역할"
   users ||--o{ consents : "동의"
   users ||--o{ notifications : "수신"
+  users ||--o{ auth_tokens : "인증토큰"
   documents ||--o{ document_chunks : "청크"
   document_chunks ||--o{ citations : "근거"
   conversations ||--o{ messages : "메시지"
@@ -97,10 +99,21 @@ erDiagram
     uuid id PK
     uuid tenant_id FK
     uuid household_id FK
-    string login_id "OAuth sub, 사전등록 NULL"
+    string login_id "email HMAC 해시, 초대·시드 NULL"
+    string password_hash "Argon2id, 설정 전 NULL"
+    timestamp email_verified_at "미검증 NULL"
     string status
     bool roster_matched
     uuid pii_ref FK
+  }
+  auth_tokens {
+    uuid id PK
+    uuid tenant_id FK
+    uuid user_id FK
+    string purpose "verify_email|invite|reset_password"
+    string token_hash "SHA-256, 원문 미저장"
+    timestamp expires_at
+    timestamp used_at
   }
   pii_vault {
     uuid id PK
@@ -274,17 +287,29 @@ households(id, tenant_id, building_id, floor int, unit_no int,
 
 -- 사용자 (식별정보는 pii_vault로 분리)
 users(id, tenant_id, household_id NULL,
-      login_id UNIQUE NULL,          -- OAuth subject(Google sub). 명부 사전등록 행은 NULL
+      login_id UNIQUE NULL,          -- email의 keyed HMAC 해시(로그인·중복체크, 전역 유니크). 초대·시드 前, pre_registered 행은 NULL
+      password_hash NULL,            -- Argon2id 해시. pre_registered·초대 미완 계정은 NULL(설정 전) — [ADR-0014]
+      email_verified_at NULL,        -- 이메일 검증 완료 시각. NULL이면 로그인 차단(FR-ONB-10)
       status,                        -- pre_registered|pending|active|inactive|rejected|withdrawn
                                      --   inactive=전출(1년 보관) · withdrawn=탈퇴(즉시 비식별, [06 §4.4])
       roster_matched bool,           -- 가입 시 명부 사전등록 행과 자동 대조 일치 여부
       pii_ref uuid NULL,             -- pii_vault.id
       approved_by NULL, approved_at NULL, rejected_reason NULL,  -- 소장 승인/거절
       created_at, updated_at)
+  -- login_id partial unique index: WHERE login_id IS NOT NULL (기존 인덱스 재사용)
 
 -- 역할 (다대다)
-user_roles(id, tenant_id, user_id, role)   -- role: RESIDENT|MANAGER|STAFF|FACILITY|COUNCIL|SYS_ADMIN
+user_roles(id, tenant_id, user_id, role)   -- role: RESIDENT|MANAGER|STAFF|SYS_ADMIN (FACILITY·COUNCIL은 Phase 2)
   UNIQUE(tenant_id, user_id, role)
+
+-- 인증 토큰 (이메일 검증·초대·비밀번호 재설정 — 원문은 URL로만 전달, DB는 해시만, [ADR-0014])
+auth_tokens(id, tenant_id, user_id,
+            purpose,                 -- verify_email|invite|reset_password
+            token_hash,              -- SHA-256(원문 토큰). 원문 미저장
+            expires_at,              -- TTL 초기값: verify 24h · invite 7d · reset 1h
+            used_at NULL,            -- 사용 시각(1회용 소진 표시)
+            created_at)
+  INDEX(token_hash)
 
 -- 개인정보 분리 저장 (암호화)
 pii_vault(id, tenant_id, name_enc, phone_enc, email_enc, birth_date_enc,
@@ -304,9 +329,9 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 ```
 
 > **명부 사전등록·온보딩**: 소장이 명부 엑셀(성함·생년월일·동·호)을 일괄 업로드하면 `users` 행이
-> 사전 생성된다(`status=pre_registered`, `login_id=NULL`, PII는 `pii_vault`). 입주민이 Google OAuth로 로그인·정보 입력하면
-> 사전등록 행과 **자동 대조**(성함+생일+동·호)한다 — 일치 시 해당 행에 `login_id`를 채우고 `roster_matched=true`로
-> `pending` 전이(명부 일치 배지), 불일치 시 신규 행을 `pending`으로 만든다. 소장 최종 승인으로 `active`(거절은 `rejected`+사유).
+> 사전 생성된다(`status=pre_registered`, `login_id=NULL`, PII는 `pii_vault`). 입주민이 이메일+비밀번호로 가입·이메일 검증 후 정보 입력하면
+> 사전등록 행과 **자동 대조**(성함+생일+동·호)한다 — 일치 시 해당 행에 `login_id`(email HMAC)·`password_hash`를 채우고 `roster_matched=true`로
+> `pending` 전이(명부 일치 배지), 불일치 시 신규 행을 `pending`으로 만든다. 소장 최종 승인으로 `active`(거절은 `rejected`+사유) — 자동 승격 없음.
 > 전체 흐름: [11 §온보딩·명부](11-data-architecture.md).
 >
 > **명부 재업로드(diff 병합)**: 재업로드 시 기존 `pre_registered` 행과 (성함+생일+동·호) 키로 diff — 신규는 추가, 명부에서 사라진 행은 `inactive`(전출 추정) 표시(자동 삭제 금지, 소장 확인). 이미 `active`로 가입한 세대 계정은 유지.
@@ -536,7 +561,8 @@ CREATE POLICY tenant_isolation ON documents
 | `ai_eval_golden` | `tenant_id = current OR tenant_id IS NULL` — 공용 골든셋(NULL) + 자기 단지 골든셋 읽기 |
 | `tenants` | RLS 예외 — 멤버십(사용자↔테넌트) 기반 인가로 접근 통제 |
 | `outbox_events`·`jobs` | 워커 role만 cross-tenant(위), 그 외 role은 표준 tenant 격리 |
-| `users` (auth 조회 한정) | **`auth_lookup` permissive 정책(H2-1)** — OAuth 콜백의 `login_id` 전역 조회는 tenant 확정 전이라 표준 격리를 못 통과. `SET LOCAL app.auth_lookup='on'` 플래그가 켜진 트랜잭션에서 **SELECT만** 허용(`USING (current_setting('app.auth_lookup', true) = 'on')`). 콜백 조회 단 한 곳만 사용, 쓰기는 불가 — 행을 찾으면 그 `tenant_id`로 정상 컨텍스트 재설정 후 진행 |
+| `users` (auth 조회 한정) | **`auth_lookup` permissive 정책(H2-1)** — 로그인·이메일 중복체크의 `login_id`(email HMAC) 전역 조회는 tenant 확정 전이라 표준 격리를 못 통과. `SET LOCAL app.auth_lookup='on'` 플래그가 켜진 트랜잭션에서 **SELECT만** 허용(`USING (current_setting('app.auth_lookup', true) = 'on')`). 로그인·가입 조회 경로만 사용, 쓰기는 불가 — 행을 찾으면 그 `tenant_id`로 정상 컨텍스트 재설정 후 진행 |
+| `auth_tokens` (검증 한정) | 초대·검증·재설정 링크는 tenant 확정 전 `token_hash`로 전역 조회 — `users` auth 조회와 동일하게 `auth_lookup` 플래그 트랜잭션에서 **SELECT만** 허용, 소진(`used_at`) 쓰기는 정상 tenant 컨텍스트에서 |
 
 ## 6. 개인정보 처리
 
@@ -570,5 +596,5 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 - Alembic 마이그레이션을 버전관리(RLS 정책·role은 custom migration `op.execute`, [09 §2.1](09-implementation-harness.md)). 운영 반영은 CI에서 자동 실행([09]).
 - 파괴적 변경(컬럼 삭제·임베딩 차원 변경)은 2단계(추가→백필→정리)로 무중단.
 - **시드 분리**:
-  - **운영 시드**: 역할·민원 카테고리·공용 골든셋 + 파일럿 단지 90세대 마스터(`buildings`·`households`·`unit_types`) + **MANAGER 초대 행**(소장 이메일 시드 → 해당 이메일로 Google OAuth 로그인 시 자동 MANAGER 역할, [06 §2](06-security-privacy.md)).
+  - **운영 시드**: 역할·민원 카테고리·공용 골든셋 + 파일럿 단지 90세대 마스터(`buildings`·`households`·`unit_types`) + **최초 SYS_ADMIN 부트스트랩**(설치 스크립트가 시스템 테넌트(고정 UUID) 계정 생성 — 임시 비밀번호 출력, 첫 로그인 시 변경 강제). 소장·직원은 시드 자동 부여 아닌 **초대 토큰**(`auth_tokens` purpose=`invite`)으로 등록([06 §2](06-security-privacy.md), [ADR-0014](adr/0014-local-email-auth.md)).
   - **테스트 픽스처**: 2-tenant 합성 데이터 + 90세대 생성기(격리·소유권 테스트용). 운영 시드와 코드 경로 분리.
