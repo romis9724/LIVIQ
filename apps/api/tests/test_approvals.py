@@ -37,6 +37,7 @@ async def _seed_applicant(
     household_id: uuid.UUID,
     name: str = "김입주",
     status: str = "pending",
+    login_id: str = "applicant-sub",
 ) -> uuid.UUID:
     dek = await crypto.get_dek(session, TENANT_ID)
     vault_id = uuid.uuid4()
@@ -55,7 +56,7 @@ async def _seed_applicant(
             id=user_id,
             tenant_id=TENANT_ID,
             household_id=household_id,
-            login_id="applicant-sub",
+            login_id=login_id,
             status=status,
             roster_matched=False,
             pii_ref=vault_id,
@@ -232,3 +233,78 @@ async def test_staff_cannot_approve(
     async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         response = await c.post(f"/admin/approvals/{applicant_id}/approve")
     assert response.status_code == 403
+
+
+# ── 불일치 사유 (H7-9) ───────────────────────────────────────────────────────
+
+
+async def _seed_roster_row(
+    session: AsyncSession,
+    crypto: PiiCrypto,
+    household_id: uuid.UUID,
+    name: str,
+    *,
+    consumed: bool = False,
+) -> None:
+    """명부 출신 행(pre_registered·login_id 없음). consumed=True면 소진(가입 완료)."""
+    import datetime as dt
+
+    dek = await crypto.get_dek(session, TENANT_ID)
+    vault_id = uuid.uuid4()
+    session.add(
+        PiiVault(
+            id=vault_id,
+            tenant_id=TENANT_ID,
+            name_enc=crypto.encrypt(dek, name),
+            name_hash=crypto.hmac_hash(name),
+            key_version=1,
+        )
+    )
+    session.add(
+        User(
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            login_id=None,
+            status="pre_registered",
+            pii_ref=vault_id,
+            deleted_at=dt.datetime.now(dt.UTC) if consumed else None,
+        )
+    )
+    await session.flush()
+
+
+async def _mismatch_of(app: FastAPI, applicant_id: uuid.UUID) -> str | None:
+    import httpx
+    from httpx import ASGITransport
+
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.get("/admin/approvals")
+    assert resp.status_code == 200
+    item = next(i for i in resp.json()["items"] if i["user_id"] == str(applicant_id))
+    assert item["roster_matched"] is False
+    return item["mismatch_reason"]
+
+
+async def test_mismatch_reasons(
+    seeded: dict[tuple[int, int], uuid.UUID],
+    db_session: AsyncSession,
+    fake_redis: FakeRedis,
+    pii_crypto: PiiCrypto,
+) -> None:
+    """불일치 사유 3분류(H7-9) — 세대 명부 없음 / 인적 불일치 / 전원 소진."""
+    app = _build_app(db_session, fake_redis)
+    h_none, h_mismatch, h_consumed = seeded[(3, 301)], seeded[(3, 302)], seeded[(5, 501)]
+
+    # ① 해당 세대에 명부 행 자체가 없음.
+    a1 = await _seed_applicant(db_session, pii_crypto, h_none, name="김하나", login_id="a1")
+    assert await _mismatch_of(app, a1) == "no_household_roster"
+
+    # ② 세대 명부는 있으나 성함·생년 불일치(미소진 행 존재).
+    await _seed_roster_row(db_session, pii_crypto, h_mismatch, "박명부")
+    a2 = await _seed_applicant(db_session, pii_crypto, h_mismatch, name="김둘", login_id="a2")
+    assert await _mismatch_of(app, a2) == "person_mismatch"
+
+    # ③ 세대 명부 전원이 이미 가입(전부 소진).
+    await _seed_roster_row(db_session, pii_crypto, h_consumed, "이명부", consumed=True)
+    a3 = await _seed_applicant(db_session, pii_crypto, h_consumed, name="김셋", login_id="a3")
+    assert await _mismatch_of(app, a3) == "all_consumed"

@@ -21,7 +21,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import RequestContext, Storage, get_storage, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.roster import RosterRowError, RosterUploadOut
+from app.routers.approvals import mask_name
+from app.schemas.roster import (
+    RosterCounts,
+    RosterEntry,
+    RosterLastUpload,
+    RosterListOut,
+    RosterRowError,
+    RosterStateIn,
+    RosterUploadOut,
+)
 from liviq_db.models import Building, ExcelUpload, Household, PiiVault, User
 
 router = APIRouter(prefix="/admin/roster", tags=["roster"])
@@ -58,6 +67,189 @@ async def roster_template(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="liviq-roster-template.xlsx"'},
     )
+
+
+# 명부 행 상태(H7-9) — 판정은 전부 데이터에서 파생(별도 컬럼 없음):
+# 미가입 = pre_registered·비삭제 · 가입완료 = pre_registered·소진(soft delete, 온보딩 매칭)
+# 전출 후보 = inactive·비삭제(재업로드 diff에서 사라진 행)
+_STATE_UNREGISTERED = "unregistered"
+_STATE_JOINED = "joined"
+_STATE_MOVED_OUT = "moved_out"
+MAX_PAGE_SIZE = 200
+
+
+def _entry_state(status: str, deleted: bool) -> str:
+    if status == "inactive":
+        return _STATE_MOVED_OUT
+    return _STATE_JOINED if deleted else _STATE_UNREGISTERED
+
+
+@router.get("", response_model=RosterListOut)
+async def list_roster(
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
+    q: str = "",
+    state: str = "",
+    page: int = 1,
+    size: int = 50,
+) -> RosterListOut:
+    """명부 목록(H7-9) — 동·호·성함(마스킹)·상태 + 총계 + 마지막 업로드 요약.
+
+    명부 행 = 명부 출신 사용자(login_id 없음·PII 참조 보유·pre_registered/inactive).
+    q는 동 이름 또는 호수 일치 검색. 생년월일은 반환하지 않는다(운영자 결정, H7-9).
+    """
+    page = max(page, 1)
+    size = min(max(size, 1), MAX_PAGE_SIZE)
+
+    roster_rows = (
+        select(
+            User.id,
+            User.status,
+            User.deleted_at,
+            PiiVault.name_enc,
+            Building.name.label("building_name"),
+            Household.floor,
+            Household.unit_no,
+        )
+        .join(PiiVault, PiiVault.id == User.pii_ref)
+        .outerjoin(Household, Household.id == User.household_id)
+        .outerjoin(Building, Building.id == Household.building_id)
+        .where(
+            User.tenant_id == ctx.tenant_id,
+            User.login_id.is_(None),
+            User.pii_ref.is_not(None),
+            User.status.in_(("pre_registered", "inactive")),
+        )
+    )
+
+    # 총계는 필터와 무관하게 전체 기준(화면 상단 배지).
+    all_rows = (await session.execute(roster_rows)).all()
+    counts = RosterCounts(total=len(all_rows), unregistered=0, joined=0, moved_out=0)
+    for row in all_rows:
+        entry_state = _entry_state(row.status, row.deleted_at is not None)
+        if entry_state == _STATE_UNREGISTERED:
+            counts.unregistered += 1
+        elif entry_state == _STATE_JOINED:
+            counts.joined += 1
+        else:
+            counts.moved_out += 1
+
+    query = q.strip()
+    filtered = [
+        row
+        for row in all_rows
+        if (not state or _entry_state(row.status, row.deleted_at is not None) == state)
+        and (
+            not query
+            or row.building_name == query
+            or (row.unit_no is not None and str(row.unit_no) == query)
+        )
+    ]
+    filtered.sort(
+        key=lambda r: (r.building_name or "", r.floor or 0, r.unit_no or 0, r.status)
+    )
+    page_rows = filtered[(page - 1) * size : page * size]
+
+    dek = await crypto.get_dek(session, ctx.tenant_id) if page_rows else b""
+
+    def masked(name_enc: bytes | None) -> str:
+        if name_enc is None:
+            return "*"
+        try:
+            return mask_name(crypto.decrypt(dek, name_enc))
+        except Exception:  # noqa: BLE001 — 복호 실패 행도 목록엔 남긴다
+            return "*"
+
+    last = (
+        await session.execute(
+            select(ExcelUpload.created_at, ExcelUpload.row_count, ExcelUpload.error_report)
+            .where(ExcelUpload.tenant_id == ctx.tenant_id, ExcelUpload.type == "roster")
+            .order_by(ExcelUpload.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+
+    return RosterListOut(
+        items=[
+            RosterEntry(
+                user_id=row.id,
+                name_masked=masked(row.name_enc),
+                building_name=row.building_name,
+                floor=row.floor,
+                unit_no=row.unit_no,
+                state=_entry_state(row.status, row.deleted_at is not None),
+            )
+            for row in page_rows
+        ],
+        total=len(filtered),
+        counts=counts,
+        last_upload=(
+            RosterLastUpload(
+                uploaded_at=last.created_at,
+                row_count=last.row_count or 0,
+                error_count=len((last.error_report or {}).get("errors", [])),
+            )
+            if last is not None
+            else None
+        ),
+    )
+
+
+async def _get_roster_row(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> User:
+    """비삭제 명부 행(가입 계정 아님) — 없음·가입완료(소진)·타 단지는 동일 404."""
+    user = await session.scalar(
+        select(User).where(
+            User.tenant_id == tenant_id,
+            User.id == user_id,
+            User.login_id.is_(None),
+            User.pii_ref.is_not(None),
+            User.status.in_(("pre_registered", "inactive")),
+            User.deleted_at.is_(None),
+        )
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="명부 행을 찾을 수 없습니다")
+    return user
+
+
+@router.patch("/{user_id}", status_code=204)
+async def update_roster_state(
+    user_id: uuid.UUID,
+    body: RosterStateIn,
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> Response:
+    """명부 행 상태 수동 변경(H7-9 보강) — 미가입 ↔ 전출 후보(소장 판단)."""
+    if body.state not in (_STATE_UNREGISTERED, _STATE_MOVED_OUT):
+        raise HTTPException(status_code=422, detail="상태는 미가입·전출 후보만 가능합니다")
+    user = await _get_roster_row(session, ctx.tenant_id, user_id)
+    user.status = "pre_registered" if body.state == _STATE_UNREGISTERED else "inactive"
+    await session.flush()
+    return Response(status_code=204)
+
+
+@router.delete("/{user_id}", status_code=204)
+async def delete_roster_row(
+    user_id: uuid.UUID,
+    ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> Response:
+    """명부 행 삭제(H7-9 보강) — 가입 계정이 아닌 사전등록 행이라 PII vault째 완전 삭제."""
+    user = await _get_roster_row(session, ctx.tenant_id, user_id)
+    vault_id = user.pii_ref
+    await session.delete(user)
+    await session.flush()
+    if vault_id is not None:
+        vault = await session.scalar(
+            select(PiiVault).where(PiiVault.id == vault_id, PiiVault.tenant_id == ctx.tenant_id)
+        )
+        if vault is not None:
+            await session.delete(vault)
+            await session.flush()
+    return Response(status_code=204)
 
 
 class RosterRowIn(BaseModel):

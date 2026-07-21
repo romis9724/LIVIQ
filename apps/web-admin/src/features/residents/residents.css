@@ -348,3 +348,210 @@
   bottom: var(--space-6);
   z-index: 20;
 }
+
+/* ---- 요약 통계 (H7-9) ---- */
+.apv-stats {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.apv-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.apv-stat__value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.apv-stat__label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.apv-stat[data-tone="ok"] {
+  background: color-mix(in oklch, var(--color-success) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 30%, var(--color-border));
+}
+.apv-stat[data-tone="ok"] .apv-stat__value {
+  color: color-mix(in oklch, var(--color-success) 70%, var(--color-text));
+}
+.apv-stat[data-tone="wait"] {
+  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 25%, var(--color-border));
+}
+.apv-stat[data-tone="wait"] .apv-stat__value {
+  color: color-mix(in oklch, var(--color-accent) 80%, var(--color-text));
+}
+.apv-stat[data-tone="warn"] {
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-danger) 25%, var(--color-border));
+}
+.apv-stat[data-tone="warn"] .apv-stat__value {
+  color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
+}
+.apv-stat[data-tone="action"] {
+  background: color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 40%, var(--color-border));
+}
+.apv-stat[data-tone="action"] .apv-stat__value {
+  color: var(--color-accent);
+}
+
+/* ---- 가입 대기 컴팩트 빈 상태 ---- */
+.apv-queue {
+  margin-bottom: var(--space-6);
+}
+.apv-queue__empty {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+}
+
+/* ---- 명부 목록 (H7-9) ---- */
+.apv-roster {
+  margin-bottom: var(--space-6);
+}
+.apv-roster__toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.apv-roster__search {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+.apv-roster__search-input {
+  width: 240px;
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  background: var(--color-surface);
+}
+.apv-roster__search-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.apv-roster__filters {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.apv-roster__filter {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.apv-roster__filter:hover {
+  background: color-mix(in oklch, var(--color-text) 5%, transparent);
+}
+.apv-roster__filter[data-state="unregistered"] {
+  background: color-mix(in oklch, var(--color-text) 4%, var(--color-surface));
+}
+.apv-roster__filter[data-state="joined"] {
+  background: color-mix(in oklch, var(--color-success) 8%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 55%, var(--color-text));
+}
+.apv-roster__filter[data-state="moved_out"] {
+  background: color-mix(in oklch, var(--color-danger) 6%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-danger) 55%, var(--color-text));
+}
+.apv-roster__filter[data-active] {
+  background: color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+  border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-border));
+  box-shadow: var(--shadow-card);
+}
+.apv-roster__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.apv-roster__table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-strong);
+}
+.apv-roster__table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-variant-numeric: tabular-nums;
+}
+.apv-roster__table tbody tr:hover {
+  background: color-mix(in oklch, var(--color-text) 3%, transparent);
+}
+.apv-state {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.apv-state--unregistered {
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+.apv-state--joined {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.apv-state--moved_out {
+  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
+}
+.apv-roster__actions-col {
+  text-align: right;
+}
+.apv-roster__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.apv-roster__actions > * + * {
+  margin-left: var(--space-2);
+}
+.apv-roster__pager {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+.apv-roster__page {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 행 삭제 — 전 행 빨간 버튼의 시각 소음을 줄인다(텍스트만 위험색, 확인은 Dialog가 담당). */
+.apv-roster__delete {
+  color: color-mix(in oklch, var(--color-danger) 70%, var(--color-text));
+}

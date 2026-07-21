@@ -44,7 +44,7 @@ function usePendingBadges(enabled: boolean): Record<string, number> {
     let alive = true;
     // 마운트 시 1회 조회(폴링 없음). 각 카운트는 독립 — 하나가 실패해도 나머지는 표시.
     void listApprovals()
-      .then((items) => alive && setBadges((prev) => ({ ...prev, "/approvals": items.length })))
+      .then((items) => alive && setBadges((prev) => ({ ...prev, "/residents": items.length })))
       .catch(() => undefined);
     void listReviewQueue()
       .then((list) => alive && setBadges((prev) => ({ ...prev, "/review-queue": list.total })))

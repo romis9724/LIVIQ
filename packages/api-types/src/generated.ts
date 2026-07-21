@@ -375,6 +375,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/roster": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Roster
+         * @description 명부 목록(H7-9) — 동·호·성함(마스킹)·상태 + 총계 + 마지막 업로드 요약.
+         *
+         *     명부 행 = 명부 출신 사용자(login_id 없음·PII 참조 보유·pre_registered/inactive).
+         *     q는 동 이름 또는 호수 일치 검색. 생년월일은 반환하지 않는다(운영자 결정, H7-9).
+         */
+        get: operations["list_roster_admin_roster_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/roster/template": {
         parameters: {
             query?: never;
@@ -410,6 +433,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/roster/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Roster Row
+         * @description 명부 행 삭제(H7-9 보강) — 가입 계정이 아닌 사전등록 행이라 PII vault째 완전 삭제.
+         */
+        delete: operations["delete_roster_row_admin_roster__user_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Roster State
+         * @description 명부 행 상태 수동 변경(H7-9 보강) — 미가입 ↔ 전출 후보(소장 판단).
+         */
+        patch: operations["update_roster_state_admin_roster__user_id__patch"];
         trace?: never;
     };
     "/admin/staff": {
@@ -1156,6 +1203,8 @@ export interface components {
             building_name: string | null;
             /** Floor */
             floor: number | null;
+            /** Mismatch Reason */
+            mismatch_reason?: string | null;
             /** Name Masked */
             name_masked: string;
             /**
@@ -2013,12 +2062,73 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** RosterCounts */
+        RosterCounts: {
+            /** Joined */
+            joined: number;
+            /** Moved Out */
+            moved_out: number;
+            /** Total */
+            total: number;
+            /** Unregistered */
+            unregistered: number;
+        };
+        /**
+         * RosterEntry
+         * @description 명부 한 행(H7-9) — 성함 마스킹·생년월일 비표시(상시 노출 최소화, 운영자 결정).
+         */
+        RosterEntry: {
+            /** Building Name */
+            building_name: string | null;
+            /** Floor */
+            floor: number | null;
+            /** Name Masked */
+            name_masked: string;
+            /** State */
+            state: string;
+            /** Unit No */
+            unit_no: number | null;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+        };
+        /** RosterLastUpload */
+        RosterLastUpload: {
+            /** Error Count */
+            error_count: number;
+            /** Row Count */
+            row_count: number;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
+        /** RosterListOut */
+        RosterListOut: {
+            counts: components["schemas"]["RosterCounts"];
+            /** Items */
+            items: components["schemas"]["RosterEntry"][];
+            last_upload: components["schemas"]["RosterLastUpload"] | null;
+            /** Total */
+            total: number;
+        };
         /** RosterRowError */
         RosterRowError: {
             /** Reason */
             reason: string;
             /** Row */
             row: number;
+        };
+        /**
+         * RosterStateIn
+         * @description 명부 행 수동 상태 변경 — 미가입 ↔ 전출 후보(소장 판단, H7-9 보강).
+         */
+        RosterStateIn: {
+            /** State */
+            state: string;
         };
         /** RosterUploadOut */
         RosterUploadOut: {
@@ -3055,6 +3165,45 @@ export interface operations {
             };
         };
     };
+    list_roster_admin_roster_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                state?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RosterListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     roster_template_admin_roster_template_get: {
         parameters: {
             query?: never;
@@ -3115,6 +3264,78 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RosterUploadOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_roster_row_admin_roster__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_roster_state_admin_roster__user_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RosterStateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
