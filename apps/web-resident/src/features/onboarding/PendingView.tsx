@@ -20,9 +20,9 @@ export function PendingView() {
         const me = await getMe();
         if (!alive) return;
         const next = accountView(me);
-        // 미제출(onboarding 세션)이면 가입 화면으로 되돌린다.
+        // 미제출(registered)이면 입주민 정보 입력(온보딩)으로 되돌린다.
         if (next === "onboarding") {
-          router.replace("/signup");
+          router.replace("/onboarding");
           return;
         }
         // 반려 사유는 승인 알림함에 실려 온다 — 반려 상태에서만 추가 조회.
@@ -61,7 +61,7 @@ export function PendingView() {
           ) : null}
           {view === "pending" ? <PendingCard /> : null}
           {view === "rejected" ? (
-            <RejectedCard reason={reason} onReapply={() => router.push("/signup")} />
+            <RejectedCard reason={reason} onReapply={() => router.push("/onboarding")} />
           ) : null}
           {view === "active" ? <ActiveCard onEnter={() => router.push("/home")} /> : null}
           {view === "inactive" ? <InactiveCard /> : null}

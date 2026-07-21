@@ -2,30 +2,97 @@ import { describe, it, expect } from "vitest";
 
 import type { AppNotification } from "@/lib/api";
 import {
+  MIN_PASSWORD_LENGTH,
   MIN_SIGNUP_AGE,
-  VALID_INVITE_CODE,
   accountView,
+  authedRedirect,
   buildProfilePayload,
   fullAge,
   isUnderMinAge,
-  isValidInviteCode,
+  isValidEmail,
   maskKoreanName,
+  parseTenantId,
   rejectionReasonFrom,
   rootDestination,
+  validateAccountSignup,
+  validateNewPassword,
 } from "./logic";
 
-describe("isValidInviteCode", () => {
-  it("데모 코드 LIVIQ1은 유효하다", () => {
-    expect(isValidInviteCode(VALID_INVITE_CODE)).toBe(true);
+describe("isValidEmail", () => {
+  it("정상 형식은 유효하다", () => {
+    expect(isValidEmail("kim@example.com")).toBe(true);
+    expect(isValidEmail("  kim@example.com  ")).toBe(true);
   });
 
-  it("공백·소문자를 정규화해 비교한다", () => {
-    expect(isValidInviteCode("  liviq1 ")).toBe(true);
+  it("형식이 아니면 무효다", () => {
+    expect(isValidEmail("kim@")).toBe(false);
+    expect(isValidEmail("kim example.com")).toBe(false);
+    expect(isValidEmail("")).toBe(false);
+  });
+});
+
+describe("parseTenantId (가입 링크 ?t)", () => {
+  const uuid = "11111111-2222-3333-4444-555555555555";
+
+  it("UUID 형식이면 공백을 제거해 반환한다", () => {
+    expect(parseTenantId(uuid)).toBe(uuid);
+    expect(parseTenantId(`  ${uuid}  `)).toBe(uuid);
   });
 
-  it("다른 코드는 무효다", () => {
-    expect(isValidInviteCode("ABC123")).toBe(false);
-    expect(isValidInviteCode("")).toBe(false);
+  it("형식이 아니거나 없으면 null", () => {
+    expect(parseTenantId("not-a-uuid")).toBeNull();
+    expect(parseTenantId("")).toBeNull();
+    expect(parseTenantId(null)).toBeNull();
+    expect(parseTenantId(undefined)).toBeNull();
+  });
+});
+
+describe("validateAccountSignup (계정 가입 검증)", () => {
+  const valid = { email: "kim@example.com", password: "verylongpass", passwordConfirm: "verylongpass" };
+
+  it("정상 입력은 오류 없음", () => {
+    expect(validateAccountSignup(valid)).toEqual({});
+  });
+
+  it("이메일 형식 오류를 잡는다", () => {
+    expect(validateAccountSignup({ ...valid, email: "bad" }).email).toBeDefined();
+  });
+
+  it(`비밀번호 ${MIN_PASSWORD_LENGTH}자 미만을 잡는다`, () => {
+    const short = "a".repeat(MIN_PASSWORD_LENGTH - 1);
+    expect(validateAccountSignup({ ...valid, password: short, passwordConfirm: short }).password).toBeDefined();
+  });
+
+  it("비밀번호 확인 불일치를 잡는다", () => {
+    expect(validateAccountSignup({ ...valid, passwordConfirm: "different123" }).passwordConfirm).toBeDefined();
+  });
+});
+
+describe("validateNewPassword (재설정 새 비밀번호)", () => {
+  it("정상 입력은 오류 없음", () => {
+    expect(validateNewPassword("verylongpass", "verylongpass")).toEqual({});
+  });
+
+  it("길이 미만·불일치를 각각 잡는다", () => {
+    expect(validateNewPassword("short", "short").password).toBeDefined();
+    expect(validateNewPassword("verylongpass", "verylongpazz").passwordConfirm).toBeDefined();
+  });
+});
+
+describe("authedRedirect (로그인 사용자 진입 화면 가드)", () => {
+  it("active 는 홈으로", () => {
+    expect(authedRedirect("active")).toBe("/home");
+  });
+
+  it("registered 는 온보딩으로", () => {
+    expect(authedRedirect("registered")).toBe("/onboarding");
+  });
+
+  it("그 외 상태는 null(머무름)", () => {
+    expect(authedRedirect("pending")).toBeNull();
+    expect(authedRedirect("rejected")).toBeNull();
+    expect(authedRedirect("inactive")).toBeNull();
+    expect(authedRedirect("weird")).toBeNull();
   });
 });
 
@@ -81,7 +148,6 @@ describe("isUnderMinAge (만 14세 게이트)", () => {
 
 describe("buildProfilePayload (폼 → 서버 계약)", () => {
   const base = {
-    inviteCode: "  liviq1 ",
     name: "  김입주 ",
     birthDate: "1990-05-05",
     dong: "101",
@@ -103,9 +169,8 @@ describe("buildProfilePayload (폼 → 서버 계약)", () => {
     expect(p.unit_no).toBe(301);
   });
 
-  it("초대코드·성명 공백을 다듬는다", () => {
+  it("성명 공백을 다듬는다", () => {
     const p = buildProfilePayload(base);
-    expect(p.invite_code).toBe("liviq1");
     expect(p.name).toBe("김입주");
   });
 

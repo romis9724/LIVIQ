@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { SignupView } from "@/features/onboarding/SignupView";
+import { AccountSignupView } from "@/features/onboarding/AccountSignupView";
 
 export const metadata: Metadata = {
-  title: "가입 신청",
-  description: "약관 동의 후 입주민 정보를 입력하고 가입을 신청합니다.",
+  title: "계정 가입",
+  description: "단지 가입 링크로 접속해 이메일과 비밀번호로 계정을 만듭니다.",
 };
 
 export default function SignupPage() {
-  return <SignupView />;
+  return <AccountSignupView />;
 }

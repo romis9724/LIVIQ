@@ -164,6 +164,10 @@
 .auth-submit {
   width: 100%;
 }
+.auth-forgot {
+  align-self: center;
+  font-size: var(--text-sm);
+}
 
 /* consent */
 .auth-consent {
