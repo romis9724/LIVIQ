@@ -221,7 +221,8 @@
 | `POST /auth/login` | 공개 | 이메일+비밀번호 검증 → 세션 확립. 계정 상태별 분기(신규→온보딩, pending→대기, active→홈) |
 | `GET /auth/verify-email` | 공개 | 검증 토큰(`auth_tokens`) 확인 → `email_verified_at` 기록 |
 | `POST /auth/password-reset` · `/password-reset/confirm` | 공개 | 재설정 토큰 메일 발송 → 링크에서 새 비밀번호 설정 |
-| `POST /auth/invite/accept` | 공개 | 초대 토큰(소장·직원) 확인 → 비밀번호 설정·계정 활성화 |
+| `POST /auth/invite/accept` | 공개 | 초대 토큰(소장·직원) 확인 → 비밀번호 설정·계정 활성화(수락=이메일 소유 증명) |
+| `POST /auth/password-change` | 세션 | 현재+새 비밀번호. `must_change_password`(임시비번) 계정은 이 호출 전까지 콘텐츠 403 |
 | `POST /auth/logout` | 세션 | 세션 revoke |
 | `GET /me` | 세션(모든 상태) | 프로필·역할·계정 상태 — 상태별 화면 분기의 단일 출처 |
 | `POST /onboarding/profile` | 세션(신규) | 동의·성함·생년월일·동·호 → 명부 자동 대조 → `pending`(초대코드 제거) |
@@ -234,7 +235,10 @@
 | `POST /admin/approvals/{user_id}/approve` · `/reject` | MANAGER | 거절은 사유 필수. 상태 전환 시 대상 세션 즉시 revoke + 알림 생성 |
 | `POST /admin/roster/upload` | MANAGER | 명부 엑셀 → `excel_uploads(type=roster)` → 사전등록 diff 병합([03 §4.1](03-database-design.md)) |
 | `POST /admin/staff/invite` | MANAGER | 직원(STAFF) 초대 링크 메일(`auth_tokens` invite, TTL 7d) |
+| `GET /admin/staff` | MANAGER | 직원 목록(역할·상태·초대일 — PII 미포함) |
+| `POST /admin/staff/{user_id}/deactivate` | MANAGER | STAFF 비활성화(inactive + 세션 즉시 revoke). 자신·MANAGER 대상 400 |
 | `POST /admin/tenants` | SYS_ADMIN | 단지 생성(시스템 테넌트 권한, 단지 콘텐츠 비열람) |
+| `GET /admin/tenants` | SYS_ADMIN | 단지 목록(시스템 테넌트 제외) |
 | `POST /admin/tenants/{id}/invite-manager` | SYS_ADMIN | 소장(MANAGER) 초대 링크 메일(`auth_tokens` invite) |
 
 **AI 비서** (H1 구현됨, 화면: 입주민 AI 비서)

@@ -290,7 +290,9 @@ users(id, tenant_id, household_id NULL,
       login_id UNIQUE NULL,          -- email의 keyed HMAC 해시(로그인·중복체크, 전역 유니크). 초대·시드 前, pre_registered 행은 NULL
       password_hash NULL,            -- Argon2id 해시. pre_registered·초대 미완 계정은 NULL(설정 전) — [ADR-0014]
       email_verified_at NULL,        -- 이메일 검증 완료 시각. NULL이면 로그인 차단(FR-ONB-10)
-      status,                        -- pre_registered|registered|pending|active|inactive|rejected|withdrawn
+      must_change_password bool,     -- 임시 비밀번호 강제 변경(SYS_ADMIN 부트스트랩, H7-2)
+      status,                        -- pre_registered|invited|registered|pending|active|inactive|rejected|withdrawn
+                                     --   invited=초대 발송·수락 전(소장·직원, H7-2)
                                      --   registered=가입 완료·프로필 미제출(온보딩 필요 신호, ADR-0014)
                                      --   inactive=전출(1년 보관) · withdrawn=탈퇴(즉시 비식별, [06 §4.4])
       roster_matched bool,           -- 가입 시 명부 사전등록 행과 자동 대조 일치 여부
