@@ -4,7 +4,8 @@
   "private": true,
   "description": "LIVIQ 결정론 E2E 여정 (Playwright) — docs/07 §4, docs/09 §8.2 H2-7",
   "scripts": {
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "visual": "node scripts/visual-sweep.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
