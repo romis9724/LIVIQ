@@ -529,9 +529,7 @@ async def test_invite_manager_capacity_one(
     assert manager is not None and manager.deleted_at is not None  # 구 소장 비식별 삭제
 
 
-async def test_delete_tenant_only_when_empty(
-    seeded: AsyncSession, fake_redis: FakeRedis
-) -> None:
+async def test_delete_tenant_only_when_empty(seeded: AsyncSession, fake_redis: FakeRedis) -> None:
     """빈 단지만 완전 삭제 — 계정 있는 단지는 409(CRITICAL — 데이터 통삭제 방지)."""
     async with _make_app(
         seeded, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)

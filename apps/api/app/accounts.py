@@ -17,9 +17,7 @@ from app.session import SessionStore
 from liviq_db.models import PiiVault, User
 
 
-async def soft_delete_user(
-    session: AsyncSession, session_store: SessionStore, user: User
-) -> None:
+async def soft_delete_user(session: AsyncSession, session_store: SessionStore, user: User) -> None:
     """소프트 삭제 + PII 비식별 + 전 세션 즉시 revoke(ADR-0011)."""
     if user.pii_ref is not None:
         vault = await session.scalar(
