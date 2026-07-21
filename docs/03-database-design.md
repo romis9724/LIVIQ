@@ -290,7 +290,8 @@ users(id, tenant_id, household_id NULL,
       login_id UNIQUE NULL,          -- email의 keyed HMAC 해시(로그인·중복체크, 전역 유니크). 초대·시드 前, pre_registered 행은 NULL
       password_hash NULL,            -- Argon2id 해시. pre_registered·초대 미완 계정은 NULL(설정 전) — [ADR-0014]
       email_verified_at NULL,        -- 이메일 검증 완료 시각. NULL이면 로그인 차단(FR-ONB-10)
-      status,                        -- pre_registered|pending|active|inactive|rejected|withdrawn
+      status,                        -- pre_registered|registered|pending|active|inactive|rejected|withdrawn
+                                     --   registered=가입 완료·프로필 미제출(온보딩 필요 신호, ADR-0014)
                                      --   inactive=전출(1년 보관) · withdrawn=탈퇴(즉시 비식별, [06 §4.4])
       roster_matched bool,           -- 가입 시 명부 사전등록 행과 자동 대조 일치 여부
       pii_ref uuid NULL,             -- pii_vault.id
@@ -329,9 +330,9 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 ```
 
 > **명부 사전등록·온보딩**: 소장이 명부 엑셀(성함·생년월일·동·호)을 일괄 업로드하면 `users` 행이
-> 사전 생성된다(`status=pre_registered`, `login_id=NULL`, PII는 `pii_vault`). 입주민이 이메일+비밀번호로 가입·이메일 검증 후 정보 입력하면
-> 사전등록 행과 **자동 대조**(성함+생일+동·호)한다 — 일치 시 해당 행에 `login_id`(email HMAC)·`password_hash`를 채우고 `roster_matched=true`로
-> `pending` 전이(명부 일치 배지), 불일치 시 신규 행을 `pending`으로 만든다. 소장 최종 승인으로 `active`(거절은 `rejected`+사유) — 자동 승격 없음.
+> 사전 생성된다(`status=pre_registered`, `login_id=NULL`, PII는 `pii_vault`). 입주민이 이메일+비밀번호로 가입하면 별도 행이 `registered`로 생기고,
+> 이메일 검증 후 정보 입력 시 사전등록 행과 **자동 대조**(성함+생일+동·호)한다 — 일치 시 **가입자 행을 유지**한 채 `household_id`·`roster_matched=true`를
+> 부여하고 사전등록 행은 소진(soft delete)한다(행 이동 없음). 불일치면 가입자 행이 그대로 `pending` 전이. 소장 최종 승인으로 `active`(거절은 `rejected`+사유) — 자동 승격 없음.
 > 전체 흐름: [11 §온보딩·명부](11-data-architecture.md).
 >
 > **명부 재업로드(diff 병합)**: 재업로드 시 기존 `pre_registered` 행과 (성함+생일+동·호) 키로 diff — 신규는 추가, 명부에서 사라진 행은 `inactive`(전출 추정) 표시(자동 삭제 금지, 소장 확인). 이미 `active`로 가입한 세대 계정은 유지.
