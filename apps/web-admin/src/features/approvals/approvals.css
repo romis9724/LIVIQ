@@ -58,6 +58,22 @@
   gap: var(--space-4);
 }
 
+/* 양식 다운로드 안내(H7-7) */
+.apv-upload__template {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.apv-upload__template-link {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.apv-upload__template-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* ---- diff 요약 ---- */
 .apv-diff {
   display: flex;

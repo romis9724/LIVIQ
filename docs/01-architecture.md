@@ -239,6 +239,7 @@
 | `GET /admin/staff` | MANAGER | 직원 목록(역할·상태·초대일·이메일 — 복호는 인가 뒤, H7-5) |
 | `POST /admin/staff/{user_id}/deactivate` | MANAGER | STAFF 비활성화(inactive + 세션 즉시 revoke). 자신·MANAGER 대상 400 |
 | `DELETE /admin/staff/{user_id}` | MANAGER | 직원·타 소장 **삭제**(소프트 삭제+PII 비식별+세션 revoke). 자기 자신 400 (H7-6) |
+| `GET /admin/roster/template` | MANAGER | 명부 업로드 양식 xlsx 다운로드(헤더+예시 행 — 파서와 단일 출처, H7-7) |
 | `POST /admin/tenants` | SYS_ADMIN | 단지 생성(시스템 테넌트 권한, 단지 콘텐츠 비열람) |
 | `GET /admin/tenants` | SYS_ADMIN | 단지 목록(시스템 테넌트 제외) — 단지 상태·현재 소장(이메일·상태) 포함 (H7-6) |
 | `POST /admin/tenants/{id}/invite-manager` | SYS_ADMIN | 소장(MANAGER) 초대 링크 메일(`auth_tokens` invite). **단지당 1명** — 활성/초대중 존재 시 409 (H7-6) |

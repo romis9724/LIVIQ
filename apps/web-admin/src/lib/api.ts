@@ -896,6 +896,9 @@ function toRosterResult(raw: {
   };
 }
 
+/** 명부 업로드 양식 다운로드 URL — 세션 쿠키 동봉 최상위 GET이라 <a download>로 바로 쓴다(H7-7). */
+export const ROSTER_TEMPLATE_URL = `${API_BASE_URL}/admin/roster/template`;
+
 /** 명부 엑셀 업로드 — 신규만 추가, 기존 세대 불변, 사라진 세대는 inactive. 413=용량·422=형식오류. */
 export async function uploadRoster(file: File): Promise<RosterUploadResult> {
   const form = new FormData();
