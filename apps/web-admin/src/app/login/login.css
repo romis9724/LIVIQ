@@ -50,21 +50,20 @@
   margin: 0;
 }
 
-.admin-login__google {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
+.admin-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
-.admin-login__mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--color-surface);
-  color: var(--color-accent);
-  font-weight: 700;
-  font-size: 0.8rem;
+.admin-login__submit {
+  width: 100%;
+  margin-top: var(--space-2);
+}
+.admin-login__hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+.admin-login__hint--error {
+  color: var(--color-danger);
 }

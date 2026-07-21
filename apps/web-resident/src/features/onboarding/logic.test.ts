@@ -119,36 +119,36 @@ describe("buildProfilePayload (폼 → 서버 계약)", () => {
 });
 
 describe("accountView (계정 상태 분기)", () => {
-  it("온보딩 세션은 onboarding", () => {
-    expect(accountView({ kind: "onboarding", status: "onboarding" })).toBe("onboarding");
+  it("registered(프로필 미제출)는 onboarding", () => {
+    expect(accountView({ status: "registered" })).toBe("onboarding");
   });
 
-  it("user 세션은 status 를 그대로 매핑한다", () => {
-    expect(accountView({ kind: "user", status: "pending" })).toBe("pending");
-    expect(accountView({ kind: "user", status: "rejected" })).toBe("rejected");
-    expect(accountView({ kind: "user", status: "active" })).toBe("active");
-    expect(accountView({ kind: "user", status: "inactive" })).toBe("inactive");
+  it("status 를 그대로 매핑한다", () => {
+    expect(accountView({ status: "pending" })).toBe("pending");
+    expect(accountView({ status: "rejected" })).toBe("rejected");
+    expect(accountView({ status: "active" })).toBe("active");
+    expect(accountView({ status: "inactive" })).toBe("inactive");
   });
 
   it("예상 밖 상태는 unknown", () => {
-    expect(accountView({ kind: "user", status: "weird" })).toBe("unknown");
+    expect(accountView({ status: "weird" })).toBe("unknown");
   });
 });
 
 describe("rootDestination (루트 상태별 라우팅)", () => {
   it("활성 계정은 홈으로", () => {
-    expect(rootDestination({ kind: "user", status: "active" })).toBe("/home");
+    expect(rootDestination({ status: "active" })).toBe("/home");
   });
 
-  it("온보딩 세션은 가입 화면으로", () => {
-    expect(rootDestination({ kind: "onboarding", status: "onboarding" })).toBe("/onboarding");
+  it("registered(프로필 미제출)는 가입 화면으로", () => {
+    expect(rootDestination({ status: "registered" })).toBe("/onboarding");
   });
 
   it("대기·반려·비활성·예상밖 상태는 계정 상태 화면으로", () => {
-    expect(rootDestination({ kind: "user", status: "pending" })).toBe("/pending");
-    expect(rootDestination({ kind: "user", status: "rejected" })).toBe("/pending");
-    expect(rootDestination({ kind: "user", status: "inactive" })).toBe("/pending");
-    expect(rootDestination({ kind: "user", status: "weird" })).toBe("/pending");
+    expect(rootDestination({ status: "pending" })).toBe("/pending");
+    expect(rootDestination({ status: "rejected" })).toBe("/pending");
+    expect(rootDestination({ status: "inactive" })).toBe("/pending");
+    expect(rootDestination({ status: "weird" })).toBe("/pending");
   });
 });
 

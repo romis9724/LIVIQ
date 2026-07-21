@@ -268,9 +268,11 @@ export async function submitProfile(payload: ProfilePayload): Promise<ProfileRes
   return { userId: body.user_id, status: body.status, rosterMatched: body.roster_matched };
 }
 
-/** 계정 상태(화면 분기 단일 출처). onboarding=미가입, user=가입(status: pending|active|rejected|inactive). */
+/**
+ * 계정 상태(화면 분기 단일 출처, 자체 인증 ADR-0014).
+ * status: registered=프로필 미제출(온보딩 필요) · pending=승인 대기 · active=정상 · rejected · inactive.
+ */
 export interface Me {
-  kind: "user" | "onboarding";
   status: string;
   userId: string | null;
   roles: string[];
@@ -280,5 +282,5 @@ export async function getMe(): Promise<Me> {
   const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
-  return { kind: body.kind, status: body.status, userId: body.user_id, roles: body.roles };
+  return { status: body.status, userId: body.user_id, roles: body.roles };
 }

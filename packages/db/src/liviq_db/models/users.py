@@ -85,7 +85,16 @@ class User(IdMixin, TenantMixin, TimestampMixin, Base):
     )
 
     household_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    # 로그인 식별자 = 이메일 keyed HMAC 해시(평문 이메일은 pii_vault.email_enc, ADR-0014)
     login_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 비밀번호 Argon2id 해시(평문·복호가능 형태 금지). 초대 미설정 계정은 NULL(ADR-0014)
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    # 이메일 검증 완료 시각 — NULL이면 로그인 불가(가입 검증 메일 필수, ADR-0014)
+    email_verified_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # registered=가입 완료·프로필 미제출(온보딩 필요 신호). 이후 pending→active(승인)
+    # pre_registered|registered|pending|active|inactive|rejected|withdrawn
     status: Mapped[str] = mapped_column(String, nullable=False)
     roster_matched: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
@@ -112,6 +121,30 @@ class UserRole(IdMixin, TenantMixin, TimestampMixin, Base):
 
     user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class AuthToken(IdMixin, TenantMixin, CreatedAtMixin, Base):
+    """이메일 인증·초대·재설정 1회용 토큰(ADR-0014).
+
+    원문 토큰은 URL로만 전달하고 DB엔 SHA-256 해시만 저장한다(유출 시에도 원문 복원 불가).
+    token_hash는 클릭 시점 tenant 확정 전 전역 조회 대상 = 글로벌 unique. 소진은 used_at 기록.
+    """
+
+    __tablename__ = "auth_tokens"
+    __table_args__ = (
+        tenant_fk("user_id", "users", name="fk_auth_tokens_user"),
+        Index("uq_auth_tokens_token_hash", "token_hash", unique=True),
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    purpose: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # verify_email|invite|reset_password
+    token_hash: Mapped[str] = mapped_column(String, nullable=False)
+    expires_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class Consent(IdMixin, TenantMixin, TimestampMixin, Base):

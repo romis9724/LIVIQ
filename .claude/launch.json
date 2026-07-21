@@ -2,12 +2,6 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "mock-idp",
-      "runtimeExecutable": "env",
-      "runtimeArgs": ["MOCK_IDP_INTERACTIVE=1", "node", "tests/e2e/mock-idp.mjs"],
-      "port": 9099
-    },
-    {
       "name": "api",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@liviq/api", "dev"],

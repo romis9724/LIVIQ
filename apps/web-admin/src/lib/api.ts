@@ -912,7 +912,7 @@ export async function uploadRoster(file: File): Promise<RosterUploadResult> {
 // ── 계정 (ADR-0011) — 로그인 세션의 자기 신원. '나에게 배정' 등에 사용 ────────────
 
 export interface Me {
-  kind: "user" | "onboarding";
+  // 자체 인증(ADR-0014) — kind 폐기. status: registered|pending|active|rejected|inactive.
   status: string;
   userId: string | null;
   roles: string[];
@@ -922,7 +922,7 @@ export async function getMe(): Promise<Me> {
   const response = await apiFetch(`${API_BASE_URL}/me`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
-  return { kind: body.kind, status: body.status, userId: body.user_id, roles: body.roles };
+  return { status: body.status, userId: body.user_id, roles: body.roles };
 }
 
 // ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────

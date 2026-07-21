@@ -409,34 +409,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/google/callback": {
+    "/auth/login": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Google Callback */
-        get: operations["google_callback_auth_google_callback_get"];
+        get?: never;
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/google/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Google Login */
-        get: operations["google_login_auth_google_login_get"];
-        put?: never;
-        post?: never;
+        /**
+         * Login
+         * @description 이메일+비밀번호 → 세션 확립. 검증 전(email_verified_at NULL) 계정은 403.
+         */
+        post: operations["login_auth_login_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -457,6 +443,88 @@ export interface paths {
          * @description 멱등 — 쿠키 유무와 무관하게 204. 쿠키 있으면 세션 revoke + 쿠키 제거.
          */
         post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Password Reset
+         * @description 재설정 링크 요청. 계정 존재·검증 여부와 무관하게 항상 202(존재 노출 금지).
+         */
+        post: operations["password_reset_auth_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Password Reset Confirm
+         * @description 토큰 + 새 비밀번호 → 교체 + 해당 사용자 전 세션 revoke(탈취 대비).
+         */
+        post: operations["password_reset_confirm_auth_password_reset_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/signup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup
+         * @description 단지별 가입 링크(tenant_id) + 이메일 + 비밀번호. 검증 메일 발송 후 201.
+         *
+         *     발송 실패는 예외 전파 → 트랜잭션 롤백 + 500(계정이 검증 불가 상태로 남지 않게).
+         */
+        post: operations["signup_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Verify Email
+         * @description 검증 링크 클릭 → email_verified_at 기록·토큰 소진. 실패 시 로그인 화면으로 안내.
+         */
+        get: operations["verify_email_auth_verify_email_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -627,7 +695,7 @@ export interface paths {
         };
         /**
          * Me
-         * @description 계정 상태 무관 — 온보딩·pending 등 모든 상태에서 화면 분기의 단일 출처.
+         * @description 계정 상태 무관 — registered·pending 등 모든 상태의 화면 분기 단일 출처.
          */
         get: operations["me_me_get"];
         put?: never;
@@ -1333,6 +1401,21 @@ export interface components {
              */
             updated_at: string;
         };
+        /** LoginIn */
+        LoginIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /** LoginOut */
+        LoginOut: {
+            /** Status */
+            status: string;
+        };
         /** MaintenanceCreateIn */
         MaintenanceCreateIn: {
             /** Parts */
@@ -1376,11 +1459,6 @@ export interface components {
         };
         /** MeOut */
         MeOut: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "user" | "onboarding";
             /** Roles */
             roles: string[];
             /** Status */
@@ -1484,6 +1562,21 @@ export interface components {
              */
             type: "notice" | "inquiry_status" | "approval" | "system";
         };
+        /** PasswordResetConfirmIn */
+        PasswordResetConfirmIn: {
+            /** New Password */
+            new_password: string;
+            /** Token */
+            token: string;
+        };
+        /** PasswordResetIn */
+        PasswordResetIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+        };
         /** ProfileIn */
         ProfileIn: {
             /**
@@ -1497,8 +1590,6 @@ export interface components {
             consents: components["schemas"]["ConsentIn"][];
             /** Floor */
             floor: number;
-            /** Invite Code */
-            invite_code: string;
             /** Name */
             name: string;
             /** Unit No */
@@ -1611,6 +1702,29 @@ export interface components {
              * Format: uuid
              */
             upload_id: string;
+        };
+        /** SignupIn */
+        SignupIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+        };
+        /** SignupOut */
+        SignupOut: {
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
         };
         /** StatusChangeIn */
         StatusChangeIn: {
@@ -2588,17 +2702,18 @@ export interface operations {
             };
         };
     };
-    google_callback_auth_google_callback_get: {
+    login_auth_login_post: {
         parameters: {
-            query: {
-                code: string;
-                state: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -2606,7 +2721,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["LoginOut"];
                 };
             };
             /** @description Validation Error */
@@ -2616,26 +2731,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    google_login_auth_google_login_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
         };
@@ -2657,6 +2752,134 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    password_reset_auth_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    password_reset_confirm_auth_password_reset_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetConfirmIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_auth_signup_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_email_auth_verify_email_get: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
             };
             /** @description Validation Error */
             422: {

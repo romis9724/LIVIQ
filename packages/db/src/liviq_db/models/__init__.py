@@ -15,7 +15,7 @@ from .notices import Notice, NoticeDraft, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
 from .plans import FloorPlan, PlanDevice
 from .tenants import Building, Household, Tenant, UnitType
-from .users import Consent, PiiVault, TenantKey, User, UserRole
+from .users import AuthToken, Consent, PiiVault, TenantKey, User, UserRole
 
 metadata = Base.metadata
 
@@ -32,6 +32,7 @@ __all__ = [
     "AiEvalGolden",
     "AiFeedback",
     "AuditLog",
+    "AuthToken",
     "Base",
     "Building",
     "Citation",
