@@ -5,7 +5,6 @@ const ROLE_LABEL: Record<string, string> = {
   RESIDENT: "입주민",
   MANAGER: "관리소장",
   STAFF: "관리사무소 직원",
-  COUNCIL: "입주자대표",
 };
 
 /** 대표 역할 라벨(첫 역할). 매핑 없으면 원문, 역할 없으면 "회원". */
