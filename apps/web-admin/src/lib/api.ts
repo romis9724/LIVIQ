@@ -1660,3 +1660,176 @@ export async function deleteCode(id: string): Promise<void> {
   });
   await ensureOk(response);
 }
+
+// ── 동/호수 관리 (H8-5) ────────────────────────────────────────────────────────
+
+export interface Building {
+  id: string;
+  name: string;
+  floors: number | null;
+  householdCount: number;
+}
+
+export interface Household {
+  id: string;
+  floor: number;
+  unitNo: number;
+  status: string;
+}
+
+export interface HouseholdList {
+  building: { id: string; name: string; floors: number | null };
+  items: Household[];
+}
+
+export interface BulkHouseholdInput {
+  floorStart: number;
+  floorEnd: number;
+  unitStart: number;
+  unitEnd: number;
+  status?: string;
+}
+
+export interface BulkHouseholdResult {
+  created: number;
+  skipped: number;
+}
+
+interface RawBuilding {
+  id: string;
+  name: string;
+  floors: number | null;
+  household_count?: number;
+}
+
+interface RawHousehold {
+  id: string;
+  floor: number;
+  unit_no: number;
+  status: string;
+}
+
+function toBuilding(raw: RawBuilding): Building {
+  return {
+    id: raw.id,
+    name: raw.name,
+    floors: raw.floors,
+    householdCount: raw.household_count ?? 0,
+  };
+}
+
+function toHousehold(raw: RawHousehold): Household {
+  return { id: raw.id, floor: raw.floor, unitNo: raw.unit_no, status: raw.status };
+}
+
+/** 동 목록(+세대 수 집계). 403=권한 없음. */
+export async function listBuildings(): Promise<Building[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawBuilding[]).map(toBuilding);
+}
+
+/** 동 생성. 409=같은 이름의 동 존재. */
+export async function createBuilding(input: {
+  name: string;
+  floors?: number | null;
+}): Promise<Building> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: input.name, floors: input.floors ?? null }),
+  });
+  await ensureOk(response);
+  return toBuilding(await response.json());
+}
+
+/** 동 수정 — name·floors. 409=이름 중복. */
+export async function updateBuilding(
+  id: string,
+  input: { name?: string; floors?: number | null },
+): Promise<Building> {
+  const body: Record<string, unknown> = {};
+  if (input.name !== undefined) body.name = input.name;
+  if (input.floors !== undefined) body.floors = input.floors;
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await ensureOk(response);
+  return toBuilding(await response.json());
+}
+
+/** 동 삭제. 409=소속 세대 존재. */
+export async function deleteBuilding(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 동의 세대 목록(층·호 오름차순). 404=동 없음. */
+export async function listHouseholds(buildingId: string): Promise<HouseholdList> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings/${buildingId}/households`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    building: {
+      id: body.building.id,
+      name: body.building.name,
+      floors: body.building.floors,
+    },
+    items: (body.items as RawHousehold[]).map(toHousehold),
+  };
+}
+
+/** 세대 일괄 생성(층·호 범위, 단일은 start==end). 이미 있는 (층,호)는 건너뜀. 422=범위 오류. */
+export async function createHouseholds(
+  buildingId: string,
+  input: BulkHouseholdInput,
+): Promise<BulkHouseholdResult> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/buildings/${buildingId}/households`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      floor_start: input.floorStart,
+      floor_end: input.floorEnd,
+      unit_start: input.unitStart,
+      unit_end: input.unitEnd,
+      status: input.status ?? "active",
+    }),
+  });
+  await ensureOk(response);
+  return (await response.json()) as BulkHouseholdResult;
+}
+
+/** 세대 수정 — floor·unit_no·status. 409=같은 동 층·호 중복. */
+export async function updateHousehold(
+  id: string,
+  input: { floor?: number; unitNo?: number; status?: string },
+): Promise<Household> {
+  const body: Record<string, unknown> = {};
+  if (input.floor !== undefined) body.floor = input.floor;
+  if (input.unitNo !== undefined) body.unit_no = input.unitNo;
+  if (input.status !== undefined) body.status = input.status;
+  const response = await apiFetch(`${API_BASE_URL}/admin/households/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await ensureOk(response);
+  return toHousehold(await response.json());
+}
+
+/** 세대 삭제. 409=입주민·명부·민원·관리비 연결 중. */
+export async function deleteHousehold(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/households/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}

@@ -19,6 +19,7 @@ const FEES: NavItem = { href: "/fees", icon: "💰", label: "관리비 관리" }
 const FACILITIES: NavItem = { href: "/facilities", icon: "🏢", label: "시설 관리" };
 const STAFF_MGMT: NavItem = { href: "/staff", icon: "🪪", label: "직원 관리" };
 const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label: "코드 관리" };
+const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
 const TENANTS: NavItem = { href: "/system/tenants", icon: "🏘", label: "단지 관리" };
 
 // STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·검수·승인 숨김).
@@ -37,6 +38,7 @@ const MANAGER_NAV: readonly NavItem[] = [
   FACILITIES,
   STAFF_MGMT,
   SETTINGS_CODES,
+  SETTINGS_HOUSEHOLDS,
 ];
 
 export function isSysAdmin(roles: readonly string[]): boolean {
