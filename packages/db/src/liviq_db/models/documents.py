@@ -48,7 +48,7 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
 
     title: Mapped[str] = mapped_column(String, nullable=False)
     source_type: Mapped[str] = mapped_column(String, nullable=False)  # 규약|회의록|공지|지침|매뉴얼
-    visibility: Mapped[str] = mapped_column(String, nullable=False)  # ALL|RESIDENT|ADMIN|COUNCIL
+    visibility: Mapped[str] = mapped_column(String, nullable=False)  # ALL|RESIDENT|ADMIN
     body: Mapped[str | None] = mapped_column(Text, nullable=True)  # 설명용 본문 — 임베딩 안 함
     # 현재 버전 번호(document_versions 최신과 일치).
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))

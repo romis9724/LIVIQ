@@ -358,7 +358,7 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 ```sql
 -- 게시글 메타(관리자 전용 게시판 — 제목+본문(설명용)+첨부 1개 필수)
 documents(id, tenant_id, title, source_type,        -- 규약|회의록|공지|지침|매뉴얼
-          visibility,                                -- ALL|RESIDENT|ADMIN|COUNCIL (AI 인용 범위)
+          visibility,                                -- ALL|RESIDENT|ADMIN (AI 인용 범위)
           body text NULL,                            -- 본문(설명용 — 임베딩 안 함)
           version int,                               -- 현재 버전 번호(document_versions 최신과 일치)
           index_status,                              -- pending|indexing|indexed|failed
@@ -386,7 +386,7 @@ content_chunks(id, tenant_id,
 ```
 
 > 벡터 검색은 항상 `WHERE tenant_id = $current AND visibility ∈ 허용` 선필터 후 ANN.
-> visibility 매핑: `ALL`=인증 사용자 전체 · `RESIDENT`=입주민 · `ADMIN`=MANAGER·STAFF 열람 · `COUNCIL`=입주자대표회의.
+> visibility 매핑: `ALL`=인증 사용자 전체 · `RESIDENT`=입주민 · `ADMIN`=MANAGER·STAFF 열람.
 > **notice 청크(H8-3)**: visibility 컬럼이 없는 대신 `notices` 조인으로 `status='published' AND deleted_at IS NULL`을 검색 시점에 검증(미발행 미노출 CRITICAL — 인제스트가 published만 대상이어도 이중 방어). 인제스트 대상 = 본문 + 파싱 가능 첨부(.pdf/.txt/.md)만, published 수정·첨부 변경 시 기존 청크 삭제·재임베딩, soft delete 시 청크 즉시 삭제(문서와 동일 패턴).
 > 임베딩 모델/차원 변경은 마이그레이션 이벤트(전량 재색인) — 함부로 바꾸지 않음.
 > 벡터는 항상 **최신 버전만** — 재업로드 시 기존 청크 삭제·재임베딩(citations.chunk_id SET NULL 보존).

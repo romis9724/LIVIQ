@@ -121,7 +121,7 @@ async def test_no_role_visibility_propagation(fake_redis: FakeRedis) -> None:
         fake_redis, ctx=ctx_res, question=QUESTION, done=_done(tool_path=("search_documents",))
     )
     assert await answer_cache.lookup(fake_redis, ctx=ctx_res, question=QUESTION) is not None
-    ctx_mgr = _ctx(roles=("MANAGER",), visibilities=("ALL", "RESIDENT", "ADMIN", "COUNCIL"))
+    ctx_mgr = _ctx(roles=("MANAGER",), visibilities=("ALL", "RESIDENT", "ADMIN"))
     assert await answer_cache.lookup(fake_redis, ctx=ctx_mgr, question=QUESTION) is None
 
 

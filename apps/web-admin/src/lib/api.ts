@@ -39,7 +39,7 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
 
 export type IndexStatus = "pending" | "indexing" | "indexed" | "failed";
 export type SourceType = "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
-export type Visibility = "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+export type Visibility = "ALL" | "RESIDENT" | "ADMIN";
 
 // 문서 게시판(ADR-0016): 게시글 = 제목 + 본문(설명) + 첨부 1개(버전 관리).
 export interface DocumentItem {
