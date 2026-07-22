@@ -361,7 +361,7 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
-| H8-1 | 공지 게시판 전환 | 공지 AI 초안 **완전 삭제**(ai-core `notice_draft.py`·초안 API 2개(`POST`·`GET /admin/notices/drafts`)·`notice_drafts` 테이블 drop) → 일반 게시판(작성·수정·삭제(soft)·상단 고정(pinned)·임시저장(draft)·예약 발행(scheduled)·첨부 pdf·hwp·hwpx·docx·xlsx·jpg·png 파일당 20MB·공지당 5개, MinIO 저장·다운로드 API 경유)·**STAFF 발행 허용**·메뉴명 "공지 초안"→"공지사항"·예약 발행 `ai-worker` arq cron(1분 폴링, scheduled_at 도달 시 published+알림)·eval 규칙6 케이스 2개(`broadcast-01-draft-only`·`review-02-notice-draft`) 제거([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)) | 첨부 인가 테스트(**CRITICAL** — 교차 tenant 첨부 접근 거부·미발행 공지 첨부 입주민 접근 거부)·예약 발행 cron 테스트·확장자/크기/개수 검증 테스트·E2E 갱신 그린·시각 실측 | 진행 중 |
+| H8-1 | 공지 게시판 전환 | 공지 AI 초안 **완전 삭제**(ai-core `notice_draft.py`·초안 API 2개(`POST`·`GET /admin/notices/drafts`)·`notice_drafts` 테이블 drop) → 일반 게시판(작성·수정·삭제(soft)·상단 고정(pinned)·임시저장(draft)·예약 발행(scheduled)·첨부 pdf·hwp·hwpx·docx·xlsx·jpg·png 파일당 20MB·공지당 5개, MinIO 저장·다운로드 API 경유)·**STAFF 발행 허용**·메뉴명 "공지 초안"→"공지사항"·예약 발행 `ai-worker` arq cron(1분 폴링, scheduled_at 도달 시 published+알림)·eval 규칙6 케이스 2개(`broadcast-01-draft-only`·`review-02-notice-draft`) 제거([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)) | 첨부 인가 테스트(**CRITICAL** — 교차 tenant 첨부 접근 거부·미발행 공지 첨부 입주민 접근 거부)·예약 발행 cron 테스트·확장자/크기/개수 검증 테스트·E2E 갱신 그린·시각 실측 | ✅ 완료 (PR #42) — pytest 463(api 234·worker 19·db 103·ai-core 107)·E2E 결정론 12·시각 실측(데스크톱+375px). 목록 응답 첨부 메타 포함 정합 수정 포함 |
 
 ## 9. 정의: "완료(Done)"
 
