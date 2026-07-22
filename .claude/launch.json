@@ -18,15 +18,6 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@liviq/web-admin", "dev"],
       "port": 3001
-    },
-    {
-      "name": "web-admin-h82",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": [
-        "-c",
-        "cd /Users/user/Workspace/LIVIQ/.claude/worktrees/h8-2-document-board/apps/web-admin && NEXT_PUBLIC_API_BASE_URL=http://localhost:8010 npx next dev --port 3011"
-      ],
-      "port": 3011
     }
   ]
 }
