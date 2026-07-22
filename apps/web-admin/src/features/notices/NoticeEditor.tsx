@@ -11,12 +11,15 @@ import {
   createNotice,
   deleteNotice,
   getNotice,
+  listBuildings,
+  listCodeGroups,
   patchNotice,
   type Notice,
   type NoticePatchInput,
 } from "@/lib/api";
+import { NOTICE_CATEGORY_GROUP, codeOptions, type CodeOption } from "@/lib/codes";
 import { AttachmentPanel } from "./AttachmentPanel";
-import { NoticeForm } from "./NoticeForm";
+import { NoticeForm, type BuildingOption } from "./NoticeForm";
 import {
   hasErrors,
   isoToLocalInput,
@@ -46,6 +49,11 @@ const EMPTY_FORM: NoticeFormValues = {
   pinned: false,
   saveMode: "draft",
   scheduledAt: "",
+  categoryCodeId: "",
+  eventStart: "",
+  eventEnd: "",
+  targetBuildings: [],
+  keywords: "",
 };
 
 function errorMessage(err: unknown): string {
@@ -77,6 +85,8 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<CodeOption[]>([]);
+  const [buildings, setBuildings] = useState<BuildingOption[]>([]);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -96,6 +106,11 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
         // 발행 공지는 역행 불가 — 편집 시 선택지를 draft 로 초기화(발행됨 표기는 폼이 담당).
         saveMode: loaded.status === "published" ? "draft" : loaded.status,
         scheduledAt: isoToLocalInput(loaded.scheduledAt),
+        categoryCodeId: loaded.categoryCodeId ?? "",
+        eventStart: loaded.eventStart ?? "",
+        eventEnd: loaded.eventEnd ?? "",
+        targetBuildings: loaded.targetBuildings ?? [],
+        keywords: loaded.keywords ?? "",
       });
       setLoadError(null);
     } catch (err) {
@@ -108,6 +123,19 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 분류 코드·대상 동 선택지 로드 — 실패해도 폼은 동작(선택지 없으면 미분류/전체동).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [groups, buildingList] = await Promise.all([listCodeGroups(), listBuildings()]);
+        setCategoryOptions(codeOptions(groups, NOTICE_CATEGORY_GROUP));
+        setBuildings(buildingList.map((b) => ({ id: b.id, name: b.name })));
+      } catch {
+        // 선택지 로드 실패는 무시 — 분류 없이도 저장 가능(NULL 허용).
+      }
+    })();
+  }, []);
 
   useEffect(
     () => () => {
@@ -130,6 +158,14 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
     const title = values.title.trim();
     const body = values.body.trim();
     const scheduledAt = values.saveMode === "scheduled" ? localInputToIso(values.scheduledAt) : null;
+    // 선택 필드 정규화 — 빈 값은 NULL(미분류·전체동·기간/키워드 없음).
+    const meta = {
+      categoryCodeId: values.categoryCodeId || null,
+      eventStart: values.eventStart || null,
+      eventEnd: values.eventEnd || null,
+      targetBuildings: values.targetBuildings.length > 0 ? values.targetBuildings : null,
+      keywords: values.keywords.trim() || null,
+    };
 
     setSaving(true);
     try {
@@ -140,13 +176,14 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
           pinned: values.pinned,
           status: values.saveMode,
           scheduledAt,
+          ...meta,
         });
         showToast("공지를 저장했습니다. 첨부 파일을 추가할 수 있습니다.");
         router.push(`/notices/${created.id}`);
         return;
       }
       if (!noticeId) return;
-      const patch: NoticePatchInput = { title, body, pinned: values.pinned };
+      const patch: NoticePatchInput = { title, body, pinned: values.pinned, ...meta };
       if (!publishedLock) {
         patch.status = values.saveMode;
         patch.scheduledAt = scheduledAt;
@@ -222,6 +259,8 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
               submitting={saving}
               submitLabel={publishedLock ? "변경 저장" : SUBMIT_LABEL[values.saveMode]}
               publishedLock={Boolean(publishedLock)}
+              categoryOptions={categoryOptions}
+              buildings={buildings}
               onChange={handleChange}
               onSubmit={() => void handleSubmit()}
             />

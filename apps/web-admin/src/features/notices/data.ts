@@ -83,17 +83,26 @@ export interface NoticeFormValues {
   pinned: boolean;
   saveMode: SaveMode;
   scheduledAt: string; // datetime-local 값("YYYY-MM-DDTHH:mm"), 없으면 ""
+  categoryCodeId: string; // NOTICE_CATEGORY 코드 id, 미선택이면 ""(NULL)
+  eventStart: string; // date 입력("YYYY-MM-DD"), 없으면 ""
+  eventEnd: string; // date 입력("YYYY-MM-DD"), 없으면 ""
+  targetBuildings: string[]; // 대상 동 id, 빈 배열이면 전체동
+  keywords: string; // 콤마 구분 자유 입력
 }
 
 export interface NoticeFormErrors {
   title?: string;
   body?: string;
   scheduledAt?: string;
+  eventEnd?: string;
 }
 
-/** 작성/수정 폼 검증 — 제목·본문 필수, 예약은 미래 시각 필수. now 주입으로 테스트 가능. */
+/** 작성/수정 폼 검증 — 제목·본문 필수, 예약은 미래 시각 필수, 행사 시작>종료 거절. now 주입 테스트 가능. */
 export function validateNoticeForm(
-  values: Pick<NoticeFormValues, "title" | "body" | "saveMode" | "scheduledAt">,
+  values: Pick<
+    NoticeFormValues,
+    "title" | "body" | "saveMode" | "scheduledAt" | "eventStart" | "eventEnd"
+  >,
   now: number = Date.now(),
 ): NoticeFormErrors {
   const errors: NoticeFormErrors = {};
@@ -113,6 +122,11 @@ export function validateNoticeForm(
       if (Number.isNaN(ts)) errors.scheduledAt = "올바른 시각을 지정하세요.";
       else if (ts <= now) errors.scheduledAt = "예약 시각은 현재보다 미래여야 합니다.";
     }
+  }
+
+  // 행사 기간은 선택 — 둘 다 있을 때만 시작>종료 거절(한쪽만 열려 있어도 허용). date 문자열은 사전순 = 시간순.
+  if (values.eventStart && values.eventEnd && values.eventStart > values.eventEnd) {
+    errors.eventEnd = "종료일은 시작일과 같거나 이후여야 합니다.";
   }
   return errors;
 }

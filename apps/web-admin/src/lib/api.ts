@@ -38,14 +38,14 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
 }
 
 export type IndexStatus = "pending" | "indexing" | "indexed" | "failed";
-export type SourceType = "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
 export type Visibility = "ALL" | "RESIDENT" | "ADMIN";
 
 // 문서 게시판(ADR-0016): 게시글 = 제목 + 본문(설명) + 첨부 1개(버전 관리).
+// 분류는 공통 코드(DOC_CATEGORY) 참조 — categoryCodeId 필수(H8-6).
 export interface DocumentItem {
   id: string;
   title: string;
-  sourceType: SourceType;
+  categoryCodeId: string;
   visibility: Visibility;
   body: string | null;
   version: number;
@@ -72,11 +72,11 @@ export interface ListDocumentsParams {
   q?: string;
 }
 
-/** 게시글 작성 — 첨부 1개 필수, 본문은 선택. */
+/** 게시글 작성 — 첨부 1개 필수, 본문은 선택. 분류(DOC_CATEGORY 코드) 필수. */
 export interface CreateDocumentInput {
   file: File;
   title: string;
-  sourceType: SourceType;
+  categoryCodeId: string;
   visibility: Visibility;
   body?: string;
 }
@@ -85,7 +85,7 @@ export interface CreateDocumentInput {
 export interface PatchDocumentInput {
   title?: string;
   body?: string;
-  sourceType?: SourceType;
+  categoryCodeId?: string;
   visibility?: Visibility;
 }
 
@@ -113,7 +113,7 @@ export function buildListQuery(params: ListDocumentsParams): string {
 interface RawDocument {
   id: string;
   title: string;
-  source_type: SourceType;
+  category_code_id: string;
   visibility: Visibility;
   body?: string | null;
   version: number;
@@ -134,7 +134,7 @@ function toItem(raw: RawDocument): DocumentItem {
   return {
     id: raw.id,
     title: raw.title,
-    sourceType: raw.source_type,
+    categoryCodeId: raw.category_code_id,
     visibility: raw.visibility,
     body: raw.body ?? null,
     version: raw.version,
@@ -192,7 +192,7 @@ export async function createDocument(input: CreateDocumentInput): Promise<Docume
   const form = new FormData();
   form.set("file", input.file);
   form.set("title", input.title);
-  form.set("source_type", input.sourceType);
+  form.set("category_code_id", input.categoryCodeId);
   form.set("visibility", input.visibility);
   if (input.body && input.body.trim()) form.set("body", input.body.trim());
   // Content-Type 는 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
@@ -213,7 +213,7 @@ export async function patchDocument(
   const payload: Record<string, string> = {};
   if (input.title !== undefined) payload.title = input.title;
   if (input.body !== undefined) payload.body = input.body;
-  if (input.sourceType !== undefined) payload.source_type = input.sourceType;
+  if (input.categoryCodeId !== undefined) payload.category_code_id = input.categoryCodeId;
   if (input.visibility !== undefined) payload.visibility = input.visibility;
   const response = await apiFetch(`${API_BASE_URL}/documents/${id}`, {
     method: "PATCH",
@@ -371,6 +371,11 @@ export interface Notice {
   scheduledAt: string | null;
   publishedAt: string | null;
   publishedBy: string | null;
+  categoryCodeId: string | null; // NOTICE_CATEGORY 코드(선택 — NULL=미분류)
+  eventStart: string | null; // 행사 시작일("YYYY-MM-DD")
+  eventEnd: string | null; // 행사 종료일("YYYY-MM-DD")
+  targetBuildings: string[] | null; // 대상 동 id 목록(NULL=전체동)
+  keywords: string | null; // 검색 키워드(콤마 구분 자유 입력)
   createdAt: string;
   updatedAt: string;
   attachments: NoticeAttachment[];
@@ -382,6 +387,11 @@ export interface NoticeCreateInput {
   status: NoticeStatus;
   pinned: boolean;
   scheduledAt?: string | null; // 예약(status=scheduled)일 때만 ISO 시각
+  categoryCodeId?: string | null;
+  eventStart?: string | null;
+  eventEnd?: string | null;
+  targetBuildings?: string[] | null;
+  keywords?: string | null;
 }
 
 export interface NoticePatchInput {
@@ -390,6 +400,11 @@ export interface NoticePatchInput {
   pinned?: boolean;
   status?: NoticeStatus;
   scheduledAt?: string | null;
+  categoryCodeId?: string | null;
+  eventStart?: string | null;
+  eventEnd?: string | null;
+  targetBuildings?: string[] | null;
+  keywords?: string | null;
 }
 
 interface RawAttachment {
@@ -410,6 +425,11 @@ interface RawNotice {
   scheduled_at: string | null;
   published_at: string | null;
   published_by: string | null;
+  category_code_id?: string | null;
+  event_start?: string | null;
+  event_end?: string | null;
+  target_buildings?: string[] | null;
+  keywords?: string | null;
   created_at: string;
   updated_at: string;
   attachments: RawAttachment[];
@@ -436,6 +456,11 @@ function toNotice(raw: RawNotice): Notice {
     scheduledAt: raw.scheduled_at,
     publishedAt: raw.published_at,
     publishedBy: raw.published_by,
+    categoryCodeId: raw.category_code_id ?? null,
+    eventStart: raw.event_start ?? null,
+    eventEnd: raw.event_end ?? null,
+    targetBuildings: raw.target_buildings ?? null,
+    keywords: raw.keywords ?? null,
     createdAt: raw.created_at,
     updatedAt: raw.updated_at,
     attachments: (raw.attachments ?? []).map(toAttachment),
@@ -469,6 +494,11 @@ export async function createNotice(input: NoticeCreateInput): Promise<Notice> {
       status: input.status,
       pinned: input.pinned,
       scheduled_at: input.scheduledAt ?? null,
+      category_code_id: input.categoryCodeId ?? null,
+      event_start: input.eventStart ?? null,
+      event_end: input.eventEnd ?? null,
+      target_buildings: input.targetBuildings ?? null,
+      keywords: input.keywords ?? null,
     }),
   });
   await ensureOk(response);
@@ -483,6 +513,11 @@ export async function patchNotice(id: string, input: NoticePatchInput): Promise<
   if (input.pinned !== undefined) body.pinned = input.pinned;
   if (input.status !== undefined) body.status = input.status;
   if (input.scheduledAt !== undefined) body.scheduled_at = input.scheduledAt;
+  if (input.categoryCodeId !== undefined) body.category_code_id = input.categoryCodeId;
+  if (input.eventStart !== undefined) body.event_start = input.eventStart;
+  if (input.eventEnd !== undefined) body.event_end = input.eventEnd;
+  if (input.targetBuildings !== undefined) body.target_buildings = input.targetBuildings;
+  if (input.keywords !== undefined) body.keywords = input.keywords;
   const response = await apiFetch(`${API_BASE_URL}/admin/notices/${id}`, {
     method: "PATCH",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },

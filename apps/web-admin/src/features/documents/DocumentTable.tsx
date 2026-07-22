@@ -7,10 +7,11 @@ import { INDEX_META, VISIBILITY_META, shortDate } from "./data";
 
 interface DocumentTableProps {
   docs: readonly DocumentItem[];
+  categoryLabels: Map<string, string>;
 }
 
 /** 문서 게시판 목록 — 행 클릭(제목 링크)으로 상세/수정. 편집·재색인은 상세에서. */
-export function DocumentTable({ docs }: DocumentTableProps) {
+export function DocumentTable({ docs, categoryLabels }: DocumentTableProps) {
   return (
     <div className="surface-card doc-tablecard">
       <div className="doc-table__scroll">
@@ -18,7 +19,7 @@ export function DocumentTable({ docs }: DocumentTableProps) {
           <thead>
             <tr>
               <th scope="col">제목</th>
-              <th scope="col">카테고리</th>
+              <th scope="col">분류</th>
               <th scope="col">공개 범위</th>
               <th scope="col">버전</th>
               <th scope="col">색인 상태</th>
@@ -39,7 +40,9 @@ export function DocumentTable({ docs }: DocumentTableProps) {
                       <span className="doc-name__title">{doc.title}</span>
                     </Link>
                   </td>
-                  <td className="doc-nowrap">{doc.sourceType}</td>
+                  <td className="doc-nowrap">
+                    {categoryLabels.get(doc.categoryCodeId) ?? "미분류"}
+                  </td>
                   <td className="doc-nowrap">
                     <span className="doc-scope">
                       <span aria-hidden="true">{scope.icon}</span>

@@ -14,7 +14,7 @@ function doc(overrides: Partial<DocumentItem>): DocumentItem {
   return {
     id: overrides.id ?? "id",
     title: overrides.title ?? "제목",
-    sourceType: overrides.sourceType ?? "규약",
+    categoryCodeId: overrides.categoryCodeId ?? "cat-1",
     visibility: overrides.visibility ?? "ALL",
     body: overrides.body ?? null,
     version: overrides.version ?? 1,

@@ -167,6 +167,95 @@
   cursor: not-allowed;
 }
 
+/* 분류 select — 문서 폼과 동일한 Safari 대응(appearance:none + 커스텀 chevron). */
+.notice-select {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-6) 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+}
+.notice-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.notice-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.notice-optional {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* 행사 기간 — 시작/종료 date 2개 나란히. */
+.notice-period,
+.notice-targets {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.notice-period__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.notice-period__item {
+  flex: 1;
+  min-width: 160px;
+}
+.notice-period__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 대상 동 체크박스 목록. */
+.notice-targets__opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+.notice-targets__empty {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+.notice-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.notice-check:hover {
+  border-color: var(--color-accent);
+}
+
+/* 목록 분류 배지. */
+.notice-cat {
+  display: inline-block;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
 .notice-toggle {
   display: flex;
   align-items: center;

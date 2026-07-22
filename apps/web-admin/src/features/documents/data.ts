@@ -1,4 +1,4 @@
-import { ApiError, type DocumentItem, type IndexStatus, type SourceType, type Visibility } from "@/lib/api";
+import { ApiError, type DocumentItem, type IndexStatus, type Visibility } from "@/lib/api";
 
 // 색인 상태 표기 — 색만으로 전달하지 않고 아이콘·라벨 병기(WCAG 2.2 AA).
 export const INDEX_META: Record<IndexStatus, { icon: string; label: string; spin?: boolean }> = {
@@ -14,7 +14,6 @@ export const VISIBILITY_META: Record<Visibility, { icon: string; label: string }
   ADMIN: { icon: "🔒", label: "관리자 전용" },
 };
 
-export const SOURCE_TYPES: readonly SourceType[] = ["규약", "회의록", "공지", "지침", "매뉴얼"];
 export const VISIBILITIES: readonly Visibility[] = ["ALL", "RESIDENT", "ADMIN"];
 
 // 필터 탭 — "전체"는 상태 미지정.
