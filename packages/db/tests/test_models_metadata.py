@@ -48,5 +48,8 @@ def test_no_unexpected_deleted_at() -> None:
 
 
 def test_tenant_scope_table_count() -> None:
-    """도메인 30종 + tenant_keys(H2-1) + inquiry_events(H2-3) + auth_tokens(H7-1) 등록 확인."""
+    """도메인 30종 + tenant_keys(H2-1) + inquiry_events(H2-3) + auth_tokens(H7-1) 등록 확인.
+
+    H8-1(ADR-0015): notice_drafts 제거·notice_attachments 신설 — 순증감 0(합계 불변).
+    """
     assert len(metadata.tables) == 33

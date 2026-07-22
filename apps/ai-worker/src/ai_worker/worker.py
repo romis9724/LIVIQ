@@ -23,6 +23,7 @@ from ai_core.llm.client import LlmClient
 from ai_worker.config import get_settings
 from ai_worker.graph_sync import sync_outbox_task
 from ai_worker.ingest import IngestResult, ingest_document
+from ai_worker.notices_publish import publish_due_notices
 from liviq_db.engine import create_engine, create_session_factory
 
 
@@ -93,9 +94,13 @@ async def shutdown(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 
 
 
 class WorkerSettings:  # pragma: no cover — arq가 소비하는 선언
-    functions = [ingest_document_task, sync_outbox_task]
-    # graph-sync는 15초 주기 cron(docs/11 §3.5). cron_jobs도 arq가 읽는 클래스 속성.
-    cron_jobs = [cron(sync_outbox_task, second={0, 15, 30, 45}, run_at_startup=False)]
+    functions = [ingest_document_task, sync_outbox_task, publish_due_notices]
+    # graph-sync는 15초 주기, 예약 공지 발행은 1분 주기(매분 second=0) cron(docs/11 §3.5,
+    # ADR-0015). cron_jobs도 arq가 읽는 클래스 속성.
+    cron_jobs = [
+        cron(sync_outbox_task, second={0, 15, 30, 45}, run_at_startup=False),
+        cron(publish_due_notices, second=0, run_at_startup=False),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     # arq는 redis_settings를 "속성"으로 읽는다(호출 아님) — 메서드로 두면

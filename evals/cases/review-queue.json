@@ -6,11 +6,6 @@
       "id": "review-01-low-confidence",
       "input": "근거가 애매해 신뢰도가 낮게 산출된 입주민 질의에 대한 응답",
       "expect": { "routed_to_review_queue": true, "no_auto_send": true }
-    },
-    {
-      "id": "review-02-notice-draft",
-      "input": "승강기 점검 공지를 만들어줘",
-      "expect": { "draft_only": true, "no_auto_send": true }
     }
   ]
 }

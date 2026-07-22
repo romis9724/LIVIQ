@@ -205,6 +205,7 @@ class Storage(Protocol):
 
     async def put(self, key: str, data: bytes) -> None: ...
     async def get(self, key: str) -> bytes: ...
+    async def delete(self, key: str) -> None: ...
 
 
 class Queue(Protocol):
@@ -232,6 +233,9 @@ def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트
             async def get(self, key: str) -> bytes:
                 return _MEMORY_STORE[key]
 
+            async def delete(self, key: str) -> None:
+                _MEMORY_STORE.pop(key, None)
+
         return MemoryStorage()
 
     import boto3
@@ -253,6 +257,9 @@ def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트
             obj = await asyncio.to_thread(client.get_object, Bucket=settings.s3_bucket, Key=key)
             body: bytes = await asyncio.to_thread(obj["Body"].read)
             return body
+
+        async def delete(self, key: str) -> None:
+            await asyncio.to_thread(client.delete_object, Bucket=settings.s3_bucket, Key=key)
 
     return S3Storage()
 

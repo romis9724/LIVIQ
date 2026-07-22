@@ -172,6 +172,9 @@ class FakeStorage:
     async def get(self, key: str) -> bytes:
         return self.objects[key]
 
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
+
 
 class FakeQueue:
     def __init__(self) -> None:
