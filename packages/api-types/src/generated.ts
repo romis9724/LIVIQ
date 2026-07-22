@@ -195,7 +195,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Code
-         * @description 하드 삭제 — 자식이 있으면 409(명시 거부). 도메인 참조는 H8-6에서 FK RESTRICT 409.
+         * @description 하드 삭제 — 자식이 있으면 409. 도메인(notices·documents) 참조는 FK RESTRICT → 409(H8-6).
          */
         delete: operations["delete_code_admin_codes__code_id__delete"];
         options?: never;
@@ -1509,13 +1509,13 @@ export interface components {
         Body_create_document_documents_post: {
             /** Body */
             body?: string | null;
+            /**
+             * Category Code Id
+             * Format: uuid
+             */
+            category_code_id: string;
             /** File */
             file: string;
-            /**
-             * Source Type
-             * @enum {string}
-             */
-            source_type: "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
             /** Title */
             title: string;
             /**
@@ -1757,6 +1757,11 @@ export interface components {
             /** Body */
             body?: string | null;
             /**
+             * Category Code Id
+             * Format: uuid
+             */
+            category_code_id: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -1771,11 +1776,6 @@ export interface components {
              * @enum {string}
              */
             index_status: "pending" | "indexing" | "indexed" | "failed";
-            /**
-             * Source Type
-             * @enum {string}
-             */
-            source_type: "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
             /** Title */
             title: string;
             /**
@@ -1804,6 +1804,11 @@ export interface components {
          */
         DocumentOut: {
             /**
+             * Category Code Id
+             * Format: uuid
+             */
+            category_code_id: string;
+            /**
              * Created At
              * Format: date-time
              */
@@ -1818,11 +1823,6 @@ export interface components {
              * @enum {string}
              */
             index_status: "pending" | "indexing" | "indexed" | "failed";
-            /**
-             * Source Type
-             * @enum {string}
-             */
-            source_type: "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
             /** Title */
             title: string;
             /**
@@ -1845,8 +1845,8 @@ export interface components {
         DocumentPatchIn: {
             /** Body */
             body?: string | null;
-            /** Source Type */
-            source_type?: ("규약" | "회의록" | "공지" | "지침" | "매뉴얼") | null;
+            /** Category Code Id */
+            category_code_id?: string | null;
             /** Title */
             title?: string | null;
             /** Visibility */
@@ -2372,6 +2372,14 @@ export interface components {
             audience: "ALL";
             /** Body */
             body: string;
+            /** Category Code Id */
+            category_code_id?: string | null;
+            /** Event End */
+            event_end?: string | null;
+            /** Event Start */
+            event_start?: string | null;
+            /** Keywords */
+            keywords?: string | null;
             /**
              * Pinned
              * @default false
@@ -2385,6 +2393,8 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "scheduled" | "published";
+            /** Target Buildings */
+            target_buildings?: string[] | null;
             /** Title */
             title: string;
         };
@@ -2404,16 +2414,24 @@ export interface components {
             audience: string;
             /** Body */
             body: string;
+            /** Category Code Id */
+            category_code_id?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Event End */
+            event_end?: string | null;
+            /** Event Start */
+            event_start?: string | null;
             /**
              * Id
              * Format: uuid
              */
             id: string;
+            /** Keywords */
+            keywords?: string | null;
             /** Pinned */
             pinned: boolean;
             /** Published At */
@@ -2427,6 +2445,8 @@ export interface components {
              * @enum {string}
              */
             status: "draft" | "scheduled" | "published";
+            /** Target Buildings */
+            target_buildings?: string[] | null;
             /** Title */
             title: string;
             /**
@@ -2444,12 +2464,22 @@ export interface components {
             audience?: "ALL" | null;
             /** Body */
             body?: string | null;
+            /** Category Code Id */
+            category_code_id?: string | null;
+            /** Event End */
+            event_end?: string | null;
+            /** Event Start */
+            event_start?: string | null;
+            /** Keywords */
+            keywords?: string | null;
             /** Pinned */
             pinned?: boolean | null;
             /** Scheduled At */
             scheduled_at?: string | null;
             /** Status */
             status?: ("draft" | "scheduled" | "published") | null;
+            /** Target Buildings */
+            target_buildings?: string[] | null;
             /** Title */
             title?: string | null;
         };

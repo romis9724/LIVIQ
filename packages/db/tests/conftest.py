@@ -97,6 +97,7 @@ class TenantFixture:
     household_id: uuid.UUID
     user_id: uuid.UUID
     pii_id: uuid.UUID
+    doc_code_id: uuid.UUID
     document_id: uuid.UUID
     inquiry_id: uuid.UUID
     audit_id: uuid.UUID
@@ -151,11 +152,25 @@ async def _seed_tenant(conn: AsyncConnection, label: str) -> TenantFixture:
         h=household_id,
         p=pii_id,
     )
+    doc_group_id = await _scalar(
+        conn,
+        "INSERT INTO code_groups(tenant_id, group_key, name, is_system) "
+        "VALUES(:t, 'DOC_CATEGORY', '문서 카테고리', true) RETURNING id",
+        t=tenant_id,
+    )
+    doc_code_id = await _scalar(
+        conn,
+        "INSERT INTO codes(tenant_id, group_id, code, label) "
+        "VALUES(:t, :g, '규약', '규약') RETURNING id",
+        t=tenant_id,
+        g=doc_group_id,
+    )
     document_id = await _scalar(
         conn,
-        "INSERT INTO documents(tenant_id, title, source_type, visibility, index_status) "
-        "VALUES(:t, 'doc', '규약', 'ALL', 'pending') RETURNING id",
+        "INSERT INTO documents(tenant_id, title, category_code_id, visibility, index_status) "
+        "VALUES(:t, 'doc', :cc, 'ALL', 'pending') RETURNING id",
         t=tenant_id,
+        cc=doc_code_id,
     )
     inquiry_id = await _scalar(
         conn,
@@ -190,6 +205,7 @@ async def _seed_tenant(conn: AsyncConnection, label: str) -> TenantFixture:
         household_id=household_id,
         user_id=user_id,
         pii_id=pii_id,
+        doc_code_id=doc_code_id,
         document_id=document_id,
         inquiry_id=inquiry_id,
         audit_id=audit_id,

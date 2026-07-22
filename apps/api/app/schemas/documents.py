@@ -8,7 +8,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SourceType = Literal["규약", "회의록", "공지", "지침", "매뉴얼"]
 Visibility = Literal["ALL", "RESIDENT", "ADMIN"]
 IndexStatus = Literal["pending", "indexing", "indexed", "failed"]
 
@@ -21,7 +20,6 @@ __all__ = [
     "DocumentPatchIn",
     "DocumentVersionOut",
     "IndexStatus",
-    "SourceType",
     "Visibility",
 ]
 
@@ -39,7 +37,7 @@ class DocumentOut(BaseModel):
 
     id: uuid.UUID
     title: str
-    source_type: SourceType
+    category_code_id: uuid.UUID  # DOC_CATEGORY 그룹 코드(작성 시 필수)
     visibility: Visibility
     version: int
     index_status: IndexStatus
@@ -61,5 +59,5 @@ class DocumentPatchIn(BaseModel):
 
     title: str | None = Field(default=None, min_length=1, max_length=200)
     body: str | None = Field(default=None, max_length=BODY_MAX)
-    source_type: SourceType | None = None
+    category_code_id: uuid.UUID | None = None
     visibility: Visibility | None = None

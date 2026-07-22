@@ -28,6 +28,7 @@ from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import answer_cache
+from app.code_refs import validate_category_code
 from app.deps import (
     Queue,
     RequestContext,
@@ -45,7 +46,6 @@ from app.schemas.documents import (
     DocumentPatchIn,
     DocumentVersionOut,
     IndexStatus,
-    SourceType,
     Visibility,
 )
 from app.session import get_redis
@@ -147,10 +147,11 @@ async def create_document(
     queue: Annotated[Queue, Depends(get_queue)],
     file: Annotated[UploadFile, File()],
     title: Annotated[str, Form(min_length=1, max_length=200)],
-    source_type: Annotated[SourceType, Form()],
+    category_code_id: Annotated[uuid.UUID, Form()],
     visibility: Annotated[Visibility, Form()],
     body: Annotated[str | None, Form(max_length=BODY_MAX)] = None,
 ) -> DocumentOut:
+    await validate_category_code(session, ctx.tenant_id, category_code_id, "DOC_CATEGORY")
     data, suffix = await _read_validated_file(file)
     content_hash = hashlib.sha256(data).hexdigest()
     if await _current_version_hash_exists(session, ctx.tenant_id, content_hash):
@@ -164,7 +165,7 @@ async def create_document(
         id=doc_id,
         tenant_id=ctx.tenant_id,
         title=title,
-        source_type=source_type,
+        category_code_id=category_code_id,
         visibility=visibility,
         body=body,
         version=1,
@@ -212,7 +213,7 @@ async def get_document(
     return DocumentDetailOut(
         id=document.id,
         title=document.title,
-        source_type=document.source_type,  # type: ignore[arg-type]
+        category_code_id=document.category_code_id,
         visibility=document.visibility,  # type: ignore[arg-type]
         version=document.version,
         index_status=document.index_status,  # type: ignore[arg-type]
@@ -232,12 +233,14 @@ async def patch_document(
     patch: DocumentPatchIn,
 ) -> DocumentOut:
     document = await _get_owned_document(session, ctx.tenant_id, document_id)
+    if patch.category_code_id is not None:
+        await validate_category_code(session, ctx.tenant_id, patch.category_code_id, "DOC_CATEGORY")
     if patch.title is not None:
         document.title = patch.title
     if patch.body is not None:
         document.body = patch.body
-    if patch.source_type is not None:
-        document.source_type = patch.source_type
+    if patch.category_code_id is not None:
+        document.category_code_id = patch.category_code_id
     # visibility 변경은 검색 노출 범위를 바꾼다 → 캐시 세대 증가로 이전 답변 무효화(H4-2).
     visibility_changed = patch.visibility is not None and patch.visibility != document.visibility
     if patch.visibility is not None:

@@ -20,10 +20,10 @@ from app.deps import (
 from app.main import create_app
 from conftest import MANAGER_USER_ID, TENANT_ID
 from httpx import ASGITransport
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import CodeGroup, Tenant
+from liviq_db.models import Code, CodeGroup, Notice, Tenant
 
 TENANT_B_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
@@ -226,6 +226,36 @@ async def test_patch_code_updates_label_sort_active(seeded: AsyncSession) -> Non
     assert r.status_code == 200
     body = r.json()
     assert body["label"] == "A2" and body["sort_order"] == 5 and body["active"] is False
+
+
+async def test_delete_code_referenced_by_notice_409(seeded: AsyncSession) -> None:
+    """도메인(notices)이 참조 중인 코드는 FK RESTRICT → 409(H8-6). 코드는 남는다."""
+    group = CodeGroup(
+        tenant_id=TENANT_ID, group_key="NOTICE_CATEGORY", name="공지 분류", is_system=True
+    )
+    seeded.add(group)
+    await seeded.flush()
+    code = Code(tenant_id=TENANT_ID, group_id=group.id, code="일반", label="일반")
+    seeded.add(code)
+    await seeded.flush()
+    seeded.add(
+        Notice(
+            tenant_id=TENANT_ID,
+            title="공지",
+            body="본문",
+            status="draft",
+            audience="ALL",
+            category_code_id=code.id,
+        )
+    )
+    await seeded.flush()
+
+    async with _client(seeded) as c:
+        response = await c.delete(f"/admin/codes/{code.id}")
+    assert response.status_code == 409
+    # SAVEPOINT 롤백 후에도 바깥 트랜잭션은 살아있어 코드가 그대로 조회된다.
+    still_there = await seeded.scalar(select(Code.id).where(Code.id == code.id))
+    assert still_there == code.id
 
 
 # ── 인가 매트릭스 ─────────────────────────────────────────────────────────────

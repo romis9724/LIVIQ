@@ -45,6 +45,7 @@ async def _seed_notice(
     *,
     status: str = "published",
     deleted: bool = False,
+    keywords: str | None = None,
     attachments: list[tuple[str, str, bytes]] | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID, dict[str, bytes]]:
     """tenant + 공지(+첨부) 시드. attachments=(filename, storage_key, bytes) 목록.
@@ -63,6 +64,7 @@ async def _seed_notice(
         status=status,
         pinned=False,
         audience="ALL",
+        keywords=keywords,
         published_at=datetime.datetime.now(datetime.UTC) if status == "published" else None,
         deleted_at=datetime.datetime.now(datetime.UTC) if deleted else None,
     )
@@ -121,6 +123,25 @@ async def test_ingest_body_and_parsable_attachments(
     # .hwp는 다운로드조차 하지 않는다(확장자 선필터). .pdf는 파싱 시도.
     assert "t/notices/n/hwp" not in seen
     assert "t/notices/n/pdf" in seen and "t/notices/n/md" in seen
+
+
+async def test_keywords_included_in_chunk_text(session: AsyncSession, fake_llm: LlmClient) -> None:
+    """콤마 구분 keywords가 임베딩 청크 텍스트에 포함된다(H8-6, 검색 재현율 보강)."""
+    kw_marker = "긴급단수표식"
+    tenant_id, notice_id, objects = await _seed_notice(session, keywords=f"{kw_marker},급수,점검")
+    result = await ingest_notice(
+        session,
+        llm=fake_llm,
+        download=_downloader(objects, []),
+        notice_id=notice_id,
+        tenant_id=tenant_id,
+    )
+    assert result.status == "indexed"
+    chunks = list(
+        await session.scalars(select(ContentChunk).where(ContentChunk.notice_id == notice_id))
+    )
+    joined = "\n".join(c.content for c in chunks)
+    assert kw_marker in joined  # keywords가 벡터화 텍스트에 반영
 
 
 async def test_reingest_is_idempotent(session: AsyncSession, fake_llm: LlmClient) -> None:

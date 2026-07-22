@@ -76,9 +76,9 @@ async def test_insert_with_other_tenant_id_is_rejected(
     async def insert_b_document() -> object:
         return await owner_conn.execute(
             text(
-                "INSERT INTO documents(tenant_id, title, source_type, visibility, index_status) "
-                "VALUES(:t, 'x', '규약', 'ALL', 'pending')"
-            ).bindparams(t=seed.b.tenant_id)
+                "INSERT INTO documents(tenant_id, title, category_code_id, visibility, "
+                "index_status) VALUES(:t, 'x', :cc, 'ALL', 'pending')"
+            ).bindparams(t=seed.b.tenant_id, cc=seed.b.doc_code_id)
         )
 
     await _assert_denied(owner_conn, insert_b_document)
@@ -100,9 +100,9 @@ async def test_no_context_insert_is_rejected(owner_conn: AsyncConnection, seed: 
     async def insert_a_document() -> object:
         return await owner_conn.execute(
             text(
-                "INSERT INTO documents(tenant_id, title, source_type, visibility, index_status) "
-                "VALUES(:t, 'x', '규약', 'ALL', 'pending')"
-            ).bindparams(t=seed.a.tenant_id)
+                "INSERT INTO documents(tenant_id, title, category_code_id, visibility, "
+                "index_status) VALUES(:t, 'x', :cc, 'ALL', 'pending')"
+            ).bindparams(t=seed.a.tenant_id, cc=seed.a.doc_code_id)
         )
 
     await _assert_denied(owner_conn, insert_a_document)
@@ -198,9 +198,9 @@ async def test_worker_domain_table_blocked_without_context(
     async def insert_document() -> object:
         return await owner_conn.execute(
             text(
-                "INSERT INTO documents(tenant_id, title, source_type, visibility, index_status) "
-                "VALUES(:t, 'x', '규약', 'ALL', 'pending')"
-            ).bindparams(t=seed.a.tenant_id)
+                "INSERT INTO documents(tenant_id, title, category_code_id, visibility, "
+                "index_status) VALUES(:t, 'x', :cc, 'ALL', 'pending')"
+            ).bindparams(t=seed.a.tenant_id, cc=seed.a.doc_code_id)
         )
 
     await _assert_denied(owner_conn, insert_document)

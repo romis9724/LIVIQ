@@ -16,9 +16,16 @@ from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import ContentChunk, Document, DocumentVersion, Tenant, User
+from liviq_db.models import Code, CodeGroup, ContentChunk, Document, DocumentVersion, Tenant, User
 
 OTHER_TENANT_ID = uuid.UUID("99999999-9999-9999-9999-999999999999")
+
+# 결정적 코드 id — _create가 세션 없이 참조하도록 시드에서 고정 id를 심는다.
+DOC_GROUP_ID = uuid.UUID("d0c00000-0000-0000-0000-000000000001")
+DOC_CODE_ID = uuid.UUID("d0c00000-0000-0000-0000-000000000010")  # code=공지
+DOC_CODE_GUIDE_ID = uuid.UUID("d0c00000-0000-0000-0000-000000000011")  # code=지침
+NOTICE_GROUP_ID = uuid.UUID("d0c00000-0000-0000-0000-000000000002")
+NOTICE_CODE_ID = uuid.UUID("d0c00000-0000-0000-0000-000000000020")  # 잘못된 그룹 검증용
 
 Client = tuple[httpx.AsyncClient, FakeStorage, FakeQueue, FakeRedis]
 
@@ -30,6 +37,46 @@ async def _seed_tenant_user(session: AsyncSession) -> None:
     session.add(Tenant(id=TENANT_ID, name="단지A", status="active"))
     await session.flush()
     session.add(User(id=USER_ID, tenant_id=TENANT_ID, status="active"))
+    session.add(
+        CodeGroup(
+            id=DOC_GROUP_ID,
+            tenant_id=TENANT_ID,
+            group_key="DOC_CATEGORY",
+            name="문서 카테고리",
+            is_system=True,
+        )
+    )
+    session.add(
+        CodeGroup(
+            id=NOTICE_GROUP_ID,
+            tenant_id=TENANT_ID,
+            group_key="NOTICE_CATEGORY",
+            name="공지 분류",
+            is_system=True,
+        )
+    )
+    await session.flush()
+    session.add(
+        Code(id=DOC_CODE_ID, tenant_id=TENANT_ID, group_id=DOC_GROUP_ID, code="공지", label="공지")
+    )
+    session.add(
+        Code(
+            id=DOC_CODE_GUIDE_ID,
+            tenant_id=TENANT_ID,
+            group_id=DOC_GROUP_ID,
+            code="지침",
+            label="지침",
+        )
+    )
+    session.add(
+        Code(
+            id=NOTICE_CODE_ID,
+            tenant_id=TENANT_ID,
+            group_id=NOTICE_GROUP_ID,
+            code="일반",
+            label="일반",
+        )
+    )
     await session.flush()
 
 
@@ -57,10 +104,10 @@ async def _create(
     body: str | None = "설명 본문",
     filename: str = "a.txt",
     content: str = "내용 A",
-    source_type: str = "공지",
+    category_code_id: str = str(DOC_CODE_ID),
     visibility: str = "ALL",
 ) -> httpx.Response:
-    data = {"title": title, "source_type": source_type, "visibility": visibility}
+    data = {"title": title, "category_code_id": category_code_id, "visibility": visibility}
     if body is not None:
         data["body"] = body
     return await c.post(
@@ -108,7 +155,7 @@ async def test_create_without_file_rejected(client: Client) -> None:
     c, _, _, _ = client
     response = await c.post(
         "/documents",
-        data={"title": "제목", "source_type": "공지", "visibility": "ALL"},
+        data={"title": "제목", "category_code_id": str(DOC_CODE_ID), "visibility": "ALL"},
     )
     assert response.status_code == 422
 
@@ -124,7 +171,7 @@ async def test_create_rejects_empty_file(client: Client) -> None:
     response = await c.post(
         "/documents",
         files={"file": ("빈.txt", b"", "text/plain")},
-        data={"title": "빈", "source_type": "공지", "visibility": "ALL"},
+        data={"title": "빈", "category_code_id": str(DOC_CODE_ID), "visibility": "ALL"},
     )
     assert response.status_code == 422
 
@@ -306,16 +353,46 @@ async def test_patch_updates_all_fields(client: Client) -> None:
         json={
             "title": "새 제목",
             "body": "새 본문",
-            "source_type": "지침",
+            "category_code_id": str(DOC_CODE_GUIDE_ID),
             "visibility": "ADMIN",
         },
     )
     assert response.status_code == 200
     assert response.json()["title"] == "새 제목"
     assert response.json()["visibility"] == "ADMIN"
+    assert response.json()["category_code_id"] == str(DOC_CODE_GUIDE_ID)
     detail = (await c.get(f"/documents/{doc_id}")).json()
     assert detail["body"] == "새 본문"
-    assert detail["source_type"] == "지침"
+    assert detail["category_code_id"] == str(DOC_CODE_GUIDE_ID)
+
+
+# ── 분류 코드 검증 ──────────────────────────────────────────────────────────
+
+
+async def test_create_stores_category_code(client: Client) -> None:
+    c, _, _, _ = client
+    body = (await _create(c)).json()
+    assert body["category_code_id"] == str(DOC_CODE_ID)
+
+
+async def test_create_rejects_non_doc_category_code_422(client: Client) -> None:
+    """NOTICE_CATEGORY 그룹 코드는 문서 분류로 쓸 수 없다(그룹 불일치 422)."""
+    c, _, _, _ = client
+    response = await _create(c, category_code_id=str(NOTICE_CODE_ID))
+    assert response.status_code == 422
+
+
+async def test_create_rejects_unknown_code_422(client: Client) -> None:
+    c, _, _, _ = client
+    response = await _create(c, category_code_id=str(uuid.uuid4()))
+    assert response.status_code == 422
+
+
+async def test_patch_rejects_non_doc_category_code_422(client: Client) -> None:
+    c, _, _, _ = client
+    doc_id = (await _create(c)).json()["id"]
+    response = await c.patch(f"/documents/{doc_id}", json={"category_code_id": str(NOTICE_CODE_ID)})
+    assert response.status_code == 422
 
 
 async def test_patch_visibility_bumps_cache(client: Client) -> None:
