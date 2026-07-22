@@ -27,8 +27,8 @@ describe("validateRange", () => {
     expect(validateRange({ ...ok, floorStart: 1.5 })).toContain("정수");
   });
 
-  it("호 범위를 벗어나면 거절", () => {
-    expect(validateRange({ ...ok, unitEnd: 200 })).toContain("호는");
+  it("호 순번 범위를 벗어나면 거절", () => {
+    expect(validateRange({ ...ok, unitEnd: 200 })).toContain("호 순번");
   });
 
   it("상한(2000) 초과는 거절", () => {
@@ -55,12 +55,21 @@ describe("countCombos", () => {
 });
 
 describe("unitLabel · previewLabels", () => {
-  it("호는 2자리 0채움", () => {
-    expect(unitLabel(3, 1)).toBe("301호");
-    expect(unitLabel(10, 12)).toBe("1012호");
+  it("완전 호수를 그대로 표기(floor 미합성)", () => {
+    expect(unitLabel(3, 301)).toBe("301호");
+    expect(unitLabel(10, 1001)).toBe("1001호");
+    // 버그였던 이중 합성 방지: unit_no 201을 "2201호"로 만들지 않는다.
+    expect(unitLabel(2, 201)).toBe("201호");
   });
 
-  it("미리보기는 층·호 오름차순, limit로 잘림", () => {
+  it("미리보기는 순번을 완전 호수(floor*100+순번)로 변환", () => {
+    // ok = 1~3층 × 순번 1~2 → 101·102·201…
     expect(previewLabels(ok, 3)).toEqual(["101호", "102호", "201호"]);
+    // 10층 순번 1~3 → 1001·1002·1003.
+    expect(previewLabels({ floorStart: 10, floorEnd: 10, unitStart: 1, unitEnd: 3 })).toEqual([
+      "1001호",
+      "1002호",
+      "1003호",
+    ]);
   });
 });

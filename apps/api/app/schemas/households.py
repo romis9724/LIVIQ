@@ -16,6 +16,8 @@ BULK_MAX_HOUSEHOLDS = 2000
 # 세대 상태 — 기본 active(입주 가능). inactive는 공실·사용 중지 표시(집계·필터용).
 HOUSEHOLD_STATUSES = ("active", "inactive")
 BUILDING_MAX_FLOORS = 200
+# 완전 호수(unit_no) 상한 — 최고층*100+최대 호 순번(200*100+99). seed·온보딩과 같은 완전 호수 체계.
+UNIT_NO_MAX = BUILDING_MAX_FLOORS * 100 + 99
 
 __all__ = [
     "BUILDING_MAX_FLOORS",
@@ -82,10 +84,11 @@ class HouseholdListOut(BaseModel):
 
 
 class HouseholdBulkCreateIn(BaseModel):
-    """층·호 범위 일괄 생성. 단일 세대는 start==end로 지정한다.
+    """층·호 순번 범위 일괄 생성. 단일 세대는 start==end로 지정한다.
 
-    floor_start~floor_end × unit_start~unit_end의 데카르트 곱을 세대로 만든다. 이미 있는
-    (층,호)는 건너뛴다(멱등). 상한 초과·역순 범위는 422.
+    floor_start~floor_end × unit_start~unit_end의 데카르트 곱을 세대로 만든다. unit_start
+    ~unit_end는 각 층의 호 *순번*(1~N)이고 저장되는 unit_no는 완전 호수(floor*100+순번)다
+    (예: 2층 1~3호 → 201·202·203). 이미 있는 (층,호)는 건너뛴다(멱등). 상한 초과·역순은 422.
     """
 
     floor_start: int = Field(ge=-10, le=BUILDING_MAX_FLOORS)
@@ -114,22 +117,28 @@ class HouseholdBulkCreateOut(BaseModel):
 
 
 class HouseholdUpdateIn(BaseModel):
-    """floor·unit_no·status 수정 — 전달한 필드만 반영."""
+    """floor·unit_no·status 수정 — 전달한 필드만 반영.
+
+    unit_no는 완전 호수 직접 입력(예: 201·1001).
+    """
 
     floor: int | None = Field(default=None, ge=-10, le=BUILDING_MAX_FLOORS)
-    unit_no: int | None = Field(default=None, ge=1, le=99)
+    unit_no: int | None = Field(default=None, ge=1, le=UNIT_NO_MAX)
     status: str | None = None
 
 
 def expand_household_grid(
     floor_start: int, floor_end: int, unit_start: int, unit_end: int
 ) -> list[tuple[int, int]]:
-    """층·호 범위 → (층, 호) 조합 목록(층 오름차순, 그 안에서 호 오름차순).
+    """층·호 순번 범위 → (층, 완전 호수) 조합 목록(층 오름차순, 그 안에서 호 오름차순).
 
-    범위 정합성(end>=start)은 HouseholdBulkCreateIn이 이미 검증했다고 가정한다.
+    unit_start~unit_end는 각 층의 호 *순번*(1~N)이고, 저장되는 unit_no는 완전 호수
+    (floor*100+순번)다. seed_households_xlsx·온보딩과 같은 체계 — 예: 2층 1~3호 →
+    (2,201)·(2,202)·(2,203), 10층 → (10,1001)…. 범위 정합성(end>=start)은
+    HouseholdBulkCreateIn이 이미 검증했다고 가정한다.
     """
     return [
-        (floor, unit)
+        (floor, floor * 100 + unit_seq)
         for floor in range(floor_start, floor_end + 1)
-        for unit in range(unit_start, unit_end + 1)
+        for unit_seq in range(unit_start, unit_end + 1)
     ]
