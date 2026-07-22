@@ -36,6 +36,10 @@
   --space-8: 2rem;
   --space-12: 3rem;
 
+  /* 네이티브 select 화살표 대체 — appearance:none 후 커스텀 chevron(크로스브라우저, 특히 Safari).
+     stroke는 --color-text-muted 대응 중립 회색(SVG data URI라 토큰 변수 주입 불가). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+
   /* radius / elevation */
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;

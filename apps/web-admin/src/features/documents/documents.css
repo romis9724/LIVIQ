@@ -36,15 +36,24 @@
 }
 .doc-input,
 .doc-select {
-  /* 앱 폼 관습(.form-field__input·.nc-field): min-height 탭 타깃 + 좌우 패딩만 —
-     네이티브 select가 세로 패딩을 무시해 input보다 짧아지던 문제 해소. */
+  /* 앱 폼 관습(.form-field__input·.nc-field): min-height 탭 타깃 + 좌우 패딩만. */
   min-height: var(--tap-min);
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
   color: var(--color-text);
   font-size: var(--text-sm);
+}
+/* 네이티브 select는 Safari에서 min-height·패딩을 무시하고 자체 높이로 렌더 →
+   appearance:none으로 일반 박스화(input과 높이 일치) + 커스텀 chevron. */
+.doc-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--space-6);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
 }
 .doc-input:focus-visible,
 .doc-select:focus-visible {

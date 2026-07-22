@@ -111,13 +111,18 @@
   margin-bottom: var(--space-2);
 }
 .fu-field select {
+  appearance: none;
+  -webkit-appearance: none;
   min-height: var(--tap-min);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-6) 0 var(--space-3);
   font-family: inherit;
   font-size: 1rem;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
   color: var(--color-text);
   max-width: 260px;
 }
@@ -326,13 +331,18 @@
   font-weight: 600;
 }
 .fu-filter select {
+  appearance: none;
+  -webkit-appearance: none;
   min-height: var(--tap-min);
-  padding: 0 var(--space-3);
+  padding: 0 var(--space-6) 0 var(--space-3);
   font-family: inherit;
   font-size: 1rem;
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
   color: var(--color-text);
 }
 .fu-summary {

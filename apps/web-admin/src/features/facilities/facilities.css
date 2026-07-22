@@ -323,13 +323,18 @@
   font-size: 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
   color: var(--color-text);
 }
 .fac-select {
-  /* 네이티브 select가 세로 패딩을 무시해 짧아지던 문제 — 탭 타깃 높이 + 좌우 패딩. */
+  /* Safari 네이티브 select 높이 클램프 회피 — appearance:none + 커스텀 chevron. */
+  appearance: none;
+  -webkit-appearance: none;
   min-height: var(--tap-min);
-  padding: 0 12px;
+  padding: 0 var(--space-6) 0 12px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
 }
 .fac-textarea {
   padding: 10px 12px;
