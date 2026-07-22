@@ -23,7 +23,7 @@ from httpx import ASGITransport
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import AuthToken, PiiVault, Tenant, User
+from liviq_db.models import AuthToken, Building, Household, PiiVault, Tenant, User
 
 _KEK = base64.b64encode(b"0" * 32).decode()
 EMAIL = "resident@example.com"
@@ -420,3 +420,49 @@ async def test_logout_revokes_session(db_session: AsyncSession, fake_redis: Fake
 
     assert logout.status_code == 204
     assert me.status_code == 401
+
+
+async def test_me_exposes_own_name_and_unit(
+    db_session: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """본인 세션은 실명·'{동}동 {호}호'를 /me로 받는다(H8-8, 본인 소유 vault만)."""
+    await _seed_tenant(db_session)
+    crypto = _crypto()
+    mailer = FakeMailer()
+
+    async with _build_client(db_session, fake_redis, mailer) as c:
+        await _signup(c)
+        await c.get("/auth/verify-email", params={"token": mailer.last_token()})
+        await c.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})
+
+        # 온보딩 대체 — 세대 배정 + 실명 암호화(본인 vault)
+        await db_session.execute(
+            text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
+        )
+        user = await db_session.scalar(select(User).where(User.tenant_id == TENANT_ID))
+        assert user is not None and user.pii_ref is not None
+        building = Building(tenant_id=TENANT_ID, name="401", floors=25)
+        db_session.add(building)
+        await db_session.flush()
+        household = Household(
+            tenant_id=TENANT_ID,
+            building_id=building.id,
+            floor=2,
+            unit_no=201,
+            status="active",
+        )
+        db_session.add(household)
+        await db_session.flush()
+        user.household_id = household.id
+        vault = await db_session.scalar(select(PiiVault).where(PiiVault.id == user.pii_ref))
+        assert vault is not None
+        dek = await crypto.get_dek(db_session, TENANT_ID)
+        vault.name_enc = crypto.encrypt(dek, "최주민")
+        await db_session.flush()
+
+        me = await c.get("/me")
+
+    assert me.status_code == 200
+    body = me.json()
+    assert body["display_name"] == "최주민"
+    assert body["unit_label"] == "401동 201호"

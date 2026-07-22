@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Skeleton, Switch } from "@liviq/ui";
+import Link from "next/link";
+import { Skeleton } from "@liviq/ui";
 import { API_BASE_URL } from "@/lib/dev-context";
 import { ApiError, getMe, type Me } from "@/lib/api";
+import { formatWon, getFees, type FeeData } from "../fees/api";
+import { currentPeriod } from "../home/logic";
 import { NotificationInbox } from "./NotificationInbox";
-import { accountStatusLabel, roleLabel } from "./logic";
+import { accountStatusLabel, feePeriodLabel, roleLabel } from "./logic";
 import "./me.css";
 
 /** 로그아웃 — 세션 revoke(멱등) 후 로그인 화면으로. 실패해도 로그인으로 이동. */
@@ -17,16 +20,14 @@ async function logout(): Promise<void> {
   }
 }
 
-type SettingKey = "push" | "ai" | "dark";
+/** 섹션별 독립 로딩 — 관리비 실패가 프로필을 막지 않는다. */
+type Loadable<T> = { status: "loading" } | { status: "error" } | { status: "ready"; data: T };
 
 export function MeView() {
+  const period = currentPeriod();
   const [me, setMe] = useState<Me | null>(null);
   const [meError, setMeError] = useState(false);
-  const [settings, setSettings] = useState<Record<SettingKey, boolean>>({
-    push: true,
-    ai: true,
-    dark: false,
-  });
+  const [fee, setFee] = useState<Loadable<FeeData>>({ status: "loading" });
 
   useEffect(() => {
     let alive = true;
@@ -37,13 +38,13 @@ export function MeView() {
         if (!alive || (err instanceof ApiError && err.status === 401)) return;
         setMeError(true);
       });
+    getFees(period)
+      .then((data) => alive && setFee({ status: "ready", data }))
+      .catch(() => alive && setFee({ status: "error" }));
     return () => {
       alive = false;
     };
-  }, []);
-
-  const toggleSetting = (key: SettingKey) =>
-    setSettings((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, [period]);
 
   return (
     <main id="main" className="me">
@@ -54,8 +55,10 @@ export function MeView() {
         <div className="me-profile__info">
           {me ? (
             <>
-              <div className="me-profile__name">{roleLabel(me.roles)}</div>
-              <div className="me-profile__sub">{accountStatusLabel(me.status)}</div>
+              <div className="me-profile__name">{me.displayName ?? roleLabel(me.roles)}</div>
+              <div className="me-profile__sub">
+                {me.unitLabel ?? accountStatusLabel(me.status)}
+              </div>
             </>
           ) : meError ? (
             <div className="me-profile__sub">계정 정보를 불러오지 못했어요.</div>
@@ -68,27 +71,22 @@ export function MeView() {
       <NotificationInbox />
 
       <section className="me-section">
-        <h2 className="me-section__title">설정</h2>
-        <div className="me-group">
-          <SettingToggle label="알림 수신" checked={settings.push} onChange={() => toggleSetting("push")} />
-          <SettingToggle
-            label="AI 추천 질문 표시"
-            checked={settings.ai}
-            onChange={() => toggleSetting("ai")}
-          />
-          <SettingToggle
-            label="다크 모드 (베타)"
-            checked={settings.dark}
-            onChange={() => toggleSetting("dark")}
-          />
-          <a href="#" className="me-row me-row--link">
-            <span className="me-row__label">언어 · 글자 크기</span>
-            <span className="me-row__value">한국어 · 보통</span>
-            <span aria-hidden="true" className="me-row__chevron">
-              ›
-            </span>
-          </a>
-        </div>
+        <h2 className="me-section__title">관리비</h2>
+        <Link href="/fees" className="me-fee">
+          <span className="me-fee__body">
+            <span className="me-fee__period">{feePeriodLabel(period)}</span>
+            {fee.status === "loading" ? (
+              <Skeleton height="1.6rem" width="8rem" />
+            ) : fee.status === "error" || fee.data.total === null ? (
+              <span className="me-fee__empty">이번 달 관리비가 아직 없어요</span>
+            ) : (
+              <span className="me-fee__amount">{formatWon(fee.data.total)}</span>
+            )}
+          </span>
+          <span className="me-fee__more" aria-hidden="true">
+            자세히 →
+          </span>
+        </Link>
       </section>
 
       <section className="me-section">
@@ -99,7 +97,7 @@ export function MeView() {
               🔒
             </span>
             <p>
-              이름·연락처 등 개인정보는 화면과 담당자 전달 시 자동 마스킹됩니다. 예: 홍*동 ·
+              AI 응대·담당자 전달 시 타인의 개인정보는 자동 마스킹됩니다. 예: 홍*동 ·
               010-****-1234
             </p>
           </div>
@@ -123,22 +121,5 @@ export function MeView() {
         </button>
       </section>
     </main>
-  );
-}
-
-function SettingToggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  return (
-    <div className="me-row">
-      <span className="me-row__label">{label}</span>
-      <Switch label={label} checked={checked} onChange={onChange} />
-    </div>
   );
 }

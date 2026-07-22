@@ -162,6 +162,47 @@
   line-height: 1.5;
 }
 
+/* 관리비 요약 — 당월 합계 + /fees 진입. */
+.me-fee {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  min-height: var(--tap-min);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  color: inherit;
+}
+.me-fee__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.me-fee__period {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.me-fee__amount {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.me-fee__empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.me-fee__more {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
 .me-privacy {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

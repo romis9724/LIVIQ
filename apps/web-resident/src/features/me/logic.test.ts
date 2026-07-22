@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { accountStatusLabel, roleLabel } from "./logic";
+import { accountStatusLabel, feePeriodLabel, roleLabel } from "./logic";
 
 describe("roleLabel", () => {
   it("역할 코드를 한국어 라벨로 매핑한다", () => {
@@ -31,5 +31,12 @@ describe("accountStatusLabel", () => {
 
   it("매핑 없는 상태는 원문 유지", () => {
     expect(accountStatusLabel("weird")).toBe("weird");
+  });
+});
+
+describe("feePeriodLabel", () => {
+  it("YYYY-MM → YYYY년 M월(선행 0 제거)", () => {
+    expect(feePeriodLabel("2026-07")).toBe("2026년 7월");
+    expect(feePeriodLabel("2026-12")).toBe("2026년 12월");
   });
 });

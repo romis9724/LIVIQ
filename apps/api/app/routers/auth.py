@@ -45,7 +45,7 @@ from app.schemas.auth import (
     TenantDirectoryOut,
 )
 from app.session import SessionData, SessionStore, get_redis, get_session_store
-from liviq_db.models import PiiVault, Tenant, User, UserRole
+from liviq_db.models import Building, Household, PiiVault, Tenant, User, UserRole
 
 logger = logging.getLogger("app.auth")
 router = APIRouter(tags=["auth"])
@@ -360,16 +360,74 @@ async def password_change(
     return response
 
 
+async def _own_profile(
+    db: AsyncSession,
+    crypto: PiiCrypto,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> tuple[str | None, str | None]:
+    """본인 세션 소유 vault만 복호해 실명·'{동}동 {호}호'를 조립(규칙 2·3, H8-8).
+
+    signup과 동일하게 app.tenant_id로 정상 격리 경로 전환 후 본인 행만 읽는다. 미제출·
+    미배정·복호 실패는 각 필드 None으로 흡수한다(/me는 화면 분기 출처라 500 금지).
+    """
+    await db.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
+    )
+    user = await db.scalar(
+        select(User).where(
+            User.id == user_id, User.tenant_id == tenant_id, User.deleted_at.is_(None)
+        )
+    )
+    if user is None:
+        return None, None
+
+    display_name: str | None = None
+    if user.pii_ref is not None:
+        vault = await db.scalar(select(PiiVault).where(PiiVault.id == user.pii_ref))
+        if vault is not None and vault.name_enc is not None:
+            try:
+                dek = await crypto.get_dek(db, tenant_id)
+                display_name = crypto.decrypt(dek, vault.name_enc)
+            except Exception:  # noqa: BLE001 — 복호 실패는 이름 미표시로 흡수
+                logger.warning("me 실명 복호 실패", exc_info=True)
+
+    unit_label: str | None = None
+    if user.household_id is not None:
+        row = (
+            await db.execute(
+                select(Building.name, Household.unit_no)
+                .join(Building, Household.building_id == Building.id)
+                .where(Household.id == user.household_id)
+            )
+        ).first()
+        if row is not None:
+            unit_label = f"{row.name}동 {row.unit_no}호"
+
+    return display_name, unit_label
+
+
 @router.get("/me", response_model=MeOut)
-async def me(session: Annotated[SessionData, Depends(get_session_raw)]) -> MeOut:
-    """계정 상태 무관 — registered·pending 등 모든 상태의 화면 분기 단일 출처."""
+async def me(
+    session: Annotated[SessionData, Depends(get_session_raw)],
+    db: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
+    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
+) -> MeOut:
+    """계정 상태 무관 — registered·pending 등 모든 상태의 화면 분기 단일 출처.
+
+    본인 실명·세대는 세션 소유 vault만 복호해 노출한다(타인 PII 아님, 규칙 2·3).
+    """
+    tenant_id = uuid.UUID(session.tenant_id)
+    display_name, unit_label = await _own_profile(db, crypto, tenant_id, uuid.UUID(session.user_id))
     return MeOut(
         status=session.status,
-        tenant_id=uuid.UUID(session.tenant_id),
+        tenant_id=tenant_id,
         user_id=uuid.UUID(session.user_id),
         roles=list(session.roles),
         must_change_password=session.must_change_password,
         email=session.email or None,
+        display_name=display_name,
+        unit_label=unit_label,
     )
 
 

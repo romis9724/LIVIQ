@@ -335,6 +335,8 @@ export interface Me {
   userId: string | null;
   roles: string[];
   mustChangePassword: boolean; // true면 비밀번호 변경 강제(H7-2, 주민 흐름은 미사용)
+  displayName: string | null; // 본인 실명(서버가 본인 vault만 복호, 미제출 시 null)
+  unitLabel: string | null; // "{동}동 {호}호"(세대 미배정 시 null)
 }
 
 export async function getMe(): Promise<Me> {
@@ -346,5 +348,7 @@ export async function getMe(): Promise<Me> {
     userId: body.user_id,
     roles: body.roles,
     mustChangePassword: body.must_change_password ?? false,
+    displayName: body.display_name ?? null,
+    unitLabel: body.unit_label ?? null,
   };
 }
