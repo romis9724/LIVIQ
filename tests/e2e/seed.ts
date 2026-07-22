@@ -81,7 +81,8 @@ const CHILD_TABLES = [
   "citations",
   "messages",
   "conversations",
-  "notice_drafts",
+  // 첨부는 notices FK(CASCADE)라 notices 삭제가 되쓸어가지만, 방어적으로 먼저 지운다(H8-1, ADR-0015).
+  "notice_attachments",
   "notices",
   "fees",
   "excel_uploads",
