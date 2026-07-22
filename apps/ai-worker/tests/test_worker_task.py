@@ -9,8 +9,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from ai_core.llm.client import LlmClient
-from ai_worker.worker import ingest_document_task
-from liviq_db.models import Document, Tenant
+from ai_worker.worker import ingest_document_task, ingest_notice_task
+from liviq_db.models import ContentChunk, Document, Notice, Tenant
 
 
 async def test_ingest_task_runs_with_tenant_context(pg_dsn: str, fake_llm: LlmClient) -> None:
@@ -51,4 +51,56 @@ async def test_ingest_task_runs_with_tenant_context(pg_dsn: str, fake_llm: LlmCl
             tenant = await cleanup.get(Tenant, tenant_id)
             if tenant is not None:
                 await cleanup.delete(tenant)
+        await engine.dispose()
+
+
+async def test_ingest_notice_task_runs_with_tenant_context(
+    pg_dsn: str, fake_llm: LlmClient
+) -> None:
+    import datetime
+
+    engine = create_async_engine(pg_dsn, poolclass=NullPool)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with factory() as seed_session, seed_session.begin():
+        tenant = Tenant(name="t", status="active")
+        seed_session.add(tenant)
+        await seed_session.flush()
+        notice = Notice(
+            tenant_id=tenant.id,
+            title="발행 공지",
+            body="지하주차장은 24시간 개방한다.",
+            status="published",
+            pinned=False,
+            audience="ALL",
+            published_at=datetime.datetime.now(datetime.UTC),
+        )
+        seed_session.add(notice)
+        await seed_session.flush()
+        tenant_id, notice_id = tenant.id, notice.id
+
+    async def download(storage_key: str) -> bytes:
+        return b""
+
+    from fakeredis.aioredis import FakeRedis
+
+    redis = FakeRedis(decode_responses=True)
+    ctx = {"session_factory": factory, "llm": fake_llm, "download": download, "redis": redis}
+    try:
+        result = await ingest_notice_task(ctx, str(notice_id), str(tenant_id))
+        assert result["status"] == "indexed"
+        assert result["chunks"] >= 1
+
+        async with factory() as check:
+            count = await check.scalar(
+                select(ContentChunk).where(ContentChunk.notice_id == notice_id)
+            )
+        assert count is not None
+        assert await redis.get(f"cache:gen:{tenant_id}") == "1"  # 색인 → 캐시 무효화
+    finally:
+        await redis.aclose()
+        async with factory() as cleanup, cleanup.begin():
+            t = await cleanup.get(Tenant, tenant_id)
+            if t is not None:
+                await cleanup.delete(t)
         await engine.dispose()

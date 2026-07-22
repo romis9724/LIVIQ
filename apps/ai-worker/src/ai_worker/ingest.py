@@ -9,14 +9,14 @@ worker role은 BYPASSRLS 없이 RLS를 그대로 받는다(docs/03 §5).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from ai_core.rag import chunk_text
+from ai_core.rag import Chunk, chunk_text
 from ai_worker.parsing import UnsupportedFormatError, extract_text
 from liviq_db.models import ContentChunk, Document, DocumentVersion
 
@@ -78,10 +78,7 @@ async def ingest_document(
         await _mark_failed(session, document_id)
         return IngestResult(document_id, 0, "failed", error="추출된 텍스트 없음")
 
-    vectors: list[list[float]] = []
-    for start in range(0, len(chunks), EMBED_BATCH_SIZE):
-        batch = chunks[start : start + EMBED_BATCH_SIZE]
-        vectors.extend(await llm.embed([c.content for c in batch]))
+    vectors = await embed_chunks(llm, chunks)
 
     # 멱등 재색인: 기존 청크 삭제 → 재삽입
     await session.execute(
@@ -108,6 +105,15 @@ async def ingest_document(
         update(Document).where(Document.id == document_id).values(index_status="indexed")
     )
     return IngestResult(document_id, len(chunks), "indexed")
+
+
+async def embed_chunks(llm: LlmClient, chunks: Sequence[Chunk]) -> list[list[float]]:
+    """청크 본문을 배치로 임베딩(문서·공지 인제스트가 공유)."""
+    vectors: list[list[float]] = []
+    for start in range(0, len(chunks), EMBED_BATCH_SIZE):
+        batch = chunks[start : start + EMBED_BATCH_SIZE]
+        vectors.extend(await llm.embed([c.content for c in batch]))
+    return vectors
 
 
 async def _mark_failed(session: AsyncSession, document_id: uuid.UUID) -> None:

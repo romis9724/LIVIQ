@@ -10,6 +10,7 @@ tenant 전환 전 반드시 flush해 이전 tenant 컨텍스트로 쓰기를 확
 from __future__ import annotations
 
 import datetime
+import uuid
 from typing import Any
 
 from sqlalchemy import select, text
@@ -48,7 +49,7 @@ async def publish_due_notices(ctx: dict[str, Any]) -> dict[str, int]:
     """도달한 예약 공지를 발행 + 대상자 알림. arq cron(1분)이 호출."""
     session_factory = ctx["session_factory"]
     now = _now()
-    published = 0
+    ingest_targets: list[tuple[uuid.UUID, uuid.UUID]] = []
 
     async with session_factory() as session, session.begin():
         # worker_scheduled_scan 정책으로 tenant 컨텍스트 없이 scheduled 공지만 cross-tenant 스캔.
@@ -77,6 +78,13 @@ async def publish_due_notices(ctx: dict[str, Any]) -> dict[str, int]:
             notice.published_at = now
             await _notify_active_users(session, notice.tenant_id, notice)
             await session.flush()
-            published += 1
+            ingest_targets.append((notice.id, notice.tenant_id))
 
-    return {"published": published}
+    # 발행 커밋 후 벡터화 인제스트를 enqueue한다(H8-3) — 발행이 커밋된 뒤여야 잡이 published
+    # 공지를 읽는다. arq는 ctx["redis"]로 풀을 주입(테스트 ctx엔 없을 수 있음 → fail-open).
+    redis = ctx.get("redis")
+    if redis is not None:
+        for notice_id, tenant_id in ingest_targets:
+            await redis.enqueue_job("ingest_notice_task", str(notice_id), str(tenant_id))
+
+    return {"published": len(ingest_targets)}

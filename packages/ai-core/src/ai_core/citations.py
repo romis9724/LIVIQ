@@ -25,7 +25,7 @@ class Citation:
 
     ref: int
     chunk_id: uuid.UUID
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None  # notice 청크 인용은 None(source는 document_title로 표기)
     document_title: str
     quote: str
     page: int | None

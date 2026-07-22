@@ -13,6 +13,9 @@ from pathlib import PurePosixPath
 _TEXT_SUFFIXES = {".txt", ".md", ".markdown"}
 _PDF_SUFFIX = ".pdf"
 
+# 벡터화 가능한(파싱 지원) 확장자 화이트리스트 — 공지 첨부 필터가 재사용(H8-3).
+SUPPORTED_SUFFIXES = frozenset(_TEXT_SUFFIXES | {_PDF_SUFFIX})
+
 # 연속 공백·빈 줄 정리(청킹 품질·토큰 절약)
 _MULTI_BLANK_RE = re.compile(r"\n{3,}")
 _TRAILING_WS_RE = re.compile(r"[ \t]+$", re.MULTILINE)

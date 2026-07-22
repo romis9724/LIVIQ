@@ -23,6 +23,7 @@ from ai_core.llm.client import LlmClient
 from ai_worker.config import get_settings
 from ai_worker.graph_sync import sync_outbox_task
 from ai_worker.ingest import IngestResult, ingest_document
+from ai_worker.ingest_notice import NoticeIngestResult, ingest_notice
 from ai_worker.notices_publish import publish_due_notices
 from liviq_db.engine import create_engine, create_session_factory
 
@@ -78,6 +79,31 @@ async def ingest_document_task(
     return {"status": result.status, "chunks": result.chunk_count, "error": result.error}
 
 
+async def ingest_notice_task(ctx: dict[str, Any], notice_id: str, tenant_id: str) -> dict[str, Any]:
+    """공지 인제스트 태스크. published 공지만 색인, 미발행·삭제는 스킵(ingest_notice)."""
+    session_factory = ctx["session_factory"]
+    llm: LlmClient = ctx["llm"]
+    download = ctx["download"]
+    nid, ten_id = uuid.UUID(notice_id), uuid.UUID(tenant_id)
+
+    async with session_factory() as session, session.begin():
+        # tenant 컨텍스트 — RLS 이중 방어의 1층(docs/03 §5)
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(ten_id))
+        )
+        result: NoticeIngestResult = await ingest_notice(
+            session, llm=llm, download=download, notice_id=nid, tenant_id=ten_id
+        )
+
+    # 색인 시 캐시 세대 증가 → 이전 답변 캐시 무효화(H4-2, ingest_document_task와 동일). fail-open.
+    redis = ctx.get("redis")
+    if redis is not None and result.status == "indexed":
+        with contextlib.suppress(RedisError):
+            await redis.incr(f"cache:gen:{ten_id}")
+
+    return {"status": result.status, "chunks": result.chunk_count}
+
+
 async def startup(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 전용
     ctx["session_factory"] = create_session_factory(create_engine())
     ctx["llm"] = LlmClient()
@@ -94,7 +120,12 @@ async def shutdown(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 
 
 
 class WorkerSettings:  # pragma: no cover — arq가 소비하는 선언
-    functions = [ingest_document_task, sync_outbox_task, publish_due_notices]
+    functions = [
+        ingest_document_task,
+        ingest_notice_task,
+        sync_outbox_task,
+        publish_due_notices,
+    ]
     # graph-sync는 15초 주기, 예약 공지 발행은 1분 주기(매분 second=0) cron(docs/11 §3.5,
     # ADR-0015). cron_jobs도 arq가 읽는 클래스 속성.
     cron_jobs = [

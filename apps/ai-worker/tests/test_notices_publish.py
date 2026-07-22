@@ -119,3 +119,28 @@ async def test_deleted_due_notice_excluded(pg_dsn: str) -> None:
     finally:
         await _cleanup(factory, tenant_id)
         await engine.dispose()
+
+
+class _RecordingRedis:
+    """arq redis 대역 — enqueue_job 호출만 기록(발행→인제스트 연결 검증, H8-3)."""
+
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def enqueue_job(self, task: str, *args: Any) -> None:
+        self.jobs.append((task, args))
+
+
+async def test_due_publish_enqueues_ingest(pg_dsn: str) -> None:
+    engine, factory = _factory(pg_dsn)
+    past = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=1)
+    tenant_id, notice_id = await _seed_scheduled(factory, scheduled_at=past)
+    redis = _RecordingRedis()
+    try:
+        result = await publish_due_notices({"session_factory": factory, "redis": redis})
+        assert result["published"] >= 1
+        # 발행된 공지마다 벡터화 인제스트가 enqueue된다(cron→ingest 연결).
+        assert ("ingest_notice_task", (str(notice_id), str(tenant_id))) in redis.jobs
+    finally:
+        await _cleanup(factory, tenant_id)
+        await engine.dispose()
