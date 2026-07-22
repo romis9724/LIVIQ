@@ -72,6 +72,26 @@ async def _load_attachments(
     return list(rows)
 
 
+async def _load_attachments_map(
+    session: AsyncSession, tenant_id: uuid.UUID, notice_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[NoticeAttachment]]:
+    """목록용 첨부 일괄 로드 — 목록 화면(첨부 수·입주민 상세)이 첨부 메타를 소비한다."""
+    if not notice_ids:
+        return {}
+    rows = await session.scalars(
+        select(NoticeAttachment)
+        .where(
+            NoticeAttachment.tenant_id == tenant_id,
+            NoticeAttachment.notice_id.in_(notice_ids),
+        )
+        .order_by(NoticeAttachment.created_at.asc())
+    )
+    grouped: dict[uuid.UUID, list[NoticeAttachment]] = {}
+    for row in rows:
+        grouped.setdefault(row.notice_id, []).append(row)
+    return grouped
+
+
 async def _get_owned_notice(
     session: AsyncSession, tenant_id: uuid.UUID, notice_id: uuid.UUID
 ) -> Notice:
@@ -145,7 +165,9 @@ async def list_notices(
         )
         .order_by(Notice.pinned.desc(), Notice.published_at.desc())
     )
-    return NoticeListOut(items=[_notice_out(row) for row in rows])
+    notices = list(rows)
+    attachments = await _load_attachments_map(session, ctx.tenant_id, [n.id for n in notices])
+    return NoticeListOut(items=[_notice_out(n, attachments.get(n.id, [])) for n in notices])
 
 
 @router.get("/{notice_id}", response_model=NoticeOut)
@@ -201,7 +223,9 @@ async def list_admin_notices(
         .where(Notice.tenant_id == ctx.tenant_id, Notice.deleted_at.is_(None))
         .order_by(Notice.pinned.desc(), Notice.created_at.desc())
     )
-    return NoticeListOut(items=[_notice_out(row) for row in rows])
+    notices = list(rows)
+    attachments = await _load_attachments_map(session, ctx.tenant_id, [n.id for n in notices])
+    return NoticeListOut(items=[_notice_out(n, attachments.get(n.id, [])) for n in notices])
 
 
 @admin_router.post("", response_model=NoticeOut, status_code=201)

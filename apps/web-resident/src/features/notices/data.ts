@@ -18,3 +18,19 @@ export function toParagraphs(body: string): string[] {
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
 }
+
+const SIZE_UNITS = ["KB", "MB", "GB", "TB"] as const;
+const BYTES_PER_UNIT = 1024;
+
+/** 바이트 → 사람이 읽는 크기(예: 940B · 1.2KB · 3.4MB). 1024 단위, 음수·비정상은 0B. */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0B";
+  if (bytes < BYTES_PER_UNIT) return `${bytes}B`;
+  let size = bytes / BYTES_PER_UNIT;
+  let unit = 0;
+  while (size >= BYTES_PER_UNIT && unit < SIZE_UNITS.length - 1) {
+    size /= BYTES_PER_UNIT;
+    unit += 1;
+  }
+  return `${size.toFixed(1)}${SIZE_UNITS[unit]}`;
+}

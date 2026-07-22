@@ -349,6 +349,21 @@ async def test_resident_downloads_published_attachment(seeded: AsyncSession) -> 
     assert "filename*=UTF-8''" in response.headers["content-disposition"]
 
 
+async def test_list_includes_attachment_meta(seeded: AsyncSession) -> None:
+    """목록 응답에 첨부 메타 포함 — 목록 화면(관리자 첨부 수·입주민 상세)이 소비한다."""
+    storage = FakeStorage()
+    async with _client(seeded, storage=storage) as admin:
+        notice_id = await _publish(admin, title="첨부 목록")
+        await _upload_attachment(admin, uuid.UUID(notice_id), name="안내문.pdf")
+        admin_list = await admin.get("/admin/notices")
+    admin_items = [n for n in admin_list.json()["items"] if n["id"] == notice_id]
+    assert admin_items and admin_items[0]["attachments"][0]["filename"] == "안내문.pdf"
+    async with _client(seeded, roles=("RESIDENT",), user_id=USER_ID, storage=storage) as res:
+        response = await res.get("/notices")
+    items = [n for n in response.json()["items"] if n["id"] == notice_id]
+    assert items and items[0]["attachments"][0]["filename"] == "안내문.pdf"
+
+
 async def test_resident_denied_unpublished_attachment(seeded: AsyncSession) -> None:
     """CRITICAL: draft 공지의 첨부는 입주민이 다운로드할 수 없다."""
     storage = FakeStorage()

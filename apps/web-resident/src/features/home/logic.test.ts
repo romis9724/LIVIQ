@@ -15,8 +15,10 @@ const notice = (over: Partial<Notice>): Notice => ({
   title: "공지",
   body: "본문",
   audience: "ALL",
+  pinned: false,
   publishedAt: "2026-07-10T00:00:00Z",
   createdAt: "2026-07-10T00:00:00Z",
+  attachments: [],
   ...over,
 });
 
