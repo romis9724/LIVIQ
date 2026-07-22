@@ -16,6 +16,7 @@ from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts import soft_delete_user
+from app.codes_seed import seed_default_codes
 from app.config import SYSTEM_TENANT_ID
 from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session, require_roles
 from app.invites import create_invite
@@ -75,6 +76,8 @@ async def create_tenant(
     tenant = Tenant(name=body.name, status="active")
     session.add(tenant)
     await session.flush()
+    # 기본 공통 코드 시드(규칙 8 — 액션은 코드). 이후 tenant 컨텍스트는 새 단지로 전환됨.
+    await seed_default_codes(session, tenant.id)
     return TenantOut(id=tenant.id, name=tenant.name)
 
 

@@ -52,5 +52,6 @@ def test_tenant_scope_table_count() -> None:
     + document_versions(H8-2) 등록 확인.
 
     H8-1(ADR-0015): notice_drafts 제거·notice_attachments 신설 — 순증감 0(합계 불변).
+    H8-4(ADR-0017): code_groups·codes 신설 — +2.
     """
-    assert len(metadata.tables) == 34
+    assert len(metadata.tables) == 36
