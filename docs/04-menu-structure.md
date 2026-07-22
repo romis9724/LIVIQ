@@ -75,7 +75,7 @@
 ├── ✅ AI 검수 큐          [MANAGER]              신뢰도 낮은 AI 응답 검토·승인/수정
 ├── 📄 문서 관리           [MANAGER STAFF]
 │   ├── 업로드 (PDF/HWP/이미지)
-│   ├── 공개범위 설정 (ALL/RESIDENT/ADMIN/COUNCIL)
+│   ├── 공개범위 설정 (ALL/RESIDENT/ADMIN)
 │   ├── 문서 검색 (자연어 → 원문 발췌·링크)
 │   └── 색인 상태 (pending/indexed/failed, 재색인)
 ├── 💰 관리비 관리          [MANAGER]

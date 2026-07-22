@@ -75,10 +75,10 @@ async def test_get_slides_idle_ttl(session_store: SessionStore, fake_redis: Fake
 
 def test_visibilities_for_maps_roles() -> None:
     assert visibilities_for(["RESIDENT"]) == ("ALL", "RESIDENT")
-    assert visibilities_for(["MANAGER"]) == ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
-    assert visibilities_for(["STAFF"]) == ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
+    assert visibilities_for(["MANAGER"]) == ("ALL", "RESIDENT", "ADMIN")
+    assert visibilities_for(["STAFF"]) == ("ALL", "RESIDENT", "ADMIN")
     # 합집합 + 정렬 고정
-    assert visibilities_for(["RESIDENT", "MANAGER"]) == ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
+    assert visibilities_for(["RESIDENT", "MANAGER"]) == ("ALL", "RESIDENT", "ADMIN")
     # 미지정/빈 역할(H7-2에서 제거된 FACILITY 포함) → 입주민 기본값
     assert visibilities_for(["FACILITY"]) == ("ALL", "RESIDENT")
     assert visibilities_for([]) == ("ALL", "RESIDENT")

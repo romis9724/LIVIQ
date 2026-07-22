@@ -26,14 +26,15 @@ SESSION_COOKIE_NAME = "liviq_session"
 
 # 역할→문서 공개범위(docs/03 §4.2 visibility 매핑).
 RESIDENT_VISIBILITIES = ("ALL", "RESIDENT")
-# role은 RESIDENT|MANAGER|STAFF|SYS_ADMIN(H7-2에서 FACILITY·COUNCIL 제거). "COUNCIL"·
-# "ADMIN" 등 값은 문서 분류(visibility) enum이지 역할이 아니므로 유지한다.
+# role은 RESIDENT|MANAGER|STAFF|SYS_ADMIN(H7-2에서 FACILITY·COUNCIL 제거). visibility enum은
+# ALL|RESIDENT|ADMIN — 문서 분류 값이지 역할이 아니다. COUNCIL은 visibility에서도 제거됨
+# (입대위 역할 부재로 ADMIN과 동작 동일한 죽은 옵션 → ADMIN으로 통합).
 _ROLE_VISIBILITIES: dict[str, tuple[str, ...]] = {
     "RESIDENT": ("ALL", "RESIDENT"),
-    "MANAGER": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
-    "STAFF": ("ALL", "RESIDENT", "ADMIN", "COUNCIL"),
+    "MANAGER": ("ALL", "RESIDENT", "ADMIN"),
+    "STAFF": ("ALL", "RESIDENT", "ADMIN"),
 }
-_VISIBILITY_ORDER = ("ALL", "RESIDENT", "ADMIN", "COUNCIL")
+_VISIBILITY_ORDER = ("ALL", "RESIDENT", "ADMIN")
 # local dev 헤더 컨텍스트에 부여할 역할 — 기존 로컬 워크플로·테스트 보존.
 DEV_ROLES = ("RESIDENT", "MANAGER", "STAFF")
 

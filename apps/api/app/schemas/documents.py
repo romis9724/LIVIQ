@@ -9,7 +9,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 SourceType = Literal["규약", "회의록", "공지", "지침", "매뉴얼"]
-Visibility = Literal["ALL", "RESIDENT", "ADMIN", "COUNCIL"]
+Visibility = Literal["ALL", "RESIDENT", "ADMIN"]
 IndexStatus = Literal["pending", "indexing", "indexed", "failed"]
 
 BODY_MAX = 20000

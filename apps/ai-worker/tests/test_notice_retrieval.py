@@ -65,7 +65,7 @@ async def _search(session: AsyncSession, llm: LlmClient, tenant_id: uuid.UUID) -
     query_vec = (await llm.embed([_QUERY]))[0]
     retriever = PgVectorRetriever(session)
     return await retriever.search(
-        query_vec, tenant_id=tenant_id, visibilities=["ALL", "RESIDENT", "ADMIN", "COUNCIL"]
+        query_vec, tenant_id=tenant_id, visibilities=["ALL", "RESIDENT", "ADMIN"]
     )
 
 

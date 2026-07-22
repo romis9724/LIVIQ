@@ -1346,7 +1346,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+            visibility: "ALL" | "RESIDENT" | "ADMIN";
         };
         /** Body_upload_attachment_admin_notices__notice_id__attachments_post */
         Body_upload_attachment_admin_notices__notice_id__attachments_post: {
@@ -1463,7 +1463,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+            visibility: "ALL" | "RESIDENT" | "ADMIN";
         };
         /** DocumentListOut */
         DocumentListOut: {
@@ -1508,7 +1508,7 @@ export interface components {
              * Visibility
              * @enum {string}
              */
-            visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+            visibility: "ALL" | "RESIDENT" | "ADMIN";
         };
         /**
          * DocumentPatchIn
@@ -1522,7 +1522,7 @@ export interface components {
             /** Title */
             title?: string | null;
             /** Visibility */
-            visibility?: ("ALL" | "RESIDENT" | "ADMIN" | "COUNCIL") | null;
+            visibility?: ("ALL" | "RESIDENT" | "ADMIN") | null;
         };
         /** DocumentVersionOut */
         DocumentVersionOut: {

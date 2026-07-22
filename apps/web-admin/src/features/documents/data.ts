@@ -12,11 +12,10 @@ export const VISIBILITY_META: Record<Visibility, { icon: string; label: string }
   ALL: { icon: "🌐", label: "전체 공개" },
   RESIDENT: { icon: "🏠", label: "입주민" },
   ADMIN: { icon: "🔒", label: "관리자 전용" },
-  COUNCIL: { icon: "👥", label: "입대의" },
 };
 
 export const SOURCE_TYPES: readonly SourceType[] = ["규약", "회의록", "공지", "지침", "매뉴얼"];
-export const VISIBILITIES: readonly Visibility[] = ["ALL", "RESIDENT", "ADMIN", "COUNCIL"];
+export const VISIBILITIES: readonly Visibility[] = ["ALL", "RESIDENT", "ADMIN"];
 
 // 필터 탭 — "전체"는 상태 미지정.
 export type StatusFilter = IndexStatus | "all";
