@@ -1,0 +1,294 @@
+/* 코드 관리 — 좌(그룹 목록) / 우(코드 트리) 2단 레이아웃. 토큰만 사용. */
+
+.codes-layout__grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .codes-layout__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.codes-panel__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.codes-panel__title--sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.codes-subtitle {
+  font-size: var(--text-base);
+  font-weight: 700;
+}
+
+.codes-lock {
+  font-size: var(--text-sm);
+}
+
+.codes-key {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.codes-empty {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  padding: var(--space-4) 0;
+}
+
+.codes-note {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+/* ---- 좌: 그룹 목록 ---- */
+.codes-groups__head,
+.codes-detail__codes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.codes-groups__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.codes-groups__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+.codes-groups__item:hover {
+  border-color: var(--color-border-strong);
+}
+.codes-groups__item[data-active] {
+  border-color: var(--color-accent);
+  background: var(--color-surface-sunken);
+}
+.codes-groups__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.codes-groups__name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+.codes-groups__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.codes-groups__count {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- 우: 상세 헤더 ---- */
+.codes-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.codes-detail__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.codes-detail__desc {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.codes-detail__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.codes-detail__codes {
+  margin-top: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-5);
+}
+
+/* ---- 코드 트리 ---- */
+.codes-tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+}
+.codes-tree--child {
+  margin-top: var(--space-2);
+  margin-left: var(--space-5);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
+}
+
+.codes-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.codes-row[data-inactive] {
+  opacity: 0.55;
+}
+.codes-row__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+.codes-row__badge {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+}
+.codes-row__code {
+  flex: none;
+}
+.codes-row__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.codes-danger-btn {
+  color: var(--color-danger);
+}
+.codes-danger-btn:disabled {
+  color: var(--color-text-muted);
+}
+
+/* ---- 폼 ---- */
+.codes-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.codes-form--row {
+  margin-bottom: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.codes-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+@media (max-width: 560px) {
+  .codes-form__grid {
+    grid-template-columns: 1fr;
+  }
+}
+.codes-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.codes-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.codes-field--grow {
+  flex: 1;
+  min-width: 160px;
+}
+.codes-field--sort {
+  width: 96px;
+}
+.codes-field__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.codes-field__input {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+}
+.codes-field__input--mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.codes-field__input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.codes-field__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.codes-field__error {
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
+/* ---- 토스트 ---- */
+.codes-toast {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+}

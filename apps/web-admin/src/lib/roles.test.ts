@@ -12,11 +12,17 @@ describe("navForRoles", () => {
     expect(nav.map((n) => n.href)).toEqual(["/inquiries", "/notices", "/documents"]);
   });
 
-  it("MANAGER에는 전체와 직원 관리를 노출한다", () => {
+  it("MANAGER에는 전체와 직원 관리·코드 관리를 노출한다", () => {
     const hrefs = navForRoles(["MANAGER"]).map((n) => n.href);
     expect(hrefs).toContain("/dashboard");
     expect(hrefs).toContain("/staff");
     expect(hrefs).toContain("/fees");
+    expect(hrefs).toContain("/settings/codes");
+  });
+
+  it("설정(코드 관리)은 STAFF·SYS_ADMIN에 노출하지 않는다", () => {
+    expect(navForRoles(["STAFF"]).map((n) => n.href)).not.toContain("/settings/codes");
+    expect(navForRoles(["SYS_ADMIN"]).map((n) => n.href)).not.toContain("/settings/codes");
   });
 
   it("MANAGER+STAFF는 소장 기준 전체 내비를 노출한다", () => {
