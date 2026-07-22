@@ -514,13 +514,29 @@
 .fee-invoice__table thead th {
   color: var(--color-text-muted);
   font-weight: 600;
+  font-size: var(--text-xs);
 }
-.fee-invoice__num {
+/* 금액 열 우측 정렬 — table 스코프로 th·td 기본 left 규칙보다 특이도 우선. */
+.fee-invoice__table .fee-invoice__num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* 계층: level 1 = 카테고리(굵게·기본색), level 2 = 하위(들여쓰기·연한색·작게). */
+.fee-invoice__table tbody .fee-invoice__row-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.fee-invoice__table tbody tr:not([data-sub]) .fee-invoice__num {
+  font-weight: 600;
+}
 .fee-invoice__table tbody tr[data-sub] .fee-invoice__row-name {
-  padding-left: var(--space-4);
+  padding-left: var(--space-6);
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.fee-invoice__table tbody tr[data-sub] .fee-invoice__num {
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 .fee-invoice__total {
