@@ -15,14 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
 from ai_core.rag.retrieval import PgVectorRetriever
-from ai_worker.ingest import ingest_document
+from ai_worker.ingest import Downloader, ingest_document
 from ai_worker.ingest_notice import ingest_notice
 from liviq_db.models import ContentChunk, Notice, Tenant
 
 _QUERY = "주차 안내"
 
 
-def _downloader(data: bytes):
+def _downloader(data: bytes) -> Downloader:
     async def download(storage_key: str) -> bytes:
         return data
 
@@ -107,7 +107,7 @@ async def test_document_search_regression(session: AsyncSession, fake_llm: LlmCl
     await ingest_document(
         session,
         llm=fake_llm,
-        download=_downloader(RULES_TEXT.encode()),  # type: ignore[arg-type]
+        download=_downloader(RULES_TEXT.encode()),
         document_id=doc_id,
         tenant_id=tenant_id,
     )

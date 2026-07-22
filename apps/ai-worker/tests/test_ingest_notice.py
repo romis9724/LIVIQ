@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
+from ai_worker.ingest import Downloader
 from ai_worker.ingest_notice import ingest_notice
 from liviq_db.models import ContentChunk, Notice, NoticeAttachment, Tenant
 
@@ -31,7 +32,7 @@ def _blank_pdf() -> bytes:
     return buf.getvalue()
 
 
-def _downloader(objects: dict[str, bytes], seen: list[str]):
+def _downloader(objects: dict[str, bytes], seen: list[str]) -> Downloader:
     async def download(storage_key: str) -> bytes:
         seen.append(storage_key)
         return objects[storage_key]
@@ -103,7 +104,7 @@ async def test_ingest_body_and_parsable_attachments(
     result = await ingest_notice(
         session,
         llm=fake_llm,
-        download=_downloader(objects, seen),  # type: ignore[arg-type]
+        download=_downloader(objects, seen),
         notice_id=notice_id,
         tenant_id=tenant_id,
     )
@@ -130,7 +131,7 @@ async def test_reingest_is_idempotent(session: AsyncSession, fake_llm: LlmClient
         result = await ingest_notice(
             session,
             llm=fake_llm,
-            download=_downloader(objects, []),  # type: ignore[arg-type]
+            download=_downloader(objects, []),
             notice_id=notice_id,
             tenant_id=tenant_id,
         )
@@ -152,7 +153,7 @@ async def test_unpublished_or_deleted_is_skipped(
     result = await ingest_notice(
         session,
         llm=fake_llm,
-        download=_downloader(objects, []),  # type: ignore[arg-type]
+        download=_downloader(objects, []),
         notice_id=notice_id,
         tenant_id=tenant_id,
     )
