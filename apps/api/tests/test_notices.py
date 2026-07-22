@@ -16,6 +16,7 @@ import pytest_asyncio
 from app.deps import (
     RequestContext,
     get_context,
+    get_queue,
     get_session_store,
     get_storage,
     get_tenant_session,
@@ -23,12 +24,12 @@ from app.deps import (
 )
 from app.main import create_app
 from app.routers import notices as notices_router
-from conftest import MANAGER_USER_ID, TENANT_ID, USER_ID, FakeStorage
+from conftest import MANAGER_USER_ID, TENANT_ID, USER_ID, FakeQueue, FakeStorage
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import Notice, NoticeAttachment, Notification, Tenant, User
+from liviq_db.models import ContentChunk, Notice, NoticeAttachment, Notification, Tenant, User
 
 TENANT_B_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
@@ -60,12 +61,16 @@ def _client(
     roles: tuple[str, ...] = ("MANAGER",),
     user_id: uuid.UUID = MANAGER_USER_ID,
     storage: FakeStorage | None = None,
+    queue: FakeQueue | None = None,
 ) -> httpx.AsyncClient:
     app = create_app()
     app.dependency_overrides[get_context] = lambda: RequestContext(
         TENANT_ID, user_id, roles=roles, visibilities=visibilities_for(roles)
     )
     app.dependency_overrides[get_tenant_session] = lambda: db_session
+    # 발행·본문/첨부 변경 훅이 ingest_notice_task를 enqueue한다 → 항상 FakeQueue로 대체
+    # (미대체 시 실 arq 연결 시도). 어서션이 필요한 테스트는 queue를 주입한다(H8-3).
+    app.dependency_overrides[get_queue] = lambda: queue or FakeQueue()
     if storage is not None:
         app.dependency_overrides[get_storage] = lambda: storage
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
@@ -414,3 +419,107 @@ async def test_delete_attachment_removes_row_and_object(seeded: AsyncSession) ->
     assert storage.objects == {}  # MinIO 객체 제거
     count = await seeded.scalar(select(func.count()).select_from(NoticeAttachment))
     assert count == 0
+
+
+# ── 벡터화 인제스트 트리거 (H8-3) ───────────────────────────────────────────────
+
+
+def _ingest_jobs(queue: FakeQueue) -> list[tuple[object, ...]]:
+    return [args for task, args in queue.jobs if task == "ingest_notice_task"]
+
+
+async def test_create_published_enqueues_ingest(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        response = await c.post(
+            "/admin/notices", json={"title": "발행", "body": "본문", "status": "published"}
+        )
+    notice_id = response.json()["id"]
+    assert _ingest_jobs(queue) == [(notice_id, str(TENANT_ID))]
+
+
+async def test_create_draft_does_not_enqueue(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        await c.post("/admin/notices", json={"title": "초안", "body": "본문", "status": "draft"})
+    assert _ingest_jobs(queue) == []
+
+
+async def test_patch_publish_transition_enqueues(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "초안", "body": "본문", "status": "draft"}
+        )
+        notice_id = created.json()["id"]
+        await c.patch(f"/admin/notices/{notice_id}", json={"status": "published"})
+    assert _ingest_jobs(queue) == [(notice_id, str(TENANT_ID))]
+
+
+async def test_patch_published_body_change_reingests(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "발행", "body": "본문", "status": "published"}
+        )
+        notice_id = created.json()["id"]
+        await c.patch(f"/admin/notices/{notice_id}", json={"body": "수정 본문"})
+    # 발행 시 1회 + 본문 수정 시 1회 재인제스트.
+    assert _ingest_jobs(queue) == [(notice_id, str(TENANT_ID)), (notice_id, str(TENANT_ID))]
+
+
+async def test_patch_published_pinned_only_no_reingest(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "발행", "body": "본문", "status": "published"}
+        )
+        notice_id = created.json()["id"]
+        await c.patch(f"/admin/notices/{notice_id}", json={"pinned": True})
+    # pinned은 벡터 본문과 무관 → 발행 1회만, 재인제스트 없음.
+    assert _ingest_jobs(queue) == [(notice_id, str(TENANT_ID))]
+
+
+async def test_draft_body_change_no_ingest(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "초안", "body": "본문", "status": "draft"}
+        )
+        notice_id = created.json()["id"]
+        await c.patch(f"/admin/notices/{notice_id}", json={"body": "수정"})
+    assert _ingest_jobs(queue) == []  # 미발행 → 인제스트 안 함
+
+
+async def test_published_attachment_change_reingests(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    storage = FakeStorage()
+    async with _client(seeded, storage=storage, queue=queue) as c:
+        notice_id = await _publish(c, title="첨부 공지")
+        att_id = await _upload_attachment(c, uuid.UUID(notice_id))
+        await c.delete(f"/admin/notices/{notice_id}/attachments/{att_id}")
+    # 발행 + 첨부 업로드 + 첨부 삭제 = 3회.
+    assert _ingest_jobs(queue) == [(notice_id, str(TENANT_ID))] * 3
+
+
+async def test_soft_delete_removes_notice_chunks(seeded: AsyncSession) -> None:
+    """soft delete 시 notice 청크 즉시 삭제 → 검색에서 즉시 사라짐(CRITICAL 경로)."""
+    notice = await _create_notice_row(seeded, status="published", tenant_id=TENANT_ID)
+    seeded.add(
+        ContentChunk(
+            tenant_id=TENANT_ID,
+            source_type="notice",
+            notice_id=notice.id,
+            chunk_index=0,
+            content="공지 본문",
+            embedding=[0.01] * 1024,
+        )
+    )
+    await seeded.flush()
+    async with _client(seeded) as c:
+        deleted = await c.delete(f"/admin/notices/{notice.id}")
+    assert deleted.status_code == 204
+    remaining = await seeded.scalar(
+        select(func.count()).select_from(ContentChunk).where(ContentChunk.notice_id == notice.id)
+    )
+    assert remaining == 0

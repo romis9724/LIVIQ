@@ -23,7 +23,7 @@ MIN_SCORE = 0.35
 @dataclass(frozen=True)
 class RetrievedChunk:
     chunk_id: uuid.UUID
-    document_id: uuid.UUID
+    document_id: uuid.UUID | None  # notice 청크는 None(source는 document_title로 표기)
     document_title: str
     content: str
     heading: str | None
@@ -47,22 +47,31 @@ class Retriever(Protocol):
 
 _SEARCH_SQL = text(
     """
-    SELECT c.id AS chunk_id, c.document_id, d.title AS document_title,
+    SELECT c.id AS chunk_id, c.document_id,
+           COALESCE(d.title, n.title) AS document_title,
            c.content, c.heading, c.page, c.clause,
            1 - (c.embedding <=> CAST(:query_embedding AS vector)) AS score
     FROM content_chunks c
-    JOIN documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
+    LEFT JOIN documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
+    LEFT JOIN notices n ON n.id = c.notice_id AND n.tenant_id = c.tenant_id
     WHERE c.tenant_id = :tenant_id
-      AND c.source_type = 'document'
-      AND d.deleted_at IS NULL
-      AND d.index_status = 'indexed'
-      AND d.visibility = ANY(:visibilities)
+      AND (
+        (c.source_type = 'document'
+           AND d.deleted_at IS NULL
+           AND d.index_status = 'indexed'
+           AND d.visibility = ANY(:visibilities))
+        OR
+        (c.source_type = 'notice'
+           AND n.status = 'published'
+           AND n.deleted_at IS NULL)
+      )
     ORDER BY c.embedding <=> CAST(:query_embedding AS vector)
     LIMIT :top_k
     """
 )
-# source_type='document' 명시 — H8-3에서 공지 청크가 같은 테이블에 생겨도 문서 검색이
-# 공지 청크와 섞이지 않게 한다(문서 인용 경로 격리, ADR-0016).
+# 문서·공지 다형 검색(H8-3): document는 visibility 조인, notice는 published·미삭제 조인으로
+# 미발행 공지 청크를 원천 배제(인제스트 published-only와 함께 이중 방어, CRITICAL). notice
+# 청크는 document_id NULL → title은 notices.title로 COALESCE.
 
 
 class PgVectorRetriever:

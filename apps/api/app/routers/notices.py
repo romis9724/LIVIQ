@@ -15,13 +15,15 @@ from typing import Annotated
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import (
+    Queue,
     RequestContext,
     Storage,
     get_context,
+    get_queue,
     get_storage,
     get_tenant_session,
     require_roles,
@@ -33,7 +35,7 @@ from app.schemas.notices import (
     NoticeOut,
     NoticeUpdateIn,
 )
-from liviq_db.models import Notice, NoticeAttachment, Notification, User
+from liviq_db.models import ContentChunk, Notice, NoticeAttachment, Notification, User
 
 router = APIRouter(prefix="/notices", tags=["notices"])
 admin_router = APIRouter(prefix="/admin/notices", tags=["notices"])
@@ -148,6 +150,11 @@ async def _notify_notice_published(
         )
 
 
+async def _enqueue_ingest(queue: Queue, tenant_id: uuid.UUID, notice_id: uuid.UUID) -> None:
+    """published 공지 벡터화 인제스트 트리거(H8-3). 미발행은 인제스트하지 않는다."""
+    await queue.enqueue("ingest_notice_task", str(notice_id), str(tenant_id))
+
+
 # ── 조회(전 인증 사용자) ────────────────────────────────────────────────────
 
 
@@ -232,6 +239,7 @@ async def list_admin_notices(
 async def create_notice(
     ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    queue: Annotated[Queue, Depends(get_queue)],
     body: NoticeCreateIn,
 ) -> NoticeOut:
     is_published = body.status == "published"
@@ -252,6 +260,7 @@ async def create_notice(
     if is_published:
         await _notify_notice_published(session, ctx.tenant_id, notice)
         await session.flush()
+        await _enqueue_ingest(queue, ctx.tenant_id, notice.id)
     return _notice_out(notice)
 
 
@@ -270,17 +279,23 @@ async def get_admin_notice(
 async def update_notice(
     ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    queue: Annotated[Queue, Depends(get_queue)],
     notice_id: uuid.UUID,
     body: NoticeUpdateIn,
 ) -> NoticeOut:
     notice = await _get_owned_notice(session, ctx.tenant_id, notice_id)
     fields = body.model_fields_set
     new_status = body.status
+    was_published = notice.status == "published"
 
     # published→draft/scheduled 역행 거부(발행 취소 불가).
-    if notice.status == "published" and new_status is not None and new_status != "published":
+    if was_published and new_status is not None and new_status != "published":
         raise HTTPException(status_code=409, detail="발행된 공지는 초안·예약으로 되돌릴 수 없음")
 
+    # 벡터화 대상 텍스트(title·body·audience) 변경 여부 — published 공지면 재인제스트 트리거.
+    content_changed = any(
+        f in fields and getattr(body, f) is not None for f in ("title", "body", "audience")
+    )
     if "title" in fields and body.title is not None:
         notice.title = body.title
     if "body" in fields and body.body is not None:
@@ -307,6 +322,9 @@ async def update_notice(
     if became_published:
         await _notify_notice_published(session, ctx.tenant_id, notice)
         await session.flush()
+    # 발행 전이 시 최초 인제스트, published 상태에서 본문 변경 시 재인제스트(H8-3).
+    if became_published or (was_published and content_changed):
+        await _enqueue_ingest(queue, ctx.tenant_id, notice.id)
     attachments = await _load_attachments(session, ctx.tenant_id, notice.id)
     return _notice_out(notice, attachments)
 
@@ -319,6 +337,13 @@ async def delete_notice(
 ) -> Response:
     notice = await _get_owned_notice(session, ctx.tenant_id, notice_id)
     notice.deleted_at = _now()
+    # 청크 즉시 삭제 → 검색에서 바로 사라짐(documents delete 선례, citations.chunk_id는 SET NULL).
+    await session.execute(
+        delete(ContentChunk).where(
+            ContentChunk.source_type == "notice",
+            ContentChunk.notice_id == notice_id,
+        )
+    )
     await session.flush()
     return Response(status_code=204)
 
@@ -331,6 +356,7 @@ async def upload_attachment(
     ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     storage: Annotated[Storage, Depends(get_storage)],
+    queue: Annotated[Queue, Depends(get_queue)],
     notice_id: uuid.UUID,
     file: Annotated[UploadFile, File()],
 ) -> AttachmentOut:
@@ -374,6 +400,9 @@ async def upload_attachment(
     )
     session.add(attachment)
     await session.flush()
+    # published 공지의 첨부 변경은 벡터화에 반영 → 재인제스트(H8-3).
+    if notice.status == "published":
+        await _enqueue_ingest(queue, ctx.tenant_id, notice.id)
     return _attachment_out(attachment)
 
 
@@ -382,9 +411,11 @@ async def delete_attachment(
     ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     storage: Annotated[Storage, Depends(get_storage)],
+    queue: Annotated[Queue, Depends(get_queue)],
     notice_id: uuid.UUID,
     attachment_id: uuid.UUID,
 ) -> Response:
+    notice = await _get_owned_notice(session, ctx.tenant_id, notice_id)
     attachment = await session.scalar(
         select(NoticeAttachment).where(
             NoticeAttachment.id == attachment_id,
@@ -398,4 +429,7 @@ async def delete_attachment(
     await session.delete(attachment)
     await session.flush()
     await storage.delete(storage_key)  # DB 행 삭제 확정 후 객체 제거(하드 삭제)
+    # published 공지의 첨부 변경은 벡터화에 반영 → 재인제스트(H8-3).
+    if notice.status == "published":
+        await _enqueue_ingest(queue, ctx.tenant_id, notice.id)
     return Response(status_code=204)

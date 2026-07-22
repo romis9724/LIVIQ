@@ -288,6 +288,27 @@ async def test_worker_can_notify_under_tenant_context(
     assert inserted.rowcount == 1
 
 
+async def test_worker_reads_notice_attachments_under_tenant_context(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """공지 인제스트(H8-3): worker가 tenant 컨텍스트에서 notice_attachments SELECT(GRANT 확인)."""
+    notice_id = await _insert_notice(owner_conn, seed.a.tenant_id, status="published")
+    await owner_conn.execute(
+        text(
+            "INSERT INTO notice_attachments(tenant_id, notice_id, filename, content_type, "
+            "size_bytes, storage_key) VALUES(:t, :n, 'a.pdf', 'application/pdf', 1, 'k')"
+        ).bindparams(t=seed.a.tenant_id, n=notice_id)
+    )
+
+    # 자기 tenant 컨텍스트: 첨부 조회 성립(첨부 파싱용 SELECT).
+    await set_context(owner_conn, "liviq_worker", seed.a.tenant_id)
+    assert await _count(owner_conn, "notice_attachments") == 1
+
+    # 타 tenant(B) 컨텍스트: 표준 tenant_isolation으로 0행(격리 유지).
+    await set_context(owner_conn, "liviq_worker", seed.b.tenant_id)
+    assert await _count(owner_conn, "notice_attachments") == 0
+
+
 # ── ai_eval_golden: 공용 + 자기 단지만 ────────────────────────────────────
 
 

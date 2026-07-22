@@ -371,7 +371,7 @@ document_versions(id, tenant_id, document_id,
                   content_hash, uploaded_by, created_at)
   UNIQUE(tenant_id, document_id, version)
 
--- 청크 + 임베딩 — 소스 다형(문서 + 공지 H8-3 대비)
+-- 청크 + 임베딩 — 소스 다형(문서 + 공지, H8-3 활성)
 content_chunks(id, tenant_id,
                source_type,                          -- document|notice
                document_id NULL, notice_id NULL,     -- CHECK: source_type과 정확히 하나 일치
@@ -387,6 +387,7 @@ content_chunks(id, tenant_id,
 
 > 벡터 검색은 항상 `WHERE tenant_id = $current AND visibility ∈ 허용` 선필터 후 ANN.
 > visibility 매핑: `ALL`=인증 사용자 전체 · `RESIDENT`=입주민 · `ADMIN`=MANAGER·STAFF 열람 · `COUNCIL`=입주자대표회의.
+> **notice 청크(H8-3)**: visibility 컬럼이 없는 대신 `notices` 조인으로 `status='published' AND deleted_at IS NULL`을 검색 시점에 검증(미발행 미노출 CRITICAL — 인제스트가 published만 대상이어도 이중 방어). 인제스트 대상 = 본문 + 파싱 가능 첨부(.pdf/.txt/.md)만, published 수정·첨부 변경 시 기존 청크 삭제·재임베딩, soft delete 시 청크 즉시 삭제(문서와 동일 패턴).
 > 임베딩 모델/차원 변경은 마이그레이션 이벤트(전량 재색인) — 함부로 바꾸지 않음.
 > 벡터는 항상 **최신 버전만** — 재업로드 시 기존 청크 삭제·재임베딩(citations.chunk_id SET NULL 보존).
 > 중복 방어는 DB 전역 unique 대신 앱 레벨(현재 버전 집합 내 동일 content_hash → 409, ADR-0016).
@@ -587,7 +588,7 @@ CREATE POLICY tenant_isolation ON documents
 - **컨텍스트 미설정 시 fail-closed**: `app.tenant_id` 미설정이면 `nullif(...)`가 NULL → 정책이 거짓 → 읽기·쓰기 **모두 실패**.
 - `SYS_ADMIN`은 단지 업무 데이터 RLS를 우회하지 **않는다**(메타/모니터링 테이블만 접근). 단지 콘텐츠 열람은 별도 승인·감사 필요([06 §3](06-security-privacy.md)).
 - 애플리케이션 레벨 필터 + DB 레벨 RLS **이중 방어**.
-- **워커(ai-worker) role 정책**: `ai-worker` 전용 DB role은 `outbox_events`·`jobs`에 한해 **cross-tenant `SELECT`/`UPDATE`** 허용(큐 폴링·claim). 도메인 테이블 접근 권한은 없다 — 이벤트를 claim한 뒤 그 이벤트의 `tenant_id`로 `SET LOCAL app.tenant_id` 후 도메인 반영. 큐만 전역, 도메인은 tenant 컨텍스트로 **`BYPASSRLS` 없이** 처리. **예외(H8-1 예약 발행, [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md))**: `notices`에 `worker_scheduled_scan` 정책(SELECT 한정, `status='scheduled' AND deleted_at IS NULL` 행만 — 발행 전 운영자 작성물, PII 없음)으로 cross-tenant 스캔 허용. 발행 전이(`UPDATE notices`)·알림 생성(`SELECT users`·`INSERT notifications`)은 표준 tenant 격리를 그대로 받아 해당 tenant `SET LOCAL` 후에만 성립.
+- **워커(ai-worker) role 정책**: `ai-worker` 전용 DB role은 `outbox_events`·`jobs`에 한해 **cross-tenant `SELECT`/`UPDATE`** 허용(큐 폴링·claim). 도메인 테이블 접근 권한은 없다 — 이벤트를 claim한 뒤 그 이벤트의 `tenant_id`로 `SET LOCAL app.tenant_id` 후 도메인 반영. 큐만 전역, 도메인은 tenant 컨텍스트로 **`BYPASSRLS` 없이** 처리. **예외(H8-1 예약 발행, [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md))**: `notices`에 `worker_scheduled_scan` 정책(SELECT 한정, `status='scheduled' AND deleted_at IS NULL` 행만 — 발행 전 운영자 작성물, PII 없음)으로 cross-tenant 스캔 허용. 발행 전이(`UPDATE notices`)·알림 생성(`SELECT users`·`INSERT notifications`)은 표준 tenant 격리를 그대로 받아 해당 tenant `SET LOCAL` 후에만 성립. **공지 인제스트(H8-3)**: 워커가 tenant 컨텍스트에서 `notice_attachments` **SELECT**(첨부 파싱용, H8-3 GRANT 추가)와 `content_chunks` 쓰기(H8-2 GRANT 기존)를 수행.
 
 **전역·예외 테이블 정책** — 아래 테이블은 표준 tenant 격리에서 예외:
 
