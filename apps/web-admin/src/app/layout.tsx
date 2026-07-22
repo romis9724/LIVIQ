@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     default: "LIVIQ 관리자",
     template: "%s · LIVIQ 관리자",
   },
-  description: "LIVIQ 관리자 콘솔 — AI 검수·공지 초안·민원·문서·시설·회의록.",
+  description: "LIVIQ 관리자 콘솔 — 공지·민원·문서·관리비·시설 관리.",
 };
 
 export const viewport: Viewport = {

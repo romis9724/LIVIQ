@@ -41,4 +41,6 @@
 - **신규 의존**: `ai-worker` arq cron 폴링(예약 발행)·MinIO 첨부 버킷.
 - 재검토 신호: 공지 작성에 초안 보조(요약·번역 등)가 다시 필요해지면 **읽기 전용 보조 도구**로 재도입 검토(현 결정은 초안→발행 자동 흐름 제거이지 공지 AI 영구 배제가 아님).
 
+> **개정 노트(2026-07-22, H8-7)**: 사후 **AI 검수 큐**(assistant 저신뢰 답변 목록·승인/반려)를 제거했다(사용자 결정). 공지 AI 초안 삭제(본 ADR)로 검수 큐의 주 대상이 사라졌고, 운영자가 사후 검수 워크플로 자체를 불요로 판정. 제거 범위: api `review_queue` 라우터·스키마·테스트, web-admin `/review-queue` 화면·내비, `messages`의 사후 검수 결정 컬럼(`reviewed_by·reviewed_at·review_note`, 마이그레이션 `b2d9e4f7a1c3`이 `f7a1c2d3e4b5`의 역으로 drop). **저신뢰 플래그(`messages.review_status=needs_review`)·`confidence`는 유지** — 대시보드 "검수 필요율" 지표와 폴백 판정에 계속 쓰인다. 규칙 6은 여전히 **담당자 연결 폴백**(저신뢰 답변을 사람이 이어받음)으로 성립하며, 사후 목록·승인 UI만 사라졌다.
+
 > **개정 노트(2026-07-22, H8-3)**: 본 ADR의 "RAG 미인제스트"는 H8-3(공지 벡터화, [docs/09 §8.10](../09-implementation-harness.md))에서 개정 — **published 공지만** `content_chunks(source_type=notice)`로 인제스트해 비서 검색에 노출한다([ADR-0016](0016-document-board-versioned-attachment.md)의 청크 일반화가 전제). 공지 **작성·발행 경로의 AI 미개입 원칙은 불변** — 벡터화는 읽기 전용 검색 노출이다. 마스킹은 documents 인제스트 선례를 따라 미적용(공지는 전 입주민 공개 문서 — 임베딩이 추가 노출을 만들지 않음; 입주민 대상 비공개·개인화 텍스트가 인제스트 대상이 되면 규칙 2 재검토).

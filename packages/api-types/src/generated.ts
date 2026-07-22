@@ -385,6 +385,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/fees/{household_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Fee Detail */
+        get: operations["get_fee_detail_admin_fees__household_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/households/{household_id}": {
         parameters: {
             query?: never;
@@ -526,46 +543,6 @@ export interface paths {
         post?: never;
         /** Delete Attachment */
         delete: operations["delete_attachment_admin_notices__notice_id__attachments__attachment_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/review-queue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Review Queue
-         * @description 검수 대상 assistant 답변 목록. 신뢰도 낮은 순(nulls last)→오래된 순 정렬.
-         */
-        get: operations["list_review_queue_admin_review_queue_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/review-queue/{message_id}/decide": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Decide Review
-         * @description 승인/반려 결정 기록(사후) — review_status·reviewed_by/at·note 갱신. 부수효과 없음.
-         */
-        post: operations["decide_review_admin_review_queue__message_id__decide_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1399,6 +1376,24 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AdminFeeDetailOut
+         * @description 관리자 고지서 상세 — 세대 1건의 분배 내역 전체.
+         */
+        AdminFeeDetailOut: {
+            /** Breakdown */
+            breakdown: components["schemas"]["BreakdownRow"][];
+            /** Building Name */
+            building_name: string;
+            /** Floor */
+            floor: number;
+            /** Period */
+            period: string;
+            /** Total */
+            total: number;
+            /** Unit No */
+            unit_no: number;
+        };
         /** AdminFeeListOut */
         AdminFeeListOut: {
             /** Household Count */
@@ -1543,6 +1538,18 @@ export interface components {
         Body_upload_roster_admin_roster_upload_post: {
             /** File */
             file: string;
+        };
+        /**
+         * BreakdownRow
+         * @description 분배된 관리비 항목 1행 — 순서 보존 리스트로 저장·응답(H8-7).
+         */
+        BreakdownRow: {
+            /** Amount */
+            amount: number;
+            /** Level */
+            level: number;
+            /** Name */
+            name: string;
         };
         /**
          * BudgetStats
@@ -1741,16 +1748,6 @@ export interface components {
             inquiries: {
                 [key: string]: number;
             };
-        };
-        /** DecideIn */
-        DecideIn: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "approve" | "reject";
-            /** Note */
-            note?: string | null;
         };
         /** DocumentDetailOut */
         DocumentDetailOut: {
@@ -1993,9 +1990,7 @@ export interface components {
         /** FeeOut */
         FeeOut: {
             /** Breakdown */
-            breakdown: {
-                [key: string]: number;
-            } | null;
+            breakdown: components["schemas"]["BreakdownRow"][] | null;
             /** Period */
             period: string;
             /** Prev Total */
@@ -2003,32 +1998,8 @@ export interface components {
             /** Total */
             total: number | null;
         };
-        /** FeePreviewRow */
-        FeePreviewRow: {
-            /** Breakdown */
-            breakdown: {
-                [key: string]: number;
-            };
-            /** Building Name */
-            building_name: string;
-            /** Floor */
-            floor: number;
-            /** Total */
-            total: number;
-            /** Unit No */
-            unit_no: number;
-        };
-        /** FeeRowErrorOut */
-        FeeRowErrorOut: {
-            /** Reason */
-            reason: string;
-            /** Row */
-            row: number;
-        };
         /** FeeUploadDetailOut */
         FeeUploadDetailOut: {
-            /** Errors */
-            errors: components["schemas"]["FeeRowErrorOut"][];
             /** Period */
             period: string | null;
             /** Row Count */
@@ -2045,23 +2016,21 @@ export interface components {
         };
         /** FeeUploadOut */
         FeeUploadOut: {
-            /** Errors */
-            errors: components["schemas"]["FeeRowErrorOut"][];
             /** Period */
             period: string;
             /** Preview */
-            preview: components["schemas"]["FeePreviewRow"][];
+            preview: components["schemas"]["BreakdownRow"][];
             /** Row Count */
             row_count: number;
             /** Status */
             status: string;
+            /** Total */
+            total: number;
             /**
              * Upload Id
              * Format: uuid
              */
             upload_id: string;
-            /** Valid Rows */
-            valid_rows: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2579,56 +2548,6 @@ export interface components {
         RejectIn: {
             /** Reason */
             reason: string;
-        };
-        /** ReviewCitationOut */
-        ReviewCitationOut: {
-            /** Document Title */
-            document_title: string | null;
-            /** Quote */
-            quote: string | null;
-        };
-        /** ReviewItemOut */
-        ReviewItemOut: {
-            /** Answer */
-            answer: string;
-            /** Citations */
-            citations: components["schemas"]["ReviewCitationOut"][];
-            /** Confidence */
-            confidence: number | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Message Id
-             * Format: uuid
-             */
-            message_id: string;
-            /** Question */
-            question: string | null;
-            /** Review Note */
-            review_note: string | null;
-            /**
-             * Review Status
-             * @enum {string}
-             */
-            review_status: "needs_review" | "approved" | "rejected";
-            /** Reviewed At */
-            reviewed_at: string | null;
-            /** Status */
-            status: string | null;
-        };
-        /** ReviewListOut */
-        ReviewListOut: {
-            /** Items */
-            items: components["schemas"]["ReviewItemOut"][];
-            /** Limit */
-            limit: number;
-            /** Page */
-            page: number;
-            /** Total */
-            total: number;
         };
         /** RosterCounts */
         RosterCounts: {
@@ -3762,6 +3681,8 @@ export interface operations {
         parameters: {
             query: {
                 period: string;
+                building?: string | null;
+                unit?: number | null;
             };
             header?: {
                 "x-dev-tenant-id"?: string | null;
@@ -3893,6 +3814,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeeApplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_fee_detail_admin_fees__household_id__get: {
+        parameters: {
+            query: {
+                period: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                household_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeeDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -4342,84 +4301,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_review_queue_admin_review_queue_get: {
-        parameters: {
-            query?: {
-                status?: "needs_review" | "approved" | "rejected";
-                page?: number;
-                limit?: number;
-            };
-            header?: {
-                "x-dev-tenant-id"?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                liviq_session?: string | null;
-            };
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewListOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    decide_review_admin_review_queue__message_id__decide_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-dev-tenant-id"?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                message_id: string;
-            };
-            cookie?: {
-                liviq_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DecideIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReviewItemOut"];
-                };
             };
             /** @description Validation Error */
             422: {

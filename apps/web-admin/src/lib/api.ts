@@ -571,30 +571,22 @@ export function noticeAttachmentDownloadUrl(id: string, attachmentId: string): s
 }
 
 // ── 관리비 (docs/01 §13, 규칙 5 — 엑셀이 단일 출처·표시 전용) ──────────────────
+// H8-7: 단지 총액 트리 업로드 → 세대수(574) 균등분배(코드 계산, AI 미개입). breakdown은
+// 순서 보존 트리 리스트(name·level·amount).
 
-export type FeeUploadStatus = "validated" | "failed";
-
-export interface FeeRowError {
-  row: number;
-  reason: string;
-}
-
-export interface FeePreviewRow {
-  buildingName: string;
-  floor: number;
-  unitNo: number;
-  breakdown: Record<string, number>;
-  total: number;
+export interface FeeBreakdownRow {
+  name: string;
+  level: number;
+  amount: number;
 }
 
 export interface FeeUploadResult {
   uploadId: string;
-  status: FeeUploadStatus;
+  status: string; // validated
   period: string;
   rowCount: number;
-  validRows: number;
-  errors: FeeRowError[];
-  preview: FeePreviewRow[];
+  total: number; // 분배 합계(합계행)
+  preview: FeeBreakdownRow[]; // 상위 레벨(level<=1)
 }
 
 export interface FeeApplyResult {
@@ -619,20 +611,27 @@ export interface AdminFeeList {
   householdCount: number;
 }
 
+export interface AdminFeeDetail {
+  period: string;
+  buildingName: string;
+  floor: number;
+  unitNo: number;
+  breakdown: FeeBreakdownRow[];
+  total: number;
+}
+
+export interface AdminFeeSearch {
+  building?: string;
+  unit?: number;
+}
+
 interface RawFeeUpload {
   upload_id: string;
-  status: FeeUploadStatus;
+  status: string;
   period: string;
   row_count: number;
-  valid_rows: number;
-  errors: FeeRowError[];
-  preview: {
-    building_name: string;
-    floor: number;
-    unit_no: number;
-    breakdown: Record<string, number>;
-    total: number;
-  }[];
+  total: number;
+  preview: FeeBreakdownRow[];
 }
 
 function toFeeUpload(raw: RawFeeUpload): FeeUploadResult {
@@ -641,19 +640,12 @@ function toFeeUpload(raw: RawFeeUpload): FeeUploadResult {
     status: raw.status,
     period: raw.period,
     rowCount: raw.row_count,
-    validRows: raw.valid_rows,
-    errors: raw.errors,
-    preview: raw.preview.map((p) => ({
-      buildingName: p.building_name,
-      floor: p.floor,
-      unitNo: p.unit_no,
-      breakdown: p.breakdown,
-      total: p.total,
-    })),
+    total: raw.total,
+    preview: raw.preview ?? [],
   };
 }
 
-/** 관리비 엑셀 업로드·검증(저장은 apply까지 미반영). 413=용량초과·422=형식오류. */
+/** 관리비 총액 트리 업로드·검증(저장은 apply까지 미반영). 413=용량초과·422=형식오류. */
 export async function uploadFeeExcel(file: File, period: string): Promise<FeeUploadResult> {
   const form = new FormData();
   form.set("file", file);
@@ -665,7 +657,7 @@ export async function uploadFeeExcel(file: File, period: string): Promise<FeeUpl
   return toFeeUpload(await response.json());
 }
 
-/** 검증된 업로드를 확정 적재(해당 월 전체 교체·MANAGER). 409=validated 아님. */
+/** 검증된 업로드를 확정 적재(401동 201호 1세대·MANAGER). 409=validated 아님·422=대상 세대 없음. */
 export async function applyFeeUpload(uploadId: string): Promise<FeeApplyResult> {
   const response = await apiFetch(`${API_BASE_URL}/admin/fees/uploads/${uploadId}/apply`, {
     method: "POST",
@@ -681,10 +673,21 @@ export async function applyFeeUpload(uploadId: string): Promise<FeeApplyResult> 
   };
 }
 
-/** 월별 세대 부과 현황(관리자). */
-export async function listAdminFees(period: string): Promise<AdminFeeList> {
+/** AdminFeeSearch → 쿼리스트링(빈 값 생략). 순수 함수 — 테스트 대상. */
+export function buildFeeQuery(period: string, search: AdminFeeSearch = {}): string {
+  const params = new URLSearchParams({ period });
+  if (search.building && search.building.trim()) params.set("building", search.building.trim());
+  if (search.unit != null && !Number.isNaN(search.unit)) params.set("unit", String(search.unit));
+  return params.toString();
+}
+
+/** 월별 동/호별 부과 현황(관리자) — 동·호 검색 필터. */
+export async function listAdminFees(
+  period: string,
+  search: AdminFeeSearch = {},
+): Promise<AdminFeeList> {
   const response = await apiFetch(
-    `${API_BASE_URL}/admin/fees?period=${encodeURIComponent(period)}`,
+    `${API_BASE_URL}/admin/fees?${buildFeeQuery(period, search)}`,
     { headers: DEV_HEADERS },
   );
   await ensureOk(response);
@@ -709,108 +712,25 @@ export async function listAdminFees(period: string): Promise<AdminFeeList> {
   };
 }
 
-// ── AI 검수 큐 (docs/01 §13, 규칙 6 — 사후 검수·회수 없음) ─────────────────────
-
-export type ReviewStatus = "needs_review" | "approved" | "rejected";
-export type ReviewAction = "approve" | "reject";
-
-export interface ReviewCitation {
-  documentTitle: string | null;
-  quote: string | null;
-}
-
-export interface ReviewItem {
-  messageId: string;
-  question: string | null;
-  answer: string;
-  confidence: number | null; // 0~1
-  status: string | null; // answered|fallback|handed_off
-  citations: ReviewCitation[];
-  createdAt: string;
-  reviewStatus: ReviewStatus;
-  reviewedAt: string | null;
-  reviewNote: string | null;
-}
-
-export interface ReviewList {
-  items: ReviewItem[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-interface RawReviewCitation {
-  document_title: string | null;
-  quote: string | null;
-}
-
-interface RawReviewItem {
-  message_id: string;
-  question: string | null;
-  answer: string;
-  confidence: number | null;
-  status: string | null;
-  citations: RawReviewCitation[];
-  created_at: string;
-  review_status: ReviewStatus;
-  reviewed_at: string | null;
-  review_note: string | null;
-}
-
-function toReviewItem(raw: RawReviewItem): ReviewItem {
-  return {
-    messageId: raw.message_id,
-    question: raw.question,
-    answer: raw.answer,
-    confidence: raw.confidence,
-    status: raw.status,
-    citations: raw.citations.map((c) => ({
-      documentTitle: c.document_title,
-      quote: c.quote,
-    })),
-    createdAt: raw.created_at,
-    reviewStatus: raw.review_status,
-    reviewedAt: raw.reviewed_at,
-    reviewNote: raw.review_note,
-  };
-}
-
-export async function listReviewQueue(
-  status: ReviewStatus = "needs_review",
-  page = 1,
-  limit = 20,
-): Promise<ReviewList> {
-  const search = new URLSearchParams({
-    status,
-    page: String(page),
-    limit: String(limit),
-  });
-  const response = await apiFetch(`${API_BASE_URL}/admin/review-queue?${search.toString()}`, {
-    headers: DEV_HEADERS,
-  });
+/** 세대 1건 고지서 상세(분배 내역 전체). 404=해당 세대·월 없음. */
+export async function getAdminFeeDetail(
+  householdId: string,
+  period: string,
+): Promise<AdminFeeDetail> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/admin/fees/${householdId}?period=${encodeURIComponent(period)}`,
+    { headers: DEV_HEADERS },
+  );
   await ensureOk(response);
   const body = await response.json();
   return {
-    items: (body.items as RawReviewItem[]).map(toReviewItem),
+    period: body.period,
+    buildingName: body.building_name,
+    floor: body.floor,
+    unitNo: body.unit_no,
+    breakdown: (body.breakdown as FeeBreakdownRow[]) ?? [],
     total: body.total,
-    page: body.page,
-    limit: body.limit,
   };
-}
-
-/** 승인/반려 결정(MANAGER). 반려는 note 필수. 409=이미 처리됨·403=권한 없음. */
-export async function decideReview(
-  messageId: string,
-  action: ReviewAction,
-  note?: string,
-): Promise<ReviewItem> {
-  const response = await apiFetch(`${API_BASE_URL}/admin/review-queue/${messageId}/decide`, {
-    method: "POST",
-    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ action, note: note ?? null }),
-  });
-  await ensureOk(response);
-  return toReviewItem(await response.json());
 }
 
 // ── 시설 관리 (docs/01 §13, 규칙 8 — 쓰기는 전부 사람 폼) ──────────────────────

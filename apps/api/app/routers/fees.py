@@ -1,7 +1,7 @@
-"""관리비 — 엑셀 업로드·검증·확정 적재(관리자) + 조회(입주민·관리자) + AI 설명(SSE).
+"""관리비 — 단지 총액 트리 업로드·세대수 균등분배(관리자) + 조회(입주민·관리자) + AI 설명(SSE).
 
-원천은 관리자 엑셀(규칙 5, AI는 설명만). 업로드는 검증·미리보기만 하고 fees에 쓰지 않으며,
-apply(MANAGER)가 단일 트랜잭션으로 해당 (tenant, period)를 전체 교체한다(FR-FEE-02).
+원천은 관리자 엑셀(규칙 5, AI는 설명만). 업로드는 총액 트리를 검증·미리보기만 하고,
+apply(MANAGER)가 세대수(574)로 **코드가** 균등분배해 fees에 적재한다(AI 미개입 → 규칙 5 준수).
 입주민 조회는 본인 세대 + 입주 승인 이후 월만(FR-FEE-03, docs/06 §2 결정 E).
 """
 
@@ -33,17 +33,17 @@ from app.deps import (
     get_tenant_session,
     require_roles,
 )
-from app.fees_excel import ParsedFeeRow, parse_fee_xlsx
+from app.fees_excel import divide_fee_tree, parse_fee_total_xlsx
 from app.schemas.assistant import AnswerStatus, CitationData, StatusData, StatusStage, TokenData
 from app.schemas.fees import (
+    AdminFeeDetailOut,
     AdminFeeListOut,
     AdminFeeRow,
+    BreakdownRow,
     FeeApplyOut,
     FeeExplainDoneData,
     FeeExplainRequest,
     FeeOut,
-    FeePreviewRow,
-    FeeRowErrorOut,
     FeeUploadDetailOut,
     FeeUploadOut,
     validate_period,
@@ -55,12 +55,20 @@ admin_router = APIRouter(prefix="/admin/fees", tags=["fees"])
 
 _ADMIN_ROLES = ("MANAGER",)  # 관리비 전체 소장 전용(H7-2에서 STAFF 제거, docs/04 §4)
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 관리비 엑셀 크기 상한
-PREVIEW_ROWS = 20  # 업로드 미리보기 행 수(저장 안 함)
+PREVIEW_MAX_LEVEL = 1  # 업로드 미리보기 노출 트리 레벨(대분류·중분류)
+EXPLAIN_MAX_LEVEL = 1  # AI 설명 프롬프트에 넣을 트리 레벨(상위 항목만 — 토큰 절감)
 
-HouseholdMap = dict[tuple[str, int, int], uuid.UUID]
+HOUSEHOLD_DIVISOR = 574  # 분배 세대수(단지 확정 상수, H8-7)
+TOTAL_ROW_NAME = "합계"  # 트리 합계행 항목명 — total_amount 소스
+SUMMARY_ROOT_NAMES = ("공용관리비", "개별사용료", "장기수선충당금 월부과액")
+
+# ponytail: 데모 — 401동 201호 1세대만 부과. 전 세대 팬아웃은 세대별 실사용 분리(전용 항목) 설계 후.
+TARGET_BUILDING = "401"
+TARGET_FLOOR = 2
+TARGET_UNIT = 201
 
 
-# ── 업로드·검증(MANAGER·STAFF) ──────────────────────────────────────────────
+# ── 업로드·검증(MANAGER) ─────────────────────────────────────────────────────
 
 
 @admin_router.post("/uploads", response_model=FeeUploadOut)
@@ -78,17 +86,9 @@ async def upload_fees(
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="파일이 10MB를 초과")
 
-    parsed = parse_fee_xlsx(data)
-    hmap = await _household_map(session, ctx.tenant_id)
-    errors = [FeeRowErrorOut(row=e.row, reason=e.reason) for e in parsed.errors]
-    valid: list[ParsedFeeRow] = []
-    for row in parsed.rows:
-        if _match(hmap, row) is None:
-            errors.append(FeeRowErrorOut(row=row.row_no, reason="해당 세대 없음"))
-        else:
-            valid.append(row)
+    rows = parse_fee_total_xlsx(data)
+    divided = divide_fee_tree(rows, HOUSEHOLD_DIVISOR)
 
-    status = "validated" if valid else "failed"
     upload_id = uuid.uuid4()
     file_key = f"{ctx.tenant_id}/fees/{upload_id}.xlsx"
     await storage.put(file_key, data)
@@ -99,21 +99,19 @@ async def upload_fees(
             type="fee",
             period=period,
             file_key=file_key,
-            status=status,
-            row_count=len(parsed.rows),
-            error_report={"errors": [e.model_dump() for e in errors]} if errors else None,
+            status="validated",
+            row_count=len(divided),
             uploaded_by=ctx.user_id,
         )
     )
     await session.flush()
     return FeeUploadOut(
         upload_id=upload_id,
-        status=status,
+        status="validated",
         period=period,
-        row_count=len(parsed.rows),
-        valid_rows=len(valid),
-        errors=errors,
-        preview=[_preview_row(row) for row in valid[:PREVIEW_ROWS]],
+        row_count=len(divided),
+        total=_total_from_breakdown(divided),
+        preview=[BreakdownRow(**row) for row in divided if row["level"] <= PREVIEW_MAX_LEVEL],
     )
 
 
@@ -124,18 +122,16 @@ async def get_upload(
     upload_id: uuid.UUID,
 ) -> FeeUploadDetailOut:
     upload = await _get_fee_upload(session, ctx.tenant_id, upload_id)
-    report = upload.error_report or {}
     return FeeUploadDetailOut(
         upload_id=upload.id,
         type=upload.type,
         period=upload.period,
         status=upload.status,
         row_count=upload.row_count,
-        errors=[FeeRowErrorOut(**e) for e in report.get("errors", [])],
     )
 
 
-# ── 확정 적재(MANAGER만, 전체 교체) ─────────────────────────────────────────
+# ── 확정 적재(MANAGER만, 401동 201호 세대 교체) ─────────────────────────────
 
 
 @admin_router.post("/uploads/{upload_id}/apply", response_model=FeeApplyOut)
@@ -154,33 +150,38 @@ async def apply_fees(
         raise HTTPException(status_code=422, detail="업로드에 대상 월(period)이 없습니다")
 
     data = await storage.get(upload.file_key)
-    parsed = parse_fee_xlsx(data)
-    hmap = await _household_map(session, ctx.tenant_id)
+    rows = parse_fee_total_xlsx(data)
+    divided = divide_fee_tree(rows, HOUSEHOLD_DIVISOR)
 
-    # 단일 트랜잭션(get_tenant_session이 begin) — 해당 월 전체 교체(FR-FEE-02).
-    await session.execute(
-        delete(Fee).where(Fee.tenant_id == ctx.tenant_id, Fee.period == upload.period)
-    )
-    applied = 0
-    for row in parsed.rows:
-        household_id = _match(hmap, row)
-        if household_id is None:
-            continue
-        session.add(
-            Fee(
-                tenant_id=ctx.tenant_id,
-                household_id=household_id,
-                period=upload.period,
-                breakdown=row.breakdown,
-                total_amount=row.total,
-                source="excel",
-                upload_id=upload.id,
-            )
+    household_id = await _target_household(session, ctx.tenant_id)
+    if household_id is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{TARGET_BUILDING}동 {TARGET_UNIT}호 세대가 없습니다 — 세대를 먼저 등록하세요",
         )
-        applied += 1
+
+    # 단일 트랜잭션(get_tenant_session이 begin) — 해당 세대·월 1건 교체.
+    await session.execute(
+        delete(Fee).where(
+            Fee.tenant_id == ctx.tenant_id,
+            Fee.household_id == household_id,
+            Fee.period == upload.period,
+        )
+    )
+    session.add(
+        Fee(
+            tenant_id=ctx.tenant_id,
+            household_id=household_id,
+            period=upload.period,
+            breakdown=divided,
+            total_amount=_total_from_breakdown(divided),
+            source="excel",
+            upload_id=upload.id,
+        )
+    )
     upload.status = "applied"
     await session.flush()
-    return FeeApplyOut(upload_id=upload.id, status="applied", period=upload.period, applied=applied)
+    return FeeApplyOut(upload_id=upload.id, status="applied", period=upload.period, applied=1)
 
 
 # ── 조회 ────────────────────────────────────────────────────────────────────
@@ -205,7 +206,7 @@ async def get_my_fees(
         prev_total = int(prev_fee.total_amount) if prev_fee and prev_fee.total_amount else None
     return FeeOut(
         period=period,
-        breakdown=_as_int_breakdown(fee.breakdown) if fee else None,
+        breakdown=_breakdown_rows(fee.breakdown) if fee else None,
         total=int(fee.total_amount) if fee and fee.total_amount is not None else None,
         prev_total=prev_total,
     )
@@ -216,32 +217,72 @@ async def list_fees(
     ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     period: Annotated[str, Query()],
+    building: Annotated[str | None, Query()] = None,
+    unit: Annotated[int | None, Query()] = None,
 ) -> AdminFeeListOut:
     validate_period(period)
-    rows = await session.execute(
+    stmt = (
         select(
             Fee.household_id, Fee.total_amount, Building.name, Household.floor, Household.unit_no
         )
         .join(Household, Household.id == Fee.household_id)
         .join(Building, Building.id == Household.building_id)
         .where(Fee.tenant_id == ctx.tenant_id, Fee.period == period)
-        .order_by(Building.name, Household.floor, Household.unit_no)
     )
+    if building and building.strip():
+        stmt = stmt.where(Building.name.ilike(f"%{building.strip()}%"))
+    if unit is not None:
+        stmt = stmt.where(Household.unit_no == unit)
+    stmt = stmt.order_by(Building.name, Household.floor, Household.unit_no)
+    rows = await session.execute(stmt)
     households = [
         AdminFeeRow(
             household_id=hid,
             building_name=name,
             floor=floor,
-            unit_no=unit,
+            unit_no=unit_no,
             total=int(total or 0),
         )
-        for hid, total, name, floor, unit in rows
+        for hid, total, name, floor, unit_no in rows
     ]
     return AdminFeeListOut(
         period=period,
         households=households,
         total_sum=sum(row.total for row in households),
         household_count=len(households),
+    )
+
+
+@admin_router.get("/{household_id}", response_model=AdminFeeDetailOut)
+async def get_fee_detail(
+    ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    household_id: uuid.UUID,
+    period: Annotated[str, Query()],
+) -> AdminFeeDetailOut:
+    validate_period(period)
+    row = (
+        await session.execute(
+            select(Fee, Building.name, Household.floor, Household.unit_no)
+            .join(Household, Household.id == Fee.household_id)
+            .join(Building, Building.id == Household.building_id)
+            .where(
+                Fee.tenant_id == ctx.tenant_id,
+                Fee.household_id == household_id,
+                Fee.period == period,
+            )
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="해당 세대·월 관리비 없음")
+    fee, name, floor, unit_no = row
+    return AdminFeeDetailOut(
+        period=period,
+        building_name=name,
+        floor=floor,
+        unit_no=unit_no,
+        breakdown=_breakdown_rows(fee.breakdown),
+        total=int(fee.total_amount) if fee.total_amount is not None else 0,
     )
 
 
@@ -270,7 +311,8 @@ async def explain(
         )
     )
     avg_total = int(avg) if avg is not None else None
-    breakdown = _as_int_breakdown(fee.breakdown)
+    # 상위 레벨만 dict로 축약해 프롬프트 전달(토큰 절감). fee_explain은 dict[str,int]를 받는다.
+    breakdown = _breakdown_dict(fee.breakdown, EXPLAIN_MAX_LEVEL)
     total = int(fee.total_amount)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
@@ -312,27 +354,17 @@ async def explain(
 # ── 헬퍼 ────────────────────────────────────────────────────────────────────
 
 
-async def _household_map(session: AsyncSession, tenant_id: uuid.UUID) -> HouseholdMap:
-    """(동, 층, 호) → household_id. 행 매칭 N회 쿼리 대신 1회 로드."""
-    rows = await session.execute(
-        select(Building.name, Household.floor, Household.unit_no, Household.id)
+async def _target_household(session: AsyncSession, tenant_id: uuid.UUID) -> uuid.UUID | None:
+    """분배 대상 세대(401동 201호) id — 데모 스코프."""
+    return await session.scalar(
+        select(Household.id)
         .join(Building, Building.id == Household.building_id)
-        .where(Household.tenant_id == tenant_id)
-    )
-    return {(name, floor, unit): hid for name, floor, unit, hid in rows}
-
-
-def _match(hmap: HouseholdMap, row: ParsedFeeRow) -> uuid.UUID | None:
-    return hmap.get((row.building_name, row.floor, row.unit_no))
-
-
-def _preview_row(row: ParsedFeeRow) -> FeePreviewRow:
-    return FeePreviewRow(
-        building_name=row.building_name,
-        floor=row.floor,
-        unit_no=row.unit_no,
-        breakdown=row.breakdown,
-        total=row.total,
+        .where(
+            Household.tenant_id == tenant_id,
+            Building.name == TARGET_BUILDING,
+            Household.floor == TARGET_FLOOR,
+            Household.unit_no == TARGET_UNIT,
+        )
     )
 
 
@@ -375,10 +407,28 @@ async def _fee_for(
     )
 
 
-def _as_int_breakdown(breakdown: dict[str, Any] | None) -> dict[str, int]:
+def _breakdown_rows(breakdown: list[dict[str, Any]] | None) -> list[BreakdownRow]:
+    """저장된 트리 리스트 → BreakdownRow 리스트(순서 보존)."""
     if not breakdown:
-        return {}
-    return {name: int(amount) for name, amount in breakdown.items()}
+        return []
+    return [
+        BreakdownRow(name=str(r["name"]), level=int(r["level"]), amount=int(r["amount"]))
+        for r in breakdown
+    ]
+
+
+def _breakdown_dict(breakdown: list[dict[str, Any]] | None, max_level: int) -> dict[str, int]:
+    """상위 레벨(<=max_level) 항목만 name→amount dict(AI 설명 프롬프트용)."""
+    rows = _breakdown_rows(breakdown)
+    return {row.name: row.amount for row in rows if row.level <= max_level}
+
+
+def _total_from_breakdown(divided: list[dict[str, Any]]) -> int:
+    """합계행(name=='합계') 금액. 없으면 대분류(공용·개별·장충) 합."""
+    for row in divided:
+        if row["name"] == TOTAL_ROW_NAME:
+            return int(row["amount"])
+    return sum(int(row["amount"]) for row in divided if row["name"] in SUMMARY_ROOT_NAMES)
 
 
 def _prev_period(period: str) -> str:

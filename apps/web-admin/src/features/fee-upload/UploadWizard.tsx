@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dialog, FileDropzone, SurfaceCard, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
-import {
-  ApiError,
-  applyFeeUpload,
-  uploadFeeExcel,
-  type FeeUploadResult,
-} from "@/lib/api";
-import { breakdownColumns, formatWon, monthLabel, unitLabel } from "./logic";
+import { ApiError, applyFeeUpload, uploadFeeExcel, type FeeUploadResult } from "@/lib/api";
+import { formatWon, monthLabel } from "./logic";
 
 type Step = "select" | "review" | "confirm";
 
@@ -20,6 +15,7 @@ const STEP_LABELS: Record<Step, string> = {
 };
 const ORDER: Step[] = ["select", "review", "confirm"];
 const TOAST_DURATION_MS = 3200;
+const HOUSEHOLD_DIVISOR = 574; // 표시용(서버 계약 고정) — 분배는 서버가 수행
 
 /** 이번 달(YYYY-MM). 업로드 대상 월 기본값. */
 function currentMonth(): string {
@@ -69,9 +65,6 @@ export function UploadWizard({ onApplied }: UploadWizardProps) {
     try {
       const res = await uploadFeeExcel(file, period);
       setResult(res);
-      if (res.status === "failed") {
-        showToast(`검증 실패 — 유효한 세대가 없습니다.`, "danger");
-      }
     } catch (err) {
       showToast(errorMessage(err), "danger");
     } finally {
@@ -89,7 +82,7 @@ export function UploadWizard({ onApplied }: UploadWizardProps) {
       reset();
       onApplied();
     } catch (err) {
-      // 409=validated 아님(이미 적용/실패) 등 상태코드 메시지 노출.
+      // 409=validated 아님, 422=대상 세대 없음 등 상태코드 메시지 노출.
       showToast(errorMessage(err), "danger");
     } finally {
       setApplying(false);
@@ -150,8 +143,8 @@ export function UploadWizard({ onApplied }: UploadWizardProps) {
         open={dialogOpen}
         danger
         title={`${monthLabel(period)} 관리비를 확정할까요?`}
-        description={`${monthLabel(period)} 관리비를 ${result?.validRows ?? 0}세대에 반영합니다. 같은 달 기존 데이터는 전체 교체되며 되돌릴 수 없습니다.`}
-        confirmLabel="전체 교체 · 확정"
+        description={`단지 총액을 ${HOUSEHOLD_DIVISOR}세대로 균등분배해 401동 201호에 반영합니다. 같은 세대의 해당 월 기존 데이터는 교체되며 되돌릴 수 없습니다.`}
+        confirmLabel="확정 · 반영"
         onCancel={() => setDialogOpen(false)}
         onConfirm={handleApply}
       />
@@ -178,10 +171,11 @@ function SelectStep({ period, onPeriod, file, uploading, onFile, onNext }: Selec
   return (
     <section className="fu-card" aria-labelledby="fu-select-title">
       <h2 id="fu-select-title" className="fu-card__title">
-        관리비 엑셀 업로드
+        관리비 총액 엑셀 업로드
       </h2>
       <p className="fu-card__lede">
-        관리비는 <strong>업로드한 엑셀이 단일 출처</strong>입니다. 대상 월과 파일을 선택하세요.
+        관리비는 <strong>업로드한 엑셀이 단일 출처</strong>입니다. 단지 총액 트리를 올리면 시스템이{" "}
+        {HOUSEHOLD_DIVISOR}세대로 균등분배합니다(AI 미개입).
       </p>
 
       <div className="fu-field">
@@ -195,7 +189,7 @@ function SelectStep({ period, onPeriod, file, uploading, onFile, onNext }: Selec
       </div>
 
       <FileDropzone
-        label="관리비 엑셀 업로드"
+        label="관리비 총액 엑셀 업로드"
         accept=".xlsx"
         maxSizeMb={10}
         state={uploading ? "uploading" : file ? "selected" : "idle"}
@@ -204,7 +198,7 @@ function SelectStep({ period, onPeriod, file, uploading, onFile, onNext }: Selec
       />
 
       <p className="fu-hint">
-        <span>컬럼: 동 · 층 · 호 · 항목별 금액(원 단위)</span>
+        <span>형식: 분류(들여쓰기 트리) · 우리단지총액(원 단위, 음수 허용)</span>
       </p>
 
       <div className="fu-actions">
@@ -225,10 +219,6 @@ interface ReviewStepProps {
 }
 
 function ReviewStep({ result, period, applying, onBack, onApply }: ReviewStepProps) {
-  const failed = result.status === "failed";
-  const hasErrors = result.errors.length > 0;
-  const columns = breakdownColumns(result.preview);
-
   return (
     <section aria-labelledby="fu-review-title">
       <h2 id="fu-review-title" className="fu-section__title">
@@ -237,92 +227,42 @@ function ReviewStep({ result, period, applying, onBack, onApply }: ReviewStepPro
 
       <div className="fu-stats">
         <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">유효 세대</div>
-          <div className="fu-stat__value">{result.validRows}세대</div>
-        </SurfaceCard>
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">파싱 행</div>
+          <div className="fu-stat__label">분배 항목</div>
           <div className="fu-stat__value">{result.rowCount}행</div>
         </SurfaceCard>
         <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">오류</div>
-          <div
-            className={`fu-stat__value ${hasErrors ? "fu-stat__delta--up" : ""}`}
-          >
-            {result.errors.length}건
-          </div>
+          <div className="fu-stat__label">세대 수(분모)</div>
+          <div className="fu-stat__value">{HOUSEHOLD_DIVISOR}세대</div>
+        </SurfaceCard>
+        <SurfaceCard className="fu-stat">
+          <div className="fu-stat__label">세대당 합계</div>
+          <div className="fu-stat__value">{formatWon(result.total)}</div>
         </SurfaceCard>
       </div>
-
-      {failed ? (
-        <p className="fu-errnote" role="alert">
-          유효한 세대가 없어 확정할 수 없습니다. 오류를 수정한 뒤 다시 업로드하세요.
-        </p>
-      ) : hasErrors ? (
-        <p className="fu-errnote">
-          오류 {result.errors.length}행은 확정 시 <strong>스킵</strong>되고 유효한{" "}
-          {result.validRows}세대만 반영됩니다.
-        </p>
-      ) : null}
-
-      {hasErrors ? (
-        <div className="surface-card fu-tablecard">
-          <table className="fu-table">
-            <thead>
-              <tr>
-                <th scope="col" className="fu-num">
-                  행
-                </th>
-                <th scope="col">사유</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.errors.map((e) => (
-                <tr key={`${e.row}-${e.reason}`}>
-                  <td className="fu-num">{e.row}</td>
-                  <td>{e.reason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
 
       {result.preview.length > 0 ? (
         <div className="surface-card fu-tablecard">
           <table className="fu-table">
             <thead>
               <tr>
-                <th scope="col">동</th>
-                <th scope="col">호</th>
-                {columns.map((c) => (
-                  <th scope="col" key={c} className="fu-num">
-                    {c}
-                  </th>
-                ))}
+                <th scope="col">항목(상위)</th>
                 <th scope="col" className="fu-num">
-                  합계
+                  세대당 금액
                 </th>
               </tr>
             </thead>
             <tbody>
               {result.preview.map((row) => (
-                <tr key={`${row.buildingName}-${row.floor}-${row.unitNo}`}>
-                  <td>{row.buildingName}</td>
-                  <td>{unitLabel(row.floor, row.unitNo)}</td>
-                  {columns.map((c) => (
-                    <td key={c} className="fu-num">
-                      {row.breakdown[c] != null ? formatWon(row.breakdown[c]) : "—"}
-                    </td>
-                  ))}
-                  <td className="fu-num">{formatWon(row.total)}</td>
+                <tr key={row.name} data-sub={row.level >= 1 || undefined}>
+                  <td style={{ paddingLeft: `calc(var(--space-4) + ${row.level} * var(--space-4))` }}>
+                    {row.name}
+                  </td>
+                  <td className="fu-num">{formatWon(row.amount)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {result.validRows > result.preview.length ? (
-            <div className="fu-table__more">…외 {result.validRows - result.preview.length}세대</div>
-          ) : null}
+          <div className="fu-table__more">확정 시 세대당 분배 내역 전체가 반영됩니다.</div>
         </div>
       ) : null}
 
@@ -330,11 +270,9 @@ function ReviewStep({ result, period, applying, onBack, onApply }: ReviewStepPro
         <Button variant="secondary" onClick={onBack}>
           ← 다시 업로드
         </Button>
-        {!failed ? (
-          <Button variant="danger" onClick={onApply} disabled={applying}>
-            {applying ? "반영 중…" : "확정 적용"}
-          </Button>
-        ) : null}
+        <Button variant="danger" onClick={onApply} disabled={applying}>
+          {applying ? "반영 중…" : "확정 적용"}
+        </Button>
       </div>
     </section>
   );

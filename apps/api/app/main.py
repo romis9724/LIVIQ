@@ -5,7 +5,6 @@ H2-1: auth(이메일+비밀번호·세션)·onboarding(제출·명부 대조)·a
 H2-3: inquiries(접수·조회·배정·상태 + 키워드 분류·타임라인·알림).
 H8-1: notices(공지 게시판 — 작성·수정·삭제·고정·예약·첨부 + 발행 알림, ADR-0015).
 H2-5: fees(관리비 엑셀 업로드·검증·확정 적재 + 조회 + AI 설명 SSE).
-H2-6: review_queue(AI 검수 큐 — 사후 검수 목록·승인/반려).
 H3-1: facilities(시설 CRUD·장애/정비 이력 + outbox 원자 기록).
 H4-3: dashboard(운영 통계 집계 — 질의·토큰·폴백·검수·캐시·민원·시설, MANAGER 전용).
 H5-3: notifications(인앱 알림함 조회·읽음 처리 + 검수 반려 시 정정 알림 생성).
@@ -36,7 +35,6 @@ from app.routers import (
     notices,
     notifications,
     onboarding,
-    review_queue,
     roster,
     staff,
 )
@@ -80,7 +78,6 @@ def create_app() -> FastAPI:
     app.include_router(notifications.router)
     app.include_router(fees.router)
     app.include_router(fees.admin_router)
-    app.include_router(review_queue.router)
     app.include_router(facilities.router)
     app.include_router(dashboard.router)
     app.include_router(codes.router)

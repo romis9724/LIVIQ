@@ -47,14 +47,9 @@ class Message(IdMixin, TenantMixin, CreatedAtMixin, Base):
     confidence: Mapped[decimal.Decimal | None] = mapped_column(Numeric, nullable=True)
     # answered|fallback|handed_off
     status: Mapped[str | None] = mapped_column(String, nullable=True)
-    # needs_review|approved|rejected
+    # needs_review|None — 저신뢰 답변 플래그(대시보드 검수 필요율). 검수 큐 제거(H8-7)로
+    # approved/rejected 전이는 없어짐(ADR-0015 개정 노트).
     review_status: Mapped[str | None] = mapped_column(String, nullable=True)
-    # 사후 검수 결정 기록(docs/01 §13, H2-6) — 검수자·시각·메모. FK 없음(actor_user_id 패턴).
-    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    reviewed_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_input: Mapped[int | None] = mapped_column(Integer, nullable=True)
     token_output: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost_usd: Mapped[decimal.Decimal | None] = mapped_column(Numeric, nullable=True)

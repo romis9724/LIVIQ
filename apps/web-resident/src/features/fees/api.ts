@@ -3,10 +3,11 @@
 
 import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 import { parseSseBuffer } from "../assistant/api";
+import type { BreakdownRow } from "./invoice";
 
 export interface FeeData {
   period: string;
-  breakdown: Record<string, number> | null;
+  breakdown: BreakdownRow[] | null; // 순서 보존 트리(name·level·amount) — H8-7
   total: number | null;
   prevTotal: number | null;
 }
@@ -44,7 +45,9 @@ export async function getFees(period: string): Promise<FeeData> {
   const body = await response.json();
   return {
     period: body.period,
-    breakdown: body.breakdown ?? null,
+    breakdown: Array.isArray(body.breakdown)
+      ? (body.breakdown as BreakdownRow[])
+      : null,
     total: body.total ?? null,
     prevTotal: body.prev_total ?? null,
   };

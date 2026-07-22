@@ -18,9 +18,6 @@ export const E2E = {
   householdId: "ee2e0000-0000-4000-8000-000000000004",
   notice1Id: "ee2e0000-0000-4000-8000-000000000005",
   notice2Id: "ee2e0000-0000-4000-8000-000000000006",
-  conversationId: "ee2e0000-0000-4000-8000-000000000007",
-  userMessageId: "ee2e0000-0000-4000-8000-000000000008",
-  assistantMessageId: "ee2e0000-0000-4000-8000-000000000009",
   feeCurrentId: "ee2e0000-0000-4000-8000-00000000000a",
   feePrevId: "ee2e0000-0000-4000-8000-00000000000b",
   // 가입 여정용 2호 세대 — 명부 불일치 신청자가 붙는 유효 세대(조회 성공, 매칭 실패).
@@ -95,13 +92,6 @@ export const NOTICE2 = {
   body: "다음 주 월요일 승강기 정기 점검이 예정되어 있습니다.",
 };
 
-// 시드된 검수 큐 항목(needs_review).
-export const REVIEW = {
-  question: "E2E 검수 큐 테스트 질문입니다.",
-  answer: "E2E 검수 대기 답변 — 신뢰도가 낮아 사후 검수가 필요합니다.",
-  confidence: 0.35,
-};
-
 /** 이번 달(YYYY-MM) — FeesView.currentMonth()과 동일 규칙. */
 export function currentMonth(now: Date = new Date()): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -116,9 +106,18 @@ export function prevMonth(now: Date = new Date()): string {
 // 시드 관리비 합계(원). 당월 > 전월 → "전월 대비 ▲" 렌더 확인.
 export const FEE_CURRENT_TOTAL = 238400;
 export const FEE_PREV_TOTAL = 210000;
-export const FEE_BREAKDOWN: Record<string, number> = {
-  일반관리비: 120000,
-  청소비: 38400,
-  경비비: 50000,
-  승강기유지비: 30000,
-};
+// H8-7: breakdown = 순서 보존 트리 리스트([{name,level,amount}]). level 0=대분류·합계.
+// level 1 합 = 238400 = 공용관리비 = 합계(정합).
+export interface FeeBreakdownRow {
+  name: string;
+  level: number;
+  amount: number;
+}
+export const FEE_BREAKDOWN: FeeBreakdownRow[] = [
+  { name: "공용관리비", level: 0, amount: 238400 },
+  { name: "일반관리비", level: 1, amount: 120000 },
+  { name: "청소비", level: 1, amount: 38400 },
+  { name: "경비비", level: 1, amount: 50000 },
+  { name: "승강기유지비", level: 1, amount: 30000 },
+  { name: "합계", level: 0, amount: 238400 },
+];

@@ -12,7 +12,7 @@
 3. **단지(tenant) 격리.** 모든 쿼리에 `tenant_id` + DB RLS 이중 방어. 단지 간 데이터 혼입 절대 금지.
 4. **인가는 서버에서.** 프론트 메뉴 숨김은 보조일 뿐. 모든 엔드포인트가 역할·테넌트·소유권 검증.
 5. **관리비는 확정 업로드 데이터(엑셀, 추후 ERP)가 단일 출처.** AI는 설명만, 계산·부과 금지.
-6. **위험 출력은 사람 검수.** AI의 입주민 자동발송 금지(공지는 AI 미개입 일반 게시판 — H8-1, [ADR-0015](docs/adr/0015-notice-board-replaces-ai-draft.md)). 신뢰도 낮은 답변은 검수 큐.
+6. **위험 출력은 사람 검수.** AI의 입주민 자동발송 금지(공지는 AI 미개입 일반 게시판 — H8-1, [ADR-0015](docs/adr/0015-notice-board-replaces-ai-draft.md)). 신뢰도 낮은 답변은 담당자 연결 폴백(사후 검수 큐는 H8-7에서 제거 — ADR-0015 개정 노트).
 7. **토큰은 비용.** 캐싱·컨텍스트 예산·에이전트 스텝 상한 적용(단일 모델, 라우팅 보류)([docs/08](docs/08-llm-token-optimization.md)).
 8. **액션은 코드가 실행.** LLM 출력으로 권한·발송 등 부수효과를 직접 트리거하지 않음. (에이전트 도구는 읽기 전용 — 쓰기는 UI/폼)
 
@@ -26,12 +26,12 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7(자체 이메일 인증 전환 — SYS_ADMIN/초대 위계·역할 축소·주민 가입 UI·E2E 재작성·온보딩 UX 보수(회원가입 버튼+단지 선택, 직원 관리 승격)·계정/단지 수명주기(소장 정원 1·삭제=비식별·빈 단지 삭제·단지 비활성화), ADR-0014)+H8-1(공지사항 게시판 전환 — AI 초안 완전 삭제·첨부파일·상단 고정·임시저장·예약 발행 cron·STAFF 발행, ADR-0015)+H8-2(문서 게시판 전환 — 첨부 1개·버전 이력·재업로드 시 벡터 재생성·content_chunks 소스 일반화, ADR-0016)+H8-3(공지 벡터화 — published만 인제스트·검색 조인 검증, ADR-0015 개정 노트)+H8-4(공통 코드 레지스트리 — tenant 계층 코드·설정>코드 관리·기본 시드, ADR-0017)+H8-5(설정>동/호수 관리 — 동·세대 CRUD·FK 보호 삭제)+H8-6(공지·문서 코드 적용 — 공지 분류/기간/대상동/키워드·문서 source_type→코드) 완료):
+현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7(자체 이메일 인증 전환 — SYS_ADMIN/초대 위계·역할 축소·주민 가입 UI·E2E 재작성·온보딩 UX 보수(회원가입 버튼+단지 선택, 직원 관리 승격)·계정/단지 수명주기(소장 정원 1·삭제=비식별·빈 단지 삭제·단지 비활성화), ADR-0014)+H8-1(공지사항 게시판 전환 — AI 초안 완전 삭제·첨부파일·상단 고정·임시저장·예약 발행 cron·STAFF 발행, ADR-0015)+H8-2(문서 게시판 전환 — 첨부 1개·버전 이력·재업로드 시 벡터 재생성·content_chunks 소스 일반화, ADR-0016)+H8-3(공지 벡터화 — published만 인제스트·검색 조인 검증, ADR-0015 개정 노트)+H8-4(공통 코드 레지스트리 — tenant 계층 코드·설정>코드 관리·기본 시드, ADR-0017)+H8-5(설정>동/호수 관리 — 동·세대 CRUD·FK 보호 삭제)+H8-6(공지·문서 코드 적용 — 공지 분류/기간/대상동/키워드·문서 source_type→코드)+H8-7(관리비 고지서 — 단지 총액 엑셀→세대수(574) 균등분배(코드 계산·AI 미개입)·동/호별 목록·동/호·년월 검색·2단 고지서 UI(트리·당월 1열)·AI 검수 큐 완전 제거) 완료):
 
 ```text
 apps/      web-resident                      # Next.js — 전 화면 실연동(홈·비서 SSE·민원·공지·관리비·나/알림함·가입/온보딩·비밀번호 재설정), 세션 쿠키 인증
-           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서 게시판(작성·수정·버전 이력)·민원·공지사항 게시판·관리비·검수 큐·시설·주민 관리·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
-           api                               # FastAPI — documents·assistant·inquiries·notices·fees·review-queue·facilities(+outbox)·dashboard + 인증·레이트리밋·정확캐시 (liviq-api)
+           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서 게시판(작성·수정·버전 이력)·민원·공지사항 게시판·관리비·시설·주민 관리·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
+           api                               # FastAPI — documents·assistant·inquiries·notices·fees·facilities(+outbox)·dashboard + 인증·레이트리밋·정확캐시 (liviq-api)
            ai-worker                         # arq — 문서·공지 인제스트(파싱·청킹·임베딩·pgvector)·예약 공지 발행 cron (liviq-ai-worker)
 packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            api-types                         # OpenAPI→openapi-typescript 생성물 (TS)

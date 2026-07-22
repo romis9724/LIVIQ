@@ -11,7 +11,6 @@ export interface NavItem {
 // 내비 항목 카탈로그 — 라우트별 단일 정의(중복 방지).
 const DASHBOARD: NavItem = { href: "/dashboard", icon: "📊", label: "대시보드" };
 const RESIDENTS: NavItem = { href: "/residents", icon: "🙋", label: "주민 관리" };
-const REVIEW: NavItem = { href: "/review-queue", icon: "✅", label: "AI 검수 큐" };
 const NOTICES: NavItem = { href: "/notices", icon: "📢", label: "공지사항" };
 const INQUIRIES: NavItem = { href: "/inquiries", icon: "🛠", label: "민원 관리" };
 const DOCUMENTS: NavItem = { href: "/documents", icon: "📁", label: "문서 관리" };
@@ -22,7 +21,7 @@ const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label
 const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
 const TENANTS: NavItem = { href: "/system/tenants", icon: "🏘", label: "단지 관리" };
 
-// STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·검수·승인 숨김).
+// STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·승인 숨김).
 const STAFF_NAV: readonly NavItem[] = [INQUIRIES, NOTICES, DOCUMENTS];
 // SYS_ADMIN은 단지 관리 하나만 — 어떤 단지 콘텐츠에도 접근하지 않는다.
 const SYS_ADMIN_NAV: readonly NavItem[] = [TENANTS];
@@ -30,7 +29,6 @@ const SYS_ADMIN_NAV: readonly NavItem[] = [TENANTS];
 const MANAGER_NAV: readonly NavItem[] = [
   DASHBOARD,
   RESIDENTS,
-  REVIEW,
   NOTICES,
   INQUIRIES,
   DOCUMENTS,
