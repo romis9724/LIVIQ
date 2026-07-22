@@ -41,13 +41,30 @@ export type IndexStatus = "pending" | "indexing" | "indexed" | "failed";
 export type SourceType = "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
 export type Visibility = "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
 
+// 문서 게시판(ADR-0016): 게시글 = 제목 + 본문(설명) + 첨부 1개(버전 관리).
 export interface DocumentItem {
   id: string;
   title: string;
   sourceType: SourceType;
   visibility: Visibility;
+  body: string | null;
+  version: number;
   indexStatus: IndexStatus;
   createdAt: string;
+  updatedAt: string;
+}
+
+/** 첨부 버전 이력 항목(내림차순 — 서버 정렬). 다운로드는 documentDownloadUrl 로. */
+export interface DocumentVersion {
+  version: number;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface DocumentDetail extends DocumentItem {
+  versions: DocumentVersion[];
 }
 
 export interface ListDocumentsParams {
@@ -55,21 +72,20 @@ export interface ListDocumentsParams {
   q?: string;
 }
 
-export interface UploadInput {
+/** 게시글 작성 — 첨부 1개 필수, 본문은 선택. */
+export interface CreateDocumentInput {
   file: File;
   title: string;
   sourceType: SourceType;
   visibility: Visibility;
+  body?: string;
 }
 
-export interface UploadResult {
-  id: string;
-  indexStatus: IndexStatus;
-  duplicate: boolean;
-}
-
-export interface PatchInput {
+/** 메타 수정 — 파일 교체는 uploadDocumentVersion 으로 분리(새 버전). */
+export interface PatchDocumentInput {
   title?: string;
+  body?: string;
+  sourceType?: SourceType;
   visibility?: Visibility;
 }
 
@@ -99,7 +115,18 @@ interface RawDocument {
   title: string;
   source_type: SourceType;
   visibility: Visibility;
+  body?: string | null;
+  version: number;
   index_status: IndexStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+interface RawVersion {
+  version: number;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
   created_at: string;
 }
 
@@ -109,7 +136,20 @@ function toItem(raw: RawDocument): DocumentItem {
     title: raw.title,
     sourceType: raw.source_type,
     visibility: raw.visibility,
+    body: raw.body ?? null,
+    version: raw.version,
     indexStatus: raw.index_status,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  };
+}
+
+function toVersion(raw: RawVersion): DocumentVersion {
+  return {
+    version: raw.version,
+    filename: raw.filename,
+    contentType: raw.content_type,
+    sizeBytes: raw.size_bytes,
     createdAt: raw.created_at,
   };
 }
@@ -137,12 +177,24 @@ export async function listDocuments(
   return (body.items as RawDocument[]).map(toItem);
 }
 
-export async function uploadDocument(input: UploadInput): Promise<UploadResult> {
+export async function getDocument(id: string): Promise<DocumentDetail> {
+  const response = await apiFetch(`${API_BASE_URL}/documents/${id}`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const raw = await response.json();
+  return {
+    ...toItem(raw as RawDocument),
+    versions: ((raw.versions as RawVersion[] | undefined) ?? []).map(toVersion),
+  };
+}
+
+/** 게시글 작성 — 첨부 1개 필수(v1) + 인제스트 큐. 409=중복 파일·413=용량·422=형식. */
+export async function createDocument(input: CreateDocumentInput): Promise<DocumentItem> {
   const form = new FormData();
   form.set("file", input.file);
   form.set("title", input.title);
   form.set("source_type", input.sourceType);
   form.set("visibility", input.visibility);
+  if (input.body && input.body.trim()) form.set("body", input.body.trim());
   // Content-Type 는 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
   const response = await apiFetch(`${API_BASE_URL}/documents`, {
     method: "POST",
@@ -150,21 +202,53 @@ export async function uploadDocument(input: UploadInput): Promise<UploadResult> 
     body: form,
   });
   await ensureOk(response);
-  const body = await response.json();
-  return { id: body.id, indexStatus: body.index_status, duplicate: body.duplicate };
+  return toItem(await response.json());
 }
 
+/** 메타(제목·본문·유형·공개범위) 수정. 파일은 변경하지 않는다. */
 export async function patchDocument(
   id: string,
-  input: PatchInput,
+  input: PatchDocumentInput,
 ): Promise<DocumentItem> {
+  const payload: Record<string, string> = {};
+  if (input.title !== undefined) payload.title = input.title;
+  if (input.body !== undefined) payload.body = input.body;
+  if (input.sourceType !== undefined) payload.source_type = input.sourceType;
+  if (input.visibility !== undefined) payload.visibility = input.visibility;
   const response = await apiFetch(`${API_BASE_URL}/documents/${id}`, {
     method: "PATCH",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(payload),
   });
   await ensureOk(response);
   return toItem(await response.json());
+}
+
+/** 새 버전 업로드 — version+1 + 재인제스트(index_status=pending). 409=현재 버전과 동일. */
+export async function uploadDocumentVersion(id: string, file: File): Promise<DocumentItem> {
+  const form = new FormData();
+  form.set("file", file);
+  const response = await apiFetch(`${API_BASE_URL}/documents/${id}/file`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: form,
+  });
+  await ensureOk(response);
+  return toItem(await response.json());
+}
+
+/** 버전 파일 다운로드 URL — 세션 쿠키 동봉 최상위 GET이라 <a download>로 바로 쓴다(명부 양식 패턴). */
+export function documentDownloadUrl(id: string, version: number): string {
+  return `${API_BASE_URL}/documents/${id}/versions/${version}/download`;
+}
+
+/** 게시글 삭제 — soft delete + 청크 즉시 삭제(ADR-0016). 204. */
+export async function deleteDocument(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/documents/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
 }
 
 export async function reindexDocument(id: string): Promise<DocumentItem> {

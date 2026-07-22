@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_core.llm.client import LlmClient
 from ai_core.rag import chunk_text
 from ai_worker.parsing import UnsupportedFormatError, extract_text
-from liviq_db.models import Document, DocumentChunk
+from liviq_db.models import ContentChunk, Document, DocumentVersion
 
 # 임베딩 호출 배치 크기(페이로드 상한·재시도 단위 균형)
 EMBED_BATCH_SIZE = 32
@@ -50,13 +50,25 @@ async def ingest_document(
     if document is None:
         return IngestResult(document_id, 0, "failed", error="문서 없음")
 
+    # 벡터는 항상 최신 버전만(ADR-0016) — documents.version과 일치하는 첨부를 색인한다.
+    version = await session.scalar(
+        select(DocumentVersion).where(
+            DocumentVersion.document_id == document_id,
+            DocumentVersion.tenant_id == tenant_id,
+            DocumentVersion.version == document.version,
+        )
+    )
+    if version is None:
+        await _mark_failed(session, document_id)
+        return IngestResult(document_id, 0, "failed", error="버전 없음")
+
     await session.execute(
         update(Document).where(Document.id == document_id).values(index_status="indexing")
     )
 
     try:
-        raw = await download(document.storage_key)
-        text = extract_text(document.storage_key, raw)
+        raw = await download(version.storage_key)
+        text = extract_text(version.storage_key, raw)
         chunks = chunk_text(text)
     except UnsupportedFormatError as exc:
         await _mark_failed(session, document_id)
@@ -72,11 +84,18 @@ async def ingest_document(
         vectors.extend(await llm.embed([c.content for c in batch]))
 
     # 멱등 재색인: 기존 청크 삭제 → 재삽입
-    await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == document_id))
+    await session.execute(
+        delete(ContentChunk).where(
+            ContentChunk.source_type == "document",
+            ContentChunk.document_id == document_id,
+        )
+    )
     session.add_all(
-        DocumentChunk(
+        ContentChunk(
             tenant_id=tenant_id,
+            source_type="document",
             document_id=document_id,
+            notice_id=None,
             chunk_index=chunk.index,
             content=chunk.content,
             heading=chunk.heading,

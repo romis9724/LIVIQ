@@ -14,7 +14,7 @@ c1a2b3d4e5f6 스타일 준수, docs/03 §5).
   tenant 컨텍스트 하 notices UPDATE·users SELECT·notifications INSERT(발행 전이+알림).
 
 Revision ID: e8b1c4d09a2f
-Revises: b2c3d4e5f6a7
+Revises: d7e8f9a0b1c2
 Create Date: 2026-07-22 12:00:00.000000
 """
 
@@ -27,7 +27,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "e8b1c4d09a2f"
-down_revision: str | None = "b2c3d4e5f6a7"
+down_revision: str | None = "d7e8f9a0b1c2"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

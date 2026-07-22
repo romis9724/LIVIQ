@@ -910,8 +910,8 @@ export interface paths {
         /** List Documents */
         get: operations["list_documents_documents_get"];
         put?: never;
-        /** Upload Document */
-        post: operations["upload_document_documents_post"];
+        /** Create Document */
+        post: operations["create_document_documents_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -925,14 +925,33 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Document */
+        get: operations["get_document_documents__document_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Document */
+        delete: operations["delete_document_documents__document_id__delete"];
         options?: never;
         head?: never;
         /** Patch Document */
         patch: operations["patch_document_documents__document_id__patch"];
+        trace?: never;
+    };
+    "/documents/{document_id}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload New Version */
+        post: operations["upload_new_version_documents__document_id__file_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/documents/{document_id}/reindex": {
@@ -946,6 +965,23 @@ export interface paths {
         put?: never;
         /** Reindex Document */
         post: operations["reindex_document_documents__document_id__reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{document_id}/versions/{version}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Version */
+        get: operations["download_version_documents__document_id__versions__version__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1293,13 +1329,10 @@ export interface components {
             /** Size Bytes */
             size_bytes: number;
         };
-        /** Body_upload_attachment_admin_notices__notice_id__attachments_post */
-        Body_upload_attachment_admin_notices__notice_id__attachments_post: {
-            /** File */
-            file: string;
-        };
-        /** Body_upload_document_documents_post */
-        Body_upload_document_documents_post: {
+        /** Body_create_document_documents_post */
+        Body_create_document_documents_post: {
+            /** Body */
+            body?: string | null;
             /** File */
             file: string;
             /**
@@ -1315,8 +1348,18 @@ export interface components {
              */
             visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
         };
+        /** Body_upload_attachment_admin_notices__notice_id__attachments_post */
+        Body_upload_attachment_admin_notices__notice_id__attachments_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_fees_admin_fees_uploads_post */
         Body_upload_fees_admin_fees_uploads_post: {
+            /** File */
+            file: string;
+        };
+        /** Body_upload_new_version_documents__document_id__file_post */
+        Body_upload_new_version_documents__document_id__file_post: {
             /** File */
             file: string;
         };
@@ -1381,12 +1424,56 @@ export interface components {
             /** Note */
             note?: string | null;
         };
+        /** DocumentDetailOut */
+        DocumentDetailOut: {
+            /** Body */
+            body?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Index Status
+             * @enum {string}
+             */
+            index_status: "pending" | "indexing" | "indexed" | "failed";
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "규약" | "회의록" | "공지" | "지침" | "매뉴얼";
+            /** Title */
+            title: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+            /** Versions */
+            versions: components["schemas"]["DocumentVersionOut"][];
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+        };
         /** DocumentListOut */
         DocumentListOut: {
             /** Items */
             items: components["schemas"]["DocumentOut"][];
         };
-        /** DocumentOut */
+        /**
+         * DocumentOut
+         * @description 게시판 목록 항목 — 본문 제외(경량). 상세는 DocumentDetailOut.
+         */
         DocumentOut: {
             /**
              * Created At
@@ -1411,6 +1498,13 @@ export interface components {
             /** Title */
             title: string;
             /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+            /**
              * Visibility
              * @enum {string}
              */
@@ -1418,31 +1512,33 @@ export interface components {
         };
         /**
          * DocumentPatchIn
-         * @description 부분 수정 — 지정한 필드만 갱신(둘 다 None이면 no-op 아님, 422).
+         * @description 부분 수정 — 지정한 필드만 갱신(None = 미변경, body는 빈 문자열로 비운다).
          */
         DocumentPatchIn: {
+            /** Body */
+            body?: string | null;
+            /** Source Type */
+            source_type?: ("규약" | "회의록" | "공지" | "지침" | "매뉴얼") | null;
             /** Title */
             title?: string | null;
             /** Visibility */
             visibility?: ("ALL" | "RESIDENT" | "ADMIN" | "COUNCIL") | null;
         };
-        /** DocumentUploadOut */
-        DocumentUploadOut: {
+        /** DocumentVersionOut */
+        DocumentVersionOut: {
+            /** Content Type */
+            content_type: string;
             /**
-             * Duplicate
-             * @default false
+             * Created At
+             * Format: date-time
              */
-            duplicate: boolean;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Index Status
-             * @enum {string}
-             */
-            index_status: "pending" | "indexing" | "indexed" | "failed";
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Version */
+            version: number;
         };
         /** FacilityCreateIn */
         FacilityCreateIn: {
@@ -4261,7 +4357,7 @@ export interface operations {
             };
         };
     };
-    upload_document_documents_post: {
+    create_document_documents_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4275,7 +4371,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_upload_document_documents_post"];
+                "multipart/form-data": components["schemas"]["Body_create_document_documents_post"];
             };
         };
         responses: {
@@ -4285,8 +4381,78 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocumentUploadOut"];
+                    "application/json": components["schemas"]["DocumentOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_documents__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_documents__document_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4339,6 +4505,46 @@ export interface operations {
             };
         };
     };
+    upload_new_version_documents__document_id__file_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_new_version_documents__document_id__file_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     reindex_document_documents__document_id__reindex_post: {
         parameters: {
             query?: never;
@@ -4362,6 +4568,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_version_documents__document_id__versions__version__download_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                document_id: string;
+                version: number;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

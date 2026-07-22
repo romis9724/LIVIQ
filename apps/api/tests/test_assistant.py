@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Citation, Document, DocumentChunk, Message, Tenant, User
+from liviq_db.models import Citation, ContentChunk, Document, Message, Tenant, User
 
 
 async def _seed_indexed_document(session: AsyncSession) -> uuid.UUID:
@@ -34,16 +34,17 @@ async def _seed_indexed_document(session: AsyncSession) -> uuid.UUID:
             title="관리규약",
             source_type="규약",
             visibility="ALL",
-            storage_key=f"{TENANT_ID}/documents/{doc_id}.txt",
-            content_hash="hash-1",
+            version=1,
             index_status="indexed",
         )
     )
     await session.flush()
     session.add(
-        DocumentChunk(
+        ContentChunk(
             tenant_id=TENANT_ID,
+            source_type="document",
             document_id=doc_id,
+            notice_id=None,
             chunk_index=0,
             content="지하주차장은 24시간 개방한다.",
             embedding=[0.05] * EMBED_DIM,  # fake_llm 임베딩과 동일 → cosine=1

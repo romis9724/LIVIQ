@@ -352,16 +352,18 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 무료 Gmail 일 발송 한도(약 500통)는 파일럿 규모에 충분 — 초과 시 어댑터 뒤에서 SES 등으로 교체.
 
-### 8.10 H8 체크리스트 (운영 개편 — 공지사항 게시판)
+### 8.10 H8 체크리스트 (게시판 전환 — 공지·문서)
 
-> 근거: 운영자 인터뷰 확정(2026-07-22) — 공지는 관리사무소가 직접 작성하는 정형 문서로, 키워드→AI 초안→검수 흐름은 실무에 불요하고 첨부파일이 실제 요구. 공지 AI 초안 자산을 **완전 삭제**하고 일반 게시판으로 전환([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)).
-> 권한 개정: **MANAGER·STAFF 모두** 공지 작성·발행 — H7-2 STAFF 인가 축소 중 **공지 발행**만 STAFF에 개방(관리비·시설·검수·승인·명부·직원·설정은 소장 전용 유지). 공지 경로 AI 미개입으로 규칙 6(자동발송 금지)의 공지 표면은 원천 제거되며, 검수 게이트·규칙 6은 assistant 등 다른 AI 표면에 유지.
-> 근거 설계: [00 §3.4](00-requirements.md)(FR-ADM-01) · [01 §13](01-architecture.md)(공지 API) · [03 §4.4](03-database-design.md)(notices·notice_attachments) · [04](04-menu-structure.md)(공지사항 메뉴).
+> 근거: 운영자 인터뷰 확정(2026-07-22) — 공지·문서 모두 관리사무소가 직접 작성하는 게시판으로 전환. 공지는 키워드→AI 초안→검수 흐름이 실무에 불요하고 첨부파일이 실제 요구라 AI 초안 자산을 **완전 삭제**([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)), 문서는 첨부 1개·버전 이력 게시판([ADR-0016](adr/0016-document-board-versioned-attachment.md)).
+> 권한 개정(H8-1): **MANAGER·STAFF 모두** 공지 작성·발행 — H7-2 STAFF 인가 축소 중 **공지 발행**만 STAFF에 개방(관리비·시설·검수·승인·명부·직원·설정은 소장 전용 유지). 공지 경로 AI 미개입으로 규칙 6(자동발송 금지)의 공지 표면은 원천 제거되며, 검수 게이트·규칙 6은 assistant 등 다른 AI 표면에 유지.
+> 근거 설계: [00 §3.4](00-requirements.md)(FR-ADM-01) · [01 §13](01-architecture.md)(공지·문서 API) · [03 §4.4](03-database-design.md)(notices·notice_attachments·content_chunks) · [04](04-menu-structure.md)(메뉴).
 > 각 작업 단위는 §3.1 사이클(설계 갱신 → 구현 → 현행화 → PR)을 따르고, 머지는 단위별 사용자 확인 후 진행.
 
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
 | H8-1 | 공지 게시판 전환 | 공지 AI 초안 **완전 삭제**(ai-core `notice_draft.py`·초안 API 2개(`POST`·`GET /admin/notices/drafts`)·`notice_drafts` 테이블 drop) → 일반 게시판(작성·수정·삭제(soft)·상단 고정(pinned)·임시저장(draft)·예약 발행(scheduled)·첨부 pdf·hwp·hwpx·docx·xlsx·jpg·png 파일당 20MB·공지당 5개, MinIO 저장·다운로드 API 경유)·**STAFF 발행 허용**·메뉴명 "공지 초안"→"공지사항"·예약 발행 `ai-worker` arq cron(1분 폴링, scheduled_at 도달 시 published+알림)·eval 규칙6 케이스 2개(`broadcast-01-draft-only`·`review-02-notice-draft`) 제거([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)) | 첨부 인가 테스트(**CRITICAL** — 교차 tenant 첨부 접근 거부·미발행 공지 첨부 입주민 접근 거부)·예약 발행 cron 테스트·확장자/크기/개수 검증 테스트·E2E 갱신 그린·시각 실측 | ✅ 완료 (PR #42) — pytest 463(api 234·worker 19·db 103·ai-core 107)·E2E 결정론 12·시각 실측(데스크톱+375px). 목록 응답 첨부 메타 포함 정합 수정 포함 |
+| H8-2 | 문서 게시판 전환 | [ADR-0016](adr/0016-document-board-versioned-attachment.md) — 관리자 전용 게시판(제목+본문(설명용)+첨부 1개 필수), `document_versions` 버전 이력(재업로드=version+1+재인제스트, 이력 다운로드만·롤백 없음), `document_chunks`→`content_chunks` 소스 일반화(notice 대비), soft delete+청크 즉시 삭제, 다운로드 API 경유 인가, 기존 데이터 폐기. web-admin 목록·작성·상세/수정·버전 이력 화면 | 인가·격리 테스트(**CRITICAL** — 교차 tenant 404·RESIDENT 거부), 재업로드→재인제스트→벡터 최신화 검증, 게이트 그린(pytest cov 80·vitest·E2E) | ✅ 구현 완료 — pytest 229/17/114/102(cov 95~98%)·vitest 100·build 그린. 실스택 실측: v1 색인→v2 재업로드 시 content_chunks 완전 교체 확인, UI 전 여정(작성 폼·목록·상세/수정·버전 이력·삭제·모바일 375px) 시각 검증. worker role의 청크 DELETE 권한 결함(재색인, superuser 접속에서만 잠복 동작) 교정. 로컬 E2E는 타 세션 dev 서버 포트 점유로 CI 위임 |
+| H8-3 | 공지 벡터화 | 공지 본문+파싱 가능 첨부(.pdf/.txt/.md)만 임베딩 → `content_chunks(source_type=notice)`. **published만** 인제스트(발행 시점 인제스트·수정 시 재인제스트·삭제/비공개 시 청크 제거). 공지 첨부 화이트리스트(.hwp 등)는 축소 안 함 | 미발행 공지 검색 미노출(**CRITICAL**) + 발행→검색 반영 검증 | 예정 (H8-1 마감 후 별도 세션) |
 
 ## 9. 정의: "완료(Done)"
 

@@ -25,3 +25,4 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0013](0013-python-backend.md) | 백엔드 Python 전환 (FastAPI·SQLAlchemy·arq·uv) | Accepted |
 | [0014](0014-local-email-auth.md) | 자체 이메일+비밀번호 인증 (Google OAuth 대체) | Accepted |
 | [0015](0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환 | Accepted |
+| [0016](0016-document-board-versioned-attachment.md) | 문서관리 게시판 전환 — 첨부 1개·버전 이력·청크 소스 일반화 | Accepted |

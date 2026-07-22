@@ -1,21 +1,11 @@
 "use client";
 
-import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
-import type { ToastTone } from "@liviq/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, EmptyState, Skeleton } from "@liviq/ui";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-  ApiError,
-  listDocuments,
-  patchDocument,
-  reindexDocument,
-  uploadDocument,
-  type DocumentItem,
-  type UploadInput,
-  type Visibility,
-} from "@/lib/api";
+import { ApiError, listDocuments, type DocumentItem } from "@/lib/api";
 import { DocumentTable } from "./DocumentTable";
-import { UploadPanel } from "./UploadPanel";
 import {
   STATUS_FILTERS,
   filterDocs,
@@ -28,16 +18,9 @@ import "./documents.css";
 // ponytail: 폴링, 문서량 커지면 SSE/웹소켓
 const POLL_INTERVAL_MS = 5000;
 const SEARCH_DEBOUNCE_MS = 300;
-const TOAST_DURATION_MS = 3200;
-
-interface ToastState {
-  message: string;
-  tone: ToastTone;
-}
 
 function errorMessage(err: unknown): string {
-  if (err instanceof ApiError) return err.message;
-  if (err instanceof Error) return err.message;
+  if (err instanceof ApiError || err instanceof Error) return err.message;
   return "알 수 없는 오류가 발생했습니다.";
 }
 
@@ -48,18 +31,8 @@ export function DocumentManager() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [toast, setToast] = useState<ToastState | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = useCallback((message: string, tone: ToastTone = "success") => {
-    setToast({ message, tone });
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
-  }, []);
-
-  // 전체 목록 1회 로드 후 클라이언트에서 필터·집계 — 집계를 필터 탭과 무관하게 유지(브리프 선택지).
+  // 전체 목록 1회 로드 후 클라이언트에서 필터·집계 — 집계를 필터 탭과 무관하게 유지.
   const load = useCallback(async () => {
     try {
       const items = await listDocuments();
@@ -90,73 +63,30 @@ export function DocumentManager() {
     return () => clearInterval(timer);
   }, [polling, load]);
 
-  useEffect(() => () => {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-  }, []);
-
   const summary = useMemo(() => summarize(docs), [docs]);
   const visibleDocs = useMemo(
     () => filterDocs(docs, statusFilter, debouncedSearch),
     [docs, statusFilter, debouncedSearch],
   );
 
-  async function handleUpload(input: UploadInput) {
-    setUploading(true);
-    try {
-      const result = await uploadDocument(input);
-      showToast(
-        result.duplicate ? "이미 등록된 문서입니다." : "업로드했습니다. 색인을 시작합니다.",
-        result.duplicate ? "neutral" : "success",
-      );
-      await load();
-    } catch (err) {
-      showToast(errorMessage(err), "danger");
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleChangeVisibility(id: string, visibility: Visibility) {
-    setBusyId(id);
-    try {
-      const updated = await patchDocument(id, { visibility });
-      setDocs((prev) => prev.map((doc) => (doc.id === id ? updated : doc)));
-      showToast("공개 범위를 변경했습니다.");
-    } catch (err) {
-      showToast(errorMessage(err), "danger");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleReindex(id: string) {
-    setBusyId(id);
-    try {
-      const updated = await reindexDocument(id);
-      setDocs((prev) => prev.map((doc) => (doc.id === id ? updated : doc)));
-      showToast("재색인을 요청했습니다.");
-    } catch (err) {
-      showToast(errorMessage(err), "danger");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   return (
     <>
-      <header className="admin-page__header">
-        <h1 id="main" className="admin-page__title">
-          문서 관리
-        </h1>
-        <p className="admin-page__lede">
-          업로드한 문서가 색인되면 AI가 출처로 인용합니다. 색인 실패 문서는 인용되지 않으니
-          재색인하세요.
-        </p>
+      <header className="admin-page__header doc-head">
+        <div className="doc-head__text">
+          <h1 id="main" className="admin-page__title">
+            문서 관리
+          </h1>
+          <p className="admin-page__lede">
+            관리규약·회의록·지침을 게시글로 관리합니다. 첨부 문서가 색인되면 AI가 출처로 인용하며,
+            개정판을 올리면 최신본을 따라갑니다.
+          </p>
+        </div>
+        <Link href="/documents/new" className="btn btn--primary">
+          새 문서
+        </Link>
       </header>
 
       <main className="admin-page__main doc-main">
-        <UploadPanel uploading={uploading} onUpload={handleUpload} />
-
         <div className="doc-summary">
           <SummaryCard label="색인 완료" count={summary.indexed} color="var(--color-success)" />
           <SummaryCard label="색인 중" count={summary.indexing} color="var(--color-accent)" />
@@ -193,21 +123,12 @@ export function DocumentManager() {
           loadError={loadError}
           docs={docs}
           visibleDocs={visibleDocs}
-          busyId={busyId}
           onRetry={() => {
             setLoading(true);
             void load();
           }}
-          onChangeVisibility={handleChangeVisibility}
-          onReindex={handleReindex}
         />
       </main>
-
-      {toast ? (
-        <div className="doc-toast-slot">
-          <Toast message={toast.message} tone={toast.tone} />
-        </div>
-      ) : null}
     </>
   );
 }
@@ -227,22 +148,10 @@ interface DocumentsBodyProps {
   loadError: string | null;
   docs: readonly DocumentItem[];
   visibleDocs: readonly DocumentItem[];
-  busyId: string | null;
   onRetry: () => void;
-  onChangeVisibility: (id: string, visibility: Visibility) => void;
-  onReindex: (id: string) => void;
 }
 
-function DocumentsBody({
-  loading,
-  loadError,
-  docs,
-  visibleDocs,
-  busyId,
-  onRetry,
-  onChangeVisibility,
-  onReindex,
-}: DocumentsBodyProps) {
+function DocumentsBody({ loading, loadError, docs, visibleDocs, onRetry }: DocumentsBodyProps) {
   if (loading) {
     return (
       <div className="surface-card doc-tablecard doc-loading">
@@ -267,7 +176,12 @@ function DocumentsBody({
       <EmptyState
         icon="📄"
         title="등록된 문서가 없습니다"
-        description="관리규약·공지·회의록을 업로드하면 AI가 출처로 인용합니다."
+        description="‘새 문서’로 관리규약·공지·회의록을 올리면 AI가 출처로 인용합니다."
+        action={
+          <Link href="/documents/new" className="btn btn--primary">
+            새 문서
+          </Link>
+        }
       />
     );
   }
@@ -280,12 +194,5 @@ function DocumentsBody({
       />
     );
   }
-  return (
-    <DocumentTable
-      docs={visibleDocs}
-      busyId={busyId}
-      onChangeVisibility={onChangeVisibility}
-      onReindex={onReindex}
-    />
-  );
+  return <DocumentTable docs={visibleDocs} />;
 }

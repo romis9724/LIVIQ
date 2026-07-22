@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from .base import Base
 from .conversations import AiFeedback, Citation, Conversation, Message
-from .documents import Document, DocumentChunk
+from .documents import ContentChunk, Document, DocumentVersion
 from .facilities import Facility, Incident, MaintenanceLog
 from .fees import ExcelUpload, Fee
 from .inquiries import Inquiry, InquiryCategory, InquiryEvent
@@ -37,9 +37,10 @@ __all__ = [
     "Building",
     "Citation",
     "Consent",
+    "ContentChunk",
     "Conversation",
     "Document",
-    "DocumentChunk",
+    "DocumentVersion",
     "ExcelUpload",
     "Facility",
     "Fee",
