@@ -41,6 +41,11 @@ class NoticeCreateIn(BaseModel):
     status: NoticeStatus = "draft"
     pinned: bool = False
     scheduled_at: datetime.datetime | None = None
+    category_code_id: uuid.UUID | None = None  # NOTICE_CATEGORY 그룹 코드(NULL 허용)
+    event_start: datetime.date | None = None  # 표시용 행사/작업 기간
+    event_end: datetime.date | None = None
+    target_buildings: list[uuid.UUID] | None = None  # 대상 동(NULL=전체동)
+    keywords: str | None = Field(default=None, max_length=500)  # 콤마 구분 — 임베딩 텍스트 포함
 
     @model_validator(mode="after")
     def _validate_schedule(self) -> NoticeCreateIn:
@@ -62,6 +67,11 @@ class NoticeUpdateIn(BaseModel):
     pinned: bool | None = None
     status: NoticeStatus | None = None
     scheduled_at: datetime.datetime | None = None
+    category_code_id: uuid.UUID | None = None  # 지정 시 검증·갱신, None으로 명시하면 무분류로 비움
+    event_start: datetime.date | None = None
+    event_end: datetime.date | None = None
+    target_buildings: list[uuid.UUID] | None = None
+    keywords: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def _validate_schedule(self) -> NoticeUpdateIn:
@@ -90,6 +100,11 @@ class NoticeOut(BaseModel):
     scheduled_at: datetime.datetime | None
     published_at: datetime.datetime | None
     published_by: uuid.UUID | None
+    category_code_id: uuid.UUID | None = None
+    event_start: datetime.date | None = None
+    event_end: datetime.date | None = None
+    target_buildings: list[uuid.UUID] | None = None
+    keywords: str | None = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
     attachments: list[AttachmentOut] = []

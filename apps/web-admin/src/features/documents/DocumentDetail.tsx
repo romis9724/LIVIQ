@@ -10,18 +10,18 @@ import {
   deleteDocument,
   documentDownloadUrl,
   getDocument,
+  listCodeGroups,
   patchDocument,
   reindexDocument,
   uploadDocumentVersion,
   type DocumentDetail as DocumentDetailData,
-  type SourceType,
   type Visibility,
 } from "@/lib/api";
+import { DOC_CATEGORY_GROUP, codeLabelMap, codeOptions, type CodeOption } from "@/lib/codes";
 import {
   FILE_ACCEPT,
   INDEX_META,
   MAX_FILE_MB,
-  SOURCE_TYPES,
   VISIBILITIES,
   VISIBILITY_META,
   documentErrorMessage,
@@ -50,10 +50,12 @@ export function DocumentDetail() {
 
   // 메타 편집 폼 — 상세 최초 로드 시 1회 하이드레이트(폴링이 편집 중 값을 덮지 않도록 분리).
   const [title, setTitle] = useState("");
-  const [sourceType, setSourceType] = useState<SourceType>("규약");
+  const [categoryCodeId, setCategoryCodeId] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("ADMIN");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<CodeOption[]>([]);
+  const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
 
   const [newFile, setNewFile] = useState<File | null>(null);
   const [newFileError, setNewFileError] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function DocumentDetail() {
         setLoadError(null);
         if (opts?.hydrate) {
           setTitle(data.title);
-          setSourceType(data.sourceType);
+          setCategoryCodeId(data.categoryCodeId);
           setVisibility(data.visibility);
           setBody(data.body ?? "");
         }
@@ -96,6 +98,19 @@ export function DocumentDetail() {
   useEffect(() => {
     void loadDetail({ hydrate: true });
   }, [loadDetail]);
+
+  // 분류 코드 선택지·라벨 로드(1회).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const groups = await listCodeGroups();
+        setCategoryOptions(codeOptions(groups, DOC_CATEGORY_GROUP));
+        setCategoryLabels(codeLabelMap(groups, DOC_CATEGORY_GROUP));
+      } catch {
+        // 무시 — 라벨 없으면 코드 원문 표시.
+      }
+    })();
+  }, []);
 
   // 색인 진행 중(pending·indexing)이면 5초 폴링으로 상태 갱신.
   const active = detail?.indexStatus === "pending" || detail?.indexStatus === "indexing";
@@ -115,10 +130,11 @@ export function DocumentDetail() {
   const isDirty =
     detail !== null &&
     (title.trim() !== detail.title ||
-      sourceType !== detail.sourceType ||
+      categoryCodeId !== detail.categoryCodeId ||
       visibility !== detail.visibility ||
       body !== (detail.body ?? ""));
-  const canSave = detail !== null && title.trim().length > 0 && isDirty && !saving;
+  const canSave =
+    detail !== null && title.trim().length > 0 && categoryCodeId !== "" && isDirty && !saving;
 
   async function handleSave() {
     if (!detail || !canSave) return;
@@ -127,7 +143,7 @@ export function DocumentDetail() {
       const updated = await patchDocument(detail.id, {
         title: title.trim(),
         body,
-        sourceType,
+        categoryCodeId,
         visibility,
       });
       setDetail((prev) => (prev ? { ...prev, ...updated } : prev));
@@ -234,7 +250,8 @@ export function DocumentDetail() {
             {detail.title}
           </h1>
           <p className="doc-detail__submeta">
-            {detail.sourceType} · v{detail.version} · 수정 {shortDate(detail.updatedAt)}
+            {categoryLabels.get(detail.categoryCodeId) ?? "미분류"} · v{detail.version} · 수정{" "}
+            {shortDate(detail.updatedAt)}
           </p>
         </div>
         <span className={`doc-idx doc-idx--${detail.indexStatus}`}>
@@ -262,15 +279,21 @@ export function DocumentDetail() {
           </label>
           <div className="doc-form__row">
             <label className="doc-field">
-              <span className="doc-field__label">카테고리</span>
+              <span className="doc-field__label">분류</span>
               <select
                 className="doc-select"
-                value={sourceType}
-                onChange={(event) => setSourceType(event.target.value as SourceType)}
+                value={categoryCodeId}
+                onChange={(event) => setCategoryCodeId(event.target.value)}
               >
-                {SOURCE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {/* 현재 값이 비활성 코드라 옵션에 없을 수 있어 안전한 자리표시. */}
+                {categoryOptions.some((opt) => opt.id === categoryCodeId) ? null : (
+                  <option value={categoryCodeId}>
+                    {categoryLabels.get(categoryCodeId) ?? "미분류"}
+                  </option>
+                )}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
                   </option>
                 ))}
               </select>

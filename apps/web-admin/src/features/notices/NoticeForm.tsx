@@ -2,7 +2,14 @@
 
 import { Button, FormField, Switch } from "@liviq/ui";
 
+import type { CodeOption } from "@/lib/codes";
 import { MAX_BODY, MAX_TITLE, SAVE_MODES, type NoticeFormErrors, type NoticeFormValues } from "./data";
+
+/** 대상 동 선택지 — id·이름만 필요(전체 Building 을 받지 않음). */
+export interface BuildingOption {
+  id: string;
+  name: string;
+}
 
 interface NoticeFormProps {
   values: NoticeFormValues;
@@ -12,6 +19,8 @@ interface NoticeFormProps {
   submitLabel: string;
   /** 발행된 공지 수정 — 저장 방식(역행) 선택을 숨기고 제목·본문·고정만 편집. */
   publishedLock: boolean;
+  categoryOptions: readonly CodeOption[];
+  buildings: readonly BuildingOption[];
   onChange: (patch: Partial<NoticeFormValues>) => void;
   onSubmit: () => void;
 }
@@ -23,9 +32,18 @@ export function NoticeForm({
   submitting,
   submitLabel,
   publishedLock,
+  categoryOptions,
+  buildings,
   onChange,
   onSubmit,
 }: NoticeFormProps) {
+  function toggleBuilding(id: string, checked: boolean) {
+    const next = checked
+      ? [...values.targetBuildings, id]
+      : values.targetBuildings.filter((b) => b !== id);
+    onChange({ targetBuildings: next });
+  }
+
   return (
     <form
       className="surface-card notice-form"
@@ -65,6 +83,99 @@ export function NoticeForm({
             {errors.body}
           </div>
         ) : null}
+      </div>
+
+      <div className="notice-field">
+        <label className="form-field__label" htmlFor="notice-category">
+          분류 <span className="notice-optional">(선택)</span>
+        </label>
+        <select
+          id="notice-category"
+          className="notice-select"
+          value={values.categoryCodeId}
+          disabled={disabled}
+          onChange={(event) => onChange({ categoryCodeId: event.target.value })}
+        >
+          <option value="">미분류</option>
+          {categoryOptions.map((opt) => (
+            <option key={opt.id} value={opt.id}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <fieldset className="notice-period" disabled={disabled}>
+        <legend className="form-field__label">
+          행사 기간 <span className="notice-optional">(선택)</span>
+        </legend>
+        <div className="notice-period__row">
+          <label className="notice-field notice-period__item">
+            <span className="notice-period__label">시작일</span>
+            <input
+              type="date"
+              className="notice-input"
+              value={values.eventStart}
+              max={values.eventEnd || undefined}
+              onChange={(event) => onChange({ eventStart: event.target.value })}
+            />
+          </label>
+          <label className="notice-field notice-period__item">
+            <span className="notice-period__label">종료일</span>
+            <input
+              type="date"
+              className="notice-input"
+              value={values.eventEnd}
+              min={values.eventStart || undefined}
+              aria-invalid={errors.eventEnd ? true : undefined}
+              aria-describedby={errors.eventEnd ? "notice-event-error" : undefined}
+              onChange={(event) => onChange({ eventEnd: event.target.value })}
+            />
+          </label>
+        </div>
+        {errors.eventEnd ? (
+          <div id="notice-event-error" className="form-field__error">
+            {errors.eventEnd}
+          </div>
+        ) : null}
+      </fieldset>
+
+      <fieldset className="notice-targets" disabled={disabled}>
+        <legend className="form-field__label">
+          대상 동 <span className="notice-optional">(미선택 시 전체 동)</span>
+        </legend>
+        {buildings.length === 0 ? (
+          <p className="notice-muted notice-targets__empty">등록된 동이 없습니다. 전체 동에 게시됩니다.</p>
+        ) : (
+          <div className="notice-targets__opts">
+            {buildings.map((building) => (
+              <label key={building.id} className="notice-check">
+                <input
+                  type="checkbox"
+                  checked={values.targetBuildings.includes(building.id)}
+                  onChange={(event) => toggleBuilding(building.id, event.target.checked)}
+                />
+                <span>{building.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </fieldset>
+
+      <div className="notice-field">
+        <label className="form-field__label" htmlFor="notice-keywords">
+          키워드 <span className="notice-optional">(선택)</span>
+        </label>
+        <input
+          id="notice-keywords"
+          type="text"
+          className="notice-input"
+          value={values.keywords}
+          disabled={disabled}
+          placeholder="콤마로 구분 (예: 소독, 방역, 단수)"
+          onChange={(event) => onChange({ keywords: event.target.value })}
+        />
+        <span className="notice-toggle__help">AI 검색·연관 공지 추천에 쓰입니다.</span>
       </div>
 
       <div className="notice-toggle">

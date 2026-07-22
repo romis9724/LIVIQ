@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from liviq_db.models import (
     Citation,
+    Code,
+    CodeGroup,
     Conversation,
     Document,
     Message,
@@ -29,6 +31,8 @@ MANAGER_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
 STAFF_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000002")
 RESIDENT_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000003")
 DOC_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
+DOC_GROUP_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
+DOC_CODE_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000003")
 MSG_A = uuid.UUID("eeeeeeee-0000-0000-0000-000000000001")  # conf 0.62 + 인용
 MSG_B = uuid.UUID("eeeeeeee-0000-0000-0000-000000000002")  # conf 0.34 fallback
 
@@ -48,11 +52,25 @@ async def _seed(session: AsyncSession) -> None:
     for uid in (MANAGER_ID, STAFF_ID, RESIDENT_ID):
         session.add(User(id=uid, tenant_id=TENANT_ID, status="active"))
     session.add(
+        CodeGroup(
+            id=DOC_GROUP_ID,
+            tenant_id=TENANT_ID,
+            group_key="DOC_CATEGORY",
+            name="문서 카테고리",
+            is_system=True,
+        )
+    )
+    await session.flush()
+    session.add(
+        Code(id=DOC_CODE_ID, tenant_id=TENANT_ID, group_id=DOC_GROUP_ID, code="공지", label="공지")
+    )
+    await session.flush()
+    session.add(
         Document(
             id=DOC_ID,
             tenant_id=TENANT_ID,
             title="관리비 납부 안내문",
-            source_type="공지",
+            category_code_id=DOC_CODE_ID,
             visibility="ALL",
             version=1,
             index_status="indexed",

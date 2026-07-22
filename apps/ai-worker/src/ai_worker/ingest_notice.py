@@ -54,6 +54,8 @@ async def ingest_notice(
         return NoticeIngestResult(notice_id, 0, "skipped")
 
     parts = [f"{notice.title}\n\n{notice.body}"]
+    if notice.keywords:  # 콤마 구분 키워드를 임베딩 텍스트에 포함(H8-6, 검색 재현율 보강).
+        parts.append(notice.keywords.replace(",", " "))
     attachments = await session.scalars(
         select(NoticeAttachment)
         .where(

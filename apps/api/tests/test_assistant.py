@@ -16,7 +16,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Citation, ContentChunk, Document, Message, Tenant, User
+from liviq_db.models import Citation, Code, CodeGroup, ContentChunk, Document, Message, Tenant, User
 
 
 async def _seed_indexed_document(session: AsyncSession) -> uuid.UUID:
@@ -26,13 +26,21 @@ async def _seed_indexed_document(session: AsyncSession) -> uuid.UUID:
     session.add(Tenant(id=TENANT_ID, name="단지A", status="active"))
     session.add(User(id=USER_ID, tenant_id=TENANT_ID, status="active"))
     await session.flush()
+    group = CodeGroup(
+        tenant_id=TENANT_ID, group_key="DOC_CATEGORY", name="문서 카테고리", is_system=True
+    )
+    session.add(group)
+    await session.flush()
+    code = Code(tenant_id=TENANT_ID, group_id=group.id, code="규약", label="규약")
+    session.add(code)
+    await session.flush()
     doc_id = uuid.uuid4()
     session.add(
         Document(
             id=doc_id,
             tenant_id=TENANT_ID,
             title="관리규약",
-            source_type="규약",
+            category_code_id=code.id,
             visibility="ALL",
             version=1,
             index_status="indexed",

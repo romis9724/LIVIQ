@@ -88,15 +88,23 @@ async def test_missing_document_fails_cleanly(session: AsyncSession, fake_llm: L
 
 async def test_missing_current_version_fails(session: AsyncSession, fake_llm: LlmClient) -> None:
     """현재 버전에 대응하는 첨부 행이 없으면 failed(버전 없음) — 벡터는 첨부만 색인(ADR-0016)."""
-    from liviq_db.models import Tenant
+    from liviq_db.models import Code, CodeGroup, Tenant
 
     tenant = Tenant(name="t", status="active")
     session.add(tenant)
     await session.flush()
+    group = CodeGroup(
+        tenant_id=tenant.id, group_key="DOC_CATEGORY", name="문서 카테고리", is_system=True
+    )
+    session.add(group)
+    await session.flush()
+    code = Code(tenant_id=tenant.id, group_id=group.id, code="규약", label="규약")
+    session.add(code)
+    await session.flush()
     doc = Document(
         tenant_id=tenant.id,
         title="x",
-        source_type="규약",
+        category_code_id=code.id,
         visibility="ALL",
         version=1,
         index_status="pending",

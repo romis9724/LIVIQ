@@ -4,13 +4,13 @@ import { Button, FileDropzone } from "@liviq/ui";
 import type { FileDropzoneState } from "@liviq/ui";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { createDocument, type SourceType, type Visibility } from "@/lib/api";
+import { createDocument, listCodeGroups, type Visibility } from "@/lib/api";
+import { DOC_CATEGORY_GROUP, codeOptions, type CodeOption } from "@/lib/codes";
 import {
   FILE_ACCEPT,
   MAX_FILE_MB,
-  SOURCE_TYPES,
   VISIBILITIES,
   VISIBILITY_META,
   documentErrorMessage,
@@ -26,13 +26,28 @@ export function DocumentForm() {
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
-  const [sourceType, setSourceType] = useState<SourceType>("규약");
+  const [categoryCodeId, setCategoryCodeId] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("ADMIN");
   const [body, setBody] = useState("");
+  const [categoryOptions, setCategoryOptions] = useState<CodeOption[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const canSubmit = Boolean(file) && !fileError && title.trim().length > 0 && !submitting;
+  // 분류(DOC_CATEGORY) 선택지 로드 — 첫 코드를 기본 선택(분류 필수).
+  useEffect(() => {
+    void (async () => {
+      try {
+        const opts = codeOptions(await listCodeGroups(), DOC_CATEGORY_GROUP);
+        setCategoryOptions(opts);
+        setCategoryCodeId((prev) => prev || opts[0]?.id || "");
+      } catch {
+        // 무시 — 선택지 없으면 제출 불가(canSubmit)로 사용자에게 드러남.
+      }
+    })();
+  }, []);
+
+  const canSubmit =
+    Boolean(file) && !fileError && title.trim().length > 0 && categoryCodeId !== "" && !submitting;
 
   function handleFile(picked: File) {
     const error = validateAttachment(picked);
@@ -47,7 +62,7 @@ export function DocumentForm() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createDocument({ file, title: title.trim(), sourceType, visibility, body });
+      await createDocument({ file, title: title.trim(), categoryCodeId, visibility, body });
       router.push("/documents");
     } catch (err) {
       setSubmitError(documentErrorMessage(err));
@@ -108,15 +123,16 @@ export function DocumentForm() {
 
           <div className="doc-form__row">
             <label className="doc-field">
-              <span className="doc-field__label">카테고리</span>
+              <span className="doc-field__label">분류</span>
               <select
                 className="doc-select"
-                value={sourceType}
-                onChange={(event) => setSourceType(event.target.value as SourceType)}
+                value={categoryCodeId}
+                onChange={(event) => setCategoryCodeId(event.target.value)}
               >
-                {SOURCE_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
+                {categoryOptions.length === 0 ? <option value="">분류 없음</option> : null}
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
                   </option>
                 ))}
               </select>

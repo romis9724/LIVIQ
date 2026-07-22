@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFil
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.code_refs import validate_category_code, validate_target_buildings
 from app.deps import (
     Queue,
     RequestContext,
@@ -242,6 +243,12 @@ async def create_notice(
     queue: Annotated[Queue, Depends(get_queue)],
     body: NoticeCreateIn,
 ) -> NoticeOut:
+    if body.category_code_id is not None:
+        await validate_category_code(
+            session, ctx.tenant_id, body.category_code_id, "NOTICE_CATEGORY"
+        )
+    if body.target_buildings:
+        await validate_target_buildings(session, ctx.tenant_id, body.target_buildings)
     is_published = body.status == "published"
     now = _now()
     notice = Notice(
@@ -254,6 +261,11 @@ async def create_notice(
         scheduled_at=body.scheduled_at,
         published_at=now if is_published else None,
         published_by=ctx.user_id if is_published else None,
+        category_code_id=body.category_code_id,
+        event_start=body.event_start,
+        event_end=body.event_end,
+        target_buildings=[str(b) for b in body.target_buildings] if body.target_buildings else None,
+        keywords=body.keywords,
     )
     session.add(notice)
     await session.flush()
@@ -292,9 +304,17 @@ async def update_notice(
     if was_published and new_status is not None and new_status != "published":
         raise HTTPException(status_code=409, detail="발행된 공지는 초안·예약으로 되돌릴 수 없음")
 
-    # 벡터화 대상 텍스트(title·body·audience) 변경 여부 — published 공지면 재인제스트 트리거.
+    if "category_code_id" in fields and body.category_code_id is not None:
+        await validate_category_code(
+            session, ctx.tenant_id, body.category_code_id, "NOTICE_CATEGORY"
+        )
+    if "target_buildings" in fields and body.target_buildings:
+        await validate_target_buildings(session, ctx.tenant_id, body.target_buildings)
+
+    # 벡터화 대상 텍스트(title·body·audience·keywords) 변경 여부 — published면 재인제스트 트리거.
     content_changed = any(
-        f in fields and getattr(body, f) is not None for f in ("title", "body", "audience")
+        f in fields and getattr(body, f) is not None
+        for f in ("title", "body", "audience", "keywords")
     )
     if "title" in fields and body.title is not None:
         notice.title = body.title
@@ -304,6 +324,18 @@ async def update_notice(
         notice.audience = body.audience
     if "pinned" in fields and body.pinned is not None:
         notice.pinned = body.pinned
+    if "category_code_id" in fields:
+        notice.category_code_id = body.category_code_id
+    if "event_start" in fields:
+        notice.event_start = body.event_start
+    if "event_end" in fields:
+        notice.event_end = body.event_end
+    if "target_buildings" in fields:
+        notice.target_buildings = (
+            [str(b) for b in body.target_buildings] if body.target_buildings else None
+        )
+    if "keywords" in fields:
+        notice.keywords = body.keywords
 
     became_published = False
     if new_status is not None:

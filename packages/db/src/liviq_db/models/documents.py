@@ -44,10 +44,16 @@ class Document(IdMixin, TenantMixin, TimestampMixin, Base):
     __table_args__ = (
         tenant_id_unique("documents"),
         tenant_fk("uploaded_by", "users", name="fk_documents_uploaded_by"),
+        # 분류는 DOC_CATEGORY 그룹 코드 참조(RESTRICT — 참조 중 코드 삭제 409, H8-6 · ADR-0017).
+        tenant_fk(
+            "category_code_id", "codes", name="fk_documents_category_code", ondelete="RESTRICT"
+        ),
+        Index("ix_documents_tenant_category", "tenant_id", "category_code_id"),
     )
 
     title: Mapped[str] = mapped_column(String, nullable=False)
-    source_type: Mapped[str] = mapped_column(String, nullable=False)  # 규약|회의록|공지|지침|매뉴얼
+    # DOC_CATEGORY 그룹 코드 FK(NOT NULL — 작성 시 분류 필수, ← source_type enum, H8-6).
+    category_code_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     visibility: Mapped[str] = mapped_column(String, nullable=False)  # ALL|RESIDENT|ADMIN
     body: Mapped[str | None] = mapped_column(Text, nullable=True)  # 설명용 본문 — 임베딩 안 함
     # 현재 버전 번호(document_versions 최신과 일치).

@@ -12,6 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import RequestContext, get_tenant_session, require_roles
@@ -271,7 +272,7 @@ async def delete_code(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     code_id: uuid.UUID,
 ) -> Response:
-    """하드 삭제 — 자식이 있으면 409(명시 거부). 도메인 참조는 H8-6에서 FK RESTRICT 409."""
+    """하드 삭제 — 자식이 있으면 409. 도메인(notices·documents) 참조는 FK RESTRICT → 409(H8-6)."""
     code = await _get_code(session, ctx.tenant_id, code_id)
     child_count = await session.scalar(
         select(func.count())
@@ -280,6 +281,11 @@ async def delete_code(
     )
     if child_count and child_count > 0:
         raise HTTPException(status_code=409, detail="하위 코드가 있어 삭제할 수 없음")
-    await session.delete(code)
-    await session.flush()
+    # SAVEPOINT로 감싸 FK RESTRICT 위반(IntegrityError) 시 트랜잭션 전체를 잃지 않고 409로 전환.
+    try:
+        async with session.begin_nested():
+            await session.delete(code)
+            await session.flush()
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="사용 중인 코드는 삭제할 수 없음") from exc
     return Response(status_code=204)

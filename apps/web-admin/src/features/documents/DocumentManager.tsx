@@ -4,7 +4,8 @@ import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiError, listDocuments, type DocumentItem } from "@/lib/api";
+import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/lib/api";
+import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
 import { DocumentTable } from "./DocumentTable";
 import {
   STATUS_FILTERS,
@@ -31,6 +32,7 @@ export function DocumentManager() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
 
   // 전체 목록 1회 로드 후 클라이언트에서 필터·집계 — 집계를 필터 탭과 무관하게 유지.
   const load = useCallback(async () => {
@@ -48,6 +50,17 @@ export function DocumentManager() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 분류 코드 라벨(목록 표시용) — 실패 시 "미분류"로 폴백.
+  useEffect(() => {
+    void (async () => {
+      try {
+        setCategoryLabels(codeLabelMap(await listCodeGroups(), DOC_CATEGORY_GROUP));
+      } catch {
+        // 무시 — 라벨 없이 "미분류" 표시.
+      }
+    })();
+  }, []);
 
   // 검색어 디바운스(300ms) — 클라이언트 필터에만 사용.
   useEffect(() => {
@@ -123,6 +136,7 @@ export function DocumentManager() {
           loadError={loadError}
           docs={docs}
           visibleDocs={visibleDocs}
+          categoryLabels={categoryLabels}
           onRetry={() => {
             setLoading(true);
             void load();
@@ -148,10 +162,18 @@ interface DocumentsBodyProps {
   loadError: string | null;
   docs: readonly DocumentItem[];
   visibleDocs: readonly DocumentItem[];
+  categoryLabels: Map<string, string>;
   onRetry: () => void;
 }
 
-function DocumentsBody({ loading, loadError, docs, visibleDocs, onRetry }: DocumentsBodyProps) {
+function DocumentsBody({
+  loading,
+  loadError,
+  docs,
+  visibleDocs,
+  categoryLabels,
+  onRetry,
+}: DocumentsBodyProps) {
   if (loading) {
     return (
       <div className="surface-card doc-tablecard doc-loading">
@@ -194,5 +216,5 @@ function DocumentsBody({ loading, loadError, docs, visibleDocs, onRetry }: Docum
       />
     );
   }
-  return <DocumentTable docs={visibleDocs} />;
+  return <DocumentTable docs={visibleDocs} categoryLabels={categoryLabels} />;
 }

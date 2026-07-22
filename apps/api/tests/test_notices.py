@@ -24,14 +24,29 @@ from app.deps import (
 )
 from app.main import create_app
 from app.routers import notices as notices_router
-from conftest import MANAGER_USER_ID, TENANT_ID, USER_ID, FakeQueue, FakeStorage
+from conftest import BUILDING_ID, MANAGER_USER_ID, TENANT_ID, USER_ID, FakeQueue, FakeStorage
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import ContentChunk, Notice, NoticeAttachment, Notification, Tenant, User
+from liviq_db.models import (
+    Building,
+    Code,
+    CodeGroup,
+    ContentChunk,
+    Notice,
+    NoticeAttachment,
+    Notification,
+    Tenant,
+    User,
+)
 
 TENANT_B_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
+
+NOTICE_GROUP_ID = uuid.UUID("c0de0000-0000-0000-0000-000000000001")
+NOTICE_CODE_ID = uuid.UUID("c0de0000-0000-0000-0000-000000000010")  # NOTICE_CATEGORY code=일반
+DOC_GROUP_ID = uuid.UUID("c0de0000-0000-0000-0000-000000000002")
+DOC_CODE_ID = uuid.UUID("c0de0000-0000-0000-0000-000000000020")  # 잘못된 그룹 검증용
 
 
 def _future() -> str:
@@ -45,13 +60,46 @@ def _past() -> str:
 
 
 async def _seed(session: AsyncSession) -> None:
-    """단지A + active 사용자 2명(MANAGER·RESIDENT — 발행 알림 대상)."""
+    """단지A + active 사용자 2명(MANAGER·RESIDENT) + NOTICE_CATEGORY·DOC_CATEGORY 코드 + 동 1개."""
     await session.execute(
         text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
     )
     session.add(Tenant(id=TENANT_ID, name="단지A", status="active"))
+    await session.flush()  # 아래 FK(users·buildings·code_groups)가 tenants 행을 참조
     session.add(User(id=MANAGER_USER_ID, tenant_id=TENANT_ID, status="active"))
     session.add(User(id=USER_ID, tenant_id=TENANT_ID, status="active"))
+    session.add(Building(id=BUILDING_ID, tenant_id=TENANT_ID, name="101", floors=15))
+    session.add(
+        CodeGroup(
+            id=NOTICE_GROUP_ID,
+            tenant_id=TENANT_ID,
+            group_key="NOTICE_CATEGORY",
+            name="공지 분류",
+            is_system=True,
+        )
+    )
+    session.add(
+        CodeGroup(
+            id=DOC_GROUP_ID,
+            tenant_id=TENANT_ID,
+            group_key="DOC_CATEGORY",
+            name="문서 카테고리",
+            is_system=True,
+        )
+    )
+    await session.flush()
+    session.add(
+        Code(
+            id=NOTICE_CODE_ID,
+            tenant_id=TENANT_ID,
+            group_id=NOTICE_GROUP_ID,
+            code="일반",
+            label="일반",
+        )
+    )
+    session.add(
+        Code(id=DOC_CODE_ID, tenant_id=TENANT_ID, group_id=DOC_GROUP_ID, code="공지", label="공지")
+    )
     await session.flush()
 
 
@@ -196,6 +244,116 @@ async def test_patch_updates_pinned_and_title(seeded: AsyncSession) -> None:
         )
     assert patched.status_code == 200
     assert patched.json()["title"] == "새 제목" and patched.json()["pinned"] is True
+
+
+# ── 분류 코드·부가 필드 (H8-6) ─────────────────────────────────────────────────
+
+
+async def test_create_stores_category_and_extra_fields(seeded: AsyncSession) -> None:
+    async with _client(seeded) as c:
+        response = await c.post(
+            "/admin/notices",
+            json={
+                "title": "단수 안내",
+                "body": "본문",
+                "status": "draft",
+                "category_code_id": str(NOTICE_CODE_ID),
+                "event_start": "2026-08-01",
+                "event_end": "2026-08-02",
+                "target_buildings": [str(BUILDING_ID)],
+                "keywords": "단수,급수,점검",
+            },
+        )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["category_code_id"] == str(NOTICE_CODE_ID)
+    assert body["event_start"] == "2026-08-01" and body["event_end"] == "2026-08-02"
+    assert body["target_buildings"] == [str(BUILDING_ID)]
+    assert body["keywords"] == "단수,급수,점검"
+
+
+async def test_create_rejects_non_notice_category_code_422(seeded: AsyncSession) -> None:
+    """DOC_CATEGORY 그룹 코드는 공지 분류로 쓸 수 없다(그룹 불일치 422)."""
+    async with _client(seeded) as c:
+        response = await c.post(
+            "/admin/notices",
+            json={"title": "x", "body": "y", "category_code_id": str(DOC_CODE_ID)},
+        )
+    assert response.status_code == 422
+
+
+async def test_create_rejects_unknown_category_code_422(seeded: AsyncSession) -> None:
+    async with _client(seeded) as c:
+        response = await c.post(
+            "/admin/notices",
+            json={"title": "x", "body": "y", "category_code_id": str(uuid.uuid4())},
+        )
+    assert response.status_code == 422
+
+
+async def test_create_rejects_other_tenant_category_code_422(seeded: AsyncSession) -> None:
+    """타 단지(B) 코드는 A 컨텍스트에서 참조 불가(tenant 필터 → 422)."""
+    seeded.add(Tenant(id=TENANT_B_ID, name="단지B", status="active"))
+    await seeded.flush()
+    b_group_id = uuid.uuid4()
+    b_code_id = uuid.uuid4()
+    seeded.add(
+        CodeGroup(
+            id=b_group_id,
+            tenant_id=TENANT_B_ID,
+            group_key="NOTICE_CATEGORY",
+            name="공지 분류",
+            is_system=True,
+        )
+    )
+    await seeded.flush()
+    seeded.add(
+        Code(id=b_code_id, tenant_id=TENANT_B_ID, group_id=b_group_id, code="일반", label="일반")
+    )
+    await seeded.flush()
+    async with _client(seeded) as c:
+        response = await c.post(
+            "/admin/notices",
+            json={"title": "x", "body": "y", "category_code_id": str(b_code_id)},
+        )
+    assert response.status_code == 422
+
+
+async def test_create_rejects_unknown_target_building_422(seeded: AsyncSession) -> None:
+    async with _client(seeded) as c:
+        response = await c.post(
+            "/admin/notices",
+            json={"title": "x", "body": "y", "target_buildings": [str(uuid.uuid4())]},
+        )
+    assert response.status_code == 422
+
+
+async def test_patch_updates_category_and_keywords(seeded: AsyncSession) -> None:
+    async with _client(seeded) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "초안", "body": "본문", "status": "draft"}
+        )
+        notice_id = created.json()["id"]
+        patched = await c.patch(
+            f"/admin/notices/{notice_id}",
+            json={"category_code_id": str(NOTICE_CODE_ID), "keywords": "누수,긴급"},
+        )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["category_code_id"] == str(NOTICE_CODE_ID)
+    assert patched.json()["keywords"] == "누수,긴급"
+
+
+async def test_patch_published_keywords_change_reingests(seeded: AsyncSession) -> None:
+    queue = FakeQueue()
+    async with _client(seeded, queue=queue) as c:
+        created = await c.post(
+            "/admin/notices", json={"title": "발행", "body": "본문", "status": "published"}
+        )
+        notice_id = created.json()["id"]
+        await c.patch(f"/admin/notices/{notice_id}", json={"keywords": "단수,점검"})
+    jobs = [args for task, args in queue.jobs if task == "ingest_notice_task"]
+    # 발행 1회 + keywords 변경 재인제스트 1회(임베딩 텍스트에 keywords 포함).
+    assert jobs == [(notice_id, str(TENANT_ID)), (notice_id, str(TENANT_ID))]
 
 
 # ── 조회·정렬·soft delete ──────────────────────────────────────────────────────

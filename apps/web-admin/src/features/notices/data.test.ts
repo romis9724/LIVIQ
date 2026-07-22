@@ -26,6 +26,11 @@ function makeNotice(over: Partial<Notice>): Notice {
     scheduledAt: null,
     publishedAt: null,
     publishedBy: null,
+    categoryCodeId: null,
+    eventStart: null,
+    eventEnd: null,
+    targetBuildings: null,
+    keywords: null,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
     attachments: [],
@@ -97,7 +102,7 @@ describe("validateNoticeForm", () => {
 
   it("제목·본문이 있으면 오류 없음(임시저장)", () => {
     const errors = validateNoticeForm(
-      { title: "안내", body: "본문", saveMode: "draft", scheduledAt: "" },
+      { title: "안내", body: "본문", saveMode: "draft", scheduledAt: "", eventStart: "", eventEnd: "" },
       now,
     );
     expect(hasErrors(errors)).toBe(false);
@@ -105,7 +110,7 @@ describe("validateNoticeForm", () => {
 
   it("빈 제목·본문을 거절한다", () => {
     const errors = validateNoticeForm(
-      { title: "  ", body: "", saveMode: "draft", scheduledAt: "" },
+      { title: "  ", body: "", saveMode: "draft", scheduledAt: "", eventStart: "", eventEnd: "" },
       now,
     );
     expect(errors.title).toBeDefined();
@@ -119,6 +124,8 @@ describe("validateNoticeForm", () => {
         body: "b".repeat(MAX_BODY + 1),
         saveMode: "draft",
         scheduledAt: "",
+        eventStart: "",
+        eventEnd: "",
       },
       now,
     );
@@ -128,7 +135,7 @@ describe("validateNoticeForm", () => {
 
   it("예약 발행인데 시각이 없으면 거절한다", () => {
     const errors = validateNoticeForm(
-      { title: "안내", body: "본문", saveMode: "scheduled", scheduledAt: "" },
+      { title: "안내", body: "본문", saveMode: "scheduled", scheduledAt: "", eventStart: "", eventEnd: "" },
       now,
     );
     expect(errors.scheduledAt).toMatch(/지정/);
@@ -136,7 +143,14 @@ describe("validateNoticeForm", () => {
 
   it("예약 시각이 과거면 거절한다", () => {
     const errors = validateNoticeForm(
-      { title: "안내", body: "본문", saveMode: "scheduled", scheduledAt: "2020-01-01T00:00" },
+      {
+        title: "안내",
+        body: "본문",
+        saveMode: "scheduled",
+        scheduledAt: "2020-01-01T00:00",
+        eventStart: "",
+        eventEnd: "",
+      },
       now,
     );
     expect(errors.scheduledAt).toMatch(/미래/);
@@ -144,10 +158,60 @@ describe("validateNoticeForm", () => {
 
   it("예약 시각이 미래면 통과한다", () => {
     const errors = validateNoticeForm(
-      { title: "안내", body: "본문", saveMode: "scheduled", scheduledAt: "2030-01-01T00:00" },
+      {
+        title: "안내",
+        body: "본문",
+        saveMode: "scheduled",
+        scheduledAt: "2030-01-01T00:00",
+        eventStart: "",
+        eventEnd: "",
+      },
       now,
     );
     expect(hasErrors(errors)).toBe(false);
+  });
+
+  it("행사 시작일이 종료일보다 뒤면 거절한다", () => {
+    const errors = validateNoticeForm(
+      {
+        title: "안내",
+        body: "본문",
+        saveMode: "draft",
+        scheduledAt: "",
+        eventStart: "2026-08-10",
+        eventEnd: "2026-08-01",
+      },
+      now,
+    );
+    expect(errors.eventEnd).toMatch(/이후/);
+  });
+
+  it("행사 기간이 올바르거나 한쪽만 있으면 통과한다", () => {
+    const ok = validateNoticeForm(
+      {
+        title: "안내",
+        body: "본문",
+        saveMode: "draft",
+        scheduledAt: "",
+        eventStart: "2026-08-01",
+        eventEnd: "2026-08-10",
+      },
+      now,
+    );
+    expect(ok.eventEnd).toBeUndefined();
+
+    const openEnded = validateNoticeForm(
+      {
+        title: "안내",
+        body: "본문",
+        saveMode: "draft",
+        scheduledAt: "",
+        eventStart: "2026-08-01",
+        eventEnd: "",
+      },
+      now,
+    );
+    expect(openEnded.eventEnd).toBeUndefined();
   });
 });
 
