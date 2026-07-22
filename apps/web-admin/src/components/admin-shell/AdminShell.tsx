@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { API_BASE_URL, getMe, listApprovals, listReviewQueue, type Me } from "@/lib/api";
+import { API_BASE_URL, getMe, listApprovals, type Me } from "@/lib/api";
 import { isSysAdmin, navForRoles, roleHome, roleLabel } from "@/lib/roles";
 import "./admin-shell.css";
 
@@ -45,9 +45,6 @@ function usePendingBadges(enabled: boolean): Record<string, number> {
     // 마운트 시 1회 조회(폴링 없음). 각 카운트는 독립 — 하나가 실패해도 나머지는 표시.
     void listApprovals()
       .then((items) => alive && setBadges((prev) => ({ ...prev, "/residents": items.length })))
-      .catch(() => undefined);
-    void listReviewQueue()
-      .then((list) => alive && setBadges((prev) => ({ ...prev, "/review-queue": list.total })))
       .catch(() => undefined);
     return () => {
       alive = false;

@@ -112,7 +112,7 @@ async def test_staff_retains_inquiry_and_document_access(
 async def test_staff_denied_manager_only_surfaces(
     seeded: AsyncSession, fake_redis: FakeRedis
 ) -> None:
-    """관리비·검수·시설·승인·명부·직원초대는 소장 전용 — STAFF 전부 403(CRITICAL).
+    """관리비·시설·승인·명부·직원초대는 소장 전용 — STAFF 전부 403(CRITICAL).
 
     공지 발행은 ADR-0015로 STAFF에 개방됐다(위 allowed 테스트) — 여기 목록에서 제외.
     """
@@ -120,7 +120,6 @@ async def test_staff_denied_manager_only_surfaces(
         seeded, fake_redis, FakeMailer(), ctx=_ctx(("STAFF",), user_id=STAFF_ID)
     ) as c:
         assert (await c.get("/admin/fees")).status_code == 403
-        assert (await c.get("/admin/review-queue")).status_code == 403
         assert (await c.get("/admin/facilities")).status_code == 403
         assert (await c.get("/admin/approvals")).status_code == 403
         assert (

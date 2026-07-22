@@ -8,10 +8,10 @@ export default function NotFound() {
       <EmptyState
         icon="🧭"
         title="이 화면은 아직 준비 중이에요"
-        description="P0 단계에서는 AI 검수 큐와 공지 초안 작성만 구현되어 있습니다."
+        description="요청하신 화면을 찾을 수 없습니다."
         action={
-          <Link className="btn btn--primary btn--sm" href="/review-queue">
-            AI 검수 큐로 가기
+          <Link className="btn btn--primary btn--sm" href="/dashboard">
+            대시보드로 가기
           </Link>
         }
       />

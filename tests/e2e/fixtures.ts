@@ -18,9 +18,6 @@ export const E2E = {
   householdId: "ee2e0000-0000-4000-8000-000000000004",
   notice1Id: "ee2e0000-0000-4000-8000-000000000005",
   notice2Id: "ee2e0000-0000-4000-8000-000000000006",
-  conversationId: "ee2e0000-0000-4000-8000-000000000007",
-  userMessageId: "ee2e0000-0000-4000-8000-000000000008",
-  assistantMessageId: "ee2e0000-0000-4000-8000-000000000009",
   feeCurrentId: "ee2e0000-0000-4000-8000-00000000000a",
   feePrevId: "ee2e0000-0000-4000-8000-00000000000b",
   // 가입 여정용 2호 세대 — 명부 불일치 신청자가 붙는 유효 세대(조회 성공, 매칭 실패).
@@ -93,13 +90,6 @@ export const NOTICE1 = {
 export const NOTICE2 = {
   title: "E2E 승강기 점검 공지",
   body: "다음 주 월요일 승강기 정기 점검이 예정되어 있습니다.",
-};
-
-// 시드된 검수 큐 항목(needs_review).
-export const REVIEW = {
-  question: "E2E 검수 큐 테스트 질문입니다.",
-  answer: "E2E 검수 대기 답변 — 신뢰도가 낮아 사후 검수가 필요합니다.",
-  confidence: 0.35,
 };
 
 /** 이번 달(YYYY-MM) — FeesView.currentMonth()과 동일 규칙. */

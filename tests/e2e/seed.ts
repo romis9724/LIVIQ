@@ -26,7 +26,6 @@ import {
   MISMATCH_PERSON,
   NOTICE1,
   NOTICE2,
-  REVIEW,
   ROSTER_PERSON,
   SYS,
   UNIT_NO,
@@ -290,29 +289,6 @@ async function insert(client: Client): Promise<void> {
       prevMonth(),
       JSON.stringify(FEE_BREAKDOWN),
       FEE_PREV_TOTAL,
-    ],
-  );
-
-  // 검수 큐 — 대화 + user 질문 + 저신뢰 assistant 답변(needs_review).
-  await client.query(
-    `INSERT INTO conversations (id, tenant_id, user_id, channel) VALUES ($1, $2, $3, 'resident')`,
-    [E2E.conversationId, E2E.tenantId, E2E.userId],
-  );
-  await client.query(
-    `INSERT INTO messages (id, tenant_id, conversation_id, role, content, created_at)
-     VALUES ($1, $2, $3, 'user', $4, NOW() - interval '1 minute')`,
-    [E2E.userMessageId, E2E.tenantId, E2E.conversationId, REVIEW.question],
-  );
-  await client.query(
-    `INSERT INTO messages
-       (id, tenant_id, conversation_id, role, content, status, confidence, review_status, created_at)
-     VALUES ($1, $2, $3, 'assistant', $4, 'answered', $5, 'needs_review', NOW())`,
-    [
-      E2E.assistantMessageId,
-      E2E.tenantId,
-      E2E.conversationId,
-      REVIEW.answer,
-      REVIEW.confidence,
     ],
   );
 }
