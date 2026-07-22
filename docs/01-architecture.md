@@ -290,7 +290,8 @@
 | `POST /admin/notices/{id}/attachments` | MANAGER·STAFF | multipart 업로드 — 확장자 화이트리스트(pdf·hwp·hwpx·docx·xlsx·jpg·jpeg·png)+파일당 20MB+공지당 5개 상한 |
 | `DELETE /admin/notices/{id}/attachments/{att_id}` | MANAGER·STAFF | 첨부 삭제(MinIO 객체 포함) |
 
-> 예약 발행(`scheduled`)은 `ai-worker` arq cron(1분 폴링)이 `scheduled_at` 도달 시 `published` 전이 + 대상자 알림 생성. 공지 본문·첨부는 RAG 인제스트하지 않는다(현행 유지). 공지 경로에 AI는 관여하지 않는다.
+> 예약 발행(`scheduled`)은 `ai-worker` arq cron(1분 폴링)이 `scheduled_at` 도달 시 `published` 전이 + 대상자 알림 생성.
+> **공지 벡터화(H8-3)**: **published 공지만** 본문+파싱 가능 첨부(.pdf/.txt/.md)를 `content_chunks(source_type=notice)`로 인제스트(발행 시점·published 수정/첨부 변경 시 재인제스트 enqueue, soft delete 시 청크 즉시 삭제). 검색(`search_documents`)은 notice 청크를 **published+미삭제 조인 검증**으로만 노출(미발행 미노출 CRITICAL). 공지 **작성·발행 경로에 AI는 여전히 관여하지 않는다** — 벡터화는 읽기 전용 검색 노출이다([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md) 개정 노트).
 
 **관리비** (H2-5 · [ADR-0006](adr/0006-fees-excel-upload-source.md), 화면: 입주민 관리비 / 관리자 관리비 관리)
 
