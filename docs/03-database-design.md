@@ -316,8 +316,10 @@ buildings(id, tenant_id, name, floors int, created_at, updated_at)
 -- 세대 (동·층·호로 구조화)
 households(id, tenant_id, building_id, floor int, unit_no int,
            unit_type_id NULL,             -- 평면도 타입 참조(unit_types.id, §4.8)
-           status, created_at, updated_at)
+           status, created_at, updated_at)  -- status: active|inactive(공실·사용 중지)
   UNIQUE(tenant_id, building_id, floor, unit_no)
+  -- H8-5 설정>동/호수 관리는 위 스키마를 그대로 재사용(마이그레이션 없음). 세대 삭제는
+  -- users·inquiries·fees·plan_devices FK 연결 시 앱에서 409로 거부(DB FK가 최종 방어).
 
 -- 사용자 (식별정보는 pii_vault로 분리)
 users(id, tenant_id, household_id NULL,

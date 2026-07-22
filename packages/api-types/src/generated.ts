@@ -55,6 +55,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/buildings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Buildings
+         * @description 동 목록 + 각 동의 세대 수(집계). 이름 오름차순.
+         */
+        get: operations["list_buildings_admin_buildings_get"];
+        put?: never;
+        /** Create Building */
+        post: operations["create_building_admin_buildings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/buildings/{building_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Building
+         * @description 동 삭제 — 소속 세대가 있으면 409(세대를 먼저 정리해야 함).
+         */
+        delete: operations["delete_building_admin_buildings__building_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Building */
+        patch: operations["update_building_admin_buildings__building_id__patch"];
+        trace?: never;
+    };
+    "/admin/buildings/{building_id}/households": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Households
+         * @description 동의 세대 목록 — 층·호 오름차순.
+         */
+        get: operations["list_households_admin_buildings__building_id__households_get"];
+        put?: never;
+        /**
+         * Create Households
+         * @description 층·호 범위 일괄 생성(단일은 start==end). 이미 있는 (층,호)는 건너뛴다(멱등).
+         */
+        post: operations["create_households_admin_buildings__building_id__households_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/code-groups": {
         parameters: {
             query?: never;
@@ -317,6 +383,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/households/{household_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Household
+         * @description 세대 삭제 — 입주민·명부·민원·관리비·세대기기 연결 시 409(CRITICAL 삭제 보호).
+         */
+        delete: operations["delete_household_admin_households__household_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Household
+         * @description floor·unit_no·status 수정. (층,호) 변경 시 같은 동 내 중복이면 409.
+         */
+        patch: operations["update_household_admin_households__household_id__patch"];
         trace?: never;
     };
     "/admin/inquiries": {
@@ -1468,6 +1558,57 @@ export interface components {
             /** Used Today */
             used_today: number;
         };
+        /** BuildingCreateIn */
+        BuildingCreateIn: {
+            /** Floors */
+            floors?: number | null;
+            /** Name */
+            name: string;
+        };
+        /** BuildingItem */
+        BuildingItem: {
+            /** Floors */
+            floors: number | null;
+            /**
+             * Household Count
+             * @default 0
+             */
+            household_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /** BuildingListOut */
+        BuildingListOut: {
+            /** Items */
+            items: components["schemas"]["BuildingItem"][];
+        };
+        /** BuildingOut */
+        BuildingOut: {
+            /** Floors */
+            floors: number | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * BuildingUpdateIn
+         * @description name·floors만 수정 — 전달한 필드만 반영(model_fields_set).
+         */
+        BuildingUpdateIn: {
+            /** Floors */
+            floors?: number | null;
+            /** Name */
+            name?: string | null;
+        };
         /** CacheStats */
         CacheStats: {
             /** Hit Rate */
@@ -1931,6 +2072,86 @@ export interface components {
         HealthResponse: {
             /** Status */
             status: string;
+        };
+        /**
+         * HouseholdBulkCreateIn
+         * @description 층·호 범위 일괄 생성. 단일 세대는 start==end로 지정한다.
+         *
+         *     floor_start~floor_end × unit_start~unit_end의 데카르트 곱을 세대로 만든다. 이미 있는
+         *     (층,호)는 건너뛴다(멱등). 상한 초과·역순 범위는 422.
+         */
+        HouseholdBulkCreateIn: {
+            /** Floor End */
+            floor_end: number;
+            /** Floor Start */
+            floor_start: number;
+            /**
+             * Status
+             * @default active
+             */
+            status: string;
+            /** Unit End */
+            unit_end: number;
+            /** Unit Start */
+            unit_start: number;
+        };
+        /** HouseholdBulkCreateOut */
+        HouseholdBulkCreateOut: {
+            /** Created */
+            created: number;
+            /** Skipped */
+            skipped: number;
+        };
+        /** HouseholdItem */
+        HouseholdItem: {
+            /** Floor */
+            floor: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
+            /** Unit No */
+            unit_no: number;
+        };
+        /** HouseholdListOut */
+        HouseholdListOut: {
+            building: components["schemas"]["BuildingOut"];
+            /** Items */
+            items: components["schemas"]["HouseholdItem"][];
+        };
+        /** HouseholdOut */
+        HouseholdOut: {
+            /**
+             * Building Id
+             * Format: uuid
+             */
+            building_id: string;
+            /** Floor */
+            floor: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Status */
+            status: string;
+            /** Unit No */
+            unit_no: number;
+        };
+        /**
+         * HouseholdUpdateIn
+         * @description floor·unit_no·status 수정 — 전달한 필드만 반영.
+         */
+        HouseholdUpdateIn: {
+            /** Floor */
+            floor?: number | null;
+            /** Status */
+            status?: string | null;
+            /** Unit No */
+            unit_no?: number | null;
         };
         /** IncidentCreateIn */
         IncidentCreateIn: {
@@ -2717,6 +2938,228 @@ export interface operations {
             };
         };
     };
+    list_buildings_admin_buildings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildingListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_building_admin_buildings_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildingCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_building_admin_buildings__building_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                building_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_building_admin_buildings__building_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                building_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BuildingUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuildingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_households_admin_buildings__building_id__households_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                building_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_households_admin_buildings__building_id__households_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                building_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdBulkCreateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdBulkCreateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_code_groups_admin_code_groups_get: {
         parameters: {
             query?: never;
@@ -3417,6 +3860,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FeeApplyOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_household_admin_households__household_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                household_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_household_admin_households__household_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                household_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HouseholdUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdOut"];
                 };
             };
             /** @description Validation Error */
