@@ -196,11 +196,12 @@
 | [0006](adr/0006-fees-excel-upload-source.md) | 관리비 원천 = 엑셀 업로드(ERP 어댑터는 추후) | ERP 미러 | ERP 부재, 어댑터 인터페이스로 병행 대비 |
 | [0007](adr/0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 + 스텝 상한(정적 라우터 대체) | 정적 라우터 유지 / 자유 ReAct 루프 | 복합 질의 커버 + 비용·평가 통제. 쓰기는 도구 제외로 규칙 8 유지 |
 | [0013](adr/0013-python-backend.md) | 백엔드 전면 Python(FastAPI·arq·SQLAlchemy+Alembic·ai-core) | 기존 TS 백엔드 스택 유지 | AI/데이터 생태계 정합, mcp 자산 재사용, 웹↔api 타입은 OpenAPI 생성 |
+| [0015](adr/0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환(첨부·예약 발행) | AI 초안→검수→발행 흐름 유지 | 운영 실무는 정형 문서 직접 작성, 첨부가 실요구·AI 불요 |
 
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -275,14 +276,21 @@
 | `GET /admin/inquiries` | MANAGER·STAFF | 접수함(상태·카테고리 필터) |
 | `POST /admin/inquiries/{id}/assign` · `/status` | MANAGER·STAFF | 상태 머신 `received→assigned→in_progress→done`(역행은 관리자만). 변경 시 `inquiry_events` 기록 + 작성자 알림 |
 
-**공지** (H2-4, 화면: 입주민 공지 / 관리자 공지 관리)
+**공지** (H8-1 게시판 전환 · [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md), 화면: 입주민 공지 / 관리자 공지사항)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `GET /notices` · `/notices/{id}` | RESIDENT+ | `audience`·역할 필터 |
-| `POST /admin/notices/drafts` | MANAGER·STAFF | 키워드→AI 초안(`notice_drafts`). **출처 인용 강제** — 근거 문서 없으면 초안 생성 거절 |
-| `GET /admin/notices/drafts/{id}` | MANAGER·STAFF | 초안·인용 확인(검수 화면) |
-| `POST /admin/notices` | MANAGER | **발송·예약은 사람 확정만**(AI 초안 승인 후 승격). published 시 대상자 알림 생성 |
+| `GET /notices` · `/notices/{id}` | RESIDENT+ | `published`만, 상단 고정(pinned) 우선 정렬 + `audience`·역할 필터. 상세에 첨부 메타 포함 |
+| `GET /notices/{id}/attachments/{att_id}` | RESIDENT+ | 첨부 파일 다운로드 — API 경유(tenant·published 검증, presigned URL 미사용) |
+| `GET /admin/notices` | MANAGER·STAFF | 전 상태 목록(draft·scheduled 포함) |
+| `POST /admin/notices` | MANAGER·STAFF | 작성 — `status=draft\|published\|scheduled`(scheduled는 `scheduled_at` 필수). published 시 대상자 알림 생성 |
+| `GET /admin/notices/{id}` | MANAGER·STAFF | 상세(첨부 포함) |
+| `PATCH /admin/notices/{id}` | MANAGER·STAFF | 제목·본문·audience·pinned·상태 전이. 발행 전이 시 대상자 알림 생성 |
+| `DELETE /admin/notices/{id}` | MANAGER·STAFF | soft delete |
+| `POST /admin/notices/{id}/attachments` | MANAGER·STAFF | multipart 업로드 — 확장자 화이트리스트(pdf·hwp·hwpx·docx·xlsx·jpg·jpeg·png)+파일당 20MB+공지당 5개 상한 |
+| `DELETE /admin/notices/{id}/attachments/{att_id}` | MANAGER·STAFF | 첨부 삭제(MinIO 객체 포함) |
+
+> 예약 발행(`scheduled`)은 `ai-worker` arq cron(1분 폴링)이 `scheduled_at` 도달 시 `published` 전이 + 대상자 알림 생성. 공지 본문·첨부는 RAG 인제스트하지 않는다(현행 유지). 공지 경로에 AI는 관여하지 않는다.
 
 **관리비** (H2-5 · [ADR-0006](adr/0006-fees-excel-upload-source.md), 화면: 입주민 관리비 / 관리자 관리비 관리)
 
@@ -335,7 +343,7 @@
 
 ### 13.3 표면 불변식 (구현이 어겨서는 안 되는 것)
 
-1. AI가 상태를 바꾸는 엔드포인트는 없다 — AI 산출물은 항상 `*_drafts`·제안 컬럼(`ai_suggested_*`)에 머물고, 상태 전이는 사람 액션 엔드포인트만 수행(규칙 6·8).
+1. AI가 상태를 바꾸는 엔드포인트는 없다 — AI 산출물은 항상 제안 컬럼(`ai_suggested_*`)에 머물고, 상태 전이는 사람 액션 엔드포인트만 수행(규칙 6·8).
 2. 관리비 쓰기는 엑셀 업로드 confirm 플로우가 유일하다. `/fees/explain`은 읽기+설명 전용(규칙 5).
 3. 입주민 리소스는 소유권 필터가 쿼리에 박힌다(`author_user_id`·`household_id`·승인 시점) — 파라미터로 우회 불가.
 4. SSE 계약(4이벤트)은 assistant·explain 등 모든 AI 스트리밍이 공유하며 변경 금지([09 §1.1](09-implementation-harness.md)).

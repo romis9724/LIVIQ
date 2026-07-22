@@ -24,6 +24,7 @@ erDiagram
   tenants ||--o{ conversations : "대화"
   tenants ||--o{ inquiries : "민원"
   tenants ||--o{ notices : "공지"
+  tenants ||--o{ notice_attachments : "첨부"
   tenants ||--o{ facilities : "시설"
   tenants ||--o{ excel_uploads : "업로드"
   tenants ||--o{ outbox_events : "이벤트"
@@ -49,7 +50,7 @@ erDiagram
   conversations ||--o{ messages : "메시지"
   messages ||--o{ citations : "인용"
   messages ||--o{ ai_feedback : "피드백"
-  notices ||--o{ notice_drafts : "초안"
+  notices ||--o{ notice_attachments : "첨부"
   facilities ||--o{ maintenance_logs : "정비"
   facilities ||--o{ incidents : "장애"
   excel_uploads ||--o{ fees : "적용"
@@ -186,12 +187,15 @@ erDiagram
     uuid tenant_id FK
     string title
     string status
+    bool pinned
+    timestamptz scheduled_at
   }
-  notice_drafts {
+  notice_attachments {
     uuid id PK
     uuid tenant_id FK
     uuid notice_id FK
-    string review_status
+    string filename
+    string storage_key
   }
   notifications {
     uuid id PK
@@ -413,20 +417,27 @@ inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified|
                payload jsonb,                          -- {from, to, category_id, note, ...}
                created_at)
 
-notices(id, tenant_id, title, body text, status,       -- draft|published|retracted|superseded
-        scheduled_at NULL,                              -- 예약 발송 시각(단일 컬럼; NULL=즉시). 발송 후 정정=superseded, 철회=retracted
+-- 공지 (H8-1 게시판 전환 — AI 초안 폐기, [ADR-0015]. 작성·수정·삭제·고정·임시저장·예약 발행)
+notices(id, tenant_id, title, body text, status,       -- draft|scheduled|published
+        pinned bool default false,                      -- 상단 고정
+        scheduled_at timestamptz NULL,                  -- status=scheduled일 때 발행 예정 시각(ai-worker cron이 도달 시 published 전이+알림)
         published_at, published_by, audience,           -- ALL|building|household
+        deleted_at NULL,                                -- soft delete(§3)
         created_at, updated_at)
 
-notice_drafts(id, tenant_id, notice_id NULL, prompt_keywords jsonb,
-              ai_body text, reviewed_by NULL, review_status,  -- pending|approved|rejected
-              created_at)                                      -- 자동발송 금지: 검수 후 notices로 승격
+-- 공지 첨부 (MinIO 저장, 다운로드는 API 경유 — presigned URL 미사용)
+notice_attachments(id, tenant_id, notice_id,           -- FK → notices(tenant_id, id) composite
+                   filename, content_type, size_bytes,  -- 확장자 화이트리스트 pdf·hwp·hwpx·docx·xlsx·jpg·jpeg·png, 파일당 20MB, 공지당 최대 5개
+                   storage_key,                          -- {tenant_id}/notices/{notice_id}/{attachment_id}
+                   created_at)
 
 -- 인앱 알림함 (앱 내 알림만, 외부 자동발송 아님)
 notifications(id, tenant_id, user_id, type,            -- notice|inquiry_status|approval|system
               title, body text, link,                  -- link=앱 내 딥링크
               read_at NULL, created_at)                 -- RLS 대상(본인 알림만 열람)
 ```
+
+> **공지 첨부 접근 통제(H8-1 CRITICAL 게이트)**: `notice_attachments`는 `tenant_id` 표준 RLS 대상(§5 일반 규칙 — 예외 테이블 아님). 입주민 다운로드 경로(`GET /notices/{id}/attachments/{att_id}`)는 RLS(tenant) + **공지 published 검증 + 소유 notice 일치**를 앱에서 이중 확인해 교차 tenant·미발행 공지 첨부 접근을 차단한다. 첨부 삭제(`DELETE`)는 행 + MinIO 객체를 함께 제거(하드 삭제 — soft delete 대상 아님).
 
 ### 4.5 시설·회의
 
@@ -589,7 +600,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 ## 7. 인덱싱·성능
 
 - 벡터: `document_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
-- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
+- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.
