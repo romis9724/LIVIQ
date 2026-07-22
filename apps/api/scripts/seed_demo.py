@@ -24,11 +24,12 @@ H7-2 역할 축소로 FACILITY 계정은 제거했다(RESIDENT·MANAGER·STAFF·
 
 명부(pre_registered) 2명 — 신규 가입 여정 테스트용. 계정이 아직 없으므로 dev 단지 가입 링크로
 계정을 만든 뒤 온보딩 폼에서 아래 인적사항을 **그대로** 입력하면 명부와 자동 대조
-(name_hash+birth_date_hash+household)되어 pending 승격된다:
+(name_hash+birth_date_hash+household)되어 pending 승격된다. 동·층·호는 실명부(401~405동,
+seed_households_xlsx)의 실재 세대에 맞춘다:
     | 이름   | 생년월일    | 동   | 층 | 호  |
     |--------|-------------|------|----|-----|
-    | 정가입 | 1992-03-15  | 101  | 3  | 301 |
-    | 한신규 | 1988-11-02  | 101  | 4  | 402 |
+    | 정가입 | 1992-03-15  | 401  | 3  | 301 |
+    | 한신규 | 1988-11-02  | 401  | 4  | 402 |
 
 dev 단지 가입 링크(입주민 웹):
     /signup?t=11111111-1111-1111-1111-111111111111
@@ -51,8 +52,8 @@ from liviq_db.models import Building, Fee, Household, PiiVault, Tenant, User, Us
 
 DEV_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 DEMO_PASSWORD = "liviq-demo-1234!"  # 활성 계정 공통 비밀번호(데모 편의 — 운영은 재설정 유도)
-# 입주민 웹 가입 폼의 동 옵션(DONG_OPTIONS)과 일치해야 세대 조회가 성공한다.
-BUILDING_NAME = "101"
+# 실명부(seed_households_xlsx의 401~405동) 중 하나 — 데모 명부·온보딩 대조가 실단지 세대와 정합.
+BUILDING_NAME = "401"
 
 # 활성 계정: (이름, 역할, 이메일). login_id = 이메일 keyed HMAC.
 ACTIVE_ACCOUNTS = (
@@ -78,7 +79,7 @@ async def _require_tenant(session: AsyncSession) -> None:
 
 
 async def _ensure_building(session: AsyncSession) -> uuid.UUID:
-    """웹 폼 동 옵션과 일치하는 building '101' 확보. 기존 '101동'이 있으면 개명(멱등)."""
+    """실명부 동 '401' 확보 — seed_households_xlsx가 이미 만들면 재사용, 없으면 생성(멱등)."""
     building_id = await session.scalar(
         select(Building.id).where(
             Building.tenant_id == DEV_TENANT_ID, Building.name == BUILDING_NAME
@@ -86,13 +87,7 @@ async def _ensure_building(session: AsyncSession) -> uuid.UUID:
     )
     if building_id is not None:
         return building_id
-    legacy = await session.scalar(
-        select(Building).where(Building.tenant_id == DEV_TENANT_ID, Building.name == "101동")
-    )
-    if legacy is not None:
-        legacy.name = BUILDING_NAME  # 웹 가입 폼(dong="101")과 정합 — FK는 id 기준이라 안전
-        return legacy.id
-    building = Building(tenant_id=DEV_TENANT_ID, name=BUILDING_NAME, floors=15)
+    building = Building(tenant_id=DEV_TENANT_ID, name=BUILDING_NAME, floors=25)
     session.add(building)
     await session.flush()
     return building.id
