@@ -9,7 +9,7 @@
 2. **개인정보 분리**: 식별정보는 `pii_vault`에 분리·암호화 저장, 업무 테이블은 참조키만.
 3. **불변/감사**: 핵심 행위는 `audit_logs`에 추가-only 기록.
 4. **관리비 원천**: 관리자 **엑셀 업로드**가 현재 원천(추후 ERP 어댑터 병행 여지). AI는 **설명만**(계산·부과 금지).
-5. **벡터 배치 분리**: 문서 임베딩은 `document_chunks`(pgvector), 시설 텍스트 임베딩은 **Neo4j 벡터 인덱스**에만 — 중복 저장 금지([11-data-architecture.md](11-data-architecture.md)).
+5. **벡터 배치 분리**: 문서·공지 임베딩은 `content_chunks`(pgvector), 시설 텍스트 임베딩은 **Neo4j 벡터 인덱스**에만 — 중복 저장 금지([11-data-architecture.md](11-data-architecture.md)).
 
 ## 2. ERD (개념)
 
@@ -44,8 +44,9 @@ erDiagram
   users ||--o{ consents : "동의"
   users ||--o{ notifications : "수신"
   users ||--o{ auth_tokens : "인증토큰"
-  documents ||--o{ document_chunks : "청크"
-  document_chunks ||--o{ citations : "근거"
+  documents ||--o{ document_versions : "첨부버전"
+  documents ||--o{ content_chunks : "청크"
+  content_chunks ||--o{ citations : "근거"
   conversations ||--o{ messages : "메시지"
   messages ||--o{ citations : "인용"
   messages ||--o{ ai_feedback : "피드백"
@@ -140,10 +141,19 @@ erDiagram
     string source_type
     string index_status
   }
-  document_chunks {
+  document_versions {
     uuid id PK
     uuid tenant_id FK
     uuid document_id FK
+    int version
+    string storage_key
+  }
+  content_chunks {
+    uuid id PK
+    uuid tenant_id FK
+    string source_type
+    uuid document_id FK
+    uuid notice_id FK
     text content
     vector embedding
   }
@@ -339,24 +349,33 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 >
 > **명부 재업로드(diff 병합)**: 재업로드 시 기존 `pre_registered` 행과 (성함+생일+동·호) 키로 diff — 신규는 추가, 명부에서 사라진 행은 `inactive`(전출 추정) 표시(자동 삭제 금지, 소장 확인). 이미 `active`로 가입한 세대 계정은 유지.
 
-### 4.2 문서·벡터 (RAG)
+### 4.2 문서·벡터 (RAG) — H8-2 게시판 전환([ADR-0016](adr/0016-document-board-versioned-attachment.md))
 
 ```sql
--- 원문 메타
+-- 게시글 메타(관리자 전용 게시판 — 제목+본문(설명용)+첨부 1개 필수)
 documents(id, tenant_id, title, source_type,        -- 규약|회의록|공지|지침|매뉴얼
-          visibility,                                -- ALL|RESIDENT|ADMIN|COUNCIL
-          storage_key, content_hash, version,
+          visibility,                                -- ALL|RESIDENT|ADMIN|COUNCIL (AI 인용 범위)
+          body text NULL,                            -- 본문(설명용 — 임베딩 안 함)
+          version int,                               -- 현재 버전 번호(document_versions 최신과 일치)
           index_status,                              -- pending|indexing|indexed|failed
-          uploaded_by, created_at, updated_at)
-  UNIQUE(tenant_id, content_hash)                    -- 멱등 인제스트
+          uploaded_by, created_at, updated_at, deleted_at)
 
--- 청크 + 임베딩
-document_chunks(id, tenant_id, document_id,
-                chunk_index, content text,
-                heading, page int, clause,           -- 인용 정확도용 메타
-                token_count int,
-                embedding vector(1024),              -- bge-m3(1024) 고정
-                created_at)
+-- 첨부 버전 이력(재업로드 = version+1 + 재인제스트. 이력은 다운로드만 — 롤백 없음)
+document_versions(id, tenant_id, document_id,
+                  version int, filename, content_type, size_bytes int,
+                  storage_key,                       -- {tenant}/documents/{doc_id}/v{n}{suffix}
+                  content_hash, uploaded_by, created_at)
+  UNIQUE(tenant_id, document_id, version)
+
+-- 청크 + 임베딩 — 소스 다형(문서 + 공지 H8-3 대비)
+content_chunks(id, tenant_id,
+               source_type,                          -- document|notice
+               document_id NULL, notice_id NULL,     -- CHECK: source_type과 정확히 하나 일치
+               chunk_index, content text,
+               heading, page int, clause,            -- 인용 정확도용 메타
+               token_count int,
+               embedding vector(1024),               -- bge-m3(1024) 고정
+               created_at)
 -- 인덱스
 --   HNSW(embedding vector_cosine_ops)
 --   btree(tenant_id, document_id)
@@ -365,6 +384,8 @@ document_chunks(id, tenant_id, document_id,
 > 벡터 검색은 항상 `WHERE tenant_id = $current AND visibility ∈ 허용` 선필터 후 ANN.
 > visibility 매핑: `ALL`=인증 사용자 전체 · `RESIDENT`=입주민 · `ADMIN`=MANAGER·STAFF 열람 · `COUNCIL`=입주자대표회의.
 > 임베딩 모델/차원 변경은 마이그레이션 이벤트(전량 재색인) — 함부로 바꾸지 않음.
+> 벡터는 항상 **최신 버전만** — 재업로드 시 기존 청크 삭제·재임베딩(citations.chunk_id SET NULL 보존).
+> 중복 방어는 DB 전역 unique 대신 앱 레벨(현재 버전 집합 내 동일 content_hash → 409, ADR-0016).
 
 ### 4.3 대화·인용
 
@@ -588,7 +609,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 
 ## 7. 인덱싱·성능
 
-- 벡터: `document_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
+- 벡터: `content_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
 - 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
