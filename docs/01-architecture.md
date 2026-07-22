@@ -201,7 +201,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -332,6 +332,20 @@
 | `GET /admin/dashboard/stats` | MANAGER | 기간 파라미터(기본 7일) — 질의 수·평균 토큰(입/출)·폴백률·needs_review율·캐시 적중률·민원 상태 분포·시설 상태 분포 + 일일 토큰 예산 사용량·초과 여부(NFR-COST-01, 경고만·차단 없음). 집계는 SQL(파일럿 규모 — 별도 집계 테이블 없음) |
 
 > AI 질의 경로(H4)에는 정확 캐시([08 §2.0·2.1](08-llm-token-optimization.md) 스코프 키)와 Redis 레이트 리밋(사용자·단지별, 초과 429)이 앞단에 붙는다 — SSE 계약·오케스트레이터는 불변.
+
+**설정·코드 관리** (H8-4 · [ADR-0017](adr/0017-tenant-code-registry.md), 화면: 관리자 설정 > 코드 관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/code-groups` | MANAGER·STAFF | 그룹 + 코드 트리(작성 폼 소비 겸용 — STAFF는 조회만, 설정 메뉴 미노출) |
+| `POST /admin/code-groups` | MANAGER | 커스텀 그룹 생성(`group_key`·name·description) |
+| `PATCH /admin/code-groups/{id}` | MANAGER | name·description 수정(is_system 그룹의 `group_key` 변경 불가) |
+| `DELETE /admin/code-groups/{id}` | MANAGER | is_system 그룹은 409, 하위 코드 CASCADE |
+| `POST /admin/codes` | MANAGER | code·label·parent_id·sort_order |
+| `PATCH /admin/codes/{id}` | MANAGER | label·sort_order·active·parent_id(순환 검증) |
+| `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조 존재 시 409(H8-6 이후) — 비활성(active=false)으로 숨김 권장 |
+
+> 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조한다. 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다.
 
 **알림함** (횡단 · [ADR-0012](adr/0012-in-app-notification-only.md), 화면: 입주민 나>알림함)
 

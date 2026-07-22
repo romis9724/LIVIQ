@@ -34,7 +34,7 @@ from httpx import ASGITransport
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import AuthToken, PiiVault, User, UserRole
+from liviq_db.models import AuthToken, CodeGroup, PiiVault, User, UserRole
 
 _KEK = base64.b64encode(b"0" * 32).decode()
 STAFF_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
@@ -164,6 +164,17 @@ async def test_sys_admin_create_list_and_invite_manager(
         created = await c.post("/admin/tenants", json={"name": "새단지"})
         assert created.status_code == 201, created.text
         tid = created.json()["id"]
+
+        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017) — 시스템 그룹 2종.
+        await db_session.execute(
+            text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=tid)
+        )
+        seeded_groups = list(
+            await db_session.scalars(
+                select(CodeGroup.group_key).where(CodeGroup.tenant_id == uuid.UUID(tid))
+            )
+        )
+        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY"}
 
         listed = await c.get("/admin/tenants")
         assert listed.status_code == 200

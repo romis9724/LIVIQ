@@ -32,6 +32,9 @@ erDiagram
   tenants ||--o{ jobs : "작업"
   tenants ||--o{ notifications : "알림"
   tenants ||--o{ auth_tokens : "토큰"
+  tenants ||--o{ code_groups : "코드그룹"
+  code_groups ||--o{ codes : "코드"
+  codes ||--o{ codes : "하위코드"
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
   unit_types ||--o{ floor_plans : "평면도"
@@ -116,6 +119,23 @@ erDiagram
     string token_hash "SHA-256, 원문 미저장"
     timestamp expires_at
     timestamp used_at
+  }
+  code_groups {
+    uuid id PK
+    uuid tenant_id FK
+    string group_key
+    string name
+    bool is_system
+  }
+  codes {
+    uuid id PK
+    uuid tenant_id FK
+    uuid group_id FK
+    uuid parent_id FK "자기참조, NULL"
+    string code
+    string label
+    int sort_order
+    bool active
   }
   pii_vault {
     uuid id PK
@@ -570,6 +590,32 @@ outbox_events(id, tenant_id, aggregate_type,          -- facility|incident|maint
 > **워커 처리 규칙**: `FOR UPDATE SKIP LOCKED`로 이벤트 claim(중복 처리 방지). Neo4j 노드에 `last_applied_version`을 저장해 더 오래된 이벤트는 거부(순서 역전 방지). delete는 노드 삭제가 아니라 **tombstone 이벤트**로 처리(지연 도착한 update가 삭제된 노드를 재생성하지 못하게). 최대 재시도 초과 시 **DLQ**(`status=failed`)로 격리 후 운영자가 재처리.
 > **DLQ 정책**: `payload`는 aggregate **전체 스냅샷**. 한 이벤트가 DLQ로 격리돼도 **후속 이벤트 처리는 계속 진행**하며, DLQ 재처리는 중간 이벤트를 순차 재생하지 않고 **최신 스냅샷 리플레이**로 수렴시킨다.
 
+### 4.10 공통 코드 레지스트리 (H8-4 · [ADR-0017](adr/0017-tenant-code-registry.md))
+
+분류를 하드코딩하지 않고 tenant 스코프 계층 코드로 관리한다. 공지 분류(NOTICE_CATEGORY)·문서 카테고리(DOC_CATEGORY)가 첫 소비처(H8-6 참조 전환).
+
+```sql
+-- 코드 그룹 (예: NOTICE_CATEGORY | DOC_CATEGORY)
+code_groups(id, tenant_id, group_key,          -- 그룹 식별 키(대문자 스네이크)
+            name, description text NULL,
+            is_system bool default false,      -- 시스템 그룹: 삭제·group_key 변경 불가(코드 행 자체는 수정·추가·비활성 가능)
+            created_at, updated_at)
+  UNIQUE(tenant_id, group_key)
+
+-- 코드 (계층 — parent_id 자기참조)
+codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, id) composite
+      parent_id NULL,                          -- FK → codes(tenant_id, id) composite, 계층(하이라키)
+      code, label, sort_order int default 0,
+      active bool default true,
+      created_at, updated_at)
+  UNIQUE(tenant_id, group_id, code)
+```
+
+> **RLS**: 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — 예외 아님). cross-tenant 참조는 composite FK로 차단.
+> **계층**: `parent_id` 자기참조. UI는 2단계까지 권장, DB는 깊이 제한 없음 — **순환 방지는 앱 검증**(`PATCH /admin/codes` parent_id 변경 시).
+> **삭제 정책**: soft delete 대상 **아님**(§3 목록 제외) — **하드 삭제**. is_system 그룹 삭제는 409, 삭제 시 하위 코드 CASCADE. 도메인 테이블은 H8-6에서 `codes.id`를 FK **RESTRICT**로 참조 → 참조 중 코드 삭제는 409, 비활성(`active=false`)으로 숨김 권장.
+> **기본 코드 시드**(규칙 8 — 액션은 코드): 단지 생성 시 시드 + 기존 단지는 마이그레이션 시드. NOTICE_CATEGORY(일반·시설점검·방역소독·회의결과·주민행사·시스템장애 — '일반' 기본), DOC_CATEGORY(규약·회의록·공지·지침·매뉴얼). 그룹은 `is_system=true`(삭제·키 변경 잠금), 코드 행은 단지별 수정·추가·비활성 가능.
+
 ## 5. RLS (행 수준 보안)
 
 ```sql
@@ -623,7 +669,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 ## 7. 인덱싱·성능
 
 - 벡터: `content_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
-- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
+- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`, `codes(tenant_id, group_id, sort_order)`(코드 트리 정렬 조회).
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.

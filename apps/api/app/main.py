@@ -10,6 +10,7 @@ H3-1: facilities(시설 CRUD·장애/정비 이력 + outbox 원자 기록).
 H4-3: dashboard(운영 통계 집계 — 질의·토큰·폴백·검수·캐시·민원·시설, MANAGER 전용).
 H5-3: notifications(인앱 알림함 조회·읽음 처리 + 검수 반려 시 정정 알림 생성).
 H7-2: admin_tenants(단지 생성·소장 초대, SYS_ADMIN)·staff(직원 초대·목록·비활성화, MANAGER).
+H8-4: codes(공통 코드 레지스트리 CRUD — 쓰기 MANAGER, 조회 MANAGER·STAFF, ADR-0017).
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from app.routers import (
     approvals,
     assistant,
     auth,
+    codes,
     dashboard,
     documents,
     facilities,
@@ -79,6 +81,8 @@ def create_app() -> FastAPI:
     app.include_router(review_queue.router)
     app.include_router(facilities.router)
     app.include_router(dashboard.router)
+    app.include_router(codes.router)
+    app.include_router(codes.code_router)
     return app
 
 

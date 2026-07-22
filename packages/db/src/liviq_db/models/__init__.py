@@ -6,6 +6,7 @@ Alembic env.py·testcontainers가 `Base.metadata`(= `metadata`)를 target으로 
 from __future__ import annotations
 
 from .base import Base
+from .codes import Code, CodeGroup
 from .conversations import AiFeedback, Citation, Conversation, Message
 from .documents import ContentChunk, Document, DocumentVersion
 from .facilities import Facility, Incident, MaintenanceLog
@@ -36,6 +37,8 @@ __all__ = [
     "Base",
     "Building",
     "Citation",
+    "Code",
+    "CodeGroup",
     "Consent",
     "ContentChunk",
     "Conversation",

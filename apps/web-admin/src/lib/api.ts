@@ -1480,3 +1480,183 @@ export async function getDashboardStats(days: number): Promise<DashboardStats> {
     facilities: raw.facilities,
   };
 }
+
+// ── 코드 관리 (H8-4, docs/adr/0017) ─────────────────────────────────────────
+
+/** 그룹에 속한 단일 코드. parentId 로 2단계 계층을 구성(프론트가 트리화). */
+export interface Code {
+  id: string;
+  groupId: string;
+  code: string;
+  label: string;
+  parentId: string | null;
+  sortOrder: number;
+  active: boolean;
+}
+
+/** 공통 코드 그룹 + 소속 코드(평면). isSystem 이면 삭제·그룹 키 수정 불가. */
+export interface CodeGroup {
+  id: string;
+  groupKey: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  codes: Code[];
+}
+
+export interface CreateCodeGroupInput {
+  groupKey: string;
+  name: string;
+  description?: string;
+}
+
+export interface UpdateCodeGroupInput {
+  name?: string;
+  description?: string | null;
+}
+
+export interface CreateCodeInput {
+  groupId: string;
+  code: string;
+  label: string;
+  parentId?: string | null;
+  sortOrder?: number;
+}
+
+export interface UpdateCodeInput {
+  label?: string;
+  sortOrder?: number;
+  active?: boolean;
+  parentId?: string | null;
+}
+
+interface RawCode {
+  id: string;
+  group_id: string;
+  code: string;
+  label: string;
+  parent_id: string | null;
+  sort_order: number;
+  active: boolean;
+}
+
+interface RawCodeGroup {
+  id: string;
+  group_key: string;
+  name: string;
+  description: string | null;
+  is_system: boolean;
+  codes?: RawCode[] | null;
+}
+
+function toCode(raw: RawCode): Code {
+  return {
+    id: raw.id,
+    groupId: raw.group_id,
+    code: raw.code,
+    label: raw.label,
+    parentId: raw.parent_id,
+    sortOrder: raw.sort_order,
+    active: raw.active,
+  };
+}
+
+function toCodeGroup(raw: RawCodeGroup): CodeGroup {
+  return {
+    id: raw.id,
+    groupKey: raw.group_key,
+    name: raw.name,
+    description: raw.description ?? null,
+    isSystem: raw.is_system,
+    codes: (raw.codes ?? []).map(toCode),
+  };
+}
+
+/** 그룹 목록 + 각 그룹의 코드(평면 배열). MANAGER·STAFF. */
+export async function listCodeGroups(): Promise<CodeGroup[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/code-groups`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawCodeGroup[]).map(toCodeGroup);
+}
+
+/** 그룹 생성 — group_key(대문자 스네이크)·name·설명. 409=중복 키. MANAGER. */
+export async function createCodeGroup(input: CreateCodeGroupInput): Promise<CodeGroup> {
+  const payload: Record<string, string> = { group_key: input.groupKey, name: input.name };
+  if (input.description !== undefined) payload.description = input.description;
+  const response = await apiFetch(`${API_BASE_URL}/admin/code-groups`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await ensureOk(response);
+  return toCodeGroup(await response.json());
+}
+
+/** 그룹 수정 — name·description 만(group_key 불변). MANAGER. */
+export async function updateCodeGroup(
+  id: string,
+  input: UpdateCodeGroupInput,
+): Promise<CodeGroup> {
+  const payload: Record<string, string | null> = {};
+  if (input.name !== undefined) payload.name = input.name;
+  if (input.description !== undefined) payload.description = input.description;
+  const response = await apiFetch(`${API_BASE_URL}/admin/code-groups/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await ensureOk(response);
+  return toCodeGroup(await response.json());
+}
+
+/** 그룹 삭제 — 하위 코드 CASCADE. is_system 이면 409. MANAGER. 204. */
+export async function deleteCodeGroup(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/code-groups/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 코드 생성 — group_id·code·label·(부모·정렬). 409=중복 코드. MANAGER. */
+export async function createCode(input: CreateCodeInput): Promise<Code> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/codes`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      group_id: input.groupId,
+      code: input.code,
+      label: input.label,
+      parent_id: input.parentId ?? null,
+      sort_order: input.sortOrder ?? 0,
+    }),
+  });
+  await ensureOk(response);
+  return toCode(await response.json());
+}
+
+/** 코드 수정 — label·sort_order·active·parent_id. 지정한 필드만 전송. MANAGER. */
+export async function updateCode(id: string, input: UpdateCodeInput): Promise<Code> {
+  const payload: Record<string, string | number | boolean | null> = {};
+  if (input.label !== undefined) payload.label = input.label;
+  if (input.sortOrder !== undefined) payload.sort_order = input.sortOrder;
+  if (input.active !== undefined) payload.active = input.active;
+  if (input.parentId !== undefined) payload.parent_id = input.parentId;
+  const response = await apiFetch(`${API_BASE_URL}/admin/codes/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await ensureOk(response);
+  return toCode(await response.json());
+}
+
+/** 코드 삭제 — 자식이 있거나 도메인 참조 시 409. MANAGER. 204. */
+export async function deleteCode(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/codes/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
