@@ -192,7 +192,7 @@ export function BulkHouseholdDialog({
         </div>
         <div className="hh-range">
           <FormField
-            label="시작 호"
+            label="시작 호 순번"
             type="number"
             inputMode="numeric"
             value={unitStart}
@@ -202,13 +202,17 @@ export function BulkHouseholdDialog({
             ~
           </span>
           <FormField
-            label="끝 호"
+            label="끝 호 순번"
             type="number"
             inputMode="numeric"
             value={unitEnd}
             onChange={(e) => setUnitEnd(e.target.value)}
           />
         </div>
+
+        <p className="hh-form__note" role="note">
+          호는 각 층의 순번(1~N)입니다. 예: 1~3 입력 시 2층은 201·202·203호가 만들어집니다.
+        </p>
 
         {error ? (
           <p className="hh-form__error" role="alert">

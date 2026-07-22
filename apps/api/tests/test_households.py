@@ -112,6 +112,19 @@ async def test_delete_empty_building_204(seeded: AsyncSession) -> None:
     assert r.status_code == 204
 
 
+# ── expand_household_grid (순수) ──────────────────────────────────────────────
+
+
+def test_expand_household_grid_composes_full_unit_no() -> None:
+    """호 순번(1~N) → 완전 호수(floor*100+순번). seed·온보딩과 같은 체계."""
+    from app.schemas.households import expand_household_grid
+
+    assert expand_household_grid(2, 2, 1, 3) == [(2, 201), (2, 202), (2, 203)]
+    assert expand_household_grid(10, 10, 1, 3) == [(10, 1001), (10, 1002), (10, 1003)]
+    # 층 오름차순, 그 안에서 호 순번 오름차순.
+    assert expand_household_grid(1, 2, 1, 2) == [(1, 101), (1, 102), (2, 201), (2, 202)]
+
+
 # ── 세대 일괄 생성 ────────────────────────────────────────────────────────────
 
 
@@ -129,11 +142,19 @@ async def test_bulk_create_range_grid(seeded: AsyncSession) -> None:
     body = listed.json()
     assert body["building"]["name"] == "101"
     assert len(body["items"]) == 6
-    # 층·호 오름차순.
+    # 층·호 오름차순 + unit_no는 완전 호수(floor*100+순번): 1층 101·102, 2층 201·202, 3층 301·302.
+    assert [(i["floor"], i["unit_no"]) for i in body["items"]] == [
+        (1, 101),
+        (1, 102),
+        (2, 201),
+        (2, 202),
+        (3, 301),
+        (3, 302),
+    ]
     assert body["items"][0] == {
         "id": body["items"][0]["id"],
         "floor": 1,
-        "unit_no": 1,
+        "unit_no": 101,
         "status": "active",
     }
 
@@ -192,14 +213,15 @@ async def test_patch_household_move_and_status(seeded: AsyncSession) -> None:
 async def test_patch_household_duplicate_unit_409(seeded: AsyncSession) -> None:
     async with _client(seeded) as c:
         bid = await _make_building(c)
+        # 1층 1~2호 → (1,101)·(1,102).
         await c.post(
             f"/admin/buildings/{bid}/households",
-            json={"floor_start": 1, "floor_end": 2, "unit_start": 1, "unit_end": 1},
+            json={"floor_start": 1, "floor_end": 1, "unit_start": 1, "unit_end": 2},
         )
         items = (await c.get(f"/admin/buildings/{bid}/households")).json()["items"]
-        # 2층1호를 1층1호로 옮기면 중복.
-        target = next(i for i in items if i["floor"] == 2)
-        r = await c.patch(f"/admin/households/{target['id']}", json={"floor": 1})
+        # 102호를 101호로 바꾸면 같은 동에 이미 있는 101호와 중복.
+        target = next(i for i in items if i["unit_no"] == 102)
+        r = await c.patch(f"/admin/households/{target['id']}", json={"unit_no": 101})
     assert r.status_code == 409
 
 

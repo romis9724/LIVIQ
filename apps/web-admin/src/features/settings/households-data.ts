@@ -7,6 +7,7 @@
 export const BULK_MAX_HOUSEHOLDS = 2000;
 export const FLOOR_MIN = -10;
 export const FLOOR_MAX = 200;
+// 호는 각 층 안의 순번(1~N). 완전 호수는 floor*100+순번으로 파생한다(2층 1호 → 201).
 export const UNIT_MIN = 1;
 export const UNIT_MAX = 99;
 
@@ -31,7 +32,7 @@ export function validateRange(input: RangeInput): string | null {
     return `층은 ${FLOOR_MIN}~${FLOOR_MAX} 범위여야 합니다.`;
   }
   if (unitStart < UNIT_MIN || unitEnd > UNIT_MAX) {
-    return `호는 ${UNIT_MIN}~${UNIT_MAX} 범위여야 합니다.`;
+    return `호 순번은 ${UNIT_MIN}~${UNIT_MAX} 범위여야 합니다.`;
   }
   if (floorEnd < floorStart) {
     return "끝 층은 시작 층 이상이어야 합니다.";
@@ -53,18 +54,27 @@ export function countCombos(input: RangeInput): number {
   return floors * units;
 }
 
-/** "N층 M호" 라벨(호는 2자리 0채움: 3층 1호 → "301호" 형태 힌트용). */
-export function unitLabel(floor: number, unitNo: number): string {
-  return `${floor}${String(unitNo).padStart(2, "0")}호`;
+/** 완전 호수 라벨. unit_no는 이미 완전 호수(201·1001)이므로 floor를 합성하지 않는다. */
+export function unitLabel(_floor: number, unitNo: number): string {
+  // seed·온보딩과 동일하게 unit_no가 완전 호수(예: 1001호 = 10층 1호). floor를 앞에 붙이면 "101001"로 깨진다.
+  return `${unitNo}호`;
 }
 
-/** 미리보기용 상위 라벨 몇 개(층 오름차순·호 오름차순). 조합이 limit보다 많으면 잘라서 반환. */
+/** 호 순번 → 완전 호수. 예: 2층 1호 → 201, 10층 3호 → 1003. 서버(expand_household_grid)와 동일. */
+export function unitNoFor(floor: number, unitSeq: number): number {
+  return floor * 100 + unitSeq;
+}
+
+/**
+ * 미리보기용 상위 라벨 몇 개(층 오름차순·호 순번 오름차순). 조합이 limit보다 많으면 잘라서 반환.
+ * 입력 unitStart~unitEnd는 각 층의 호 순번(1~N)이고, 생성될 완전 호수는 floor*100+순번이다.
+ */
 export function previewLabels(input: RangeInput, limit = 6): string[] {
   const labels: string[] = [];
   for (let floor = input.floorStart; floor <= input.floorEnd; floor += 1) {
     for (let unit = input.unitStart; unit <= input.unitEnd; unit += 1) {
       if (labels.length >= limit) return labels;
-      labels.push(unitLabel(floor, unit));
+      labels.push(unitLabel(floor, unitNoFor(floor, unit)));
     }
   }
   return labels;

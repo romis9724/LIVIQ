@@ -2075,10 +2075,11 @@ export interface components {
         };
         /**
          * HouseholdBulkCreateIn
-         * @description 층·호 범위 일괄 생성. 단일 세대는 start==end로 지정한다.
+         * @description 층·호 순번 범위 일괄 생성. 단일 세대는 start==end로 지정한다.
          *
-         *     floor_start~floor_end × unit_start~unit_end의 데카르트 곱을 세대로 만든다. 이미 있는
-         *     (층,호)는 건너뛴다(멱등). 상한 초과·역순 범위는 422.
+         *     floor_start~floor_end × unit_start~unit_end의 데카르트 곱을 세대로 만든다. unit_start
+         *     ~unit_end는 각 층의 호 *순번*(1~N)이고 저장되는 unit_no는 완전 호수(floor*100+순번)다
+         *     (예: 2층 1~3호 → 201·202·203). 이미 있는 (층,호)는 건너뛴다(멱등). 상한 초과·역순은 422.
          */
         HouseholdBulkCreateIn: {
             /** Floor End */
@@ -2144,6 +2145,8 @@ export interface components {
         /**
          * HouseholdUpdateIn
          * @description floor·unit_no·status 수정 — 전달한 필드만 반영.
+         *
+         *     unit_no는 완전 호수 직접 입력(예: 201·1001).
          */
         HouseholdUpdateIn: {
             /** Floor */
