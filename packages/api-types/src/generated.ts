@@ -1254,6 +1254,8 @@ export interface paths {
         /**
          * Me
          * @description 계정 상태 무관 — registered·pending 등 모든 상태의 화면 분기 단일 출처.
+         *
+         *     본인 실명·세대는 세션 소유 vault만 복호해 노출한다(타인 PII 아님, 규칙 2·3).
          */
         get: operations["me_me_get"];
         put?: never;
@@ -2318,6 +2320,8 @@ export interface components {
         };
         /** MeOut */
         MeOut: {
+            /** Display Name */
+            display_name?: string | null;
             /** Email */
             email?: string | null;
             /**
@@ -2331,6 +2335,8 @@ export interface components {
             status: string;
             /** Tenant Id */
             tenant_id: string | null;
+            /** Unit Label */
+            unit_label?: string | null;
             /** User Id */
             user_id: string | null;
         };

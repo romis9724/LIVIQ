@@ -71,6 +71,10 @@ class MeOut(BaseModel):
     roles: list[str]
     must_change_password: bool = False  # True면 웹은 비밀번호 변경 화면으로 강제(H7-2)
     email: str | None = None  # 로그인 이메일(세션 저장분) — 구세션은 None(ADR-0014 개정)
+    # 본인 세션 소유 vault만 복호한 실명·세대(타인 PII 아님, 규칙 2·3, H8-8).
+    # 미제출·미배정·admin 등에선 None — optional 유지(admin 앱도 이 스키마 소비).
+    display_name: str | None = None
+    unit_label: str | None = None  # "{동}동 {호}호"(unit_no=완전 호수, H8-5/H8-7)
 
 
 class TenantDirectoryItem(BaseModel):

@@ -25,3 +25,9 @@ const STATUS_LABEL: Record<string, string> = {
 export function accountStatusLabel(status: string): string {
   return STATUS_LABEL[status] ?? status;
 }
+
+/** YYYY-MM → "YYYY년 M월"(관리비 요약 라벨, 선행 0 제거). */
+export function feePeriodLabel(period: string): string {
+  const [year, month] = period.split("-");
+  return `${year}년 ${Number(month)}월`;
+}

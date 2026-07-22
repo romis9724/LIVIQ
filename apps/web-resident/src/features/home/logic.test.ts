@@ -4,6 +4,7 @@ import type { AppNotification, Inquiry, Notice } from "@/lib/api";
 import {
   HOME_NOTICE_LIMIT,
   currentPeriod,
+  greeting,
   periodLabel,
   recentInquiry,
   recentNotices,
@@ -111,5 +112,20 @@ describe("currentPeriod / periodLabel", () => {
 
   it("YYYY-MM → YYYY.MM 표기", () => {
     expect(periodLabel("2026-07")).toBe("2026.07");
+  });
+});
+
+describe("greeting", () => {
+  it("이름과 세대가 있으면 둘 다 노출한다", () => {
+    expect(greeting("최주민", "401동 201호")).toBe("안녕하세요, 최주민님 (401동 201호)");
+  });
+
+  it("세대가 없으면 이름만 노출한다", () => {
+    expect(greeting("최주민", null)).toBe("안녕하세요, 최주민님");
+  });
+
+  it("이름이 없으면 기본 인사말", () => {
+    expect(greeting(null, "401동 201호")).toBe("안녕하세요");
+    expect(greeting(null, null)).toBe("안녕하세요");
   });
 });

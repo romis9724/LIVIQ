@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Skeleton, StatusPill } from "@liviq/ui";
 import {
+  getMe,
   listMyInquiries,
   listNotices,
   listNotifications,
@@ -15,6 +16,7 @@ import { formatDate } from "../notices/data";
 import { statusPill } from "../inquiries/data";
 import {
   currentPeriod,
+  greeting,
   periodLabel,
   recentInquiry,
   recentNotices,
@@ -38,6 +40,8 @@ export function HomeView() {
   const [notices, setNotices] = useState<Loadable<Notice[]>>({ status: "loading" });
   const [inquiry, setInquiry] = useState<Loadable<Inquiry | null>>({ status: "loading" });
   const [unread, setUnread] = useState<Loadable<number>>({ status: "loading" });
+  // 인사말용 본인 실명·세대. 실패해도 "안녕하세요" 폴백이라 별도 오류 UI 없음.
+  const [greetingText, setGreetingText] = useState("안녕하세요");
 
   useEffect(() => {
     let alive = true;
@@ -55,6 +59,9 @@ export function HomeView() {
     run(listNotices().then((all) => recentNotices(all)), setNotices);
     run(listMyInquiries().then((all) => recentInquiry(all)), setInquiry);
     run(listNotifications().then(unreadCount), setUnread);
+    getMe()
+      .then((me) => alive && setGreetingText(greeting(me.displayName, me.unitLabel)))
+      .catch(() => {}); // 실패 시 기본 인사말 유지
 
     return () => {
       alive = false;
@@ -64,7 +71,7 @@ export function HomeView() {
   return (
     <div className="home">
       <header className="home__header">
-        <h1 className="home__greeting">안녕하세요</h1>
+        <h1 className="home__greeting">{greetingText}</h1>
         {unread.status === "ready" && unread.data > 0 ? (
           <Link href="/me" className="home__unread">
             <span aria-hidden="true">🔔</span> 안 읽은 알림 {unread.data}건
