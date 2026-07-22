@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.config import AiCoreSettings
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Document, DocumentChunk, Notice, NoticeDraft, Notification, Tenant, User
+from liviq_db.models import ContentChunk, Document, Notice, NoticeDraft, Notification, Tenant, User
 
 DEFAULT_ANSWER = "지하주차장 개방 안내\n\n지하주차장은 24시간 개방합니다 [1]."
 
@@ -73,16 +73,17 @@ async def _seed(session: AsyncSession, *, with_document: bool = True) -> None:
             title="관리규약",
             source_type="규약",
             visibility="ALL",
-            storage_key=f"{TENANT_ID}/documents/{doc_id}.txt",
-            content_hash="hash-1",
+            version=1,
             index_status="indexed",
         )
     )
     await session.flush()
     session.add(
-        DocumentChunk(
+        ContentChunk(
             tenant_id=TENANT_ID,
+            source_type="document",
             document_id=doc_id,
+            notice_id=None,
             chunk_index=0,
             content="지하주차장은 24시간 개방한다.",
             embedding=[0.05] * EMBED_DIM,

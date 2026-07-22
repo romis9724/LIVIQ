@@ -48,5 +48,6 @@ def test_no_unexpected_deleted_at() -> None:
 
 
 def test_tenant_scope_table_count() -> None:
-    """도메인 30종 + tenant_keys(H2-1) + inquiry_events(H2-3) + auth_tokens(H7-1) 등록 확인."""
-    assert len(metadata.tables) == 33
+    """도메인 30종 + tenant_keys(H2-1) + inquiry_events(H2-3) + auth_tokens(H7-1)
+    + document_versions(H8-2) 등록 확인."""
+    assert len(metadata.tables) == 34

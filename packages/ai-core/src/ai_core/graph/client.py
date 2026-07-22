@@ -19,7 +19,7 @@ from neo4j import AsyncDriver, AsyncGraphDatabase
 
 from ai_core.graph.config import GraphSettings, get_graph_settings
 
-# pgvector document_chunks와 동일 모델·차원(bge-m3, cosine) — docs/11 §5
+# pgvector content_chunks와 동일 모델·차원(bge-m3, cosine) — docs/11 §5
 EMBEDDING_DIMENSIONS = 1024
 # db.index.vector.queryNodes는 전역 top-K 후 tenant 필터 → 여유 배수로 뽑아 recall 보전
 _SEARCH_OVERSAMPLE = 5

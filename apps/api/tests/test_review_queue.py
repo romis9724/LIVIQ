@@ -54,8 +54,7 @@ async def _seed(session: AsyncSession) -> None:
             title="관리비 납부 안내문",
             source_type="공지",
             visibility="ALL",
-            storage_key="k",
-            content_hash="h",
+            version=1,
             index_status="indexed",
         )
     )

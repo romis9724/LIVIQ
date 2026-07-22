@@ -50,9 +50,10 @@ _SEARCH_SQL = text(
     SELECT c.id AS chunk_id, c.document_id, d.title AS document_title,
            c.content, c.heading, c.page, c.clause,
            1 - (c.embedding <=> CAST(:query_embedding AS vector)) AS score
-    FROM document_chunks c
+    FROM content_chunks c
     JOIN documents d ON d.id = c.document_id AND d.tenant_id = c.tenant_id
     WHERE c.tenant_id = :tenant_id
+      AND c.source_type = 'document'
       AND d.deleted_at IS NULL
       AND d.index_status = 'indexed'
       AND d.visibility = ANY(:visibilities)
@@ -60,6 +61,8 @@ _SEARCH_SQL = text(
     LIMIT :top_k
     """
 )
+# source_type='document' 명시 — H8-3에서 공지 청크가 같은 테이블에 생겨도 문서 검색이
+# 공지 청크와 섞이지 않게 한다(문서 인용 경로 격리, ADR-0016).
 
 
 class PgVectorRetriever:
