@@ -101,12 +101,21 @@ async def test_staff_retains_inquiry_and_document_access(
     ) as c:
         assert (await c.get("/admin/inquiries")).status_code == 200
         assert (await c.get("/documents")).status_code == 200
+        # 공지 작성·발행은 STAFF에 개방(H7-2 부분 개정, ADR-0015) — 역할 가드 통과 확인.
+        assert (await c.get("/admin/notices")).status_code == 200
+        created = await c.post(
+            "/admin/notices", json={"title": "직원 공지", "body": "본문", "status": "draft"}
+        )
+        assert created.status_code == 201
 
 
 async def test_staff_denied_manager_only_surfaces(
     seeded: AsyncSession, fake_redis: FakeRedis
 ) -> None:
-    """관리비·검수·시설·승인·명부·직원초대·공지발행은 소장 전용 — STAFF 전부 403(CRITICAL)."""
+    """관리비·검수·시설·승인·명부·직원초대는 소장 전용 — STAFF 전부 403(CRITICAL).
+
+    공지 발행은 ADR-0015로 STAFF에 개방됐다(위 allowed 테스트) — 여기 목록에서 제외.
+    """
     async with _make_app(
         seeded, fake_redis, FakeMailer(), ctx=_ctx(("STAFF",), user_id=STAFF_ID)
     ) as c:
@@ -117,7 +126,6 @@ async def test_staff_denied_manager_only_surfaces(
         assert (
             await c.post("/admin/staff/invite", json={"email": "x@example.com"})
         ).status_code == 403
-        assert (await c.post("/admin/notices", json={})).status_code == 403
         roster = await c.post("/admin/roster/upload", files={"file": ("r.xlsx", b"x")})
         assert roster.status_code == 403
 

@@ -1,11 +1,19 @@
 "use client";
 
-import { Button, EmptyState, Skeleton } from "@liviq/ui";
-import { useCallback, useEffect, useState } from "react";
+import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
+import type { ToastTone } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ApiError, listNotices, type Notice } from "@/lib/api";
-import { formatDate, toParagraphs } from "./data";
+import { ApiError, downloadAttachment, listNotices, type Attachment, type Notice } from "@/lib/api";
+import { formatDate, formatFileSize, toParagraphs } from "./data";
 import "./notices.css";
+
+const TOAST_DURATION_MS = 3200;
+
+interface ToastState {
+  message: string;
+  tone: ToastTone;
+}
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -106,7 +114,15 @@ function NoticeList({ notices, loading, loadError, onSelect, onRetry }: NoticeLi
       {notices.map((n) => (
         <button key={n.id} type="button" className="notice-card" onClick={() => onSelect(n.id)}>
           <div className="notice-card__top">
+            {n.pinned ? (
+              <span className="notice-badge notice-badge--pinned">📌 고정</span>
+            ) : null}
             <span className="notice-card__date">{formatDate(n.publishedAt)}</span>
+            {n.attachments.length > 0 ? (
+              <span className="notice-card__clip" aria-label={`첨부 ${n.attachments.length}개`}>
+                📎 {n.attachments.length}
+              </span>
+            ) : null}
           </div>
           <div className="notice-card__title">{n.title}</div>
         </button>
@@ -116,6 +132,37 @@ function NoticeList({ notices, loading, loadError, onSelect, onRetry }: NoticeLi
 }
 
 function NoticeDetail({ notice, onBack }: { notice: Notice; onBack: () => void }) {
+  const [toast, setToast] = useState<ToastState | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = useCallback((message: string, tone: ToastTone) => {
+    setToast({ message, tone });
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    },
+    [],
+  );
+
+  const handleDownload = useCallback(
+    async (attachment: Attachment) => {
+      setDownloadingId(attachment.id);
+      try {
+        await downloadAttachment(notice.id, attachment);
+      } catch (err) {
+        showToast(`다운로드에 실패했습니다. ${errorMessage(err)}`, "danger");
+      } finally {
+        setDownloadingId(null);
+      }
+    },
+    [notice.id, showToast],
+  );
+
   return (
     <div className="notices">
       <header className="notice-detail__bar">
@@ -126,7 +173,12 @@ function NoticeDetail({ notice, onBack }: { notice: Notice; onBack: () => void }
       </header>
       <main id="main" className="notice-detail">
         <div className="notice-detail__meta">
-          <span className="notice-detail__metatext">관리사무소 · {formatDate(notice.publishedAt)}</span>
+          {notice.pinned ? (
+            <span className="notice-badge notice-badge--pinned">📌 고정</span>
+          ) : null}
+          <span className="notice-detail__metatext">
+            관리사무소 · {formatDate(notice.publishedAt)}
+          </span>
         </div>
         <h1 className="notice-detail__title">{notice.title}</h1>
         <div className="notice-detail__body">
@@ -134,7 +186,41 @@ function NoticeDetail({ notice, onBack }: { notice: Notice; onBack: () => void }
             <p key={i}>{para}</p>
           ))}
         </div>
+
+        {notice.attachments.length > 0 ? (
+          <section className="notice-attach" aria-labelledby="notice-attach-heading">
+            <h2 id="notice-attach-heading" className="notice-attach__heading">
+              첨부파일
+            </h2>
+            <ul className="notice-attach__list">
+              {notice.attachments.map((att) => (
+                <li key={att.id}>
+                  <button
+                    type="button"
+                    className="notice-attach__item"
+                    onClick={() => void handleDownload(att)}
+                    disabled={downloadingId === att.id}
+                  >
+                    <span className="notice-attach__icon" aria-hidden="true">
+                      📎
+                    </span>
+                    <span className="notice-attach__name">{att.filename}</span>
+                    <span className="notice-attach__size">
+                      {downloadingId === att.id ? "받는 중…" : formatFileSize(att.sizeBytes)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </main>
+
+      {toast ? (
+        <div className="notice-toast-slot">
+          <Toast message={toast.message} tone={toast.tone} />
+        </div>
+      ) : null}
     </div>
   );
 }

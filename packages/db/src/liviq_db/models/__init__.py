@@ -11,7 +11,7 @@ from .documents import ContentChunk, Document, DocumentVersion
 from .facilities import Facility, Incident, MaintenanceLog
 from .fees import ExcelUpload, Fee
 from .inquiries import Inquiry, InquiryCategory, InquiryEvent
-from .notices import Notice, NoticeDraft, Notification
+from .notices import Notice, NoticeAttachment, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
 from .plans import FloorPlan, PlanDevice
 from .tenants import Building, Household, Tenant, UnitType
@@ -54,7 +54,7 @@ __all__ = [
     "MaintenanceLog",
     "Message",
     "Notice",
-    "NoticeDraft",
+    "NoticeAttachment",
     "Notification",
     "NULLABLE_TENANT_TABLES",
     "OutboxEvent",

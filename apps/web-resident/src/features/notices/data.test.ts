@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { formatDate, toParagraphs } from "./data";
+import { formatDate, formatFileSize, toParagraphs } from "./data";
 
 describe("formatDate", () => {
   it("ISO → YYYY.MM.DD", () => {
@@ -33,5 +33,23 @@ describe("toParagraphs", () => {
 
   it("빈 본문은 빈 배열", () => {
     expect(toParagraphs("")).toEqual([]);
+  });
+});
+
+describe("formatFileSize", () => {
+  it("1024 미만은 바이트 단위", () => {
+    expect(formatFileSize(0)).toBe("0B");
+    expect(formatFileSize(940)).toBe("940B");
+  });
+
+  it("KB·MB·GB 로 승격하며 소수 1자리", () => {
+    expect(formatFileSize(1536)).toBe("1.5KB");
+    expect(formatFileSize(1.2 * 1024 * 1024)).toBe("1.2MB");
+    expect(formatFileSize(3 * 1024 * 1024 * 1024)).toBe("3.0GB");
+  });
+
+  it("음수·비정상 값은 0B", () => {
+    expect(formatFileSize(-5)).toBe("0B");
+    expect(formatFileSize(Number.NaN)).toBe("0B");
   });
 });

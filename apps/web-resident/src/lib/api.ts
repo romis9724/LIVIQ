@@ -146,15 +146,33 @@ export async function listInquiryEvents(id: string): Promise<InquiryEvent[]> {
   return (body.items as RawEvent[]).map(toEvent);
 }
 
-// ── 공지 (docs/01 §13) — 발행된 공지만 노출 ──────────────────────────────────
+// ── 공지 (docs/01 §13) — 발행된 공지만 노출. pinned DESC→published_at DESC 서버 정렬 ──
+
+export interface Attachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
 
 export interface Notice {
   id: string;
   title: string;
   body: string;
   audience: string;
+  pinned: boolean;
   publishedAt: string | null;
   createdAt: string;
+  attachments: Attachment[];
+}
+
+interface RawAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
 }
 
 interface RawNotice {
@@ -162,8 +180,20 @@ interface RawNotice {
   title: string;
   body: string;
   audience: string;
+  pinned: boolean;
   published_at: string | null;
   created_at: string;
+  attachments: RawAttachment[];
+}
+
+function toAttachment(raw: RawAttachment): Attachment {
+  return {
+    id: raw.id,
+    filename: raw.filename,
+    contentType: raw.content_type,
+    sizeBytes: raw.size_bytes,
+    createdAt: raw.created_at,
+  };
 }
 
 function toNotice(raw: RawNotice): Notice {
@@ -172,8 +202,10 @@ function toNotice(raw: RawNotice): Notice {
     title: raw.title,
     body: raw.body,
     audience: raw.audience,
+    pinned: raw.pinned,
     publishedAt: raw.published_at,
     createdAt: raw.created_at,
+    attachments: (raw.attachments ?? []).map(toAttachment),
   };
 }
 
@@ -182,6 +214,33 @@ export async function listNotices(): Promise<Notice[]> {
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawNotice[]).map(toNotice);
+}
+
+/**
+ * 첨부파일 다운로드 — 세션 쿠키 인가라 별도 오리진에선 <a download>가 강제 저장을 못 한다.
+ * blob으로 받아 object URL을 만들어 a[download]로 저장한다(filename은 알려진 메타 사용).
+ */
+export async function downloadAttachment(
+  noticeId: string,
+  attachment: Attachment,
+): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/notices/${noticeId}/attachments/${attachment.id}`,
+    { headers: DEV_HEADERS },
+  );
+  await ensureOk(response);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = attachment.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 // ── 알림함 (ADR-0012) — 인앱 함 조회·읽음. 외부 발송 아님 ──────────────────────

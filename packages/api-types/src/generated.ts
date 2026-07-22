@@ -291,45 +291,65 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Admin Notices */
+        get: operations["list_admin_notices_admin_notices_get"];
         put?: never;
-        /** Publish Notice */
-        post: operations["publish_notice_admin_notices_post"];
+        /** Create Notice */
+        post: operations["create_notice_admin_notices_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/admin/notices/drafts": {
+    "/admin/notices/{notice_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Create Draft */
-        post: operations["create_draft_admin_notices_drafts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/notices/drafts/{draft_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Draft */
-        get: operations["get_draft_admin_notices_drafts__draft_id__get"];
+        /** Get Admin Notice */
+        get: operations["get_admin_notice_admin_notices__notice_id__get"];
         put?: never;
         post?: never;
+        /** Delete Notice */
+        delete: operations["delete_notice_admin_notices__notice_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Notice */
+        patch: operations["update_notice_admin_notices__notice_id__patch"];
+        trace?: never;
+    };
+    "/admin/notices/{notice_id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload Attachment */
+        post: operations["upload_attachment_admin_notices__notice_id__attachments_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/notices/{notice_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete Attachment */
+        delete: operations["delete_attachment_admin_notices__notice_id__attachments__attachment_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1125,6 +1145,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notices/{notice_id}/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Attachment */
+        get: operations["download_attachment_notices__notice_id__attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -1273,6 +1310,25 @@ export interface components {
              */
             assignee_user_id: string;
         };
+        /** AttachmentOut */
+        AttachmentOut: {
+            /** Content Type */
+            content_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Size Bytes */
+            size_bytes: number;
+        };
         /** Body_create_document_documents_post */
         Body_create_document_documents_post: {
             /** Body */
@@ -1291,6 +1347,11 @@ export interface components {
              * @enum {string}
              */
             visibility: "ALL" | "RESIDENT" | "ADMIN" | "COUNCIL";
+        };
+        /** Body_upload_attachment_admin_notices__notice_id__attachments_post */
+        Body_upload_attachment_admin_notices__notice_id__attachments_post: {
+            /** File */
+            file: string;
         };
         /** Body_upload_fees_admin_fees_uploads_post */
         Body_upload_fees_admin_fees_uploads_post: {
@@ -1478,50 +1539,6 @@ export interface components {
             size_bytes: number;
             /** Version */
             version: number;
-        };
-        /** DraftDetailOut */
-        DraftDetailOut: {
-            /** Body */
-            body: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Draft Id
-             * Format: uuid
-             */
-            draft_id: string;
-            /** Keywords */
-            keywords: string[];
-            /** Notice Id */
-            notice_id: string | null;
-            /** Review Status */
-            review_status: string;
-            /** Title */
-            title: string;
-        };
-        /** DraftOut */
-        DraftOut: {
-            /** Body */
-            body: string;
-            /** Citations */
-            citations: components["schemas"]["NoticeCitationOut"][];
-            /** Confidence */
-            confidence: number;
-            /**
-             * Draft Id
-             * Format: uuid
-             */
-            draft_id: string;
-            /** Title */
-            title: string;
-        };
-        /** DraftRequestIn */
-        DraftRequestIn: {
-            /** Keywords */
-            keywords: string[];
         };
         /** FacilityCreateIn */
         FacilityCreateIn: {
@@ -1937,22 +1954,31 @@ export interface components {
             /** User Id */
             user_id: string | null;
         };
-        /** NoticeCitationOut */
-        NoticeCitationOut: {
+        /** NoticeCreateIn */
+        NoticeCreateIn: {
             /**
-             * Chunk Id
-             * Format: uuid
+             * Audience
+             * @default ALL
+             * @constant
              */
-            chunk_id: string;
+            audience: "ALL";
+            /** Body */
+            body: string;
             /**
-             * Document Id
-             * Format: uuid
+             * Pinned
+             * @default false
              */
-            document_id: string;
-            /** Document Title */
-            document_title: string;
-            /** Quote */
-            quote: string;
+            pinned: boolean;
+            /** Scheduled At */
+            scheduled_at?: string | null;
+            /**
+             * Status
+             * @default draft
+             * @enum {string}
+             */
+            status: "draft" | "scheduled" | "published";
+            /** Title */
+            title: string;
         };
         /** NoticeListOut */
         NoticeListOut: {
@@ -1961,6 +1987,11 @@ export interface components {
         };
         /** NoticeOut */
         NoticeOut: {
+            /**
+             * Attachments
+             * @default []
+             */
+            attachments: components["schemas"]["AttachmentOut"][];
             /** Audience */
             audience: string;
             /** Body */
@@ -1975,6 +2006,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Pinned */
+            pinned: boolean;
             /** Published At */
             published_at: string | null;
             /** Published By */
@@ -1985,7 +2018,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "draft" | "published" | "retracted" | "superseded";
+            status: "draft" | "scheduled" | "published";
             /** Title */
             title: string;
             /**
@@ -1993,6 +2026,24 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+        };
+        /**
+         * NoticeUpdateIn
+         * @description 부분 수정. 미지정 필드는 불변(model_fields_set로 판별).
+         */
+        NoticeUpdateIn: {
+            /** Audience */
+            audience?: "ALL" | null;
+            /** Body */
+            body?: string | null;
+            /** Pinned */
+            pinned?: boolean | null;
+            /** Scheduled At */
+            scheduled_at?: string | null;
+            /** Status */
+            status?: ("draft" | "scheduled" | "published") | null;
+            /** Title */
+            title?: string | null;
         };
         /** NotificationListOut */
         NotificationListOut: {
@@ -2082,26 +2133,6 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
-        };
-        /** PublishIn */
-        PublishIn: {
-            /**
-             * Audience
-             * @default ALL
-             * @constant
-             */
-            audience: "ALL";
-            /** Body */
-            body: string;
-            /**
-             * Draft Id
-             * Format: uuid
-             */
-            draft_id: string;
-            /** Scheduled At */
-            scheduled_at?: string | null;
-            /** Title */
-            title: string;
         };
         /** RejectIn */
         RejectIn: {
@@ -3071,7 +3102,41 @@ export interface operations {
             };
         };
     };
-    publish_notice_admin_notices_post: {
+    list_admin_notices_admin_notices_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_notice_admin_notices_post: {
         parameters: {
             query?: never;
             header?: {
@@ -3085,7 +3150,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PublishIn"];
+                "application/json": components["schemas"]["NoticeCreateIn"];
             };
         };
         responses: {
@@ -3109,45 +3174,7 @@ export interface operations {
             };
         };
     };
-    create_draft_admin_notices_drafts_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-dev-tenant-id"?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path?: never;
-            cookie?: {
-                liviq_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DraftRequestIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DraftOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_draft_admin_notices_drafts__draft_id__get: {
+    get_admin_notice_admin_notices__notice_id__get: {
         parameters: {
             query?: never;
             header?: {
@@ -3155,7 +3182,7 @@ export interface operations {
                 "x-dev-user-id"?: string | null;
             };
             path: {
-                draft_id: string;
+                notice_id: string;
             };
             cookie?: {
                 liviq_session?: string | null;
@@ -3169,8 +3196,157 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DraftDetailOut"];
+                    "application/json": components["schemas"]["NoticeOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_notice_admin_notices__notice_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notice_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_notice_admin_notices__notice_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notice_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoticeUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_attachment_admin_notices__notice_id__attachments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notice_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_attachment_admin_notices__notice_id__attachments_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_attachment_admin_notices__notice_id__attachments__attachment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notice_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4768,6 +4944,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoticeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_attachment_notices__notice_id__attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                notice_id: string;
+                attachment_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

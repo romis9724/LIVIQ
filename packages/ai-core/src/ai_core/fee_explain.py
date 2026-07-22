@@ -3,8 +3,8 @@
 확정 업로드 데이터(본인 세대 breakdown·total, 전월 total, 단지 평균)를 컨텍스트로
 LLM이 **설명만** 한다. 계산·예측·부과 금지(규칙 5) — 새 금액을 만들지 않고 제공된 수치만 인용.
 
-notice_draft와 달리 검색·인용검증이 없다(원천이 RAG가 아닌 확정 SQL). 마스킹 게이트는
-동일하게 통과한다(fail-closed, 규칙 2). 인용은 합성 카드 1건(문서 아님 → document_id 없음).
+질의응답(orchestrator)과 달리 검색·인용검증이 없다(원천이 RAG가 아닌 확정 SQL). 마스킹
+게이트는 동일하게 통과한다(fail-closed, 규칙 2). 인용은 합성 카드 1건(문서 아님 → document_id 없음).
 """
 
 from __future__ import annotations

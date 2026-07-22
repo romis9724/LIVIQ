@@ -24,5 +24,5 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0012](0012-in-app-notification-only.md) | MVP 알림은 인앱 알림함만, 웹푸시는 Phase 2 | Accepted |
 | [0013](0013-python-backend.md) | 백엔드 Python 전환 (FastAPI·SQLAlchemy·arq·uv) | Accepted |
 | [0014](0014-local-email-auth.md) | 자체 이메일+비밀번호 인증 (Google OAuth 대체) | Accepted |
-| 0015 | 공지 게시판 전환 — AI 초안 제거·첨부·예약 발행 (H8-1 브랜치에서 진행 중, 머지 시 링크 연결) | Accepted |
+| [0015](0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환 | Accepted |
 | [0016](0016-document-board-versioned-attachment.md) | 문서관리 게시판 전환 — 첨부 1개·버전 이력·청크 소스 일반화 | Accepted |

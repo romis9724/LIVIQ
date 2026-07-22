@@ -12,7 +12,7 @@ export interface NavItem {
 const DASHBOARD: NavItem = { href: "/dashboard", icon: "📊", label: "대시보드" };
 const RESIDENTS: NavItem = { href: "/residents", icon: "🙋", label: "주민 관리" };
 const REVIEW: NavItem = { href: "/review-queue", icon: "✅", label: "AI 검수 큐" };
-const NOTICES: NavItem = { href: "/notices/new", icon: "📢", label: "공지 초안" };
+const NOTICES: NavItem = { href: "/notices", icon: "📢", label: "공지사항" };
 const INQUIRIES: NavItem = { href: "/inquiries", icon: "🛠", label: "민원 관리" };
 const DOCUMENTS: NavItem = { href: "/documents", icon: "📁", label: "문서 관리" };
 const FEES: NavItem = { href: "/fees", icon: "💰", label: "관리비 관리" };

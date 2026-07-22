@@ -3,7 +3,7 @@
 H1: documents(업로드·인제스트 트리거)·assistant(SSE 질의) 라우터.
 H2-1: auth(이메일+비밀번호·세션)·onboarding(제출·명부 대조)·approvals(승인)·roster(명부 업로드).
 H2-3: inquiries(접수·조회·배정·상태 + 키워드 분류·타임라인·알림).
-H2-4: notices(발행 공지 조회 + AI 초안 생성·검수 발행·알림).
+H8-1: notices(공지 게시판 — 작성·수정·삭제·고정·예약·첨부 + 발행 알림, ADR-0015).
 H2-5: fees(관리비 엑셀 업로드·검증·확정 적재 + 조회 + AI 설명 SSE).
 H2-6: review_queue(AI 검수 큐 — 사후 검수 목록·승인/반려).
 H3-1: facilities(시설 CRUD·장애/정비 이력 + outbox 원자 기록).

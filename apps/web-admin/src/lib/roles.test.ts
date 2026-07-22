@@ -9,7 +9,7 @@ describe("navForRoles", () => {
 
   it("STAFF(소장 아님)에는 민원·공지·문서만 노출한다", () => {
     const nav = navForRoles(["STAFF"]);
-    expect(nav.map((n) => n.href)).toEqual(["/inquiries", "/notices/new", "/documents"]);
+    expect(nav.map((n) => n.href)).toEqual(["/inquiries", "/notices", "/documents"]);
   });
 
   it("MANAGER에는 전체와 직원 관리를 노출한다", () => {

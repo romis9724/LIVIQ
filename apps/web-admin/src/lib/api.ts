@@ -349,83 +349,190 @@ export async function updateInquiryStatus(id: string, status: InquiryStatus): Pr
   return toInquiry(await response.json());
 }
 
-// ── 공지 초안·발행 (docs/01 §13, 규칙 6 — 발송은 사람 확정) ────────────────────
+// ── 공지사항 게시판 (docs/01 §13 · H8-1, 규칙 6 — 발송은 사람 확정) ───────────────
 
-export interface NoticeCitation {
-  documentId: string;
-  documentTitle: string;
-  chunkId: string;
-  quote: string;
+export type NoticeStatus = "draft" | "scheduled" | "published";
+
+export interface NoticeAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
 }
 
-export interface NoticeDraft {
-  draftId: string;
+export interface Notice {
+  id: string;
   title: string;
   body: string;
-  citations: NoticeCitation[];
-  confidence: number;
+  status: NoticeStatus;
+  pinned: boolean;
+  audience: string;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  publishedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  attachments: NoticeAttachment[];
 }
 
-export interface PublishNoticeInput {
-  draftId: string;
+export interface NoticeCreateInput {
   title: string;
   body: string;
+  status: NoticeStatus;
+  pinned: boolean;
+  scheduledAt?: string | null; // 예약(status=scheduled)일 때만 ISO 시각
 }
 
-interface RawCitation {
-  document_id: string;
-  document_title: string;
-  chunk_id: string;
-  quote: string;
+export interface NoticePatchInput {
+  title?: string;
+  body?: string;
+  pinned?: boolean;
+  status?: NoticeStatus;
+  scheduledAt?: string | null;
 }
 
-interface RawDraft {
-  draft_id: string;
+interface RawAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  created_at: string;
+}
+
+interface RawNotice {
+  id: string;
   title: string;
   body: string;
-  citations: RawCitation[];
-  confidence: number;
+  status: NoticeStatus;
+  pinned: boolean;
+  audience: string;
+  scheduled_at: string | null;
+  published_at: string | null;
+  published_by: string | null;
+  created_at: string;
+  updated_at: string;
+  attachments: RawAttachment[];
 }
 
-function toDraft(raw: RawDraft): NoticeDraft {
+function toAttachment(raw: RawAttachment): NoticeAttachment {
   return {
-    draftId: raw.draft_id,
-    title: raw.title,
-    body: raw.body,
-    citations: raw.citations.map((c) => ({
-      documentId: c.document_id,
-      documentTitle: c.document_title,
-      chunkId: c.chunk_id,
-      quote: c.quote,
-    })),
-    confidence: raw.confidence,
+    id: raw.id,
+    filename: raw.filename,
+    contentType: raw.content_type,
+    sizeBytes: raw.size_bytes,
+    createdAt: raw.created_at,
   };
 }
 
-/** 키워드에서 AI 초안 생성. 422=근거 없음·503=LLM 불가는 ApiError.status 로 분기. */
-export async function createNoticeDraft(keywords: string[]): Promise<NoticeDraft> {
-  const response = await apiFetch(`${API_BASE_URL}/admin/notices/drafts`, {
-    method: "POST",
-    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ keywords }),
-  });
-  await ensureOk(response);
-  return toDraft(await response.json());
+function toNotice(raw: RawNotice): Notice {
+  return {
+    id: raw.id,
+    title: raw.title,
+    body: raw.body,
+    status: raw.status,
+    pinned: raw.pinned,
+    audience: raw.audience,
+    scheduledAt: raw.scheduled_at,
+    publishedAt: raw.published_at,
+    publishedBy: raw.published_by,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    attachments: (raw.attachments ?? []).map(toAttachment),
+  };
 }
 
-/** 검수 완료한 초안을 발행(사람 확정). audience 는 현재 ALL 만. 409=이미 처리된 초안. */
-export async function publishNotice(input: PublishNoticeInput): Promise<void> {
+/** 공지 목록(전 상태) — 서버가 고정 우선·작성일 내림차순으로 정렬해 반환. */
+export async function listNotices(): Promise<Notice[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawNotice[]).map(toNotice);
+}
+
+/** 공지 상세(첨부 포함). */
+export async function getNotice(id: string): Promise<Notice> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices/${id}`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  return toNotice(await response.json());
+}
+
+/** 공지 작성 — audience 는 현재 ALL 고정. 422=예약 시각 누락/과거. */
+export async function createNotice(input: NoticeCreateInput): Promise<Notice> {
   const response = await apiFetch(`${API_BASE_URL}/admin/notices`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({
-      draft_id: input.draftId,
       title: input.title,
       body: input.body,
       audience: "ALL",
+      status: input.status,
+      pinned: input.pinned,
+      scheduled_at: input.scheduledAt ?? null,
     }),
   });
   await ensureOk(response);
+  return toNotice(await response.json());
+}
+
+/** 공지 부분 수정. 409=발행된 공지를 초안·예약으로 역행 시도. */
+export async function patchNotice(id: string, input: NoticePatchInput): Promise<Notice> {
+  const body: Record<string, unknown> = {};
+  if (input.title !== undefined) body.title = input.title;
+  if (input.body !== undefined) body.body = input.body;
+  if (input.pinned !== undefined) body.pinned = input.pinned;
+  if (input.status !== undefined) body.status = input.status;
+  if (input.scheduledAt !== undefined) body.scheduled_at = input.scheduledAt;
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices/${id}`, {
+    method: "PATCH",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  await ensureOk(response);
+  return toNotice(await response.json());
+}
+
+/** 공지 삭제(soft delete). 204. */
+export async function deleteNotice(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
+/** 첨부 업로드 — multipart(file). 413=용량 초과·422=개수 초과/빈 파일. */
+export async function uploadNoticeAttachment(
+  id: string,
+  file: File,
+): Promise<NoticeAttachment> {
+  const form = new FormData();
+  form.set("file", file);
+  // Content-Type 은 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
+  const response = await apiFetch(`${API_BASE_URL}/admin/notices/${id}/attachments`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: form,
+  });
+  await ensureOk(response);
+  return toAttachment(await response.json());
+}
+
+/** 첨부 삭제. 204. */
+export async function deleteNoticeAttachment(id: string, attachmentId: string): Promise<void> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/admin/notices/${id}/attachments/${attachmentId}`,
+    { method: "DELETE", headers: DEV_HEADERS },
+  );
+  await ensureOk(response);
+}
+
+/**
+ * 첨부 다운로드 URL — published 공지에서만 유효(서버 계약). 세션 쿠키 동봉 최상위 GET이라
+ * <a download>로 바로 쓴다(ROSTER_TEMPLATE_URL 과 동일 접근).
+ */
+export function noticeAttachmentDownloadUrl(id: string, attachmentId: string): string {
+  return `${API_BASE_URL}/notices/${id}/attachments/${attachmentId}`;
 }
 
 // ── 관리비 (docs/01 §13, 규칙 5 — 엑셀이 단일 출처·표시 전용) ──────────────────

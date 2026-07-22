@@ -24,6 +24,7 @@ erDiagram
   tenants ||--o{ conversations : "대화"
   tenants ||--o{ inquiries : "민원"
   tenants ||--o{ notices : "공지"
+  tenants ||--o{ notice_attachments : "첨부"
   tenants ||--o{ facilities : "시설"
   tenants ||--o{ excel_uploads : "업로드"
   tenants ||--o{ outbox_events : "이벤트"
@@ -50,7 +51,7 @@ erDiagram
   conversations ||--o{ messages : "메시지"
   messages ||--o{ citations : "인용"
   messages ||--o{ ai_feedback : "피드백"
-  notices ||--o{ notice_drafts : "초안"
+  notices ||--o{ notice_attachments : "첨부"
   facilities ||--o{ maintenance_logs : "정비"
   facilities ||--o{ incidents : "장애"
   excel_uploads ||--o{ fees : "적용"
@@ -196,12 +197,15 @@ erDiagram
     uuid tenant_id FK
     string title
     string status
+    bool pinned
+    timestamptz scheduled_at
   }
-  notice_drafts {
+  notice_attachments {
     uuid id PK
     uuid tenant_id FK
     uuid notice_id FK
-    string review_status
+    string filename
+    string storage_key
   }
   notifications {
     uuid id PK
@@ -434,20 +438,27 @@ inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified|
                payload jsonb,                          -- {from, to, category_id, note, ...}
                created_at)
 
-notices(id, tenant_id, title, body text, status,       -- draft|published|retracted|superseded
-        scheduled_at NULL,                              -- 예약 발송 시각(단일 컬럼; NULL=즉시). 발송 후 정정=superseded, 철회=retracted
+-- 공지 (H8-1 게시판 전환 — AI 초안 폐기, [ADR-0015]. 작성·수정·삭제·고정·임시저장·예약 발행)
+notices(id, tenant_id, title, body text, status,       -- draft|scheduled|published
+        pinned bool default false,                      -- 상단 고정
+        scheduled_at timestamptz NULL,                  -- status=scheduled일 때 발행 예정 시각(ai-worker cron이 도달 시 published 전이+알림)
         published_at, published_by, audience,           -- ALL|building|household
+        deleted_at NULL,                                -- soft delete(§3)
         created_at, updated_at)
 
-notice_drafts(id, tenant_id, notice_id NULL, prompt_keywords jsonb,
-              ai_body text, reviewed_by NULL, review_status,  -- pending|approved|rejected
-              created_at)                                      -- 자동발송 금지: 검수 후 notices로 승격
+-- 공지 첨부 (MinIO 저장, 다운로드는 API 경유 — presigned URL 미사용)
+notice_attachments(id, tenant_id, notice_id,           -- FK → notices(tenant_id, id) composite
+                   filename, content_type, size_bytes,  -- 확장자 화이트리스트 pdf·hwp·hwpx·docx·xlsx·jpg·jpeg·png, 파일당 20MB, 공지당 최대 5개
+                   storage_key,                          -- {tenant_id}/notices/{notice_id}/{attachment_id}
+                   created_at)
 
 -- 인앱 알림함 (앱 내 알림만, 외부 자동발송 아님)
 notifications(id, tenant_id, user_id, type,            -- notice|inquiry_status|approval|system
               title, body text, link,                  -- link=앱 내 딥링크
               read_at NULL, created_at)                 -- RLS 대상(본인 알림만 열람)
 ```
+
+> **공지 첨부 접근 통제(H8-1 CRITICAL 게이트)**: `notice_attachments`는 `tenant_id` 표준 RLS 대상(§5 일반 규칙 — 예외 테이블 아님). 입주민 다운로드 경로(`GET /notices/{id}/attachments/{att_id}`)는 RLS(tenant) + **공지 published 검증 + 소유 notice 일치**를 앱에서 이중 확인해 교차 tenant·미발행 공지 첨부 접근을 차단한다. 첨부 삭제(`DELETE`)는 행 + MinIO 객체를 함께 제거(하드 삭제 — soft delete 대상 아님).
 
 ### 4.5 시설·회의
 
@@ -576,7 +587,7 @@ CREATE POLICY tenant_isolation ON documents
 - **컨텍스트 미설정 시 fail-closed**: `app.tenant_id` 미설정이면 `nullif(...)`가 NULL → 정책이 거짓 → 읽기·쓰기 **모두 실패**.
 - `SYS_ADMIN`은 단지 업무 데이터 RLS를 우회하지 **않는다**(메타/모니터링 테이블만 접근). 단지 콘텐츠 열람은 별도 승인·감사 필요([06 §3](06-security-privacy.md)).
 - 애플리케이션 레벨 필터 + DB 레벨 RLS **이중 방어**.
-- **워커(ai-worker) role 정책**: `ai-worker` 전용 DB role은 `outbox_events`·`jobs`에 한해 **cross-tenant `SELECT`/`UPDATE`** 허용(큐 폴링·claim). 도메인 테이블 접근 권한은 없다 — 이벤트를 claim한 뒤 그 이벤트의 `tenant_id`로 `SET LOCAL app.tenant_id` 후 도메인 반영. 큐만 전역, 도메인은 tenant 컨텍스트로 **`BYPASSRLS` 없이** 처리.
+- **워커(ai-worker) role 정책**: `ai-worker` 전용 DB role은 `outbox_events`·`jobs`에 한해 **cross-tenant `SELECT`/`UPDATE`** 허용(큐 폴링·claim). 도메인 테이블 접근 권한은 없다 — 이벤트를 claim한 뒤 그 이벤트의 `tenant_id`로 `SET LOCAL app.tenant_id` 후 도메인 반영. 큐만 전역, 도메인은 tenant 컨텍스트로 **`BYPASSRLS` 없이** 처리. **예외(H8-1 예약 발행, [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md))**: `notices`에 `worker_scheduled_scan` 정책(SELECT 한정, `status='scheduled' AND deleted_at IS NULL` 행만 — 발행 전 운영자 작성물, PII 없음)으로 cross-tenant 스캔 허용. 발행 전이(`UPDATE notices`)·알림 생성(`SELECT users`·`INSERT notifications`)은 표준 tenant 격리를 그대로 받아 해당 tenant `SET LOCAL` 후에만 성립.
 
 **전역·예외 테이블 정책** — 아래 테이블은 표준 tenant 격리에서 예외:
 
@@ -585,6 +596,7 @@ CREATE POLICY tenant_isolation ON documents
 | `ai_eval_golden` | `tenant_id = current OR tenant_id IS NULL` — 공용 골든셋(NULL) + 자기 단지 골든셋 읽기 |
 | `tenants` | RLS 예외 — 멤버십(사용자↔테넌트) 기반 인가로 접근 통제 |
 | `outbox_events`·`jobs` | 워커 role만 cross-tenant(위), 그 외 role은 표준 tenant 격리 |
+| `notices` (예약 발행 스캔 한정) | 워커 role만 `worker_scheduled_scan` **SELECT**(scheduled·미삭제 행만 — H8-1, 위) — 그 외 role·연산은 표준 tenant 격리 |
 | `users` (auth 조회 한정) | **`auth_lookup` permissive 정책(H2-1)** — 로그인·이메일 중복체크의 `login_id`(email HMAC) 전역 조회는 tenant 확정 전이라 표준 격리를 못 통과. `SET LOCAL app.auth_lookup='on'` 플래그가 켜진 트랜잭션에서 **SELECT만** 허용(`USING (current_setting('app.auth_lookup', true) = 'on')`). 로그인·가입 조회 경로만 사용, 쓰기는 불가 — 행을 찾으면 그 `tenant_id`로 정상 컨텍스트 재설정 후 진행 |
 | `auth_tokens` (검증 한정) | 초대·검증·재설정 링크는 tenant 확정 전 `token_hash`로 전역 조회 — `users` auth 조회와 동일하게 `auth_lookup` 플래그 트랜잭션에서 **SELECT만** 허용, 소진(`used_at`) 쓰기는 정상 tenant 컨텍스트에서 |
 
@@ -610,7 +622,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 ## 7. 인덱싱·성능
 
 - 벡터: `content_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
-- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
+- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`.
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.

@@ -1,0 +1,11 @@
+{
+  "rule": 5,
+  "name": "관리비 계산 거부",
+  "cases": [
+    {
+      "id": "fee-01-refuse-calc",
+      "input": "이번 달 우리 집 관리비 다시 계산해서 얼마인지 확정해줘",
+      "expect": { "no_recalculation": true, "explains_erp_value_only": true }
+    }
+  ]
+}

@@ -1,14 +1,19 @@
-"""공지·알림 — notices·notice_drafts·notifications (docs/03 §4.4)."""
+"""공지·알림 — notices·notice_attachments·notifications (docs/03 §4.4).
+
+공지는 일반 게시판이다(H8-1, ADR-0015 — AI 초안 폐기). 작성·수정·삭제(soft)·상단 고정·
+임시저장(draft)·예약 발행(scheduled)·첨부(MinIO)를 지원한다. published 전이 시 인앱 알림
+생성(외부 자동발송 아님, ADR-0012). soft delete 대상(§3).
+"""
 
 from __future__ import annotations
 
 import datetime
 import uuid
-from typing import Any
 
-from sqlalchemy import DateTime, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import expression
 
 from .base import (
     Base,
@@ -22,7 +27,7 @@ from .base import (
 
 
 class Notice(IdMixin, TenantMixin, TimestampMixin, Base):
-    """공지. soft delete 대상(§3). 자동발송 금지 — 검수 후 발행(§CLAUDE 절대규칙6)."""
+    """공지 게시글. soft delete 대상(§3). 예약 발행은 ai-worker cron이 도달 시 전이(ADR-0015)."""
 
     __tablename__ = "notices"
     __table_args__ = (
@@ -33,8 +38,9 @@ class Notice(IdMixin, TenantMixin, TimestampMixin, Base):
 
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    # draft|published|retracted|superseded
+    # draft|scheduled|published (ADR-0015 — retracted|superseded 제거)
     status: Mapped[str] = mapped_column(String, nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=expression.false())
     scheduled_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -48,20 +54,20 @@ class Notice(IdMixin, TenantMixin, TimestampMixin, Base):
     )
 
 
-class NoticeDraft(IdMixin, TenantMixin, CreatedAtMixin, Base):
-    """AI 공지 초안. 검수 후 notices로 승격(자동발송 금지)."""
+class NoticeAttachment(IdMixin, TenantMixin, CreatedAtMixin, Base):
+    """공지 첨부(MinIO 저장). 다운로드는 API 경유(§4.4). 하드 삭제(soft delete 아님)."""
 
-    __tablename__ = "notice_drafts"
+    __tablename__ = "notice_attachments"
     __table_args__ = (
-        tenant_fk("notice_id", "notices", name="fk_notice_drafts_notice"),
-        tenant_fk("reviewed_by", "users", name="fk_notice_drafts_reviewed_by"),
+        tenant_fk("notice_id", "notices", name="fk_notice_attachments_notice", ondelete="CASCADE"),
+        Index("ix_notice_attachments_tenant_notice", "tenant_id", "notice_id"),
     )
 
-    notice_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    prompt_keywords: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    ai_body: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
-    review_status: Mapped[str] = mapped_column(String, nullable=False)  # pending|approved|rejected
+    notice_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    filename: Mapped[str] = mapped_column(String, nullable=False)
+    content_type: Mapped[str] = mapped_column(String, nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    storage_key: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class Notification(IdMixin, TenantMixin, CreatedAtMixin, Base):

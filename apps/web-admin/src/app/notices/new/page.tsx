@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { NoticeComposer } from "@/features/notice-composer/NoticeComposer";
+import { NoticeEditor } from "@/features/notices/NoticeEditor";
 
 export const metadata: Metadata = {
-  title: "공지 초안 작성",
-  description: "키워드에서 AI 초안을 만들고 검수 후 발송합니다. 자동 발송은 없습니다.",
+  title: "새 공지 작성",
+  description: "공지를 작성해 임시저장·예약·즉시 발행합니다.",
 };
 
 export default function NoticeNewPage() {
-  return <NoticeComposer />;
+  return <NoticeEditor mode="create" />;
 }
