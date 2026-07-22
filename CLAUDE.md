@@ -26,17 +26,17 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7(자체 이메일 인증 전환 — SYS_ADMIN/초대 위계·역할 축소·주민 가입 UI·E2E 재작성·온보딩 UX 보수(회원가입 버튼+단지 선택, 직원 관리 승격)·계정/단지 수명주기(소장 정원 1·삭제=비식별·빈 단지 삭제·단지 비활성화), ADR-0014) 완료):
+현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7(자체 이메일 인증 전환 — SYS_ADMIN/초대 위계·역할 축소·주민 가입 UI·E2E 재작성·온보딩 UX 보수(회원가입 버튼+단지 선택, 직원 관리 승격)·계정/단지 수명주기(소장 정원 1·삭제=비식별·빈 단지 삭제·단지 비활성화), ADR-0014)+H8-2(문서 게시판 전환 — 첨부 1개·버전 이력·재업로드 시 벡터 재생성·content_chunks 소스 일반화, ADR-0016) 완료):
 
 ```text
 apps/      web-resident                      # Next.js — 전 화면 실연동(홈·비서 SSE·민원·공지·관리비·나/알림함·가입/온보딩·비밀번호 재설정), 세션 쿠키 인증
-           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
+           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서 게시판(작성·수정·버전 이력)·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
            api                               # FastAPI — documents·assistant·inquiries·notices·fees·review-queue·facilities(+outbox)·dashboard + 인증·레이트리밋·정확캐시 (liviq-api)
            ai-worker                         # arq — 문서 인제스트(파싱·청킹·임베딩·pgvector) (liviq-ai-worker)
 packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
            api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
            ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·도구 에이전트(읽기 전용 6종)·그래프 (liviq-ai-core)
-           db                                # SQLAlchemy 30테이블 · Alembic · RLS 정책+role (liviq-db)
+           db                                # SQLAlchemy 34테이블 · Alembic · RLS 정책+role (liviq-db)
 mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
 evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·2·3·5·6·8)
 tests/     e2e                               # Playwright 결정론 여정 (@liviq/e2e — @llm 태그는 로컬 전용)

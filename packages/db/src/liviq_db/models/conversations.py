@@ -70,7 +70,7 @@ class Citation(IdMixin, TenantMixin, TimestampMixin, Base):
         # 청크 재색인·삭제 시 chunk_id만 NULL, 답변 시점 근거(quote·source_revision) 보존(§4.3)
         tenant_fk(
             "chunk_id",
-            "document_chunks",
+            "content_chunks",
             name="fk_citations_chunk",
             ondelete="SET NULL (chunk_id)",
         ),

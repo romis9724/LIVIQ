@@ -153,11 +153,9 @@ async def _seed_tenant(conn: AsyncConnection, label: str) -> TenantFixture:
     )
     document_id = await _scalar(
         conn,
-        "INSERT INTO documents(tenant_id, title, source_type, visibility, "
-        "storage_key, content_hash, index_status) "
-        "VALUES(:t, 'doc', '규약', 'ALL', 'k', :ch, 'pending') RETURNING id",
+        "INSERT INTO documents(tenant_id, title, source_type, visibility, index_status) "
+        "VALUES(:t, 'doc', '규약', 'ALL', 'pending') RETURNING id",
         t=tenant_id,
-        ch=f"hash-{label}",
     )
     inquiry_id = await _scalar(
         conn,

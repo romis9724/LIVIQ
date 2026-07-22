@@ -60,11 +60,12 @@ graph TD
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
 
 **H1(RAG MVP)+H2(입주민/관리자 기능) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
-ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector), api는 `documents`·`assistant` SSE에 더해
+ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector — 항상 최신 버전만, H8-2), api는 `documents`·`assistant` SSE에 더해
 **정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·자체 이메일+비밀번호 인증(Argon2id·검증 메일·auth_tokens, [ADR-0014](docs/adr/0014-local-email-auth.md))·역할 인가 가드(`require_roles`)·
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
-화면 실연동(H6 완료): **양 앱 전 화면 실연동·목업 0** — web-resident 홈·비서·민원·공지·관리비·나/알림함·온보딩, web-admin 대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부. 웹 인증은 세션 쿠키 1차(credentials CORS, H6-1), 인증 수단은 H7에서 자체 이메일 인증으로 교체 — 가입 여정 E2E(설치→단지→초대→명부→가입→승인)가 CI 게이트(H7-4).
+화면 실연동(H6 완료): **양 앱 전 화면 실연동·목업 0** — web-resident 홈·비서·민원·공지·관리비·나/알림함·온보딩, web-admin 대시보드·문서·민원·공지 초안·관리비·검수 큐·시설·가입 승인/명부.
+문서관리는 H8-2([ADR-0016](docs/adr/0016-document-board-versioned-attachment.md))에서 **관리자 전용 게시판**으로 전환 — 게시글=제목+본문(설명용·임베딩 제외)+첨부 1개 필수(.pdf/.txt/.md), 재업로드=`document_versions` version+1+자동 재인제스트(벡터는 최신만), 이력 다운로드 전용(롤백 없음), soft delete 시 청크 즉시 삭제. 청크는 `content_chunks`(document|notice 다형)로 일반화 — H8-3 공지 벡터화가 스키마 변경 없이 진입. 웹 인증은 세션 쿠키 1차(credentials CORS, H6-1), 인증 수단은 H7에서 자체 이메일 인증으로 교체 — 가입 여정 E2E(설치→단지→초대→명부→가입→승인)가 CI 게이트(H7-4).
 시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
 outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
 `/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
