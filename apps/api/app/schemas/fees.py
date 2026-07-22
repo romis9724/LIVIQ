@@ -10,13 +10,14 @@ from pydantic import BaseModel, field_validator
 from app.schemas.assistant import AnswerStatus
 
 __all__ = [
+    "AdminFeeDetailOut",
     "AdminFeeListOut",
     "AdminFeeRow",
+    "BreakdownRow",
+    "FeeApplyOut",
     "FeeExplainDoneData",
     "FeeExplainRequest",
     "FeeOut",
-    "FeePreviewRow",
-    "FeeRowErrorOut",
     "FeeUploadDetailOut",
     "FeeUploadOut",
     "validate_period",
@@ -34,27 +35,21 @@ def validate_period(period: str) -> str:
     return period
 
 
-class FeeRowErrorOut(BaseModel):
-    row: int
-    reason: str
+class BreakdownRow(BaseModel):
+    """분배된 관리비 항목 1행 — 순서 보존 리스트로 저장·응답(H8-7)."""
 
-
-class FeePreviewRow(BaseModel):
-    building_name: str  # 동
-    floor: int
-    unit_no: int
-    breakdown: dict[str, int]  # 항목명 → 금액
-    total: int
+    name: str  # 항목명
+    level: int  # 트리 depth(0=대분류)
+    amount: int  # 세대당 금액(원, 음수 허용)
 
 
 class FeeUploadOut(BaseModel):
     upload_id: uuid.UUID
-    status: str  # validated|failed
+    status: str  # validated (트리 파싱 성공 — 형식 오류는 422)
     period: str
-    row_count: int  # 구조 파싱된 데이터 행 수
-    valid_rows: int  # 세대 매칭까지 성공한 행 수
-    errors: list[FeeRowErrorOut]
-    preview: list[FeePreviewRow]  # 첫 20행(업로드 시점 1회, 저장 안 함)
+    row_count: int  # 트리 행 수
+    total: int  # 분배 합계(합계행 amount, 없으면 대분류 합)
+    preview: list[BreakdownRow]  # 상위 레벨(level<=1) 미리보기
 
 
 class FeeUploadDetailOut(BaseModel):
@@ -63,8 +58,6 @@ class FeeUploadDetailOut(BaseModel):
     period: str | None
     status: str
     row_count: int | None
-    errors: list[FeeRowErrorOut]
-    # ponytail: 미리보기 rows는 저장하지 않는다 — 재확인은 원본 재업로드/apply로. errors만 재표시.
 
 
 class FeeApplyOut(BaseModel):
@@ -76,7 +69,7 @@ class FeeApplyOut(BaseModel):
 
 class FeeOut(BaseModel):
     period: str
-    breakdown: dict[str, int] | None
+    breakdown: list[BreakdownRow] | None
     total: int | None
     prev_total: int | None  # 전월 합계(추이용, 있으면)
 
@@ -94,6 +87,17 @@ class AdminFeeListOut(BaseModel):
     households: list[AdminFeeRow]
     total_sum: int
     household_count: int
+
+
+class AdminFeeDetailOut(BaseModel):
+    """관리자 고지서 상세 — 세대 1건의 분배 내역 전체."""
+
+    period: str
+    building_name: str
+    floor: int
+    unit_no: int
+    breakdown: list[BreakdownRow]
+    total: int
 
 
 class FeeExplainRequest(BaseModel):

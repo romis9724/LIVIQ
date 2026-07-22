@@ -48,7 +48,8 @@ class Fee(IdMixin, TenantMixin, CreatedAtMixin, Base):
 
     household_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     period: Mapped[str] = mapped_column(String, nullable=False)  # YYYY-MM
-    breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # H8-7: 순서 보존 트리 리스트 [{"name","level","amount"}, ...] (구 dict 포맷 대체)
+    breakdown: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     # 금액: KRW 원 단위 정수(§3)
     total_amount: Mapped[decimal.Decimal | None] = mapped_column(Numeric(12, 0), nullable=True)
     source: Mapped[str] = mapped_column(String, nullable=False)  # excel|erp(추후)

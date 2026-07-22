@@ -415,3 +415,153 @@
   gap: var(--space-3);
   padding: var(--space-4);
 }
+
+/* 헤더 행(제목 + 액션 버튼) */
+.fu-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* 검색 필터의 텍스트/월 입력 */
+.fu-filter input {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: 1rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  max-width: 160px;
+}
+.fu-filters {
+  align-items: flex-end;
+}
+.fu-filters .btn,
+.fu-filters button {
+  min-height: var(--tap-min);
+}
+
+/* 목록의 고지서 링크 버튼 */
+.fu-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fu-link:hover {
+  color: color-mix(in oklch, var(--color-accent) 75%, var(--color-text));
+}
+
+/* ── 고지서 상세 ── */
+.fee-invoice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.fee-invoice__caption {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.fee-invoice__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 720px) {
+  .fee-invoice__grid {
+    grid-template-columns: 1fr;
+  }
+}
+.fee-invoice__group {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+.fee-invoice__group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-sunken);
+  font-weight: 700;
+}
+.fee-invoice__group-amount {
+  font-variant-numeric: tabular-nums;
+}
+.fee-invoice__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.fee-invoice__table th,
+.fee-invoice__table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-weight: 400;
+}
+.fee-invoice__table thead th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+.fee-invoice__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.fee-invoice__table tbody tr[data-sub] .fee-invoice__row-name {
+  padding-left: var(--space-4);
+  color: var(--color-text-muted);
+}
+.fee-invoice__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-citation);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
+}
+.fee-invoice__total-label {
+  font-weight: 700;
+}
+.fee-invoice__total-value {
+  font-size: var(--text-xl, 1.5rem);
+  font-weight: 700;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+.fee-invoice__info {
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+}
+.fee-invoice__info-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.fee-invoice__info-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+}
+.fee-invoice__info-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

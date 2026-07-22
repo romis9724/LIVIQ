@@ -18,7 +18,7 @@
     |--------|----------|---------------------------|
     | 김소장 | MANAGER  | demo-manager@example.com  |
     | 박직원 | STAFF    | demo-staff@example.com    |
-    | 최주민 | RESIDENT | demo-resident@example.com |  (관리비가 있는 세대에 배정)
+    | 최주민 | RESIDENT | demo-resident@example.com |  (401동 201호 — 2026-07 관리비 배정)
 
 H7-2 역할 축소로 FACILITY 계정은 제거했다(RESIDENT·MANAGER·STAFF·SYS_ADMIN만 유효).
 
@@ -46,10 +46,12 @@ import datetime
 import uuid
 from typing import NamedTuple
 
+from app.fees_excel import FeeTreeRow, divide_fee_tree
 from app.password import hash_password
 from app.pii import PiiCrypto, get_pii_crypto
 from app.routers.auth import _normalize_email
-from sqlalchemy import func, select, text, update
+from app.routers.fees import HOUSEHOLD_DIVISOR
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from liviq_db.engine import create_engine, create_session_factory
@@ -86,6 +88,106 @@ ROSTER_PEOPLE = (
     ("정가입", datetime.date(1992, 3, 15), 3, 301),
     ("한신규", datetime.date(1988, 11, 2), 4, 402),
 )
+
+# 관리비 데모(H8-7): 단지 총액 트리를 574세대로 균등분배해 401동 201호 1세대에 부과.
+# 최주민(RESIDENT)을 이 세대에 배정해 조회·AI 설명 데모가 채워지게 한다.
+FEE_PERIOD = "2026-07"
+FEE_FLOOR, FEE_UNIT = 2, 201  # 401동 201호
+# (level, name, 단지총액) — 파일럿 실단지 관리비 트리(들여쓰기 depth = level).
+FEE_TREE: tuple[tuple[int, str, int], ...] = (
+    (0, "공용관리비", 46762861),
+    (1, "일반관리비", 24210020),
+    (2, "인건비", 22634390),
+    (3, "급여", 15621280),
+    (3, "제수당", 2552690),
+    (3, "상여금", 0),
+    (3, "퇴직금", 1446300),
+    (3, "산재보험료", 201350),
+    (3, "고용보험료", 245960),
+    (3, "국민연금", 296620),
+    (3, "건강보험료", 748910),
+    (3, "식대 등 복리후생비", 1521280),
+    (2, "제사무비", 408990),
+    (3, "일반사무용품비", 259400),
+    (3, "도서인쇄비", 134590),
+    (3, "여비교통비", 15000),
+    (2, "제세공과금", 281240),
+    (3, "공과금중 전기료", 0),
+    (3, "통신료", 281240),
+    (3, "우편료", 0),
+    (3, "제세공과금 등", 0),
+    (2, "피복비", 37950),
+    (2, "교육훈련비", 229090),
+    (3, "입주자대표회의 교육", 0),
+    (3, "장기수선계획 교육", 0),
+    (3, "방법 교육", 0),
+    (3, "안전 교육", 0),
+    (3, "배치 교육", 0),
+    (3, "보수 교육", 0),
+    (3, "그 밖에 법정교육", 0),
+    (3, "관리감독자교육", 0),
+    (3, "그 밖에 직무향상 교육", 0),
+    (3, "소방안전교육", 0),
+    (3, "시설물안전관리교육", 0),
+    (3, "전기안전관리자교육", 0),
+    (3, "승강기안전관리자교육", 0),
+    (3, "어린이놀이터 안전교육", 0),
+    (3, "수도시설관리자교육", 0),
+    (3, "그 밖에 개별법령상교육", 0),
+    (2, "차량유지비", 0),
+    (3, "연료비", 0),
+    (3, "수리비", 0),
+    (3, "보험료", 0),
+    (3, "기타차량유지비", 0),
+    (2, "그밖의부대비용", 618360),
+    (3, "관리용품구입비", 572360),
+    (3, "전문가자문비 등", 0),
+    (3, "잡비", 46000),
+    (1, "청소비", 7250220),
+    (1, "경비비", 7065750),
+    (1, "소독비", 199000),
+    (1, "승강기유지비", 1089000),
+    (1, "지능형홈네트워크설비유지비", 32200),
+    (1, "수선유지비", 6678830),
+    (2, "수선비", 3300000),
+    (2, "시설유지비", 2953830),
+    (2, "안전점검비", 125000),
+    (2, "재해예방비", 300000),
+    (1, "위탁관리수수료", 237841),
+    (0, "개별사용료", 47700530),
+    (1, "난방비", 7808640),
+    (2, "난방 공용", 5521298),
+    (2, "난방 전용", 2287342),
+    (1, "급탕비", 9396000),
+    (2, "급탕 공용", 0),
+    (2, "급탕 전용", 9396000),
+    (1, "가스사용료", 0),
+    (2, "가스 공용", 0),
+    (2, "가스 전용", 0),
+    (1, "전기료", 18325510),
+    (2, "전기 공용", 5401570),
+    (2, "전기 전용", 12923940),
+    (1, "수도료", 9894860),
+    (2, "수도 공용", -156720),
+    (2, "수도 전용", 10051580),
+    (1, "TV방송수신료", 690000),
+    (2, "TV방송수신료 전용", 690000),
+    (1, "정화조오물수수료", 0),
+    (1, "생활폐기물수수료", 0),
+    (1, "입주자대표회의 운영비", 891000),
+    (1, "건물보험료", 694520),
+    (1, "선거관리위원회 운영비", 0),
+    (1, "기타", 0),
+    (0, "장기수선충당금 월부과액", 6905380),
+    (1, "월사용액", 1100000),
+    (1, "충당금잔액", 233697416),
+    (1, "적립요율(%)", 0),
+    (0, "합계", 101368771),
+    (0, "잡수입", 1589874),
+    (1, "입주자기여수익", 0),
+    (1, "공동기여수익", 1589874),
+)
+FEE_TOTAL_ROW = "합계"
 
 
 class NoticeSeed(NamedTuple):
@@ -249,11 +351,35 @@ async def _ensure_household(
     return household.id
 
 
-async def _fee_household_id(session: AsyncSession) -> uuid.UUID | None:
-    """관리비가 있는 세대 하나(최주민 배정용) — 화면이 채워지도록."""
-    return await session.scalar(
-        select(Fee.household_id).where(Fee.tenant_id == DEV_TENANT_ID).limit(1)
+async def _seed_fee(session: AsyncSession, building_id: uuid.UUID) -> uuid.UUID:
+    """401동 201호에 2026-07 관리비 부과(단지 총액 트리 / 574세대). 멱등 — 재실행 시 교체.
+
+    분배는 라우터와 동일한 divide_fee_tree(코드 계산, AI 미개입 — 규칙 5). 최주민 배정용 세대 id 반환.
+    """
+    household_id = await _ensure_household(session, building_id, FEE_FLOOR, FEE_UNIT)
+    rows = [FeeTreeRow(level=level, name=name, amount=amount) for level, name, amount in FEE_TREE]
+    breakdown = divide_fee_tree(rows, HOUSEHOLD_DIVISOR)
+    total = next(r["amount"] for r in breakdown if r["name"] == FEE_TOTAL_ROW)
+    # 교체(delete 후 insert) — 재실행해도 1건 유지.
+    await session.execute(
+        delete(Fee).where(
+            Fee.tenant_id == DEV_TENANT_ID,
+            Fee.household_id == household_id,
+            Fee.period == FEE_PERIOD,
+        )
     )
+    session.add(
+        Fee(
+            tenant_id=DEV_TENANT_ID,
+            household_id=household_id,
+            period=FEE_PERIOD,
+            breakdown=breakdown,
+            total_amount=total,
+            source="excel",
+        )
+    )
+    await session.flush()
+    return household_id
 
 
 async def _soft_delete_legacy(session: AsyncSession, now: datetime.datetime) -> None:
@@ -306,15 +432,17 @@ async def _upsert_active_account(
             status="active",
             roster_matched=household_id is not None,
             email_verified_at=now,
+            approved_at=now,  # 활성 계정 = 승인 완료 — 관리비 등 승인 이후 월 조회 가능(FR-FEE-03)
             pii_ref=vault.id,
         )
         session.add(user)
         await session.flush()
     else:
-        # 재실행 — 문서화된 비밀번호·검증·활성 상태를 보장(중복 행 생성 없음).
+        # 재실행 — 문서화된 비밀번호·검증·활성·승인 상태를 보장(중복 행 생성 없음).
         user.status = "active"
         user.password_hash = hash_password(DEMO_PASSWORD)
         user.email_verified_at = user.email_verified_at or now
+        user.approved_at = user.approved_at or now
         if household_id is not None:
             user.household_id = household_id
 
@@ -473,6 +601,13 @@ async def _report(session: AsyncSession, crypto: PiiCrypto) -> None:
     notice_count = notice_count or 0
     print(f"공지 샘플(published): {notice_count}건")
 
+    fee_count = await session.scalar(
+        select(func.count())
+        .select_from(Fee)
+        .where(Fee.tenant_id == DEV_TENANT_ID, Fee.period == FEE_PERIOD)
+    )
+    print(f"관리비({FEE_PERIOD}, 401동 {FEE_UNIT}호): {fee_count or 0}건")
+
     # 멱등성: 재실행해도 아래 개수는 고정이어야 한다(중복 생성 없음).
     expected_active = len(ACTIVE_ACCOUNTS)
     assert active_count == expected_active, f"활성 계정 {active_count} != {expected_active}"
@@ -498,7 +633,7 @@ async def main() -> None:
             dek = await crypto.get_dek(session, DEV_TENANT_ID)
 
             await _soft_delete_legacy(session, datetime.datetime.now(datetime.UTC))
-            fee_household = await _fee_household_id(session)
+            fee_household = await _seed_fee(session, building_id)  # 401동 201호 2026-07 부과
             for name, role, email in ACTIVE_ACCOUNTS:
                 household = fee_household if role == "RESIDENT" else None
                 await _upsert_active_account(session, crypto, dek, name, role, email, household)

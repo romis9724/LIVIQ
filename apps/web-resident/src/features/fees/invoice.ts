@@ -1,36 +1,14 @@
 /**
- * 관리비 화면 순수 헬퍼 — 표시 포맷·고지서 트리 구성만 담당.
- * 관리비는 엑셀 업로드가 단일 출처이며 AI·클라이언트는 계산·부과에 관여하지 않는다(규칙 5).
- * 합계·항목 금액은 서버 값을 그대로 표기한다.
+ * 관리비 고지서 트리 구성 — 순수 헬퍼(표시 전용, 규칙 5).
+ * 서버가 준 순서 보존 리스트(name·level·amount)를 대분류(level 0) 그룹으로 묶고,
+ * 고지서에 노출하지 않는 누적지표(충당금잔액·적립요율)를 걸러낸다. 금액은 서버 값 그대로.
  */
 
-import type { FeeBreakdownRow } from "@/lib/api";
-
-/** 1000단위 구분 기호. toLocaleString ICU 의존을 피해 결정적으로 포맷. */
-export function groupDigits(n: number): string {
-  return Math.round(n)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+export interface BreakdownRow {
+  name: string;
+  level: number;
+  amount: number;
 }
-
-/** 원 단위 금액 표기. 예: 218000 → "218,000원". */
-export function formatWon(n: number): string {
-  return `${groupDigits(n)}원`;
-}
-
-/** "2026-07" → "2026년 7월". */
-export function monthLabel(month: string): string {
-  const [year, mon] = month.split("-");
-  return `${year}년 ${Number(mon)}월`;
-}
-
-/** 미리보기·현황 표의 층·호 → 표기(예: 15층 2호 → "1502"). */
-export function unitLabel(_floor: number, unitNo: number): string {
-  // unit_no가 완전한 호수(예: 1001호 = 10층 01호) — floor와 합성하면 "101001"로 깨진다.
-  return `${unitNo}호`;
-}
-
-// ── 고지서 트리 구성(H8-7) — 순서 보존 리스트를 대분류 그룹으로 묶고 누적지표를 숨긴다. ──
 
 /** 고지서에서 숨기는 누적지표 행(차감·부과 항목 아님). */
 const HIDDEN_NAMES = new Set(["충당금잔액", "적립요율(%)"]);
@@ -44,19 +22,19 @@ const MAX_DISPLAY_LEVEL = 2;
 export interface InvoiceGroup {
   name: string;
   amount: number;
-  rows: FeeBreakdownRow[]; // level 1~2 하위 항목(숨김 항목 제외)
+  rows: BreakdownRow[]; // level 1~2 하위 항목(숨김 항목 제외)
 }
 
 export interface Invoice {
   groups: InvoiceGroup[]; // 공용관리비·개별사용료·장기수선충당금 월부과액 등
-  total: FeeBreakdownRow | null; // 합계(강조)
+  total: BreakdownRow | null; // 합계(강조)
   info: InvoiceGroup | null; // 잡수입(참고 — 차감 아님)
 }
 
 /** 순서 보존 리스트 → 고지서 구조. level 0 을 그룹 헤더로 삼아 하위 행을 묶는다. */
-export function buildInvoice(rows: FeeBreakdownRow[]): Invoice {
+export function buildInvoice(rows: BreakdownRow[]): Invoice {
   const groups: InvoiceGroup[] = [];
-  let total: FeeBreakdownRow | null = null;
+  let total: BreakdownRow | null = null;
   let info: InvoiceGroup | null = null;
   let current: InvoiceGroup | null = null;
 

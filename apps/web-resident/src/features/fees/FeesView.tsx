@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Button, CitationCard, ConfidenceBadge, EmptyState, Skeleton } from "@liviq/ui";
 import type { ConfidenceStatus } from "@liviq/ui";
 import { ApiError, feeDelta, formatWon, getFees, type FeeData } from "./api";
+import { buildInvoice, type Invoice, type InvoiceGroup } from "./invoice";
 import { useFeeExplain } from "./useFeeExplain";
 import "./fees.css";
 
@@ -60,7 +61,7 @@ export function FeesView() {
 
   const hasData = data !== null && data.total !== null;
   const delta = hasData ? feeDelta(data.total, data.prevTotal) : null;
-  const items = data?.breakdown ? Object.entries(data.breakdown) : [];
+  const invoice = data?.breakdown ? buildInvoice(data.breakdown) : null;
 
   return (
     <div className="fees">
@@ -149,24 +150,64 @@ export function FeesView() {
               </section>
             ) : null}
 
-            <section className="surface-card">
-              <div className="fees-section__title">항목별 내역</div>
-              <ul className="fees-breakdown">
-                {items.map(([name, amount]) => (
-                  <li key={name} className="fees-breakdown__row">
-                    <span className="fees-breakdown__name">{name}</span>
-                    <span className="fees-breakdown__amount">{formatWon(amount)}</span>
-                  </li>
-                ))}
-                <li className="fees-breakdown__row fees-breakdown__row--total">
-                  <span className="fees-breakdown__name">합계</span>
-                  <span className="fees-breakdown__total">{formatWon(data!.total!)}</span>
-                </li>
-              </ul>
-            </section>
+            {invoice ? <InvoicePanel invoice={invoice} fallbackTotal={data!.total!} /> : null}
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+function InvoicePanel({ invoice, fallbackTotal }: { invoice: Invoice; fallbackTotal: number }) {
+  const total = invoice.total?.amount ?? fallbackTotal;
+  return (
+    <section className="surface-card">
+      <div className="fees-section__title">이번 달 관리비 고지서</div>
+      <div className="fees-invoice">
+        {invoice.groups.map((group) => (
+          <InvoiceGroupCard key={group.name} group={group} />
+        ))}
+      </div>
+      <div className="fees-invoice__total">
+        <span className="fees-invoice__total-label">당월 고지금액 합계</span>
+        <span className="fees-invoice__total-value">{formatWon(total)}</span>
+      </div>
+      {invoice.info ? (
+        <div className="fees-invoice__info">
+          <span className="fees-invoice__info-title">{invoice.info.name} (참고 · 차감 아님)</span>
+          <ul className="fees-invoice__info-list">
+            {invoice.info.rows.map((row) => (
+              <li key={row.name}>
+                <span>{row.name}</span>
+                <span>{formatWon(row.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function InvoiceGroupCard({ group }: { group: InvoiceGroup }) {
+  return (
+    <div className="fees-invoice__group">
+      <div className="fees-invoice__group-head">
+        <span className="fees-invoice__group-name">{group.name}</span>
+        <span className="fees-invoice__group-amount">{formatWon(group.amount)}</span>
+      </div>
+      <ul className="fees-invoice__rows">
+        {group.rows.map((row) => (
+          <li
+            key={row.name}
+            className="fees-invoice__row"
+            data-sub={row.level >= 2 || undefined}
+          >
+            <span className="fees-invoice__row-name">{row.name}</span>
+            <span className="fees-invoice__row-amount">{formatWon(row.amount)}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
