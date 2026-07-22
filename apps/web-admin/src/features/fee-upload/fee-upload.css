@@ -512,9 +512,10 @@
   font-weight: 400;
 }
 .fee-invoice__table thead th {
-  color: var(--color-text-muted);
-  font-weight: 600;
-  font-size: var(--text-xs);
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: var(--text-sm);
+  background: var(--color-surface-sunken);
 }
 /* 금액 열 우측 정렬 — table 스코프로 th·td 기본 left 규칙보다 특이도 우선. */
 .fee-invoice__table .fee-invoice__num {
