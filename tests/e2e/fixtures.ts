@@ -106,9 +106,18 @@ export function prevMonth(now: Date = new Date()): string {
 // 시드 관리비 합계(원). 당월 > 전월 → "전월 대비 ▲" 렌더 확인.
 export const FEE_CURRENT_TOTAL = 238400;
 export const FEE_PREV_TOTAL = 210000;
-export const FEE_BREAKDOWN: Record<string, number> = {
-  일반관리비: 120000,
-  청소비: 38400,
-  경비비: 50000,
-  승강기유지비: 30000,
-};
+// H8-7: breakdown = 순서 보존 트리 리스트([{name,level,amount}]). level 0=대분류·합계.
+// level 1 합 = 238400 = 공용관리비 = 합계(정합).
+export interface FeeBreakdownRow {
+  name: string;
+  level: number;
+  amount: number;
+}
+export const FEE_BREAKDOWN: FeeBreakdownRow[] = [
+  { name: "공용관리비", level: 0, amount: 238400 },
+  { name: "일반관리비", level: 1, amount: 120000 },
+  { name: "청소비", level: 1, amount: 38400 },
+  { name: "경비비", level: 1, amount: 50000 },
+  { name: "승강기유지비", level: 1, amount: 30000 },
+  { name: "합계", level: 0, amount: 238400 },
+];

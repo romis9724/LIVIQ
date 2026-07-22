@@ -16,9 +16,9 @@ test("당월 확정 관리비의 합계·항목·전월 대비가 표시된다",
   // 당월 합계(월 카드·항목 합계에 중복 노출되므로 first).
   await expect(page.getByText(won(FEE_CURRENT_TOTAL)).first()).toBeVisible();
 
-  // 항목별 내역 — 시드 breakdown 키가 모두 렌더.
-  for (const name of Object.keys(FEE_BREAKDOWN)) {
-    await expect(page.getByText(name).first()).toBeVisible();
+  // 항목별 내역 — 시드 breakdown 트리 항목명이 모두 렌더.
+  for (const row of FEE_BREAKDOWN) {
+    await expect(page.getByText(row.name).first()).toBeVisible();
   }
 
   // 당월 > 전월이라 전월 대비 배지 노출(월 카드 델타 + 비교 섹션 제목 중복 → first).

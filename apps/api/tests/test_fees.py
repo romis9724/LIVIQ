@@ -52,7 +52,7 @@ _TREE_ROWS: tuple[tuple[str, int], ...] = (
 )
 
 
-def _tree_xlsx(rows: tuple[tuple[str, int], ...] = _TREE_ROWS) -> bytes:
+def _tree_xlsx(rows: tuple[tuple[str, object], ...] = _TREE_ROWS) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     assert sheet is not None
@@ -172,7 +172,12 @@ async def test_upload_previews_divided_top_levels(
 async def test_upload_non_numeric_amount_422(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
-    data = _tree_xlsx((("공용관리비", 100), ("  일반관리비", "많음"),))  # type: ignore[arg-type]
+    data = _tree_xlsx(
+        (
+            ("공용관리비", 100),
+            ("  일반관리비", "많음"),
+        )
+    )
     async with _client(db_session, FakeStorage()) as c:
         resp = await _upload(c, data, "2026-07")
     assert resp.status_code == 422
@@ -451,7 +456,11 @@ async def test_explain_streams_citation_with_period(
             tenant_id=TENANT_ID,
             household_id=households[(3, 301)],
             period="2026-06",
-            breakdown=[_row("공용관리비", 0, 81468), _row("급여", 3, 27214), _row("합계", 0, 176601)],
+            breakdown=[
+                _row("공용관리비", 0, 81468),
+                _row("급여", 3, 27214),
+                _row("합계", 0, 176601),
+            ],
             total_amount=176601,
             source="excel",
         )

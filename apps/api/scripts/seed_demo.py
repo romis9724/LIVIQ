@@ -354,7 +354,8 @@ async def _ensure_household(
 async def _seed_fee(session: AsyncSession, building_id: uuid.UUID) -> uuid.UUID:
     """401동 201호에 2026-07 관리비 부과(단지 총액 트리 / 574세대). 멱등 — 재실행 시 교체.
 
-    분배는 라우터와 동일한 divide_fee_tree(코드 계산, AI 미개입 — 규칙 5). 최주민 배정용 세대 id 반환.
+    분배는 라우터와 동일한 divide_fee_tree(코드 계산, AI 미개입 — 규칙 5).
+    최주민 배정용 세대 id 반환.
     """
     household_id = await _ensure_household(session, building_id, FEE_FLOOR, FEE_UNIT)
     rows = [FeeTreeRow(level=level, name=name, amount=amount) for level, name, amount in FEE_TREE]
