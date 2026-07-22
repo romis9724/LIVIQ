@@ -35,7 +35,13 @@
 
 ## 결과
 
-- 이득: 단지별 분류를 배포 없이 관리, 공지·문서가 H8-6에서 하드코딩 분류를 코드 참조로 전환, 다른 메뉴 분류(민원 카테고리·시설 유형 등)도 그룹 추가만으로 흡수 가능.
+- 이득: 단지별 분류를 배포 없이 관리, 다른 메뉴 분류(민원 카테고리·시설 유형 등)도 그룹 추가만으로 흡수 가능.
 - 비용: 도메인 테이블의 FK RESTRICT 전환·기존 `source_type` 라벨 매핑 마이그레이션(H8-6), 설정 메뉴 신설(H8-4).
-- 후속: H8-5(동/호수 관리), H8-6(공지·문서 코드 참조 전환). notices 부가 필드(event_start/end·target_buildings·keywords)는 H8-6에서 동반 추가.
+- H8-6 참조 전환(적용): 하드코딩 분류를 코드 참조로 교체했다.
+  - `notices.category_code_id uuid NULL` — FK → `codes(tenant_id, id)` composite(NOTICE_CATEGORY 그룹), RESTRICT. NULL 허용(임시저장·기존 무분류) — 발행 공지는 분류 권장(강제 아님).
+  - `documents.category_code_id uuid NOT NULL` — 동일 composite FK(DOC_CATEGORY 그룹), RESTRICT. 기존 `source_type` enum("규약|회의록|공지|지침|매뉴얼")은 **label 일치 매핑** 후 컬럼 drop.
+  - `category_code_id`는 같은 tenant·해당 그룹 코드만 허용(앱 검증). 참조 중 코드 삭제는 DB IntegrityError → API 409.
+  - notices 부가 필드 동반 추가: `event_start`·`event_end` date NULL(표시용 행사/작업 기간), `target_buildings` jsonb NULL(동 id 배열, NULL=전체동, 표시용 — 알림 타게팅 백로그), `keywords` text NULL(콤마 구분, H8-3 임베딩 텍스트에 포함).
+  - 스키마 세부: [docs/03 §4.2·§4.4·§4.10](../03-database-design.md).
+- 후속: H8-5(동/호수 관리) 완료. notices `target_buildings` 기반 알림 타게팅은 백로그.
 - 재검토 신호: 코드 계층이 실제로 3단계 이상 필요해지거나 단지 간 공용 코드(시스템 테넌트 상속) 요구가 생기면 그룹 상속 모델을 별도 ADR로 검토.

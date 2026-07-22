@@ -29,7 +29,7 @@
 
 ### 3.1 문서 인제스트
 
-업로드 원본은 S3, 정규화 텍스트·임베딩은 pgvector. `content_hash`로 멱등, 버전 변경 시 증분 재색인. **발송된 공지도 인제스트 트리거** — `documents`(`source_type=공지`)로 자동 색인, 정정·철회 시 재색인/제거.
+업로드 원본은 S3, 정규화 텍스트·임베딩은 pgvector. `content_hash`로 멱등, 버전 변경 시 증분 재색인. **발행된 공지도 인제스트 트리거** — `content_chunks`(`source_type=notice`, H8-3)로 자동 색인, 정정·철회 시 재색인/제거([03 §4.2](03-database-design.md)).
 
 ```mermaid
 flowchart LR

@@ -35,6 +35,8 @@ erDiagram
   tenants ||--o{ code_groups : "코드그룹"
   code_groups ||--o{ codes : "코드"
   codes ||--o{ codes : "하위코드"
+  codes ||--o{ notices : "공지분류"
+  codes ||--o{ documents : "문서분류"
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
   unit_types ||--o{ floor_plans : "평면도"
@@ -159,7 +161,7 @@ erDiagram
     uuid id PK
     uuid tenant_id FK
     string title
-    string source_type
+    uuid category_code_id FK
     string index_status
   }
   document_versions {
@@ -219,6 +221,11 @@ erDiagram
     string status
     bool pinned
     timestamptz scheduled_at
+    uuid category_code_id FK "NULL"
+    date event_start
+    date event_end
+    jsonb target_buildings
+    text keywords
   }
   notice_attachments {
     uuid id PK
@@ -379,7 +386,8 @@ consents(id, tenant_id, user_id, purpose, granted bool, granted_at, revoked_at,
 
 ```sql
 -- 게시글 메타(관리자 전용 게시판 — 제목+본문(설명용)+첨부 1개 필수)
-documents(id, tenant_id, title, source_type,        -- 규약|회의록|공지|지침|매뉴얼
+documents(id, tenant_id, title,
+          category_code_id,                          -- FK → codes(tenant_id, id) composite, DOC_CATEGORY 그룹. NOT NULL. RESTRICT — 참조 중 코드 삭제 409. H8-6 전환(← source_type "규약|회의록|공지|지침|매뉴얼", 기존 데이터는 label 일치 매핑 후 컬럼 drop)
           visibility,                                -- ALL|RESIDENT|ADMIN (AI 인용 범위)
           body text NULL,                            -- 본문(설명용 — 임베딩 안 함)
           version int,                               -- 현재 버전 번호(document_versions 최신과 일치)
@@ -466,6 +474,10 @@ notices(id, tenant_id, title, body text, status,       -- draft|scheduled|publis
         pinned bool default false,                      -- 상단 고정
         scheduled_at timestamptz NULL,                  -- status=scheduled일 때 발행 예정 시각(ai-worker cron이 도달 시 published 전이+알림)
         published_at, published_by, audience,           -- ALL|building|household
+        category_code_id NULL,                          -- FK → codes(tenant_id, id) composite, NOTICE_CATEGORY 그룹. RESTRICT. NULL 허용(임시저장 유연·기존 무분류) — 발행 공지는 분류 권장(강제 아님). H8-6
+        event_start date NULL, event_end date NULL,      -- 표시용 행사/작업 기간(게시 노출 제어 아님 — scheduled_at과 무관)
+        target_buildings jsonb NULL,                    -- 대상 동 building id 배열. NULL=전체동. 표시용(알림 타게팅은 백로그)
+        keywords text NULL,                             -- 콤마 구분 키워드. H8-3 공지 임베딩 텍스트에 포함(본문+키워드)
         deleted_at NULL,                                -- soft delete(§3)
         created_at, updated_at)
 
@@ -481,6 +493,8 @@ notifications(id, tenant_id, user_id, type,            -- notice|inquiry_status|
               read_at NULL, created_at)                 -- RLS 대상(본인 알림만 열람)
 ```
 
+> **공지 분류 코드(H8-6)**: `category_code_id`는 같은 tenant·`NOTICE_CATEGORY` 그룹 코드만 허용(앱 검증). FK RESTRICT이라 참조 중 코드 삭제는 DB IntegrityError → API 409(§4.10). NULL 허용이라 임시저장·기존 공지는 무분류로 남을 수 있다. `documents.category_code_id`는 동일 패턴이되 **NOT NULL**(작성 시 DOC_CATEGORY 필수).
+>
 > **공지 첨부 접근 통제(H8-1 CRITICAL 게이트)**: `notice_attachments`는 `tenant_id` 표준 RLS 대상(§5 일반 규칙 — 예외 테이블 아님). 입주민 다운로드 경로(`GET /notices/{id}/attachments/{att_id}`)는 RLS(tenant) + **공지 published 검증 + 소유 notice 일치**를 앱에서 이중 확인해 교차 tenant·미발행 공지 첨부 접근을 차단한다. 첨부 삭제(`DELETE`)는 행 + MinIO 객체를 함께 제거(하드 삭제 — soft delete 대상 아님).
 
 ### 4.5 시설·회의
@@ -496,7 +510,7 @@ incidents(id, tenant_id, facility_id, occurred_at, symptom text,
           resolution text, root_cause text NULL, created_at)
 ```
 
-> **회의록은 별도 테이블 없이 `documents`(source_type=회의록)로 관리**한다.
+> **회의록은 별도 테이블 없이 `documents`(DOC_CATEGORY 코드 "회의록")로 관리**한다.
 > 회의 음성 STT·자동 요약은 추후 도입(그때 meetings/meeting_summaries 재설계).
 
 > 단지 배치도·공용층 평면도의 시설 포인트(`plan_devices.facility_id`)는 `facilities`와 nullable FK로 연결한다(§4.8) — 추후 설비 상태맵 확장점.
@@ -594,7 +608,7 @@ outbox_events(id, tenant_id, aggregate_type,          -- facility|incident|maint
 
 ### 4.10 공통 코드 레지스트리 (H8-4 · [ADR-0017](adr/0017-tenant-code-registry.md))
 
-분류를 하드코딩하지 않고 tenant 스코프 계층 코드로 관리한다. 공지 분류(NOTICE_CATEGORY)·문서 카테고리(DOC_CATEGORY)가 첫 소비처(H8-6 참조 전환).
+분류를 하드코딩하지 않고 tenant 스코프 계층 코드로 관리한다. 공지 분류(NOTICE_CATEGORY)·문서 카테고리(DOC_CATEGORY)가 첫 소비처 — H8-6에서 `notices.category_code_id`(NULL 허용)·`documents.category_code_id`(NOT NULL)가 FK **RESTRICT**로 참조 전환됐다(적용됨).
 
 ```sql
 -- 코드 그룹 (예: NOTICE_CATEGORY | DOC_CATEGORY)
@@ -615,7 +629,7 @@ codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, 
 
 > **RLS**: 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — 예외 아님). cross-tenant 참조는 composite FK로 차단.
 > **계층**: `parent_id` 자기참조. UI는 2단계까지 권장, DB는 깊이 제한 없음 — **순환 방지는 앱 검증**(`PATCH /admin/codes` parent_id 변경 시).
-> **삭제 정책**: soft delete 대상 **아님**(§3 목록 제외) — **하드 삭제**. is_system 그룹 삭제는 409, 삭제 시 하위 코드 CASCADE. 도메인 테이블은 H8-6에서 `codes.id`를 FK **RESTRICT**로 참조 → 참조 중 코드 삭제는 409, 비활성(`active=false`)으로 숨김 권장.
+> **삭제 정책**: soft delete 대상 **아님**(§3 목록 제외) — **하드 삭제**. is_system 그룹 삭제는 409, 삭제 시 하위 코드 CASCADE. 도메인 테이블(`notices`·`documents`)이 H8-6에서 `codes.id`를 FK **RESTRICT**로 참조하게 됐다(적용됨) → 참조 중 코드 삭제는 DB IntegrityError → API 409, 비활성(`active=false`)으로 숨김 권장.
 > **기본 코드 시드**(규칙 8 — 액션은 코드): 단지 생성 시 시드 + 기존 단지는 마이그레이션 시드. NOTICE_CATEGORY(일반·시설점검·방역소독·회의결과·주민행사·시스템장애 — '일반' 기본), DOC_CATEGORY(규약·회의록·공지·지침·매뉴얼). 그룹은 `is_system=true`(삭제·키 변경 잠금), 코드 행은 단지별 수정·추가·비활성 가능.
 
 ## 5. RLS (행 수준 보안)
@@ -671,7 +685,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 ## 7. 인덱싱·성능
 
 - 벡터: `content_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
-- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`, `codes(tenant_id, group_id, sort_order)`(코드 트리 정렬 조회).
+- 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`, `codes(tenant_id, group_id, sort_order)`(코드 트리 정렬 조회), `notices(tenant_id, category_code_id)`·`documents(tenant_id, category_code_id)`(분류 필터 조회 — H8-6).
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.

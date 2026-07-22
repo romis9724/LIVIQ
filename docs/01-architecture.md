@@ -201,7 +201,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -261,9 +261,9 @@
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `POST /documents` | MANAGER·STAFF | 구현됨 — 업로드→S3→인제스트 큐, `content_hash` 멱등 |
-| `GET /documents` | MANAGER·STAFF | 구현됨 — H2-2에서 `index_status` 필터 추가 |
-| `PATCH /documents/{id}` | MANAGER·STAFF | H2-2 — 공개범위(visibility)·제목 수정 |
+| `POST /documents` | MANAGER·STAFF | 구현됨 — 업로드→S3→인제스트 큐, `content_hash` 멱등. H8-6: `source_type` 제거·`category_code_id`(DOC_CATEGORY 코드) 필수 |
+| `GET /documents` | MANAGER·STAFF | 구현됨 — H2-2에서 `index_status` 필터 추가. H8-6: `category_code_id` 필터 |
+| `PATCH /documents/{id}` | MANAGER·STAFF | H2-2 — 공개범위(visibility)·제목 수정. H8-6: `category_code_id` 수정 |
 | `POST /documents/{id}/reindex` | MANAGER·STAFF | H2-2 — 재색인(failed 복구) |
 
 **민원** (H2-3, 화면: 입주민 민원·하자 / 관리자 민원 관리)
@@ -283,9 +283,9 @@
 | `GET /notices` · `/notices/{id}` | RESIDENT+ | `published`만, 상단 고정(pinned) 우선 정렬 + `audience`·역할 필터. 상세에 첨부 메타 포함 |
 | `GET /notices/{id}/attachments/{att_id}` | RESIDENT+ | 첨부 파일 다운로드 — API 경유(tenant·published 검증, presigned URL 미사용) |
 | `GET /admin/notices` | MANAGER·STAFF | 전 상태 목록(draft·scheduled 포함) |
-| `POST /admin/notices` | MANAGER·STAFF | 작성 — `status=draft\|published\|scheduled`(scheduled는 `scheduled_at` 필수). published 시 대상자 알림 생성 |
+| `POST /admin/notices` | MANAGER·STAFF | 작성 — `status=draft\|published\|scheduled`(scheduled는 `scheduled_at` 필수). H8-6: `category_code_id`(NOTICE_CATEGORY, NULL 허용)·`event_start`·`event_end`·`target_buildings`·`keywords` 부가. published 시 대상자 알림 생성 |
 | `GET /admin/notices/{id}` | MANAGER·STAFF | 상세(첨부 포함) |
-| `PATCH /admin/notices/{id}` | MANAGER·STAFF | 제목·본문·audience·pinned·상태 전이. 발행 전이 시 대상자 알림 생성 |
+| `PATCH /admin/notices/{id}` | MANAGER·STAFF | 제목·본문·audience·pinned·상태 전이 + H8-6 부가 필드(category_code_id·event_start/end·target_buildings·keywords). 발행 전이 시 대상자 알림 생성 |
 | `DELETE /admin/notices/{id}` | MANAGER·STAFF | soft delete |
 | `POST /admin/notices/{id}/attachments` | MANAGER·STAFF | multipart 업로드 — 확장자 화이트리스트(pdf·hwp·hwpx·docx·xlsx·jpg·jpeg·png)+파일당 20MB+공지당 5개 상한 |
 | `DELETE /admin/notices/{id}/attachments/{att_id}` | MANAGER·STAFF | 첨부 삭제(MinIO 객체 포함) |
@@ -343,9 +343,9 @@
 | `DELETE /admin/code-groups/{id}` | MANAGER | is_system 그룹은 409, 하위 코드 CASCADE |
 | `POST /admin/codes` | MANAGER | code·label·parent_id·sort_order |
 | `PATCH /admin/codes/{id}` | MANAGER | label·sort_order·active·parent_id(순환 검증) |
-| `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조 존재 시 409(H8-6 이후) — 비활성(active=false)으로 숨김 권장 |
+| `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조(notices·documents FK) 존재 시 409(H8-6 적용) — 비활성(active=false)으로 숨김 권장 |
 
-> 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조한다. 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다.
+> 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블(`notices.category_code_id` NULL 허용·`documents.category_code_id` NOT NULL)은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조 전환됐다(적용됨). 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다.
 
 **알림함** (횡단 · [ADR-0012](adr/0012-in-app-notification-only.md), 화면: 입주민 나>알림함)
 
