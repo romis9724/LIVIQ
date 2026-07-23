@@ -164,7 +164,7 @@ async def test_sys_admin_create_list_and_invite_manager(
         assert created.status_code == 201, created.text
         tid = created.json()["id"]
 
-        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017) — 시스템 그룹 2종.
+        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017·0018) — 시스템 그룹 3종.
         await db_session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=tid)
         )
@@ -173,7 +173,7 @@ async def test_sys_admin_create_list_and_invite_manager(
                 select(CodeGroup.group_key).where(CodeGroup.tenant_id == uuid.UUID(tid))
             )
         )
-        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY"}
+        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY", "INQUIRY_CATEGORY"}
 
         listed = await c.get("/admin/tenants")
         assert listed.status_code == 200
@@ -334,6 +334,17 @@ async def test_list_staff_returns_managers_and_staff(
     assert resp.status_code == 200
     ids = {item["user_id"] for item in resp.json()["items"]}
     assert str(MANAGER_USER_ID) in ids and str(staff_id) in ids
+
+
+async def test_staff_can_list_staff(seeded: AsyncSession, fake_redis: FakeRedis) -> None:
+    """직원 목록 조회는 STAFF에도 개방(배정 드롭다운용, ADR-0018) — 초대·비활성은 소장 유지."""
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("STAFF",), user_id=STAFF_ID)
+    ) as staff:
+        resp = await staff.get("/admin/staff")
+    assert resp.status_code == 200
+    ids = {item["user_id"] for item in resp.json()["items"]}
+    assert str(MANAGER_USER_ID) in ids
 
 
 async def test_list_staff_includes_decrypted_email(

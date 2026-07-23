@@ -1,4 +1,7 @@
-"""민원 — inquiry_categories·inquiries·inquiry_events (docs/03 §4.4)."""
+"""민원 — inquiries·inquiry_events (docs/03 §4.4, ADR-0018).
+
+분류는 공통 코드 그룹 INQUIRY_CATEGORY로 흡수(ADR-0017·0018) — inquiry_categories 테이블 폐기.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +9,7 @@ import datetime
 import uuid
 from typing import Any
 
-from sqlalchemy import DateTime, Index, Integer, String, Text
+from sqlalchemy import DateTime, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,15 +24,6 @@ from .base import (
 )
 
 
-class InquiryCategory(IdMixin, TenantMixin, TimestampMixin, Base):
-    __tablename__ = "inquiry_categories"
-    __table_args__ = (tenant_id_unique("inquiry_categories"),)
-
-    name: Mapped[str] = mapped_column(String, nullable=False)
-    default_assignee_role: Mapped[str | None] = mapped_column(String, nullable=True)
-    sla_hours: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-
 class Inquiry(IdMixin, TenantMixin, TimestampMixin, Base):
     """민원. soft delete 대상(§3)."""
 
@@ -40,23 +34,16 @@ class Inquiry(IdMixin, TenantMixin, TimestampMixin, Base):
         tenant_fk("household_id", "households", name="fk_inquiries_household"),
         tenant_fk("author_user_id", "users", name="fk_inquiries_author"),
         tenant_fk("assignee_user_id", "users", name="fk_inquiries_assignee"),
-        tenant_fk("category_id", "inquiry_categories", name="fk_inquiries_category"),
-        tenant_fk(
-            "ai_suggested_category_id",
-            "inquiry_categories",
-            name="fk_inquiries_ai_category",
-        ),
+        # 분류는 INQUIRY_CATEGORY 그룹 코드 참조(RESTRICT, 참조 중 삭제 거부 — ADR-0018).
+        tenant_fk("category_code_id", "codes", name="fk_inquiries_category_code"),
     )
 
     household_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     author_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    category_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    category_code_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
-    ai_suggested_category_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True
-    )
-    ai_priority: Mapped[str | None] = mapped_column(String, nullable=True)  # urgent|normal|low
+    priority: Mapped[str | None] = mapped_column(String, nullable=True)  # urgent|normal|low
     # received|assigned|in_progress|done
     status: Mapped[str] = mapped_column(String, nullable=False)
     assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

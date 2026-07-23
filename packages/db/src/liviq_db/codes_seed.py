@@ -37,4 +37,9 @@ DEFAULT_CODE_GROUPS: tuple[CodeGroupSeed, ...] = (
         name="문서 카테고리",
         codes=_codes("규약", "회의록", "공지", "지침", "매뉴얼"),
     ),
+    CodeGroupSeed(
+        group_key="INQUIRY_CATEGORY",
+        name="민원 카테고리",
+        codes=_codes("설비", "하자", "소음", "주차", "공용부", "보안", "기타"),
+    ),
 )

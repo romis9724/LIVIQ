@@ -1,4 +1,4 @@
-"""inquiries 라우터 통합 — 실 PG. 접수·분류·소유권·배정·상태 머신·알림 (docs/01 §13)."""
+"""inquiries 라우터 통합 — 실 PG. 접수·분류코드·소유권·배정·답변/피드백·상태 게이트 (ADR-0018)."""
 
 from __future__ import annotations
 
@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from liviq_db.models import (
     Building,
+    Code,
+    CodeGroup,
     Household,
-    InquiryCategory,
     Notification,
     Tenant,
     User,
@@ -29,7 +30,12 @@ OTHER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000002")
 MANAGER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000003")
 STAFF_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000004")
 STAFF2_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000005")  # 배정 대상(H7-2: STAFF)
-CATEGORY_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")
+# INQUIRY_CATEGORY 코드
+CATEGORY_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000001")  # "설비" active
+CATEGORY2_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")  # "하자" active
+INACTIVE_CATEGORY_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000003")  # 비활성
+# 다른 그룹(NOTICE_CATEGORY) 코드 — 그룹 불일치 422 검증용
+NOTICE_CODE_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
 
 
 async def _seed(session: AsyncSession) -> None:
@@ -66,7 +72,52 @@ async def _seed(session: AsyncSession) -> None:
     await session.flush()
     for uid, _hid, role in users:
         session.add(UserRole(tenant_id=TENANT_ID, user_id=uid, role=role))
-    session.add(InquiryCategory(id=CATEGORY_ID, tenant_id=TENANT_ID, name="누수"))
+
+    inquiry_group = CodeGroup(
+        tenant_id=TENANT_ID, group_key="INQUIRY_CATEGORY", name="민원 카테고리", is_system=True
+    )
+    notice_group = CodeGroup(
+        tenant_id=TENANT_ID, group_key="NOTICE_CATEGORY", name="공지 분류", is_system=True
+    )
+    session.add_all([inquiry_group, notice_group])
+    await session.flush()
+    session.add_all(
+        [
+            Code(
+                id=CATEGORY_ID,
+                tenant_id=TENANT_ID,
+                group_id=inquiry_group.id,
+                code="설비",
+                label="설비",
+                sort_order=0,
+            ),
+            Code(
+                id=CATEGORY2_ID,
+                tenant_id=TENANT_ID,
+                group_id=inquiry_group.id,
+                code="하자",
+                label="하자",
+                sort_order=1,
+            ),
+            Code(
+                id=INACTIVE_CATEGORY_ID,
+                tenant_id=TENANT_ID,
+                group_id=inquiry_group.id,
+                code="폐기",
+                label="폐기",
+                sort_order=2,
+                active=False,
+            ),
+            Code(
+                id=NOTICE_CODE_ID,
+                tenant_id=TENANT_ID,
+                group_id=notice_group.id,
+                code="일반",
+                label="일반",
+                sort_order=0,
+            ),
+        ]
+    )
     await session.flush()
 
 
@@ -85,33 +136,85 @@ async def seeded(db_session: AsyncSession) -> AsyncIterator[AsyncSession]:
     yield db_session
 
 
-async def _create(client: httpx.AsyncClient, *, title: str, body: str) -> dict[str, object]:
-    response = await client.post("/inquiries", json={"title": title, "body": body})
+async def _create(
+    client: httpx.AsyncClient,
+    *,
+    title: str,
+    body: str,
+    category_code_id: uuid.UUID | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {"title": title, "body": body}
+    if category_code_id is not None:
+        payload["category_code_id"] = str(category_code_id)
+    response = await client.post("/inquiries", json=payload)
     assert response.status_code == 201, response.text
     return response.json()
 
 
-# ── 접수 + 분류 + 이벤트 ────────────────────────────────────────────────────
+async def _assign(
+    client: httpx.AsyncClient, inquiry_id: object, assignee: uuid.UUID
+) -> dict[str, object]:
+    response = await client.post(
+        f"/admin/inquiries/{inquiry_id}/assign", json={"assignee_user_id": str(assignee)}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
 
 
-async def test_create_sets_received_classifies_and_records_events(
+# ── 접수 + 이벤트(AI 제거) ──────────────────────────────────────────────────
+
+
+async def test_create_sets_received_no_priority_and_records_created_event(
     seeded: AsyncSession,
 ) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as c:
         created = await _create(c, title="천장 누수", body="물이 샙니다")
         assert created["status"] == "received"
-        assert created["ai_priority"] == "urgent"
-        assert created["ai_suggested_category_id"] == str(CATEGORY_ID)
+        assert created["priority"] is None
+        assert created["category_code_id"] is None
 
         events = (await c.get(f"/inquiries/{created['id']}/events")).json()["items"]
-        assert [e["type"] for e in events] == ["created", "ai_classified"]
-        assert events[1]["payload"]["priority"] == "urgent"
+        assert [e["type"] for e in events] == ["created"]  # ai_classified 없음(ADR-0018)
+
+
+async def test_create_with_valid_category_code(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as c:
+        created = await _create(c, title="설비 문의", body="b", category_code_id=CATEGORY_ID)
+        assert created["category_code_id"] == str(CATEGORY_ID)
+
+
+async def test_create_rejects_foreign_group_code_422(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as c:
+        response = await c.post(
+            "/inquiries",
+            json={"title": "t", "body": "b", "category_code_id": str(NOTICE_CODE_ID)},
+        )
+    assert response.status_code == 422  # NOTICE_CATEGORY 코드는 민원 분류 아님
+
+
+async def test_create_rejects_unknown_category_code_422(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as c:
+        response = await c.post(
+            "/inquiries",
+            json={"title": "t", "body": "b", "category_code_id": str(uuid.uuid4())},
+        )
+    assert response.status_code == 422  # 미존재/타 tenant 코드
 
 
 async def test_create_without_household_returns_422(seeded: AsyncSession) -> None:
     async with _make_client(seeded, MANAGER_ID, ("RESIDENT",)) as c:  # MANAGER=세대 없음
         response = await c.post("/inquiries", json={"title": "t", "body": "b"})
     assert response.status_code == 422
+
+
+# ── 카테고리 조회 ────────────────────────────────────────────────────────────
+
+
+async def test_list_categories_returns_active_sorted(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as c:
+        items = (await c.get("/inquiries/categories")).json()["items"]
+    assert [i["label"] for i in items] == ["설비", "하자"]  # 비활성 제외·sort_order 순
+    assert items[0]["id"] == str(CATEGORY_ID)
 
 
 # ── 소유권(CRITICAL) ────────────────────────────────────────────────────────
@@ -166,13 +269,9 @@ async def test_assign_transitions_records_event_and_notifies(seeded: AsyncSessio
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="누수", body="새요")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        response = await mgr.post(
-            f"/admin/inquiries/{inquiry['id']}/assign",
-            json={"assignee_user_id": str(STAFF2_ID)},
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "assigned"
-        assert response.json()["assignee_user_id"] == str(STAFF2_ID)
+        result = await _assign(mgr, inquiry["id"], STAFF2_ID)
+        assert result["status"] == "assigned"
+        assert result["assignee_user_id"] == str(STAFF2_ID)
 
         events = (await mgr.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
         assert events[-1]["type"] == "assigned"
@@ -196,17 +295,164 @@ async def test_assign_to_resident_rejected_422(seeded: AsyncSession) -> None:
     assert response.status_code == 422
 
 
-# ── 상태 머신 ──────────────────────────────────────────────────────────────
+# ── 우선순위(수동) ──────────────────────────────────────────────────────────
+
+
+async def test_priority_set_manually(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        response = await mgr.post(
+            f"/admin/inquiries/{inquiry['id']}/priority", json={"priority": "urgent"}
+        )
+    assert response.status_code == 200
+    assert response.json()["priority"] == "urgent"
+
+
+# ── 답변(담당자→입주민) ─────────────────────────────────────────────────────
+
+
+async def test_assignee_can_reply_and_notifies_author(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        response = await staff.post(
+            f"/admin/inquiries/{inquiry['id']}/comments", json={"body": "확인 후 조치했습니다"}
+        )
+        assert response.status_code == 200
+        events = (await staff.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
+        reply = events[-1]
+        assert reply["type"] == "comment"
+        assert reply["payload"] == {"kind": "reply", "body": "확인 후 조치했습니다"}
+
+    notif = await seeded.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == AUTHOR_ID, Notification.type == "inquiry_status")
+    )
+    assert notif == 2  # 배정 알림 1 + 답변 알림 1
+
+
+async def test_non_assignee_staff_cannot_reply_403(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)
+    async with _make_client(seeded, STAFF2_ID, ("STAFF",)) as other_staff:
+        response = await other_staff.post(
+            f"/admin/inquiries/{inquiry['id']}/comments", json={"body": "끼어들기"}
+        )
+    assert response.status_code == 403
+
+
+async def test_manager_can_reply_override(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)  # 소장은 담당자 아님
+        response = await mgr.post(
+            f"/admin/inquiries/{inquiry['id']}/comments", json={"body": "소장 답변"}
+        )
+    assert response.status_code == 200
+
+
+# ── 피드백(입주민→담당자) ───────────────────────────────────────────────────
+
+
+async def _create_assign_progress(seeded: AsyncSession) -> str:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        moved = await staff.post(
+            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
+        )
+        assert moved.status_code == 200, moved.text
+    return str(inquiry["id"])
+
+
+async def test_author_feedback_in_progress_notifies_assignee(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_assign_progress(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        response = await author.post(
+            f"/inquiries/{inquiry_id}/comments", json={"body": "아직 물이 새요"}
+        )
+        assert response.status_code == 200
+        events = (await author.get(f"/inquiries/{inquiry_id}/events")).json()["items"]
+        assert events[-1]["payload"] == {"kind": "feedback", "body": "아직 물이 새요"}
+
+    notif = await seeded.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.user_id == STAFF_ID, Notification.type == "inquiry_status")
+    )
+    assert notif == 1  # 담당자에게 피드백 알림
+
+
+async def test_feedback_rejected_when_not_in_progress_422(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")  # received
+        response = await author.post(
+            f"/inquiries/{inquiry['id']}/comments", json={"body": "선접수"}
+        )
+    assert response.status_code == 422
+
+
+async def test_feedback_by_non_author_404(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_assign_progress(seeded)
+    async with _make_client(seeded, OTHER_ID, ("RESIDENT",)) as other:
+        response = await other.post(
+            f"/inquiries/{inquiry_id}/comments", json={"body": "남의 민원"}
+        )
+    assert response.status_code == 404  # 격리 — 존재 여부 노출 안 함
+
+
+# ── 상태 게이트 ────────────────────────────────────────────────────────────
+
+
+async def test_in_progress_requires_assignee(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)
+    async with _make_client(seeded, STAFF2_ID, ("STAFF",)) as other_staff:
+        denied = await other_staff.post(
+            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
+        )
+        assert denied.status_code == 403  # 비담당 직원
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        ok = await staff.post(
+            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
+        )
+        assert ok.status_code == 200
+
+
+async def test_done_requires_reply(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_assign_progress(seeded)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        no_reply = await staff.post(
+            f"/admin/inquiries/{inquiry_id}/status", json={"status": "done"}
+        )
+        assert no_reply.status_code == 422  # 답변 없는 완료 금지
+
+        await staff.post(
+            f"/admin/inquiries/{inquiry_id}/comments", json={"body": "처리 완료했습니다"}
+        )
+        done = await staff.post(
+            f"/admin/inquiries/{inquiry_id}/status", json={"status": "done"}
+        )
+        assert done.status_code == 200
+        assert done.json()["status"] == "done"
 
 
 async def test_status_forward_records_payload(seeded: AsyncSession) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="t", body="b")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        await mgr.post(
-            f"/admin/inquiries/{inquiry['id']}/assign",
-            json={"assignee_user_id": str(STAFF_ID)},
-        )
+        await _assign(mgr, inquiry["id"], STAFF_ID)
         response = await mgr.post(
             f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
         )

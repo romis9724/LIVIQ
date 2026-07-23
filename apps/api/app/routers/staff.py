@@ -26,6 +26,8 @@ from liviq_db.models import PiiVault, User, UserRole
 router = APIRouter(prefix="/admin/staff", tags=["staff"])
 
 _MANAGER = require_roles("MANAGER")
+# 목록 조회는 STAFF에도 개방(배정 드롭다운용) — 쓰기(초대·비활성·삭제)는 MANAGER 유지(ADR-0018).
+_STAFF_OR_MANAGER = require_roles("MANAGER", "STAFF")
 _STAFF_LIST_ROLES = ("MANAGER", "STAFF")
 
 
@@ -51,13 +53,14 @@ async def invite_staff(
 
 @router.get("", response_model=StaffListOut)
 async def list_staff(
-    ctx: Annotated[RequestContext, Depends(_MANAGER)],
+    ctx: Annotated[RequestContext, Depends(_STAFF_OR_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
 ) -> StaffListOut:
     """직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
 
-    이메일은 pii_vault 복호로 채운다 — MANAGER 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+    조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일은 pii_vault 복호로 채운다
+    — 관리 역할 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
     """
     rows = (
         await session.execute(
