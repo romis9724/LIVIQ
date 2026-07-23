@@ -460,6 +460,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/inquiries/{inquiry_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply Inquiry
+         * @description 담당자 답변 — 담당자 본인이거나 소장만. 작성자에게 알림(ADR-0018).
+         */
+        post: operations["reply_inquiry_admin_inquiries__inquiry_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inquiries/{inquiry_id}/priority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Inquiry Priority
+         * @description 우선순위 수동 지정(담당자·소장). 타임라인 이벤트 없음(ADR-0018).
+         */
+        post: operations["set_inquiry_priority_admin_inquiries__inquiry_id__priority_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inquiries/{inquiry_id}/status": {
         parameters: {
             query?: never;
@@ -643,7 +683,8 @@ export interface paths {
          * List Staff
          * @description 직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
          *
-         *     이메일은 pii_vault 복호로 채운다 — MANAGER 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+         *     조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일은 pii_vault 복호로 채운다
+         *     — 관리 역할 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
          */
         get: operations["list_staff_admin_staff_get"];
         put?: never;
@@ -1210,6 +1251,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inquiries/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inquiry Categories
+         * @description 접수 시 선택할 민원 분류(INQUIRY_CATEGORY active 코드, sort_order 순) — 입주민 이상 조회.
+         */
+        get: operations["list_inquiry_categories_inquiries_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/inquiries/{inquiry_id}": {
         parameters: {
             query?: never;
@@ -1221,6 +1282,26 @@ export interface paths {
         get: operations["get_inquiry_inquiries__inquiry_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inquiries/{inquiry_id}/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Inquiry Feedback
+         * @description 입주민 피드백 — 작성자 본인·처리중일 때만. 담당자에게 알림(ADR-0018).
+         */
+        post: operations["add_inquiry_feedback_inquiries__inquiry_id__comments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1728,6 +1809,11 @@ export interface components {
             /** Sort Order */
             sort_order?: number | null;
         };
+        /** CommentIn */
+        CommentIn: {
+            /** Body */
+            body: string;
+        };
         /** ConsentIn */
         ConsentIn: {
             /** Granted */
@@ -2164,12 +2250,27 @@ export interface components {
             /** Symptom */
             symptom: string;
         };
+        /** InquiryCategoryListOut */
+        InquiryCategoryListOut: {
+            /** Items */
+            items: components["schemas"]["InquiryCategoryOut"][];
+        };
+        /** InquiryCategoryOut */
+        InquiryCategoryOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string;
+        };
         /** InquiryCreateIn */
         InquiryCreateIn: {
             /** Body */
             body: string;
-            /** Category Id */
-            category_id?: string | null;
+            /** Category Code Id */
+            category_code_id?: string | null;
             /** Title */
             title: string;
         };
@@ -2209,10 +2310,6 @@ export interface components {
         };
         /** InquiryOut */
         InquiryOut: {
-            /** Ai Priority */
-            ai_priority: ("urgent" | "normal" | "low") | null;
-            /** Ai Suggested Category Id */
-            ai_suggested_category_id: string | null;
             /** Assignee User Id */
             assignee_user_id: string | null;
             /**
@@ -2222,8 +2319,8 @@ export interface components {
             author_user_id: string;
             /** Body */
             body: string;
-            /** Category Id */
-            category_id: string | null;
+            /** Category Code Id */
+            category_code_id: string | null;
             /**
              * Created At
              * Format: date-time
@@ -2234,6 +2331,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Priority */
+            priority: ("urgent" | "normal" | "low") | null;
             /**
              * Status
              * @enum {string}
@@ -2519,6 +2618,11 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /** PriorityIn */
+        PriorityIn: {
+            /** Priority */
+            priority: ("urgent" | "normal" | "low") | null;
         };
         /** ProfileIn */
         ProfileIn: {
@@ -3949,7 +4053,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("received" | "assigned" | "in_progress" | "done") | null;
-                category_id?: string | null;
+                category_code_id?: string | null;
             };
             header?: {
                 "x-dev-tenant-id"?: string | null;
@@ -3999,6 +4103,86 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reply_inquiry_admin_inquiries__inquiry_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_inquiry_priority_admin_inquiries__inquiry_id__priority_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriorityIn"];
             };
         };
         responses: {
@@ -5666,6 +5850,40 @@ export interface operations {
             };
         };
     };
+    list_inquiry_categories_inquiries_categories_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryCategoryListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_inquiry_inquiries__inquiry_id__get: {
         parameters: {
             query?: never;
@@ -5681,6 +5899,46 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_inquiry_feedback_inquiries__inquiry_id__comments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommentIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
