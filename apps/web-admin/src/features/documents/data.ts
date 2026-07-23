@@ -40,15 +40,20 @@ export function summarize(docs: readonly DocumentItem[]): Summary {
   return summary;
 }
 
-/** 클라이언트 측 필터 — 상태 탭 + 제목 부분일치(대소문자 무시). */
+/**
+ * 클라이언트 측 필터 — 상태 탭 + 제목 부분일치(대소문자 무시) + 분류.
+ * categoryId 가 빈 문자열이면("전체 분류") 분류 조건은 적용하지 않는다.
+ */
 export function filterDocs(
   docs: readonly DocumentItem[],
   status: StatusFilter,
   query: string,
+  categoryId = "",
 ): DocumentItem[] {
   const q = query.trim().toLowerCase();
   return docs.filter((doc) => {
     if (status !== "all" && doc.indexStatus !== status) return false;
+    if (categoryId && doc.categoryCodeId !== categoryId) return false;
     if (q && !doc.title.toLowerCase().includes(q)) return false;
     return true;
   });

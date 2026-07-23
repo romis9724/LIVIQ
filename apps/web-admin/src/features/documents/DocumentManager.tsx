@@ -2,12 +2,13 @@
 
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/lib/api";
 import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
 import { DocumentTable } from "./DocumentTable";
 import {
+  INDEX_META,
   STATUS_FILTERS,
   filterDocs,
   hasActiveIndexing,
@@ -18,7 +19,8 @@ import "./documents.css";
 
 // ponytail: 폴링, 문서량 커지면 SSE/웹소켓
 const POLL_INTERVAL_MS = 5000;
-const SEARCH_DEBOUNCE_MS = 300;
+
+type SummaryTone = "success" | "accent" | "neutral" | "danger";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -31,7 +33,10 @@ export function DocumentManager() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [category, setCategory] = useState("");
+  // 검색 버튼/Enter 로만 적용 — 타이핑 중에는 목록이 바뀌지 않는다(한글 IME 조합 오작동 방지).
+  const [appliedQuery, setAppliedQuery] = useState("");
+  const [appliedCategory, setAppliedCategory] = useState("");
   const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
 
   // 전체 목록 1회 로드 후 클라이언트에서 필터·집계 — 집계를 필터 탭과 무관하게 유지.
@@ -62,12 +67,6 @@ export function DocumentManager() {
     })();
   }, []);
 
-  // 검색어 디바운스(300ms) — 클라이언트 필터에만 사용.
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
-
   // pending·indexing 문서가 있으면 5초 폴링, 전부 완료/실패되면 중단.
   const polling = hasActiveIndexing(docs);
   useEffect(() => {
@@ -78,9 +77,15 @@ export function DocumentManager() {
 
   const summary = useMemo(() => summarize(docs), [docs]);
   const visibleDocs = useMemo(
-    () => filterDocs(docs, statusFilter, debouncedSearch),
-    [docs, statusFilter, debouncedSearch],
+    () => filterDocs(docs, statusFilter, appliedQuery, appliedCategory),
+    [docs, statusFilter, appliedQuery, appliedCategory],
   );
+
+  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAppliedQuery(search);
+    setAppliedCategory(category);
+  };
 
   return (
     <>
@@ -101,10 +106,30 @@ export function DocumentManager() {
 
       <main className="admin-page__main doc-main">
         <div className="doc-summary">
-          <SummaryCard label="색인 완료" count={summary.indexed} color="var(--color-success)" />
-          <SummaryCard label="색인 중" count={summary.indexing} color="var(--color-accent)" />
-          <SummaryCard label="대기" count={summary.pending} color="var(--color-text-muted)" />
-          <SummaryCard label="실패" count={summary.failed} color="var(--color-danger)" />
+          <SummaryCard
+            icon={INDEX_META.indexed.icon}
+            label="색인 완료"
+            count={summary.indexed}
+            tone="success"
+          />
+          <SummaryCard
+            icon={INDEX_META.indexing.icon}
+            label="색인 중"
+            count={summary.indexing}
+            tone="accent"
+          />
+          <SummaryCard
+            icon={INDEX_META.pending.icon}
+            label="대기"
+            count={summary.pending}
+            tone="neutral"
+          />
+          <SummaryCard
+            icon={INDEX_META.failed.icon}
+            label="실패"
+            count={summary.failed}
+            tone="danger"
+          />
         </div>
 
         <div className="doc-toolbar">
@@ -121,14 +146,32 @@ export function DocumentManager() {
               </button>
             ))}
           </div>
-          <input
-            className="doc-input doc-search"
-            type="search"
-            value={search}
-            placeholder="제목 검색"
-            aria-label="문서 제목 검색"
-            onChange={(event) => setSearch(event.target.value)}
-          />
+          <form className="doc-searchform" onSubmit={applySearch}>
+            <select
+              className="doc-select doc-searchform__category"
+              value={category}
+              aria-label="문서 분류 필터"
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="">전체 분류</option>
+              {[...categoryLabels].map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="doc-input doc-search"
+              type="search"
+              value={search}
+              placeholder="제목 검색"
+              aria-label="문서 제목 검색"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <Button type="submit" variant="secondary">
+              검색
+            </Button>
+          </form>
         </div>
 
         <DocumentsBody
@@ -147,12 +190,24 @@ export function DocumentManager() {
   );
 }
 
-function SummaryCard({ label, count, color }: { label: string; count: number; color: string }) {
+function SummaryCard({
+  icon,
+  label,
+  count,
+  tone,
+}: {
+  icon: string;
+  label: string;
+  count: number;
+  tone: SummaryTone;
+}) {
   return (
-    <div className="doc-summary__card">
-      <span className="doc-summary__dot" style={{ background: color }} aria-hidden="true" />
-      <span className="doc-summary__label">{label}</span>
+    <div className={`surface-card doc-summary__card doc-summary__card--${tone}`}>
+      <span className="doc-summary__icon" aria-hidden="true">
+        {icon}
+      </span>
       <span className="doc-summary__count">{count}</span>
+      <span className="doc-summary__label">{label}</span>
     </div>
   );
 }

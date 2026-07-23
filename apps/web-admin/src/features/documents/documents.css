@@ -100,6 +100,15 @@
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
+.doc-searchform {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.doc-searchform__category {
+  min-width: 150px;
+}
 .doc-search {
   min-width: 200px;
 }
@@ -124,32 +133,53 @@
   gap: var(--space-3);
   flex-wrap: wrap;
 }
+/* 상태 요약 카드 — 대시보드 액션 카드(.dash-action)와 시각 톤 통일.
+   상단 tone 스트립 + 아이콘 칩 + 큰 카운트. 링크가 아니라 요약이므로 hover lift 없음(정적). */
 .doc-summary__card {
+  --tone: var(--color-accent);
   flex: 1;
   min-width: 160px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
   padding: var(--space-4);
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--space-3);
+  background: color-mix(in oklch, var(--tone) 6%, var(--color-surface));
+  border-top: 3px solid var(--tone);
 }
-.doc-summary__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+.doc-summary__card--success {
+  --tone: var(--color-success);
+}
+.doc-summary__card--accent {
+  --tone: var(--color-accent);
+}
+.doc-summary__card--neutral {
+  --tone: var(--color-border-strong);
+}
+.doc-summary__card--danger {
+  --tone: var(--color-danger);
+}
+.doc-summary__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--tone) 22%, var(--color-surface));
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+.doc-summary__count {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 .doc-summary__label {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  flex: 1;
-}
-.doc-summary__count {
-  font-weight: 700;
-  font-size: var(--text-lg);
-  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .doc-tablecard {
@@ -168,11 +198,12 @@
 .doc-table thead tr {
   background: var(--color-surface-sunken);
   text-align: left;
-  color: var(--color-text-muted);
+  color: var(--color-text);
 }
 .doc-table th {
   padding: var(--space-3) var(--space-4);
-  font-weight: 600;
+  font-size: var(--text-base);
+  font-weight: 700;
   white-space: nowrap;
 }
 .doc-table td {
