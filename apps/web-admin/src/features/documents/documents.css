@@ -138,13 +138,12 @@
 .doc-summary__card {
   --tone: var(--color-accent);
   flex: 1;
-  min-width: 160px;
-  padding: var(--space-4);
+  min-width: 140px;
+  padding: var(--space-3) var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  background: color-mix(in oklch, var(--tone) 6%, var(--color-surface));
-  border-top: 3px solid var(--tone);
+  gap: var(--space-2);
+  border-color: color-mix(in oklch, var(--tone) 55%, var(--color-border));
 }
 .doc-summary__card--success {
   --tone: var(--color-success);
@@ -158,28 +157,26 @@
 .doc-summary__card--danger {
   --tone: var(--color-danger);
 }
-.doc-summary__icon {
+.doc-summary__label {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--tone) 22%, var(--color-surface));
-  font-size: var(--text-lg);
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.doc-summary__icon {
+  font-size: var(--text-base);
   line-height: 1;
 }
 .doc-summary__count {
-  font-size: var(--text-title);
+  align-self: flex-end;
+  font-size: var(--text-xl);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
-}
-.doc-summary__label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text);
+  color: color-mix(in oklch, var(--tone) 60%, var(--color-text));
 }
 
 .doc-tablecard {
