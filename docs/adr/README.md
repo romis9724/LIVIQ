@@ -27,3 +27,4 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0015](0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환 | Accepted |
 | [0016](0016-document-board-versioned-attachment.md) | 문서관리 게시판 전환 — 첨부 1개·버전 이력·청크 소스 일반화 | Accepted |
 | [0017](0017-tenant-code-registry.md) | 공통 코드 관리 — tenant 스코프 계층 코드로 하드코딩 분류 대체 | Accepted |
+| [0018](0018-inquiry-manual-handling.md) | 민원 개편 — AI 분류 제거·카테고리 코드화·답변/댓글·상태 권한 | Accepted |
