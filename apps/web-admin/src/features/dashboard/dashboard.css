@@ -1,4 +1,4 @@
-/* 관리자 대시보드 — KPI·일별 질의량·민원 현황·검수/토큰 위젯. */
+/* 관리자 대시보드 — 오늘 할 일 액션 큐·민원/시설 현황·AI 도우미 현황(토큰/캐시). */
 .dash-head {
   display: flex;
   align-items: flex-end;
@@ -207,10 +207,10 @@
   color: var(--color-text-muted);
 }
 
-/* 데이터 카드 tone — 좌측 액센트 보더로 카테고리 색 부여(스트립 남발 없이 절제). */
+/* 데이터 카드 tone — 카드 전체 테두리를 tone으로 옅게 틴트(대칭·절제). */
 .dash-tcard {
   --tc: var(--color-accent);
-  border-left: 4px solid var(--tc);
+  border-color: color-mix(in oklch, var(--tc) 55%, var(--color-border));
 }
 .dash-tcard--accent {
   --tc: var(--color-accent);
@@ -253,18 +253,6 @@
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.dash-kpi__delta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-.dash-kpi__vs {
-  color: var(--color-text-muted);
-  font-weight: 400;
-}
 
 /* charts */
 .dash-charts {
@@ -299,73 +287,6 @@
 }
 .dash-card__meta {
   font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-
-.dash-legend {
-  display: flex;
-  gap: var(--space-4);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.dash-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.dash-legend__sw {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-}
-.dash-legend__sw--total {
-  background: var(--color-accent);
-}
-.dash-legend__sw--solved {
-  background: color-mix(in oklch, var(--color-success) 55%, var(--color-surface));
-}
-
-.dash-chart__scroll {
-  overflow-x: auto;
-}
-.dash-bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 180px;
-  min-width: 560px;
-}
-.dash-bar {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 4px;
-  height: 100%;
-}
-.dash-bar__col {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  height: 100%;
-}
-.dash-bar__total {
-  width: 100%;
-  border-radius: 3px 3px 0 0;
-  background: color-mix(in oklch, var(--color-accent) 22%, var(--color-surface-sunken));
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-.dash-bar__solved {
-  width: 100%;
-  border-radius: 3px 3px 0 0;
-  background: color-mix(in oklch, var(--color-success) 55%, var(--color-surface));
-}
-.dash-bar__label {
-  font-size: 0.62rem;
   color: var(--color-text-muted);
 }
 
@@ -423,54 +344,6 @@
   border-color: var(--color-danger);
 }
 
-/* 검수 대기 위젯 */
-.dash-link {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-accent);
-  text-decoration: none;
-}
-.dash-review__big {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-.dash-review__count {
-  font-size: 2rem;
-  font-weight: 700;
-  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
-}
-.dash-review__sub {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-}
-.dash-review__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-.dash-review__list li {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--color-border);
-}
-.dash-review__q {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dash-review__score {
-  font-weight: 700;
-}
-
 /* 토큰 위젯 */
 .dash-token__big {
   display: flex;
@@ -486,30 +359,4 @@
 .dash-token__unit {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-.dash-token__delta {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: color-mix(in oklch, var(--color-success) 65%, var(--color-text));
-  margin-bottom: var(--space-4);
-}
-.dash-token__note {
-  color: var(--color-text-muted);
-  font-weight: 400;
-}
-.dash-token__total {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-}
-.dash-token__amount {
-  font-weight: 700;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
 }
