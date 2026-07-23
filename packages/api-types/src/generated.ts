@@ -1548,6 +1548,22 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ActionQueueStats
+         * @description 오늘 할 일 — 기간 무관 현재 상태 open 카운트(대시보드 최상단). tenant 격리(규칙 3).
+         */
+        ActionQueueStats: {
+            /** Approvals Pending */
+            approvals_pending: number;
+            /** Inquiries In Progress */
+            inquiries_in_progress: number;
+            /** Inquiries Unassigned */
+            inquiries_unassigned: number;
+            /** Notices Draft */
+            notices_draft: number;
+            /** Notices Scheduled */
+            notices_scheduled: number;
+        };
+        /**
          * AdminFeeDetailOut
          * @description 관리자 고지서 상세 — 세대 1건의 분배 내역 전체.
          */
@@ -1602,8 +1618,6 @@ export interface components {
             avg_token_output: number | null;
             /** Fallback Rate */
             fallback_rate: number | null;
-            /** Needs Review Rate */
-            needs_review_rate: number | null;
             /** Query Count */
             query_count: number;
         };
@@ -1916,6 +1930,7 @@ export interface components {
         };
         /** DashboardStatsOut */
         DashboardStatsOut: {
+            actions: components["schemas"]["ActionQueueStats"];
             ai: components["schemas"]["AiStats"];
             budget: components["schemas"]["BudgetStats"];
             cache: components["schemas"]["CacheStats"];

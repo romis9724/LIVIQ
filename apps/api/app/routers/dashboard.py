@@ -18,9 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.deps import RequestContext, get_tenant_session, require_roles
-from app.schemas.dashboard import AiStats, BudgetStats, CacheStats, DashboardStatsOut
+from app.schemas.dashboard import (
+    ActionQueueStats,
+    AiStats,
+    BudgetStats,
+    CacheStats,
+    DashboardStatsOut,
+)
 from app.session import get_redis
-from liviq_db.models import Facility, Inquiry, Message
+from liviq_db.models import Facility, Inquiry, Message, Notice, User
 
 logger = logging.getLogger("app.dashboard")
 
@@ -58,7 +64,6 @@ async def dashboard_stats(
                 func.avg(Message.token_output),
                 func.count().filter(Message.status == "answered"),
                 func.count().filter(Message.status == "fallback"),
-                func.count().filter(Message.review_status.is_not(None)),
             ).where(
                 Message.tenant_id == ctx.tenant_id,
                 Message.role == "assistant",
@@ -66,15 +71,17 @@ async def dashboard_stats(
             )
         )
     ).one()
-    total, avg_in, avg_out, answered, fallback, needs_review = ai_row
+    total, avg_in, avg_out, answered, fallback = ai_row
     ai = AiStats(
         query_count=total,
         avg_token_input=_avg(avg_in),
         avg_token_output=_avg(avg_out),
         answer_rate=_rate(answered, total),
         fallback_rate=_rate(fallback, total),
-        needs_review_rate=_rate(needs_review, total),
     )
+
+    # 오늘 할 일 — 기간 무관 현재 상태 open 카운트(대시보드 최상단, 규칙 3 tenant 필터).
+    actions = await _action_queue(session, ctx.tenant_id)
 
     # 캐시 적중률 — H4-2 Redis 카운터(없으면 0).
     hits = int(await redis.get(f"cache:hits:{ctx.tenant_id}") or 0)
@@ -110,7 +117,45 @@ async def dashboard_stats(
         facilities[status] = count
 
     return DashboardStatsOut(
-        days=days, ai=ai, cache=cache, budget=budget, inquiries=inquiries, facilities=facilities
+        days=days,
+        actions=actions,
+        ai=ai,
+        cache=cache,
+        budget=budget,
+        inquiries=inquiries,
+        facilities=facilities,
+    )
+
+
+async def _action_queue(session: AsyncSession, tenant_id: object) -> ActionQueueStats:
+    """기간 무관 open 카운트 — 각 단일 테이블 count(soft delete·tenant 필터). 규칙 3."""
+
+    async def _count(*conditions: object) -> int:
+        # FROM은 where 절 컬럼에서 추론(모든 조건은 단일 테이블 기준). tenant_id 필터 필수.
+        return int(await session.scalar(select(func.count()).where(*conditions)) or 0)  # type: ignore[arg-type]
+
+    return ActionQueueStats(
+        approvals_pending=await _count(
+            User.tenant_id == tenant_id, User.deleted_at.is_(None), User.status == "pending"
+        ),
+        inquiries_unassigned=await _count(
+            Inquiry.tenant_id == tenant_id,
+            Inquiry.deleted_at.is_(None),
+            Inquiry.status == "received",
+        ),
+        inquiries_in_progress=await _count(
+            Inquiry.tenant_id == tenant_id,
+            Inquiry.deleted_at.is_(None),
+            Inquiry.status == "in_progress",
+        ),
+        notices_draft=await _count(
+            Notice.tenant_id == tenant_id, Notice.deleted_at.is_(None), Notice.status == "draft"
+        ),
+        notices_scheduled=await _count(
+            Notice.tenant_id == tenant_id,
+            Notice.deleted_at.is_(None),
+            Notice.status == "scheduled",
+        ),
     )
 
 

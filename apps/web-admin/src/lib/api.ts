@@ -1466,15 +1466,23 @@ export async function changePassword(
 // ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────
 // 비율(0~1 분수·null)은 서버 값 그대로 — 표기 변환은 features/dashboard/data.ts.
 
+export interface DashboardActionQueue {
+  approvalsPending: number;
+  inquiriesUnassigned: number;
+  inquiriesInProgress: number;
+  noticesDraft: number;
+  noticesScheduled: number;
+}
+
 export interface DashboardStats {
   days: number;
+  actions: DashboardActionQueue;
   ai: {
     queryCount: number;
     avgTokenInput: number | null;
     avgTokenOutput: number | null;
     answerRate: number | null;
     fallbackRate: number | null;
-    needsReviewRate: number | null;
   };
   cache: { hits: number; misses: number; hitRate: number | null };
   budget: { enabled: boolean; budget: number; usedToday: number; exceeded: boolean };
@@ -1484,13 +1492,19 @@ export interface DashboardStats {
 
 interface RawDashboardStats {
   days: number;
+  actions: {
+    approvals_pending: number;
+    inquiries_unassigned: number;
+    inquiries_in_progress: number;
+    notices_draft: number;
+    notices_scheduled: number;
+  };
   ai: {
     query_count: number;
     avg_token_input: number | null;
     avg_token_output: number | null;
     answer_rate: number | null;
     fallback_rate: number | null;
-    needs_review_rate: number | null;
   };
   cache: { hits: number; misses: number; hit_rate: number | null };
   budget: { enabled: boolean; budget: number; used_today: number; exceeded: boolean };
@@ -1506,13 +1520,19 @@ export async function getDashboardStats(days: number): Promise<DashboardStats> {
   const raw = (await response.json()) as RawDashboardStats;
   return {
     days: raw.days,
+    actions: {
+      approvalsPending: raw.actions.approvals_pending,
+      inquiriesUnassigned: raw.actions.inquiries_unassigned,
+      inquiriesInProgress: raw.actions.inquiries_in_progress,
+      noticesDraft: raw.actions.notices_draft,
+      noticesScheduled: raw.actions.notices_scheduled,
+    },
     ai: {
       queryCount: raw.ai.query_count,
       avgTokenInput: raw.ai.avg_token_input,
       avgTokenOutput: raw.ai.avg_token_output,
       answerRate: raw.ai.answer_rate,
       fallbackRate: raw.ai.fallback_rate,
-      needsReviewRate: raw.ai.needs_review_rate,
     },
     cache: { hits: raw.cache.hits, misses: raw.cache.misses, hitRate: raw.cache.hit_rate },
     budget: {

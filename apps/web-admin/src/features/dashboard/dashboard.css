@@ -5,21 +5,43 @@
   justify-content: space-between;
   gap: var(--space-4);
 }
+/* 기간 세그먼트 컨트롤 (7일/30일 토글) — native select 대체 */
 .dash-period {
-  appearance: none;
-  -webkit-appearance: none;
-  min-height: 40px;
+  display: inline-flex;
   flex: none;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface-sunken);
+}
+.dash-period__btn {
+  appearance: none;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 var(--space-4);
   font-family: inherit;
   font-size: var(--text-sm);
-  padding: 0 var(--space-6) 0 var(--space-3);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface);
-  background-image: var(--select-chevron);
-  background-repeat: no-repeat;
-  background-position: right var(--space-3) center;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-md) - var(--space-1));
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+.dash-period__btn:hover {
   color: var(--color-text);
+}
+.dash-period__btn--active {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.dash-period__btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .dash-main {
@@ -28,11 +50,190 @@
   gap: var(--space-6);
 }
 
+/* 섹션 제목 (오늘 할 일 · AI 도우미 현황) */
+.dash-section__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-4);
+}
+/* 히어로 — "오늘 할 일"은 화면의 1차 위계 */
+.dash-section__title--hero {
+  font-size: var(--text-xl);
+}
+/* AI 섹션은 2차 위계로 강등(작게·차분하게) */
+.dash-section__title--muted {
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
+  margin-bottom: 0;
+}
+
+/* AI 도우미 현황 — sunken 밴드로 시각적 강등, 흰 카드가 그 위로 떠오름 */
+.dash-ai {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  padding: var(--space-6);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+/* 밴드 안 KPI 값은 히어로 카운트보다 작게(위계 차등) */
+.dash-ai .dash-kpi__value,
+.dash-ai .dash-token__value {
+  font-size: var(--text-xl);
+}
+
+/* 오늘 할 일 — 액션 큐 카드(클릭 시 담당 화면 이동) */
+.dash-actions {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-4);
+}
+@media (max-width: 980px) {
+  .dash-actions {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 560px) {
+  .dash-actions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.dash-action {
+  /* --tone: 카드 의미색 · --tone-ink: 텍스트 대비 안전한 진한 버전 */
+  --tone: var(--color-accent);
+  --tone-ink: var(--color-accent);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+  /* 카드 전면에 옅은 tone 틴트 + tone 상단 스트립으로 카테고리 색을 부여 */
+  background: color-mix(in oklch, var(--tone) 6%, var(--color-surface));
+  border-top: 3px solid var(--tone);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+/* 카드별 tone 배정 — 앰버는 밝아 텍스트용은 --color-text 혼합으로 대비 확보 */
+.dash-action--accent {
+  --tone: var(--color-accent);
+  --tone-ink: var(--color-accent);
+}
+.dash-action--warning {
+  --tone: var(--color-warning);
+  --tone-ink: color-mix(in oklch, var(--color-warning) 55%, var(--color-text));
+}
+.dash-action--success {
+  --tone: var(--color-success);
+  --tone-ink: color-mix(in oklch, var(--color-success) 72%, var(--color-text));
+}
+.dash-action--neutral {
+  --tone: var(--color-border-strong);
+  --tone-ink: var(--color-text);
+}
+.dash-action__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dash-action__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--tone) 22%, var(--color-surface));
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+.dash-action__arrow {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: color-mix(in oklch, var(--tone) 50%, var(--color-text-muted));
+  transform: translateX(0);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+.dash-action__count {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--tone-ink);
+}
+.dash-action__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.dash-action:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover);
+}
+.dash-action:hover .dash-action__arrow {
+  color: var(--color-accent);
+  transform: translateX(3px);
+}
+.dash-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dash-action,
+  .dash-action__arrow {
+    transition: none;
+  }
+  .dash-action:hover {
+    transform: none;
+  }
+  .dash-action:hover .dash-action__arrow {
+    transform: none;
+  }
+}
+/* 카운트 0(할 일 없음) — 카테고리 색(스트립·아이콘 칩)은 유지하고 숫자만 차분하게.
+   할 일이 있는 카드(>0)는 옅은 tone 틴트 배경으로 한 번 더 주목 유도. */
+.dash-action--empty {
+  background: var(--color-surface);
+}
+.dash-action--empty .dash-action__count {
+  color: var(--color-text-muted);
+}
+
+/* 데이터 카드 tone — 좌측 액센트 보더로 카테고리 색 부여(스트립 남발 없이 절제). */
+.dash-tcard {
+  --tc: var(--color-accent);
+  border-left: 4px solid var(--tc);
+}
+.dash-tcard--accent {
+  --tc: var(--color-accent);
+}
+.dash-tcard--success {
+  --tc: var(--color-success);
+}
+.dash-tcard--warning {
+  --tc: var(--color-warning);
+}
+/* AI 밴드용 — 소프트 블루그레이(secondary라 채도 낮춤, 회색보다 hue 살림) */
+.dash-tcard--muted {
+  --tc: color-mix(in oklch, var(--color-accent) 38%, var(--color-border-strong));
+}
+
 /* KPI */
 .dash-kpis {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-4);
+}
+.dash-kpis--3 {
+  grid-template-columns: repeat(3, 1fr);
 }
 @media (max-width: 980px) {
   .dash-kpis {

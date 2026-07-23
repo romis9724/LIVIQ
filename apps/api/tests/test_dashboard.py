@@ -1,7 +1,8 @@
 """운영 대시보드 집계 통합 테스트 — 실 PG + 역할 가드·비율 정합(H4-3, FR-ADM-06).
 
-시드: assistant 메시지 3건(answered 2·fallback 1, 검수 플래그 1, 토큰 일부 null) +
-민원 3건(received 2·done 1) + 시설 2건(normal 1·fault 1). 기대값은 각 집계식으로 계산.
+시드: assistant 메시지 3건(answered 2·fallback 1, 토큰 일부 null) +
+민원 4건(received 2·in_progress 1·done 1) + 시설 2건(normal 1·fault 1) +
+승인 대기 유저 1 + 공지 2건(draft 1·scheduled 1). 기대값은 각 집계식으로 계산.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from conftest import MANAGER_USER_ID, TENANT_ID, seed_tenant
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import Conversation, Facility, Inquiry, Message
+from liviq_db.models import Conversation, Facility, Inquiry, Message, Notice, User
 
 
 async def _seed_dashboard(session: AsyncSession) -> None:
@@ -53,7 +54,7 @@ async def _seed_dashboard(session: AsyncSession) -> None:
             token_output=200,
         )
     )
-    # answered·토큰 있음·검수 대기.
+    # answered·토큰 있음.
     session.add(
         Message(
             tenant_id=TENANT_ID,
@@ -61,7 +62,6 @@ async def _seed_dashboard(session: AsyncSession) -> None:
             role="assistant",
             content="답변2",
             status="answered",
-            review_status="needs_review",
             token_input=300,
             token_output=400,
         )
@@ -77,7 +77,7 @@ async def _seed_dashboard(session: AsyncSession) -> None:
         )
     )
 
-    for status in ("received", "received", "done"):
+    for status in ("received", "received", "in_progress", "done"):
         session.add(
             Inquiry(
                 tenant_id=TENANT_ID,
@@ -90,6 +90,17 @@ async def _seed_dashboard(session: AsyncSession) -> None:
         )
     session.add(Facility(tenant_id=TENANT_ID, name="승강기", status="normal"))
     session.add(Facility(tenant_id=TENANT_ID, name="펌프", status="fault"))
+
+    # 오늘 할 일 시드 — 승인 대기 유저 1 + 공지 draft 1·scheduled 1.
+    session.add(User(tenant_id=TENANT_ID, status="pending"))
+    session.add(
+        Notice(tenant_id=TENANT_ID, title="임시", body="본문", status="draft", audience="ALL")
+    )
+    session.add(
+        Notice(
+            tenant_id=TENANT_ID, title="예약", body="본문", status="scheduled", audience="ALL"
+        )
+    )
     await session.flush()
 
 
@@ -128,13 +139,22 @@ async def test_stats_aggregates_match_seed(dash_client: httpx.AsyncClient) -> No
     assert ai["avg_token_output"] == 300.0  # avg(200, 400)
     assert ai["answer_rate"] == 2 / 3
     assert ai["fallback_rate"] == 1 / 3
-    assert ai["needs_review_rate"] == 1 / 3
+    assert "needs_review_rate" not in ai  # H8-7/ADR-0015 검수 큐 제거로 폐기
 
     # 캐시 카운터 미설정 → 0·null(0 나누기 회피).
     assert body["cache"] == {"hits": 0, "misses": 0, "hit_rate": None}
 
-    assert body["inquiries"] == {"received": 2, "assigned": 0, "in_progress": 0, "done": 1}
+    assert body["inquiries"] == {"received": 2, "assigned": 0, "in_progress": 1, "done": 1}
     assert body["facilities"] == {"normal": 1, "check": 0, "fault": 1, "risk": 0}
+
+    # 오늘 할 일 — 기간 무관 open 카운트.
+    assert body["actions"] == {
+        "approvals_pending": 1,
+        "inquiries_unassigned": 2,
+        "inquiries_in_progress": 1,
+        "notices_draft": 1,
+        "notices_scheduled": 1,
+    }
 
 
 async def test_stats_cache_hit_rate(db_session: AsyncSession) -> None:
@@ -162,7 +182,14 @@ async def test_stats_empty_period_yields_null_rates(db_session: AsyncSession) ->
     assert ai["avg_token_input"] is None
     assert ai["answer_rate"] is None
     assert ai["fallback_rate"] is None
-    assert ai["needs_review_rate"] is None
+    # 시드 없는 단지 → 오늘 할 일 전부 0(MANAGER는 active라 승인 대기 아님).
+    assert body["actions"] == {
+        "approvals_pending": 0,
+        "inquiries_unassigned": 0,
+        "inquiries_in_progress": 0,
+        "notices_draft": 0,
+        "notices_scheduled": 0,
+    }
 
 
 async def test_stats_forbidden_for_staff(db_session: AsyncSession) -> None:
