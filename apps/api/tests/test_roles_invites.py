@@ -221,7 +221,10 @@ async def test_staff_invite_accept_login_journey(
     email = "newstaff@example.com"
     password = "brand-new-staff-pass"
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        assert (await mgr.post("/admin/staff/invite", json={"email": email})).status_code == 202
+        invited = await mgr.post(
+            "/admin/staff/invite", json={"email": email, "name": "신입직원"}
+        )
+        assert invited.status_code == 202
     token = mailer.last_token()
 
     async with _make_app(seeded, fake_redis, mailer) as c:
@@ -240,9 +243,13 @@ async def test_staff_invite_duplicate_email_conflict(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        first = await mgr.post("/admin/staff/invite", json={"email": "dup@example.com"})
+        first = await mgr.post(
+            "/admin/staff/invite", json={"email": "dup@example.com", "name": "중복직원"}
+        )
         assert first.status_code == 202
-        second = await mgr.post("/admin/staff/invite", json={"email": "DUP@example.com"})
+        second = await mgr.post(
+            "/admin/staff/invite", json={"email": "DUP@example.com", "name": "중복직원"}
+        )
     assert second.status_code == 409  # 정규화(소문자) 후 전역 중복
 
 
@@ -251,7 +258,9 @@ async def test_invite_accept_reused_token_rejected(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        await mgr.post("/admin/staff/invite", json={"email": "once@example.com"})
+        await mgr.post(
+            "/admin/staff/invite", json={"email": "once@example.com", "name": "일회직원"}
+        )
     token = mailer.last_token()
     async with _make_app(seeded, fake_redis, mailer) as c:
         first = await c.post(
@@ -269,7 +278,7 @@ async def test_invite_accept_expired_token_rejected(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        await mgr.post("/admin/staff/invite", json={"email": "exp@example.com"})
+        await mgr.post("/admin/staff/invite", json={"email": "exp@example.com", "name": "만료직원"})
     token = mailer.last_token()
     tok = await seeded.scalar(
         select(AuthToken).where(AuthToken.token_hash == auth_tokens._hash_token(token))
@@ -350,9 +359,11 @@ async def test_staff_can_list_staff(seeded: AsyncSession, fake_redis: FakeRedis)
 async def test_list_staff_includes_decrypted_email(
     seeded: AsyncSession, fake_redis: FakeRedis
 ) -> None:
-    """직원 목록에 이메일 표시(ADR-0014 개정, H7-5) — PII 부재 행은 None으로 유지."""
+    """직원 목록에 이메일·이름 표시(ADR-0014 개정·ADR-0018) — PII 부재 행은 None으로 유지."""
     async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
-        invite = await mgr.post("/admin/staff/invite", json={"email": "new-staff@example.com"})
+        invite = await mgr.post(
+            "/admin/staff/invite", json={"email": "new-staff@example.com", "name": "김초대"}
+        )
         assert invite.status_code == 202
         resp = await mgr.get("/admin/staff")
 
@@ -360,6 +371,7 @@ async def test_list_staff_includes_decrypted_email(
     by_email = {item["email"]: item for item in resp.json()["items"]}
     assert "new-staff@example.com" in by_email  # 초대 행은 복호 이메일
     assert by_email["new-staff@example.com"]["status"] == "invited"
+    assert by_email["new-staff@example.com"]["name"] == "김초대"  # 초대 시 입력한 이름
     assert None in by_email  # vault 없는 시드 소장 행은 None(행 유지)
 
 

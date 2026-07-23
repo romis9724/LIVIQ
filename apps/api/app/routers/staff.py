@@ -19,7 +19,7 @@ from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session
 from app.invites import create_invite
 from app.mail import Mailer, get_mailer
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.admin import InviteIn, StaffItem, StaffListOut
+from app.schemas.admin import InviteStaffIn, StaffItem, StaffListOut
 from app.session import SessionStore, get_session_store
 from liviq_db.models import PiiVault, User, UserRole
 
@@ -33,13 +33,16 @@ _STAFF_LIST_ROLES = ("MANAGER", "STAFF")
 
 @router.post("/invite", status_code=202)
 async def invite_staff(
-    body: InviteIn,
+    body: InviteStaffIn,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
     mailer: Annotated[Mailer, Depends(get_mailer)],
 ) -> Response:
-    """자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409."""
+    """자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+
+    이름은 pii_vault.name_enc로 저장해 목록에서 이메일 대신 실명으로 식별한다(ADR-0018).
+    """
     await create_invite(
         session=session,
         crypto=crypto,
@@ -47,6 +50,7 @@ async def invite_staff(
         tenant_id=ctx.tenant_id,
         email=body.email,
         role="STAFF",
+        name=body.name,
     )
     return Response(status_code=202)
 

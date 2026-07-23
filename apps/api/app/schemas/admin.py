@@ -13,6 +13,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 __all__ = [
     "InviteIn",
+    "InviteStaffIn",
     "StaffItem",
     "StaffListOut",
     "TenantCreateIn",
@@ -54,6 +55,13 @@ class TenantListOut(BaseModel):
 
 class InviteIn(BaseModel):
     email: EmailStr  # 초대 대상 — login_id는 HMAC 해시, 평문은 pii_vault.email_enc
+
+
+class InviteStaffIn(BaseModel):
+    """직원 초대 — 소장이 이름을 입력해 목록 식별이 가능하도록 name 필수(ADR-0018)."""
+
+    email: EmailStr
+    name: str = Field(min_length=1, max_length=100)  # pii_vault.name_enc 암호화 저장
 
 
 class StaffItem(BaseModel):
