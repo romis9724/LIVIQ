@@ -19,6 +19,18 @@ export function notificationDate(iso: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+// "나" 페이지 알림 요약에 노출할 최근 알림 개수. 나머지는 /notifications 전체 목록에서.
+export const SUMMARY_LIMIT = 4;
+
+export function summaryNotifications(items: readonly AppNotification[]): AppNotification[] {
+  return items.slice(0, SUMMARY_LIMIT);
+}
+
+// 요약이 전부를 담지 못할 때만 "더보기" 노출 — 로드된 개수가 요약 상한을 넘으면 참.
+export function hasMoreNotifications(items: readonly AppNotification[]): boolean {
+  return items.length > SUMMARY_LIMIT;
+}
+
 export function isUnread(notification: AppNotification): boolean {
   return notification.readAt === null;
 }

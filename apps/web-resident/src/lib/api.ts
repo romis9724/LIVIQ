@@ -308,8 +308,14 @@ function toNotification(raw: RawNotification): AppNotification {
   };
 }
 
-export async function listNotifications(): Promise<AppNotification[]> {
-  const response = await apiFetch(`${API_BASE_URL}/notifications`, { headers: DEV_HEADERS });
+export async function listNotifications(
+  opts?: { limit?: number; page?: number },
+): Promise<AppNotification[]> {
+  const query = new URLSearchParams();
+  if (opts?.limit !== undefined) query.set("limit", String(opts.limit));
+  if (opts?.page !== undefined) query.set("page", String(opts.page));
+  const suffix = query.toString() ? `?${query}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/notifications${suffix}`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawNotification[]).map(toNotification);

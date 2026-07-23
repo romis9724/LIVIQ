@@ -2,10 +2,13 @@ import { describe, it, expect } from "vitest";
 
 import type { AppNotification } from "@/lib/api";
 import {
+  SUMMARY_LIMIT,
+  hasMoreNotifications,
   isUnread,
   markReadInList,
   notificationDate,
   notificationIcon,
+  summaryNotifications,
   unreadCount,
 } from "./notifications";
 
@@ -53,6 +56,26 @@ describe("isUnread / unreadCount", () => {
       notification({ id: "c", readAt: null }),
     ];
     expect(unreadCount(items)).toBe(2);
+  });
+});
+
+describe("summaryNotifications / hasMoreNotifications", () => {
+  function list(count: number): AppNotification[] {
+    return Array.from({ length: count }, (_, i) => notification({ id: `n${i}` }));
+  }
+
+  it("요약은 최근 SUMMARY_LIMIT개까지만 노출한다", () => {
+    expect(summaryNotifications(list(10))).toHaveLength(SUMMARY_LIMIT);
+    expect(summaryNotifications(list(2))).toHaveLength(2);
+  });
+
+  it("로드된 개수가 요약 상한을 넘으면 더보기 노출", () => {
+    expect(hasMoreNotifications(list(SUMMARY_LIMIT + 1))).toBe(true);
+  });
+
+  it("요약 상한 이하면 더보기 숨김", () => {
+    expect(hasMoreNotifications(list(SUMMARY_LIMIT))).toBe(false);
+    expect(hasMoreNotifications(list(0))).toBe(false);
   });
 });
 
