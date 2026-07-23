@@ -443,6 +443,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/inquiries/{inquiry_id}/ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ack Inquiry
+         * @description 열람 ack — 담당자가 배정된 민원 상세를 열면 처리중으로 전환(ADR-0018 개정).
+         *
+         *     caller가 담당자이고 status=assigned일 때만 전환한다. 그 외(비담당·소장·다른 상태·완료)는
+         *     변경 없이 현재 상태를 그대로 반환하는 no-op(프론트가 상세 열람마다 호출하므로 에러 아님).
+         */
+        post: operations["ack_inquiry_admin_inquiries__inquiry_id__ack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inquiries/{inquiry_id}/assign": {
         parameters: {
             query?: never;
@@ -460,6 +483,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/inquiries/{inquiry_id}/category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Inquiry Category
+         * @description 분류 수정(담당자·소장). null이면 미분류로. 타임라인 이벤트 없음(ADR-0018 개정).
+         */
+        post: operations["set_inquiry_category_admin_inquiries__inquiry_id__category_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inquiries/{inquiry_id}/comments": {
         parameters: {
             query?: never;
@@ -471,9 +514,29 @@ export interface paths {
         put?: never;
         /**
          * Reply Inquiry
-         * @description 담당자 답변 — 담당자 본인이거나 소장만. 작성자에게 알림(ADR-0018).
+         * @description 담당자 답변 — 담당자 본인이거나 소장만, 배정 이후·완료 전. 작성자에게 알림(ADR-0018).
          */
         post: operations["reply_inquiry_admin_inquiries__inquiry_id__comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inquiries/{inquiry_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Inquiry
+         * @description 완료 처리 — 담당자·소장, 처리중/재접수 상태 + 답변 1건 이상. 작성자에게 알림(ADR-0018).
+         */
+        post: operations["complete_inquiry_admin_inquiries__inquiry_id__complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -494,23 +557,6 @@ export interface paths {
          * @description 우선순위 수동 지정(담당자·소장). 타임라인 이벤트 없음(ADR-0018).
          */
         post: operations["set_inquiry_priority_admin_inquiries__inquiry_id__priority_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/admin/inquiries/{inquiry_id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Change Inquiry Status */
-        post: operations["change_inquiry_status_admin_inquiries__inquiry_id__status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -681,10 +727,10 @@ export interface paths {
         };
         /**
          * List Staff
-         * @description 직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
+         * @description 직원 목록 — STAFF·MANAGER 역할(생성 순), 이메일·성명 포함(ADR-0014 개정·ADR-0018).
          *
-         *     조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일은 pii_vault 복호로 채운다
-         *     — 관리 역할 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+         *     조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일·성명은 pii_vault 복호로
+         *     채운다 — 관리 역할 인가 뒤에서만 반환. 복호 실패·PII 부재는 None(행 유지).
          */
         get: operations["list_staff_admin_staff_get"];
         put?: never;
@@ -1299,7 +1345,7 @@ export interface paths {
         put?: never;
         /**
          * Add Inquiry Feedback
-         * @description 입주민 피드백 — 작성자 본인·처리중일 때만. 담당자에게 알림(ADR-0018).
+         * @description 입주민 피드백 — 작성자 본인·처리중/재접수일 때만. 담당자에게 알림(ADR-0018).
          */
         post: operations["add_inquiry_feedback_inquiries__inquiry_id__comments_post"];
         delete?: never;
@@ -1319,6 +1365,26 @@ export interface paths {
         get: operations["list_inquiry_events_inquiries__inquiry_id__events_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inquiries/{inquiry_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen Inquiry
+         * @description 재접수 — 작성자 본인이 완료된 민원을 다시 연다. 담당자에게 알림(ADR-0018 개정).
+         */
+        post: operations["reopen_inquiry_inquiries__inquiry_id__reopen_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,6 +1773,11 @@ export interface components {
             hits: number;
             /** Misses */
             misses: number;
+        };
+        /** CategoryIn */
+        CategoryIn: {
+            /** Category Code Id */
+            category_code_id: string | null;
         };
         /** CodeCreateIn */
         CodeCreateIn: {
@@ -2337,7 +2408,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "received" | "assigned" | "in_progress" | "done";
+            status: "received" | "assigned" | "in_progress" | "done" | "reopened";
             /** Title */
             title: string;
             /**
@@ -2773,6 +2844,8 @@ export interface components {
              * Format: date-time
              */
             invited_at: string;
+            /** Name */
+            name?: string | null;
             /** Roles */
             roles: string[];
             /** Status */
@@ -2787,14 +2860,6 @@ export interface components {
         StaffListOut: {
             /** Items */
             items: components["schemas"]["StaffItem"][];
-        };
-        /** StatusChangeIn */
-        StatusChangeIn: {
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "received" | "assigned" | "in_progress" | "done";
         };
         /** TenantCreateIn */
         TenantCreateIn: {
@@ -4052,7 +4117,7 @@ export interface operations {
     list_admin_inquiries_admin_inquiries_get: {
         parameters: {
             query?: {
-                status?: ("received" | "assigned" | "in_progress" | "done") | null;
+                status?: ("received" | "assigned" | "in_progress" | "done" | "reopened") | null;
                 category_code_id?: string | null;
             };
             header?: {
@@ -4086,6 +4151,42 @@ export interface operations {
             };
         };
     };
+    ack_inquiry_admin_inquiries__inquiry_id__ack_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     assign_inquiry_admin_inquiries__inquiry_id__assign_post: {
         parameters: {
             query?: never;
@@ -4103,6 +4204,46 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AssignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_inquiry_category_admin_inquiries__inquiry_id__category_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryIn"];
             };
         };
         responses: {
@@ -4166,7 +4307,7 @@ export interface operations {
             };
         };
     };
-    set_inquiry_priority_admin_inquiries__inquiry_id__priority_post: {
+    complete_inquiry_admin_inquiries__inquiry_id__complete_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4180,11 +4321,7 @@ export interface operations {
                 liviq_session?: string | null;
             };
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PriorityIn"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -4206,7 +4343,7 @@ export interface operations {
             };
         };
     };
-    change_inquiry_status_admin_inquiries__inquiry_id__status_post: {
+    set_inquiry_priority_admin_inquiries__inquiry_id__priority_post: {
         parameters: {
             query?: never;
             header?: {
@@ -4222,7 +4359,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StatusChangeIn"];
+                "application/json": components["schemas"]["PriorityIn"];
             };
         };
         responses: {
@@ -5983,6 +6120,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InquiryEventListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_inquiry_inquiries__inquiry_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
                 };
             };
             /** @description Validation Error */
