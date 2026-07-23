@@ -75,7 +75,6 @@ const CHILD_TABLES = [
   "documents",
   "inquiry_events",
   "inquiries",
-  "inquiry_categories",
   "notifications",
   "ai_feedback",
   "citations",

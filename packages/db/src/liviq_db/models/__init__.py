@@ -11,7 +11,7 @@ from .conversations import AiFeedback, Citation, Conversation, Message
 from .documents import ContentChunk, Document, DocumentVersion
 from .facilities import Facility, Incident, MaintenanceLog
 from .fees import ExcelUpload, Fee
-from .inquiries import Inquiry, InquiryCategory, InquiryEvent
+from .inquiries import Inquiry, InquiryEvent
 from .notices import Notice, NoticeAttachment, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
 from .plans import FloorPlan, PlanDevice
@@ -51,7 +51,6 @@ __all__ = [
     "Household",
     "Incident",
     "Inquiry",
-    "InquiryCategory",
     "InquiryEvent",
     "Job",
     "MaintenanceLog",

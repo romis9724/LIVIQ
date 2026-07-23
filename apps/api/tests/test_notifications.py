@@ -147,3 +147,43 @@ async def test_mark_read_unknown_returns_404(seeded: AsyncSession) -> None:
     async with _make_client(seeded, USER_A) as c:
         res = await c.post(f"/notifications/{uuid.uuid4()}/read")
     assert res.status_code == 404
+
+
+# ── 삭제 (하드 삭제·소유권) ────────────────────────────────────────────────
+
+
+async def test_delete_removes_own_notification_from_list(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, USER_A) as c:
+        res = await c.delete(f"/notifications/{NOTIF_A1}")
+        assert res.status_code == 204, res.text
+
+        body = (await c.get("/notifications")).json()
+
+    assert body["total"] == 1  # 2 → 1
+    assert all(uuid.UUID(n["id"]) != NOTIF_A1 for n in body["items"])
+    gone = await seeded.scalar(select(Notification).where(Notification.id == NOTIF_A1))
+    assert gone is None  # 하드 삭제
+
+
+async def test_delete_other_users_notification_returns_404(seeded: AsyncSession) -> None:
+    # CRITICAL(규칙 4): USER_A가 USER_B의 알림을 삭제 불가.
+    async with _make_client(seeded, USER_A) as c:
+        res = await c.delete(f"/notifications/{NOTIF_B1}")
+    assert res.status_code == 404
+
+    notif = await seeded.scalar(select(Notification).where(Notification.id == NOTIF_B1))
+    assert notif is not None  # 남의 알림은 남아 있음
+
+
+async def test_delete_is_not_repeatable_returns_404(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, USER_A) as c:
+        first = await c.delete(f"/notifications/{NOTIF_A1}")
+        assert first.status_code == 204
+        again = await c.delete(f"/notifications/{NOTIF_A1}")
+    assert again.status_code == 404
+
+
+async def test_delete_unknown_returns_404(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, USER_A) as c:
+        res = await c.delete(f"/notifications/{uuid.uuid4()}")
+    assert res.status_code == 404

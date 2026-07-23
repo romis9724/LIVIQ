@@ -19,25 +19,30 @@ from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session
 from app.invites import create_invite
 from app.mail import Mailer, get_mailer
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.admin import InviteIn, StaffItem, StaffListOut
+from app.schemas.admin import InviteStaffIn, StaffItem, StaffListOut
 from app.session import SessionStore, get_session_store
 from liviq_db.models import PiiVault, User, UserRole
 
 router = APIRouter(prefix="/admin/staff", tags=["staff"])
 
 _MANAGER = require_roles("MANAGER")
+# 목록 조회는 STAFF에도 개방(배정 드롭다운용) — 쓰기(초대·비활성·삭제)는 MANAGER 유지(ADR-0018).
+_STAFF_OR_MANAGER = require_roles("MANAGER", "STAFF")
 _STAFF_LIST_ROLES = ("MANAGER", "STAFF")
 
 
 @router.post("/invite", status_code=202)
 async def invite_staff(
-    body: InviteIn,
+    body: InviteStaffIn,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
     mailer: Annotated[Mailer, Depends(get_mailer)],
 ) -> Response:
-    """자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409."""
+    """자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+
+    이름은 pii_vault.name_enc로 저장해 목록에서 이메일 대신 실명으로 식별한다(ADR-0018).
+    """
     await create_invite(
         session=session,
         crypto=crypto,
@@ -45,23 +50,32 @@ async def invite_staff(
         tenant_id=ctx.tenant_id,
         email=body.email,
         role="STAFF",
+        name=body.name,
     )
     return Response(status_code=202)
 
 
 @router.get("", response_model=StaffListOut)
 async def list_staff(
-    ctx: Annotated[RequestContext, Depends(_MANAGER)],
+    ctx: Annotated[RequestContext, Depends(_STAFF_OR_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
 ) -> StaffListOut:
-    """직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
+    """직원 목록 — STAFF·MANAGER 역할(생성 순), 이메일·성명 포함(ADR-0014 개정·ADR-0018).
 
-    이메일은 pii_vault 복호로 채운다 — MANAGER 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+    조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일·성명은 pii_vault 복호로
+    채운다 — 관리 역할 인가 뒤에서만 반환. 복호 실패·PII 부재는 None(행 유지).
     """
     rows = (
         await session.execute(
-            select(User.id, User.status, User.created_at, UserRole.role, PiiVault.email_enc)
+            select(
+                User.id,
+                User.status,
+                User.created_at,
+                UserRole.role,
+                PiiVault.email_enc,
+                PiiVault.name_enc,
+            )
             .join(
                 UserRole,
                 and_(UserRole.user_id == User.id, UserRole.tenant_id == User.tenant_id),
@@ -81,7 +95,7 @@ async def list_staff(
 
     dek = await crypto.get_dek(session, ctx.tenant_id) if rows else b""
 
-    def decrypt_email(blob: bytes | None) -> str | None:
+    def decrypt(blob: bytes | None) -> str | None:
         if blob is None:
             return None
         try:
@@ -91,7 +105,7 @@ async def list_staff(
 
     # 사용자별 역할 집계(등장 순 유지) — 조인이 역할 수만큼 행을 낸다.
     by_user: dict[uuid.UUID, StaffItem] = {}
-    for user_id, status, created_at, role, email_enc in rows:
+    for user_id, status, created_at, role, email_enc, name_enc in rows:
         item = by_user.get(user_id)
         if item is None:
             by_user[user_id] = StaffItem(
@@ -99,7 +113,8 @@ async def list_staff(
                 roles=[role],
                 status=status,
                 invited_at=created_at,
-                email=decrypt_email(email_enc),
+                email=decrypt(email_enc),
+                name=decrypt(name_enc),
             )
         elif role not in item.roles:
             item.roles.append(role)

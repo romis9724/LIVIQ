@@ -1,15 +1,16 @@
 import type { StatusKind } from "@liviq/ui";
 
-import type { AiPriority, InquiryEvent, InquiryEventType, InquiryStatus } from "@/lib/api";
+import type { InquiryEvent, InquiryEventType, InquiryStatus, Priority } from "@/lib/api";
 
 export const STATUS_LABEL: Record<InquiryStatus, string> = {
-  received: "접수됨",
+  received: "미배정",
   assigned: "배정됨",
   in_progress: "처리중",
   done: "완료",
+  reopened: "재확인",
 };
 
-export const PRIORITY_LABEL: Record<AiPriority, string> = {
+export const PRIORITY_LABEL: Record<Priority, string> = {
   urgent: "긴급",
   normal: "보통",
   low: "낮음",
@@ -21,6 +22,7 @@ const STATUS_PILL_KIND: Record<InquiryStatus, StatusKind> = {
   assigned: "progress",
   in_progress: "progress",
   done: "done",
+  reopened: "progress",
 };
 
 export function statusPill(status: InquiryStatus): { status: StatusKind; label: string } {
@@ -47,6 +49,22 @@ export function formatStatusChange(payload: InquiryEvent["payload"]): string | n
   if (!to) return null;
   const label = (s: string): string => STATUS_LABEL[s as InquiryStatus] ?? s;
   return from ? `${label(from)} → ${label(to)}` : label(to);
+}
+
+// comment 이벤트 payload → 발신 갈래("reply"=담당자 답변 · "feedback"=입주민 피드백).
+// 알 수 없는 kind 는 null.
+export function commentKind(
+  payload: InquiryEvent["payload"],
+): "reply" | "feedback" | null {
+  if (!payload) return null;
+  const kind = payload.kind;
+  return kind === "reply" || kind === "feedback" ? kind : null;
+}
+
+// comment 이벤트 payload → 본문. 문자열이 아니면 "".
+export function commentBody(payload: InquiryEvent["payload"]): string {
+  if (!payload) return "";
+  return typeof payload.body === "string" ? payload.body : "";
 }
 
 // 서버가 created_at 오름차순 정렬하지만 방어적으로 다시 정렬.

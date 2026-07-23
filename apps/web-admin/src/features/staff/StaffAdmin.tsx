@@ -49,6 +49,8 @@ export function StaffAdmin() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [inviting, setInviting] = useState(false);
   const [deactivateTarget, setDeactivateTarget] = useState<StaffMember | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
@@ -89,18 +91,20 @@ export function StaffAdmin() {
   );
 
   async function submitInvite() {
-    const trimmed = email.trim();
-    if (!EMAIL_RE.test(trimmed)) {
-      setEmailError("이메일 형식이 올바르지 않습니다.");
-      return;
-    }
-    setEmailError(undefined);
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+    const emailOk = EMAIL_RE.test(trimmedEmail);
+    const nameOk = trimmedName.length > 0;
+    setEmailError(emailOk ? undefined : "이메일 형식이 올바르지 않습니다.");
+    setNameError(nameOk ? undefined : "이름을 입력해 주세요.");
+    if (!emailOk || !nameOk) return;
     setInviting(true);
     try {
-      await inviteStaff(trimmed);
+      await inviteStaff({ email: trimmedEmail, name: trimmedName });
       setEmail("");
+      setName("");
       await load();
-      showToast(`${trimmed} 앞으로 직원 초대 메일을 발송했습니다.`);
+      showToast(`${trimmedName}(${trimmedEmail}) 앞으로 직원 초대 메일을 발송했습니다.`);
     } catch (err) {
       showToast(errorMessage(err), "danger");
     } finally {
@@ -166,6 +170,16 @@ export function StaffAdmin() {
             noValidate
           >
             <FormField
+              label="직원 이름"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              error={nameError}
+              autoComplete="off"
+              placeholder="홍길동"
+              wrapperClassName="sf-invite__field"
+            />
+            <FormField
               label="직원 이메일"
               type="email"
               value={email}
@@ -205,6 +219,7 @@ export function StaffAdmin() {
               {staff.map((member) => (
                 <li key={member.userId} className="sf-row">
                   <div className="sf-row__main">
+                    <span className="sf-row__name">{member.name ?? "이름 미기록"}</span>
                     <span className="sf-row__email">{member.email ?? "이메일 미기록"}</span>
                     <span className="sf-row__roles">{roleText(member.roles)}</span>
                     <span className={`sf-status sf-status--${member.status}`}>

@@ -1,4 +1,4 @@
-"""민원 계약 (docs/03 §4.4, docs/01 §13)."""
+"""민원 계약 (docs/03 §4.4, docs/01 §13, ADR-0018)."""
 
 from __future__ import annotations
 
@@ -8,28 +8,33 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-AiPriority = Literal["urgent", "normal", "low"]
-InquiryStatus = Literal["received", "assigned", "in_progress", "done"]
+Priority = Literal["urgent", "normal", "low"]
+InquiryStatus = Literal["received", "assigned", "in_progress", "done", "reopened"]
+# "ai_classified"는 과거 행 읽기 호환용(신규 생성 없음, ADR-0018).
 EventType = Literal["created", "ai_classified", "assigned", "status_changed", "comment"]
 
 __all__ = [
-    "AiPriority",
     "AssignIn",
+    "CategoryIn",
+    "CommentIn",
     "EventType",
+    "InquiryCategoryListOut",
+    "InquiryCategoryOut",
     "InquiryCreateIn",
     "InquiryEventListOut",
     "InquiryEventOut",
     "InquiryListOut",
     "InquiryOut",
     "InquiryStatus",
-    "StatusChangeIn",
+    "Priority",
+    "PriorityIn",
 ]
 
 
 class InquiryCreateIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(min_length=1, max_length=4000)
-    category_id: uuid.UUID | None = None
+    category_code_id: uuid.UUID | None = None
 
 
 class InquiryOut(BaseModel):
@@ -37,9 +42,8 @@ class InquiryOut(BaseModel):
     title: str
     body: str
     status: InquiryStatus
-    ai_priority: AiPriority | None
-    category_id: uuid.UUID | None
-    ai_suggested_category_id: uuid.UUID | None
+    priority: Priority | None
+    category_code_id: uuid.UUID | None
     assignee_user_id: uuid.UUID | None
     author_user_id: uuid.UUID
     created_at: datetime.datetime
@@ -48,6 +52,15 @@ class InquiryOut(BaseModel):
 
 class InquiryListOut(BaseModel):
     items: list[InquiryOut]
+
+
+class InquiryCategoryOut(BaseModel):
+    id: uuid.UUID
+    label: str
+
+
+class InquiryCategoryListOut(BaseModel):
+    items: list[InquiryCategoryOut]
 
 
 class InquiryEventOut(BaseModel):
@@ -66,5 +79,13 @@ class AssignIn(BaseModel):
     assignee_user_id: uuid.UUID
 
 
-class StatusChangeIn(BaseModel):
-    status: InquiryStatus
+class CategoryIn(BaseModel):
+    category_code_id: uuid.UUID | None
+
+
+class CommentIn(BaseModel):
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class PriorityIn(BaseModel):
+    priority: Priority | None

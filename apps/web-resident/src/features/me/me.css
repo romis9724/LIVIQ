@@ -49,6 +49,16 @@
   letter-spacing: 0.04em;
   margin-bottom: var(--space-3);
 }
+.me-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.me-section__head .me-section__title {
+  margin-bottom: 0;
+}
 .me-group {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -129,17 +139,58 @@
 }
 .me-notif-row {
   width: 100%;
-  text-align: left;
   background: var(--color-surface);
   border-left: none;
   border-right: none;
   border-top: none;
-  font-family: inherit;
-  cursor: pointer;
   align-items: flex-start;
 }
 .me-notif-row[data-unread] {
   background: color-mix(in oklch, var(--color-accent) 6%, var(--color-surface));
+}
+/* 클릭(읽음) 영역 — 아이콘+본문. 삭제 버튼과 분리된 별도 버튼. */
+.me-notif-row__hit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.me-notif-row__hit:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+/* 개별 삭제 버튼 — 전체 목록에서만 노출. */
+.me-notif-row__del {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.me-notif-row__del:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-danger);
+}
+.me-notif-row__del:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 .me-notif-row__title {
   display: flex;
@@ -160,6 +211,65 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+.me-notif__more {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.me-notif__more:hover {
+  text-decoration: underline;
+}
+
+/* 알림 전체 목록(/notifications) — 뒤로가기 헤더 + 스크롤 본문. */
+.me-notif-page {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+}
+.me-notif-page__toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--space-6) + var(--space-4));
+  transform: translateX(-50%);
+  z-index: 20;
+}
+.me-notif-page__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+.me-notif-page__back {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-left: calc(-1 * var(--space-2));
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
+.me-notif-page__title {
+  display: flex;
+  align-items: center;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.me-notif-page__main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
 }
 
 /* 관리비 요약 — 당월 합계 + /fees 진입. */

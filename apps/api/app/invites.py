@@ -33,11 +33,15 @@ async def create_invite(
     tenant_id: uuid.UUID,
     email: str,
     role: str,
+    name: str | None = None,
 ) -> uuid.UUID:
     """대상 tenant에 초대 user(status='invited') + role + invite 토큰 생성 후 메일. user_id 반환.
 
     전역 이메일 중복이면 409. 발송 실패는 예외 전파 → 트랜잭션 롤백(초대 미완 계정을 남기지
     않는다, signup과 동일). 호출부는 auth_lookup 세션(전역 SELECT on)을 넘겨야 한다.
+
+    name이 주어지면 pii_vault.name_enc에 함께 암호화 저장한다(직원 초대 — 목록 식별용).
+    중복 이메일은 위에서 409로 걸러지므로 vault는 항상 새로 만든다(기존 행 갱신 경로 없음).
     """
     email_norm = _normalize_email(email)
     email_hash = crypto.hmac_hash(email_norm)
@@ -58,6 +62,7 @@ async def create_invite(
     vault = PiiVault(
         tenant_id=tenant_id,
         email_enc=crypto.encrypt(dek, email_norm),
+        name_enc=crypto.encrypt(dek, name) if name else None,
         key_version=1,
     )
     session.add(vault)

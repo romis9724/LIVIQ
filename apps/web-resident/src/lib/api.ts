@@ -3,8 +3,8 @@
 
 import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 
-export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
-export type AiPriority = "urgent" | "normal" | "low";
+export type InquiryStatus = "received" | "assigned" | "in_progress" | "done" | "reopened";
+export type Priority = "urgent" | "normal" | "low";
 export type InquiryEventType =
   | "created"
   | "ai_classified"
@@ -17,13 +17,17 @@ export interface Inquiry {
   title: string;
   body: string;
   status: InquiryStatus;
-  aiPriority: AiPriority | null;
-  categoryId: string | null;
-  aiSuggestedCategoryId: string | null;
+  priority: Priority | null;
+  categoryCodeId: string | null;
   assigneeUserId: string | null;
   authorUserId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface InquiryCategory {
+  id: string;
+  label: string;
 }
 
 export interface InquiryEvent {
@@ -37,7 +41,7 @@ export interface InquiryEvent {
 export interface CreateInquiryInput {
   title: string;
   body: string;
-  categoryId?: string | null;
+  categoryCodeId?: string | null;
 }
 
 /** 상태코드를 담은 에러 — 화면에서 토스트/분기용. */
@@ -57,9 +61,8 @@ interface RawInquiry {
   title: string;
   body: string;
   status: InquiryStatus;
-  ai_priority: AiPriority | null;
-  category_id: string | null;
-  ai_suggested_category_id: string | null;
+  priority: Priority | null;
+  category_code_id: string | null;
   assignee_user_id: string | null;
   author_user_id: string;
   created_at: string;
@@ -80,9 +83,8 @@ function toInquiry(raw: RawInquiry): Inquiry {
     title: raw.title,
     body: raw.body,
     status: raw.status,
-    aiPriority: raw.ai_priority,
-    categoryId: raw.category_id,
-    aiSuggestedCategoryId: raw.ai_suggested_category_id,
+    priority: raw.priority,
+    categoryCodeId: raw.category_code_id,
     assigneeUserId: raw.assignee_user_id,
     authorUserId: raw.author_user_id,
     createdAt: raw.created_at,
@@ -119,8 +121,35 @@ export async function createInquiry(input: CreateInquiryInput): Promise<Inquiry>
     body: JSON.stringify({
       title: input.title,
       body: input.body,
-      category_id: input.categoryId ?? null,
+      category_code_id: input.categoryCodeId ?? null,
     }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+export async function listInquiryCategories(): Promise<InquiryCategory[]> {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/categories`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as InquiryCategory[]).map((item) => ({ id: item.id, label: item.label }));
+}
+
+export async function postInquiryFeedback(id: string, body: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}/comments`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+// 재확인 요청 — 작성자 본인·status=done 일 때만 허용(그 외 404/422). done→reopened.
+export async function reopenInquiry(id: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}/reopen`, {
+    method: "POST",
+    headers: DEV_HEADERS,
   });
   await ensureOk(response);
   return toInquiry(await response.json());
@@ -279,8 +308,14 @@ function toNotification(raw: RawNotification): AppNotification {
   };
 }
 
-export async function listNotifications(): Promise<AppNotification[]> {
-  const response = await apiFetch(`${API_BASE_URL}/notifications`, { headers: DEV_HEADERS });
+export async function listNotifications(
+  opts?: { limit?: number; page?: number },
+): Promise<AppNotification[]> {
+  const query = new URLSearchParams();
+  if (opts?.limit !== undefined) query.set("limit", String(opts.limit));
+  if (opts?.page !== undefined) query.set("page", String(opts.page));
+  const suffix = query.toString() ? `?${query}` : "";
+  const response = await apiFetch(`${API_BASE_URL}/notifications${suffix}`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
   return (body.items as RawNotification[]).map(toNotification);
@@ -293,6 +328,15 @@ export async function markNotificationRead(id: string): Promise<AppNotification>
   });
   await ensureOk(response);
   return toNotification(await response.json());
+}
+
+// 개별 삭제 — 본인 것만(타인/없음은 404). 204 No Content, 본문 없음.
+export async function deleteNotification(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
 }
 
 // ── 온보딩·계정 상태 (docs/04 §2, ADR-0011) ─────────────────────────────────

@@ -2,24 +2,40 @@
 
 import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   ApiError,
+  ackInquiry,
   assignInquiry,
-  getMe,
+  completeInquiry,
   listAdminInquiries,
-  updateInquiryStatus,
+  listCodeGroups,
+  listInquiryEvents,
+  listStaff,
+  replyInquiry,
+  setInquiryCategory,
+  setInquiryPriority,
+  type CodeGroup,
   type Inquiry,
-  type InquiryStatus,
+  type InquiryEvent,
+  type Priority,
+  type StaffMember,
 } from "@/lib/api";
+import { INQUIRY_CATEGORY_GROUP, codeLabelMap, codeOptions, type CodeOption } from "@/lib/codes";
 import {
   FILTERS,
   PRIORITY_META,
+  PRIORITY_OPTIONS,
   STATUS_META,
+  commentBody,
+  commentKind,
   countByStatus,
-  nextStatuses,
+  eventLabel,
+  formatStatusChange,
+  hasReply,
   shortDate,
+  sortEvents,
   type FilterId,
 } from "./data";
 import "./inquiry-admin.css";
@@ -36,17 +52,25 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
+/** userId → 표시 라벨(성명 우선, 없으면 축약 id). */
+function staffLabel(map: Map<string, string>, userId: string | null): string | null {
+  if (!userId) return null;
+  return map.get(userId) ?? userId.slice(0, 8);
+}
+
 export function InquiryAdmin() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
-  // 로그인 세션의 자기 user id — '나에게 배정' 대상. /me 로 취득(로드 전엔 null).
-  const [myUserId, setMyUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterId>("all");
   const [search, setSearch] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 배정 드롭다운·분류 select·라벨용 보조 데이터 — 실패해도 목록은 막지 않는다.
+  const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [codeGroups, setCodeGroups] = useState<CodeGroup[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -67,9 +91,11 @@ export function InquiryAdmin() {
 
   useEffect(() => {
     void load();
-    // 자기 신원은 배정에만 필요 — 실패해도 목록 로드는 막지 않는다.
-    void getMe()
-      .then((me) => setMyUserId(me.userId))
+    void listStaff()
+      .then(setStaff)
+      .catch(() => undefined);
+    void listCodeGroups()
+      .then(setCodeGroups)
       .catch(() => undefined);
   }, [load]);
 
@@ -78,6 +104,25 @@ export function InquiryAdmin() {
       if (toastTimer.current) clearTimeout(toastTimer.current);
     },
     [],
+  );
+
+  // userId → 표시 라벨(성명 우선, 없으면 email). 목록 담당 컬럼·상세 스레드 공용.
+  const staffMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const member of staff) {
+      const label = member.name ?? member.email;
+      if (label) map.set(member.userId, label);
+    }
+    return map;
+  }, [staff]);
+
+  const categoryMap = useMemo(
+    () => codeLabelMap(codeGroups, INQUIRY_CATEGORY_GROUP),
+    [codeGroups],
+  );
+  const categoryOptions = useMemo(
+    () => codeOptions(codeGroups, INQUIRY_CATEGORY_GROUP),
+    [codeGroups],
   );
 
   const counts = useMemo(() => countByStatus(inquiries), [inquiries]);
@@ -90,37 +135,14 @@ export function InquiryAdmin() {
     });
   }, [inquiries, filter, search]);
 
-  function patchLocal(updated: Inquiry) {
+  const selected = useMemo(
+    () => inquiries.find((it) => it.id === selectedId) ?? null,
+    [inquiries, selectedId],
+  );
+
+  const patchLocal = useCallback((updated: Inquiry) => {
     setInquiries((prev) => prev.map((it) => (it.id === updated.id ? updated : it)));
-  }
-
-  async function handleStatus(id: string, status: InquiryStatus) {
-    setBusyId(id);
-    try {
-      patchLocal(await updateInquiryStatus(id, status));
-      showToast(`상태를 '${STATUS_META[status].label}'(으)로 변경했습니다.`);
-    } catch (err) {
-      showToast(errorMessage(err), "danger");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleAssign(id: string) {
-    if (!myUserId) {
-      showToast("로그인 정보를 확인할 수 없어 배정할 수 없습니다.", "danger");
-      return;
-    }
-    setBusyId(id);
-    try {
-      patchLocal(await assignInquiry(id, myUserId));
-      showToast("나에게 배정했습니다.");
-    } catch (err) {
-      showToast(errorMessage(err), "danger");
-    } finally {
-      setBusyId(null);
-    }
-  }
+  }, []);
 
   return (
     <>
@@ -131,7 +153,7 @@ export function InquiryAdmin() {
               민원 관리
             </h1>
             <p className="admin-page__lede">
-              AI가 분류·우선순위를 제안합니다. 담당자 배정은 직접 확정합니다.
+              접수된 민원을 담당자에게 배정하고 답변·처리 상태를 관리합니다.
             </p>
           </div>
           <input
@@ -166,15 +188,28 @@ export function InquiryAdmin() {
           loadError={loadError}
           inquiries={inquiries}
           visible={visible}
-          busyId={busyId}
+          categoryMap={categoryMap}
+          staffMap={staffMap}
           onRetry={() => {
             setLoading(true);
             void load();
           }}
-          onStatus={handleStatus}
-          onAssign={handleAssign}
+          onOpen={setSelectedId}
         />
       </main>
+
+      {selected ? (
+        <InquiryDetail
+          inquiry={selected}
+          staff={staff}
+          staffMap={staffMap}
+          categoryMap={categoryMap}
+          categoryOptions={categoryOptions}
+          onClose={() => setSelectedId(null)}
+          onUpdated={patchLocal}
+          showToast={showToast}
+        />
+      ) : null}
 
       {toast ? (
         <div className="ia-toast-slot">
@@ -190,10 +225,10 @@ interface InquiryBodyProps {
   loadError: string | null;
   inquiries: readonly Inquiry[];
   visible: readonly Inquiry[];
-  busyId: string | null;
+  categoryMap: Map<string, string>;
+  staffMap: Map<string, string>;
   onRetry: () => void;
-  onStatus: (id: string, status: InquiryStatus) => void;
-  onAssign: (id: string) => void;
+  onOpen: (id: string) => void;
 }
 
 function InquiryBody({
@@ -201,10 +236,10 @@ function InquiryBody({
   loadError,
   inquiries,
   visible,
-  busyId,
+  categoryMap,
+  staffMap,
   onRetry,
-  onStatus,
-  onAssign,
+  onOpen,
 }: InquiryBodyProps) {
   if (loading) {
     return (
@@ -251,14 +286,11 @@ function InquiryBody({
             <tr>
               <th scope="col">접수번호</th>
               <th scope="col">제목</th>
-              <th scope="col">AI 분류</th>
+              <th scope="col">카테고리</th>
               <th scope="col">우선순위</th>
               <th scope="col">상태</th>
               <th scope="col">담당</th>
               <th scope="col">접수일</th>
-              <th scope="col" className="ia-table__right">
-                처리
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -266,9 +298,9 @@ function InquiryBody({
               <InquiryRow
                 key={inquiry.id}
                 inquiry={inquiry}
-                busy={busyId === inquiry.id}
-                onStatus={onStatus}
-                onAssign={onAssign}
+                categoryMap={categoryMap}
+                staffMap={staffMap}
+                onOpen={onOpen}
               />
             ))}
           </tbody>
@@ -280,30 +312,38 @@ function InquiryBody({
 
 interface InquiryRowProps {
   inquiry: Inquiry;
-  busy: boolean;
-  onStatus: (id: string, status: InquiryStatus) => void;
-  onAssign: (id: string) => void;
+  categoryMap: Map<string, string>;
+  staffMap: Map<string, string>;
+  onOpen: (id: string) => void;
 }
 
-function InquiryRow({ inquiry, busy, onStatus, onAssign }: InquiryRowProps) {
+function InquiryRow({ inquiry, categoryMap, staffMap, onOpen }: InquiryRowProps) {
   const status = STATUS_META[inquiry.status];
-  const priority = inquiry.aiPriority ? PRIORITY_META[inquiry.aiPriority] : null;
-  const options = nextStatuses(inquiry.status);
-  const assigned = inquiry.assigneeUserId !== null;
+  const priority = inquiry.priority ? PRIORITY_META[inquiry.priority] : null;
+  const category = inquiry.categoryCodeId ? (categoryMap.get(inquiry.categoryCodeId) ?? null) : null;
+  const assignee = staffLabel(staffMap, inquiry.assigneeUserId);
 
   return (
-    <tr>
+    <tr
+      className="ia-row"
+      role="button"
+      tabIndex={0}
+      aria-label={`민원 상세: ${inquiry.title}`}
+      onClick={() => onOpen(inquiry.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen(inquiry.id);
+        }
+      }}
+    >
       <td className="ia-cell--id">{inquiry.id.slice(0, 8)}</td>
       <td>
         <div className="ia-cell__title">{inquiry.title}</div>
-        {/* ponytail: 접수자 이름은 사용자 목록 api 도입 시 — 현재는 마스킹 정책상 미표시 */}
         <div className="ia-cell__asker">입주민</div>
       </td>
-      <td className="ia-nowrap">
-        {/* ponytail: 카테고리 이름 표시는 카테고리 api 도입 시 — 지금은 제안 유무만 */}
-        <span className="ia-cat__name">
-          {inquiry.aiSuggestedCategoryId ? "AI 제안" : "—"}
-        </span>
+      <td className="ia-nowrap" data-muted={!category || undefined}>
+        {category ?? "—"}
       </td>
       <td className="ia-nowrap">
         {priority ? (
@@ -321,45 +361,356 @@ function InquiryRow({ inquiry, busy, onStatus, onAssign }: InquiryRowProps) {
           {status.label}
         </span>
       </td>
-      <td className="ia-nowrap" data-muted={!assigned || undefined}>
-        {/* ponytail: 담당자 이름은 사용자 목록 api 도입 시 */}
-        {assigned ? "배정됨" : "미배정"}
+      <td className="ia-nowrap" data-muted={!assignee || undefined}>
+        {assignee ?? "미배정"}
       </td>
       <td className="ia-nowrap ia-cell--date">{shortDate(inquiry.createdAt)}</td>
-      <td className="ia-nowrap ia-table__right">
-        <div className="ia-actions">
-          {options.length > 0 ? (
-            <select
-              className="ia-status-select"
-              aria-label="상태 변경"
-              disabled={busy}
-              value=""
-              onChange={(e) => {
-                if (e.target.value) onStatus(inquiry.id, e.target.value as InquiryStatus);
-              }}
-            >
-              <option value="" disabled>
-                상태 변경
-              </option>
-              {options.map((opt) => (
-                <option key={opt} value={opt}>
-                  {STATUS_META[opt].label}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          {!assigned ? (
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              disabled={busy}
-              onClick={() => onAssign(inquiry.id)}
-            >
-              나에게 배정
-            </button>
-          ) : null}
-        </div>
-      </td>
     </tr>
+  );
+}
+
+interface InquiryDetailProps {
+  inquiry: Inquiry;
+  staff: readonly StaffMember[];
+  staffMap: Map<string, string>;
+  categoryMap: Map<string, string>;
+  categoryOptions: readonly CodeOption[];
+  onClose: () => void;
+  onUpdated: (updated: Inquiry) => void;
+  showToast: (message: string, tone?: ToastTone) => void;
+}
+
+function InquiryDetail({
+  inquiry,
+  staff,
+  staffMap,
+  categoryMap,
+  categoryOptions,
+  onClose,
+  onUpdated,
+  showToast,
+}: InquiryDetailProps) {
+  const [events, setEvents] = useState<InquiryEvent[] | null>(null);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadEvents = useCallback(async () => {
+    try {
+      setEventsError(null);
+      setEvents(sortEvents(await listInquiryEvents(inquiry.id)));
+    } catch (err) {
+      setEventsError(errorMessage(err));
+    }
+  }, [inquiry.id]);
+
+  useEffect(() => {
+    void loadEvents();
+  }, [loadEvents]);
+
+  // 열람 확인(ack) — 담당자 본인이 assigned 를 열면 서버가 처리중 전환, 그 외 no-op.
+  // inquiry.id 당 1회. 반환 inquiry 로 목록/상세 동기화 후 스레드도 갱신(전환 이벤트 반영).
+  useEffect(() => {
+    let alive = true;
+    void ackInquiry(inquiry.id)
+      .then((updated) => {
+        if (!alive) return;
+        onUpdated(updated);
+        void loadEvents();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [inquiry.id, onUpdated, loadEvents]);
+
+  // 열려 있는 동안 Escape 로 닫기 + 배경 스크롤 잠금.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const status = STATUS_META[inquiry.status];
+  const priority = inquiry.priority ? PRIORITY_META[inquiry.priority] : null;
+  const category = inquiry.categoryCodeId ? (categoryMap.get(inquiry.categoryCodeId) ?? null) : null;
+  const replyExists = events !== null && hasReply(events);
+
+  // 완료 잠금 — done 이면 모든 편집 비활성(재개는 입주민만). 서버가 최종 방어(422/403).
+  const isDone = inquiry.status === "done";
+  const locked = busy || isDone;
+  const canCompleteStatus = inquiry.status === "in_progress" || inquiry.status === "reopened";
+
+  // 완료 게이트 — 처리중/재확인 + 답변 1건 이상이라야 활성. 이유 문구로 안내.
+  function completeGate(): string | null {
+    if (isDone) return null;
+    if (!canCompleteStatus) return "처리중 상태에서 완료할 수 있습니다";
+    if (events === null) return "처리 내역을 불러오는 중입니다";
+    if (!replyExists) return "답변 등록 후 완료 가능";
+    return null;
+  }
+  const completeHint = completeGate();
+
+  async function run(action: () => Promise<Inquiry>, message: string, reloadThread = true) {
+    setBusy(true);
+    try {
+      onUpdated(await action());
+      if (reloadThread) await loadEvents();
+      showToast(message);
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleAssign(value: string) {
+    if (!value) return;
+    void run(() => assignInquiry(inquiry.id, value), "담당자를 배정했습니다.");
+  }
+
+  function handlePriority(value: string) {
+    const next = value === "" ? null : (value as Priority);
+    void run(() => setInquiryPriority(inquiry.id, next), "우선순위를 변경했습니다.", false);
+  }
+
+  function handleCategory(value: string) {
+    const next = value === "" ? null : value;
+    void run(() => setInquiryCategory(inquiry.id, next), "분류를 변경했습니다.", false);
+  }
+
+  function handleComplete() {
+    void run(() => completeInquiry(inquiry.id), "민원을 완료 처리했습니다.");
+  }
+
+  async function handleReply(e: FormEvent) {
+    e.preventDefault();
+    const body = reply.trim();
+    if (!body || busy) return;
+    setBusy(true);
+    try {
+      onUpdated(await replyInquiry(inquiry.id, body));
+      setReply("");
+      await loadEvents();
+      showToast("답변을 등록했습니다.");
+    } catch (err) {
+      showToast(errorMessage(err), "danger");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const assignableStaff = staff.filter(
+    (m) => m.email && (m.roles.includes("MANAGER") || m.roles.includes("STAFF")),
+  );
+
+  return (
+    <div className="ia-overlay" onClick={onClose}>
+      <aside
+        className="ia-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label="민원 상세"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="ia-panel__head">
+          <div className="ia-panel__heading">
+            <div className="ia-panel__chips">
+              <span className={`ia-status ia-status--${status.suffix}`}>
+                <span className="ia-status__dot" aria-hidden="true" />
+                {status.label}
+              </span>
+              {priority ? (
+                <span className={`ia-prio ia-prio--${priority.suffix}`}>
+                  <span aria-hidden="true">{priority.icon}</span>
+                  {priority.label}
+                </span>
+              ) : null}
+              {category ? <span className="ia-chip">{category}</span> : null}
+            </div>
+            <h2 className="ia-panel__title">{inquiry.title}</h2>
+            <div className="ia-panel__sub">
+              접수번호 {inquiry.id.slice(0, 8)} · 접수 {shortDate(inquiry.createdAt)}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ia-panel__close"
+            aria-label="닫기"
+            onClick={onClose}
+          >
+            ✕
+          </button>
+        </header>
+
+        <div className="ia-panel__body">
+          <p className="ia-panel__origin">{inquiry.body}</p>
+
+          {isDone ? (
+            <p className="ia-locked" role="status">
+              완료된 민원은 수정할 수 없습니다.
+            </p>
+          ) : null}
+
+          <div className="ia-controls">
+            <label className="ia-control">
+              <span className="ia-control__label">담당자</span>
+              <select
+                className="ia-select"
+                disabled={locked}
+                value={inquiry.assigneeUserId ?? ""}
+                onChange={(e) => handleAssign(e.target.value)}
+              >
+                <option value="" disabled>
+                  담당자 선택
+                </option>
+                {assignableStaff.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.name ?? m.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="ia-control">
+              <span className="ia-control__label">우선순위</span>
+              <select
+                className="ia-select"
+                disabled={locked}
+                value={inquiry.priority ?? ""}
+                onChange={(e) => handlePriority(e.target.value)}
+              >
+                {PRIORITY_OPTIONS.map((opt) => (
+                  <option key={opt.value || "none"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="ia-control">
+              <span className="ia-control__label">분류</span>
+              <select
+                className="ia-select"
+                disabled={locked}
+                value={inquiry.categoryCodeId ?? ""}
+                onChange={(e) => handleCategory(e.target.value)}
+              >
+                <option value="">분류 없음</option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {!isDone ? (
+            <div className="ia-complete">
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                disabled={busy || completeHint !== null}
+                onClick={handleComplete}
+              >
+                민원 완료
+              </button>
+              {completeHint ? <span className="ia-hint">{completeHint}</span> : null}
+            </div>
+          ) : null}
+
+          <div className="ia-control__label ia-thread__label">처리 내역</div>
+          <Thread events={events} error={eventsError} staffMap={staffMap} onRetry={loadEvents} />
+
+          <form className="ia-composer" onSubmit={handleReply}>
+            <label className="ia-control__label" htmlFor="ia-reply">
+              답변 작성
+            </label>
+            <textarea
+              id="ia-reply"
+              className="ia-composer__input"
+              rows={3}
+              placeholder="입주민에게 전달할 답변을 입력하세요."
+              value={reply}
+              disabled={locked}
+              onChange={(e) => setReply(e.target.value)}
+            />
+            <div className="ia-composer__actions">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={locked || reply.trim().length === 0}
+              >
+                답변 등록
+              </Button>
+            </div>
+          </form>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+interface ThreadProps {
+  events: InquiryEvent[] | null;
+  error: string | null;
+  staffMap: Map<string, string>;
+  onRetry: () => void;
+}
+
+function Thread({ events, error, staffMap, onRetry }: ThreadProps) {
+  if (error) {
+    return (
+      <EmptyState
+        icon="⚠"
+        title="처리 내역을 불러오지 못했습니다"
+        description={error}
+        action={<Button onClick={onRetry}>다시 시도</Button>}
+      />
+    );
+  }
+  if (events === null) {
+    return (
+      <div className="ia-thread-loading">
+        <Skeleton height="2.5rem" />
+        <Skeleton height="2.5rem" />
+      </div>
+    );
+  }
+  if (events.length === 0) {
+    return <p className="ia-thread__empty">아직 처리 내역이 없습니다.</p>;
+  }
+  return (
+    <ol className="ia-thread">
+      {events.map((ev) => {
+        const kind = ev.type === "comment" ? commentKind(ev.payload) : null;
+        if (kind === "reply" || kind === "feedback") {
+          const sender = kind === "reply" ? staffLabel(staffMap, ev.actorUserId) : null;
+          return (
+            <li key={ev.id} className={`ia-msg ia-msg--${kind}`}>
+              <div className="ia-msg__meta">
+                <span className="ia-msg__from">
+                  {kind === "reply" ? (sender ?? "관리사무소") : "입주민"}
+                </span>
+                <span className="ia-msg__time">{shortDate(ev.createdAt)}</span>
+              </div>
+              <p className="ia-msg__body">{commentBody(ev.payload)}</p>
+            </li>
+          );
+        }
+        const desc = ev.type === "status_changed" ? formatStatusChange(ev.payload) : null;
+        return (
+          <li key={ev.id} className="ia-sys">
+            <span className="ia-sys__dot" aria-hidden="true" />
+            <span className="ia-sys__label">{eventLabel(ev.type)}</span>
+            {desc ? <span className="ia-sys__desc">{desc}</span> : null}
+            <span className="ia-sys__time">{shortDate(ev.createdAt)}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

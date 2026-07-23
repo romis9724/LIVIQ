@@ -164,7 +164,7 @@ async def test_sys_admin_create_list_and_invite_manager(
         assert created.status_code == 201, created.text
         tid = created.json()["id"]
 
-        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017) — 시스템 그룹 2종.
+        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017·0018) — 시스템 그룹 3종.
         await db_session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=tid)
         )
@@ -173,7 +173,7 @@ async def test_sys_admin_create_list_and_invite_manager(
                 select(CodeGroup.group_key).where(CodeGroup.tenant_id == uuid.UUID(tid))
             )
         )
-        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY"}
+        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY", "INQUIRY_CATEGORY"}
 
         listed = await c.get("/admin/tenants")
         assert listed.status_code == 200
@@ -221,7 +221,8 @@ async def test_staff_invite_accept_login_journey(
     email = "newstaff@example.com"
     password = "brand-new-staff-pass"
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        assert (await mgr.post("/admin/staff/invite", json={"email": email})).status_code == 202
+        invited = await mgr.post("/admin/staff/invite", json={"email": email, "name": "신입직원"})
+        assert invited.status_code == 202
     token = mailer.last_token()
 
     async with _make_app(seeded, fake_redis, mailer) as c:
@@ -240,9 +241,13 @@ async def test_staff_invite_duplicate_email_conflict(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        first = await mgr.post("/admin/staff/invite", json={"email": "dup@example.com"})
+        first = await mgr.post(
+            "/admin/staff/invite", json={"email": "dup@example.com", "name": "중복직원"}
+        )
         assert first.status_code == 202
-        second = await mgr.post("/admin/staff/invite", json={"email": "DUP@example.com"})
+        second = await mgr.post(
+            "/admin/staff/invite", json={"email": "DUP@example.com", "name": "중복직원"}
+        )
     assert second.status_code == 409  # 정규화(소문자) 후 전역 중복
 
 
@@ -251,7 +256,9 @@ async def test_invite_accept_reused_token_rejected(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        await mgr.post("/admin/staff/invite", json={"email": "once@example.com"})
+        await mgr.post(
+            "/admin/staff/invite", json={"email": "once@example.com", "name": "일회직원"}
+        )
     token = mailer.last_token()
     async with _make_app(seeded, fake_redis, mailer) as c:
         first = await c.post(
@@ -269,7 +276,7 @@ async def test_invite_accept_expired_token_rejected(
 ) -> None:
     mailer = FakeMailer()
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        await mgr.post("/admin/staff/invite", json={"email": "exp@example.com"})
+        await mgr.post("/admin/staff/invite", json={"email": "exp@example.com", "name": "만료직원"})
     token = mailer.last_token()
     tok = await seeded.scalar(
         select(AuthToken).where(AuthToken.token_hash == auth_tokens._hash_token(token))
@@ -336,12 +343,25 @@ async def test_list_staff_returns_managers_and_staff(
     assert str(MANAGER_USER_ID) in ids and str(staff_id) in ids
 
 
+async def test_staff_can_list_staff(seeded: AsyncSession, fake_redis: FakeRedis) -> None:
+    """직원 목록 조회는 STAFF에도 개방(배정 드롭다운용, ADR-0018) — 초대·비활성은 소장 유지."""
+    async with _make_app(
+        seeded, fake_redis, FakeMailer(), ctx=_ctx(("STAFF",), user_id=STAFF_ID)
+    ) as staff:
+        resp = await staff.get("/admin/staff")
+    assert resp.status_code == 200
+    ids = {item["user_id"] for item in resp.json()["items"]}
+    assert str(MANAGER_USER_ID) in ids
+
+
 async def test_list_staff_includes_decrypted_email(
     seeded: AsyncSession, fake_redis: FakeRedis
 ) -> None:
-    """직원 목록에 이메일 표시(ADR-0014 개정, H7-5) — PII 부재 행은 None으로 유지."""
+    """직원 목록에 이메일·이름 표시(ADR-0014 개정·ADR-0018) — PII 부재 행은 None으로 유지."""
     async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
-        invite = await mgr.post("/admin/staff/invite", json={"email": "new-staff@example.com"})
+        invite = await mgr.post(
+            "/admin/staff/invite", json={"email": "new-staff@example.com", "name": "김초대"}
+        )
         assert invite.status_code == 202
         resp = await mgr.get("/admin/staff")
 
@@ -349,7 +369,42 @@ async def test_list_staff_includes_decrypted_email(
     by_email = {item["email"]: item for item in resp.json()["items"]}
     assert "new-staff@example.com" in by_email  # 초대 행은 복호 이메일
     assert by_email["new-staff@example.com"]["status"] == "invited"
+    assert by_email["new-staff@example.com"]["name"] == "김초대"  # 초대 시 입력한 이름
     assert None in by_email  # vault 없는 시드 소장 행은 None(행 유지)
+
+
+async def test_list_staff_includes_decrypted_name(
+    seeded: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """직원 목록에 성명 표시(ADR-0018) — name_enc 복호. PII 부재 행은 None."""
+    crypto = _crypto()
+    await seeded.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
+    )
+    dek = await crypto.get_dek(seeded, TENANT_ID)
+    vault_id = uuid.uuid4()
+    staff_id = uuid.uuid4()
+    seeded.add(
+        PiiVault(
+            id=vault_id,
+            tenant_id=TENANT_ID,
+            email_enc=crypto.encrypt(dek, "named-staff@example.com"),
+            name_enc=crypto.encrypt(dek, "홍길동"),
+            key_version=1,
+        )
+    )
+    seeded.add(User(id=staff_id, tenant_id=TENANT_ID, status="active", pii_ref=vault_id))
+    await seeded.flush()
+    seeded.add(UserRole(tenant_id=TENANT_ID, user_id=staff_id, role="STAFF"))
+    await seeded.flush()
+
+    async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
+        resp = await mgr.get("/admin/staff")
+
+    assert resp.status_code == 200
+    by_id = {item["user_id"]: item for item in resp.json()["items"]}
+    assert by_id[str(staff_id)]["name"] == "홍길동"
+    assert by_id[str(MANAGER_USER_ID)]["name"] is None  # vault 없는 시드 소장 행
 
 
 # ── 임시 비밀번호 강제 변경 게이트 (부트스트랩 SYS_ADMIN) ─────────────────────

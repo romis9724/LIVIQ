@@ -5,6 +5,7 @@ import type { Code, CodeGroup } from "./api";
 
 export const NOTICE_CATEGORY_GROUP = "NOTICE_CATEGORY";
 export const DOC_CATEGORY_GROUP = "DOC_CATEGORY";
+export const INQUIRY_CATEGORY_GROUP = "INQUIRY_CATEGORY";
 
 export interface CodeOption {
   id: string;

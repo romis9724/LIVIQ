@@ -2,10 +2,14 @@ import { describe, it, expect } from "vitest";
 
 import type { AppNotification } from "@/lib/api";
 import {
+  SUMMARY_LIMIT,
+  hasMoreNotifications,
   isUnread,
   markReadInList,
   notificationDate,
   notificationIcon,
+  removeFromList,
+  summaryNotifications,
   unreadCount,
 } from "./notifications";
 
@@ -56,6 +60,26 @@ describe("isUnread / unreadCount", () => {
   });
 });
 
+describe("summaryNotifications / hasMoreNotifications", () => {
+  function list(count: number): AppNotification[] {
+    return Array.from({ length: count }, (_, i) => notification({ id: `n${i}` }));
+  }
+
+  it("요약은 최근 SUMMARY_LIMIT개까지만 노출한다", () => {
+    expect(summaryNotifications(list(10))).toHaveLength(SUMMARY_LIMIT);
+    expect(summaryNotifications(list(2))).toHaveLength(2);
+  });
+
+  it("로드된 개수가 요약 상한을 넘으면 더보기 노출", () => {
+    expect(hasMoreNotifications(list(SUMMARY_LIMIT + 1))).toBe(true);
+  });
+
+  it("요약 상한 이하면 더보기 숨김", () => {
+    expect(hasMoreNotifications(list(SUMMARY_LIMIT))).toBe(false);
+    expect(hasMoreNotifications(list(0))).toBe(false);
+  });
+});
+
 describe("markReadInList", () => {
   it("대상 알림에 readAt을 채우고 원본을 변형하지 않는다", () => {
     const items = [
@@ -72,5 +96,23 @@ describe("markReadInList", () => {
     const items = [notification({ id: "a", readAt: "2026-07-01T00:00:00Z" })];
     const next = markReadInList(items, "a", "2026-07-09T00:00:00Z");
     expect(next[0]?.readAt).toBe("2026-07-01T00:00:00Z");
+  });
+});
+
+describe("removeFromList", () => {
+  it("대상 id를 제외한 새 배열을 반환하고 원본을 변형하지 않는다", () => {
+    const items = [
+      notification({ id: "a" }),
+      notification({ id: "b" }),
+      notification({ id: "c" }),
+    ];
+    const next = removeFromList(items, "b");
+    expect(next.map((n) => n.id)).toEqual(["a", "c"]);
+    expect(items).toHaveLength(3); // 원본 불변
+  });
+
+  it("없는 id면 그대로 유지한다", () => {
+    const items = [notification({ id: "a" })];
+    expect(removeFromList(items, "zzz").map((n) => n.id)).toEqual(["a"]);
   });
 });
