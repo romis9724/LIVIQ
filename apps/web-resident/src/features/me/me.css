@@ -139,17 +139,58 @@
 }
 .me-notif-row {
   width: 100%;
-  text-align: left;
   background: var(--color-surface);
   border-left: none;
   border-right: none;
   border-top: none;
-  font-family: inherit;
-  cursor: pointer;
   align-items: flex-start;
 }
 .me-notif-row[data-unread] {
   background: color-mix(in oklch, var(--color-accent) 6%, var(--color-surface));
+}
+/* 클릭(읽음) 영역 — 아이콘+본문. 삭제 버튼과 분리된 별도 버튼. */
+.me-notif-row__hit {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.me-notif-row__hit:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+/* 개별 삭제 버튼 — 전체 목록에서만 노출. */
+.me-notif-row__del {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.me-notif-row__del:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-danger);
+}
+.me-notif-row__del:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 .me-notif-row__title {
   display: flex;
@@ -184,11 +225,19 @@
 
 /* 알림 전체 목록(/notifications) — 뒤로가기 헤더 + 스크롤 본문. */
 .me-notif-page {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--color-surface);
+}
+.me-notif-page__toast {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--space-6) + var(--space-4));
+  transform: translateX(-50%);
+  z-index: 20;
 }
 .me-notif-page__bar {
   flex: none;

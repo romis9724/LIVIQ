@@ -330,6 +330,15 @@ export async function markNotificationRead(id: string): Promise<AppNotification>
   return toNotification(await response.json());
 }
 
+// 개별 삭제 — 본인 것만(타인/없음은 404). 204 No Content, 본문 없음.
+export async function deleteNotification(id: string): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/notifications/${id}`, {
+    method: "DELETE",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+}
+
 // ── 온보딩·계정 상태 (docs/04 §2, ADR-0011) ─────────────────────────────────
 // /onboarding/profile 은 온보딩 세션(역할 없음)으로만 접근 가능. /me 는 상태 무관.
 

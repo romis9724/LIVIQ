@@ -316,17 +316,6 @@ function SubmitForm({ categories, onSubmitted, onError }: SubmitFormProps) {
     <form className="inq-form" onSubmit={handleSubmit}>
       <div className="inq-form__scroll">
         <div className="inq-field">
-          <div className="inq-field-label">사진 첨부</div>
-          <div className="inq-photos" aria-disabled="true">
-            <button type="button" className="inq-photo-add" disabled>
-              <span aria-hidden="true">＋</span>
-              <span>사진</span>
-            </button>
-          </div>
-          <div className="inq-field-help">사진 첨부는 추후 지원될 예정입니다.</div>
-        </div>
-
-        <div className="inq-field">
           <label htmlFor="inq-category" className="inq-field-label">
             분류
           </label>

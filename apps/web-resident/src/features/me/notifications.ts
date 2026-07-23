@@ -47,3 +47,11 @@ export function markReadInList(
 ): AppNotification[] {
   return items.map((n) => (n.id === id && n.readAt === null ? { ...n, readAt } : n));
 }
+
+// 삭제 — 해당 id를 제외한 새 배열 반환(불변). 낙관적 삭제·롤백에 사용.
+export function removeFromList(
+  items: readonly AppNotification[],
+  id: string,
+): AppNotification[] {
+  return items.filter((n) => n.id !== id);
+}

@@ -13,7 +13,7 @@ import datetime
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,3 +68,23 @@ async def mark_read(
         notification.read_at = datetime.datetime.now(datetime.UTC)
         await session.flush()
     return NotificationOut.model_validate(notification, from_attributes=True)
+
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_notification(
+    ctx: Annotated[RequestContext, Depends(get_context)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    notification_id: uuid.UUID,
+) -> None:
+    """본인 알림 하드 삭제. 없거나 타인 것이면 404(존재 여부 미노출, 규칙 4)."""
+    notification = await session.scalar(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.tenant_id == ctx.tenant_id,
+            Notification.user_id == ctx.user_id,  # 타인 알림은 404
+        )
+    )
+    if notification is None:
+        raise HTTPException(status_code=404, detail="알림을 찾을 수 없음")
+    await session.delete(notification)
+    await session.flush()

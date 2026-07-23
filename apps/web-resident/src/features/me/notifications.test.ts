@@ -8,6 +8,7 @@ import {
   markReadInList,
   notificationDate,
   notificationIcon,
+  removeFromList,
   summaryNotifications,
   unreadCount,
 } from "./notifications";
@@ -95,5 +96,23 @@ describe("markReadInList", () => {
     const items = [notification({ id: "a", readAt: "2026-07-01T00:00:00Z" })];
     const next = markReadInList(items, "a", "2026-07-09T00:00:00Z");
     expect(next[0]?.readAt).toBe("2026-07-01T00:00:00Z");
+  });
+});
+
+describe("removeFromList", () => {
+  it("대상 id를 제외한 새 배열을 반환하고 원본을 변형하지 않는다", () => {
+    const items = [
+      notification({ id: "a" }),
+      notification({ id: "b" }),
+      notification({ id: "c" }),
+    ];
+    const next = removeFromList(items, "b");
+    expect(next.map((n) => n.id)).toEqual(["a", "c"]);
+    expect(items).toHaveLength(3); // 원본 불변
+  });
+
+  it("없는 id면 그대로 유지한다", () => {
+    const items = [notification({ id: "a" })];
+    expect(removeFromList(items, "zzz").map((n) => n.id)).toEqual(["a"]);
   });
 });

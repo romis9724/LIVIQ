@@ -11,6 +11,8 @@ interface NotificationListBodyProps {
   loadError: string | null;
   onRead: (notification: AppNotification) => void;
   onRetry: () => void;
+  // 삭제는 전체 목록에서만 — 요약(나 페이지)은 미전달해 버튼을 숨긴다.
+  onDelete?: (notification: AppNotification) => void;
 }
 
 /** 알림 목록 본문 — 요약(나 페이지)·전체(/notifications)가 공유하는 로딩/오류/빈/목록 렌더. */
@@ -20,6 +22,7 @@ export function NotificationListBody({
   loadError,
   onRead,
   onRetry,
+  onDelete,
 }: NotificationListBodyProps) {
   if (loading) {
     return (
@@ -51,7 +54,7 @@ export function NotificationListBody({
   return (
     <div className="me-group">
       {items.map((n) => (
-        <NotificationRow key={n.id} notification={n} onRead={onRead} />
+        <NotificationRow key={n.id} notification={n} onRead={onRead} onDelete={onDelete} />
       ))}
     </div>
   );
@@ -60,31 +63,47 @@ export function NotificationListBody({
 function NotificationRow({
   notification,
   onRead,
+  onDelete,
 }: {
   notification: AppNotification;
   onRead: (notification: AppNotification) => void;
+  onDelete?: (notification: AppNotification) => void;
 }) {
   const unread = isUnread(notification);
   return (
-    <button
-      type="button"
-      className="me-row me-notif-row"
-      data-unread={unread || undefined}
-      onClick={() => onRead(notification)}
-    >
-      <span className="me-row__icon" aria-hidden="true">
-        {notificationIcon(notification.type)}
-      </span>
-      <span className="me-row__body">
-        <span className="me-notif-row__title">
-          {unread ? <span className="me-notif-row__dot" aria-label="읽지 않음" /> : null}
-          {notification.title}
+    <div className="me-row me-notif-row" data-unread={unread || undefined}>
+      <button
+        type="button"
+        className="me-notif-row__hit"
+        onClick={() => onRead(notification)}
+      >
+        <span className="me-row__icon" aria-hidden="true">
+          {notificationIcon(notification.type)}
         </span>
-        {notification.body ? (
-          <span className="me-notif-row__desc">{notification.body}</span>
-        ) : null}
-        <span className="me-row__meta">{notificationDate(notification.createdAt)}</span>
-      </span>
-    </button>
+        <span className="me-row__body">
+          <span className="me-notif-row__title">
+            {unread ? <span className="me-notif-row__dot" aria-label="읽지 않음" /> : null}
+            {notification.title}
+          </span>
+          {notification.body ? (
+            <span className="me-notif-row__desc">{notification.body}</span>
+          ) : null}
+          <span className="me-row__meta">{notificationDate(notification.createdAt)}</span>
+        </span>
+      </button>
+      {onDelete ? (
+        <button
+          type="button"
+          className="me-notif-row__del"
+          aria-label="알림 삭제"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(notification);
+          }}
+        >
+          ×
+        </button>
+      ) : null}
+    </div>
   );
 }

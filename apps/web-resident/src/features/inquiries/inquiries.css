@@ -158,64 +158,6 @@
   background: var(--color-surface);
   color: var(--color-text);
 }
-.inq-photo-add:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.inq-photos {
-  display: flex;
-  gap: var(--space-3);
-}
-.inq-photo {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.inq-photo__ph {
-  font-size: 1.8rem;
-  opacity: 0.4;
-}
-.inq-photo__del {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 50%;
-  background: oklch(22% 0.02 250 / 0.6);
-  color: white;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-.inq-photo-add {
-  width: 84px;
-  height: 84px;
-  border-radius: var(--radius-md);
-  border: 1.5px dashed var(--color-border-strong);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-family: inherit;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  font-size: 0.72rem;
-}
-.inq-photo-add span[aria-hidden] {
-  font-size: 1.3rem;
-}
-
 /* 분류 select */
 .inq-select {
   position: relative;
