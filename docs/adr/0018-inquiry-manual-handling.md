@@ -43,3 +43,18 @@
 - 비용: `inquiry_categories` 폐기 + FK 재배선 마이그레이션(문서 source_type 전환과 동일 패턴, label 매핑) · `ai_priority`→`priority` rename · 관리자 상세 뷰 신설.
 - `default_assignee_role`·`sla_hours`(구 inquiry_categories 컬럼)는 소비처 없어 폐기 — 자동 배정·SLA 요구 생기면 코드 필드 확장 또는 별도 매핑으로 별도 ADR.
 - 재검토 신호: 답변 승인 검수(규칙 6 강화)나 카테고리별 자동 배정 요구가 생기면 재검토.
+
+## 개정 노트 (2026-07-24, 운영자 2차 피드백 — 상태 머신 액션화)
+
+수동 상태 변경(`POST /admin/inquiries/{id}/status`)이 오조작·책임 불명을 낳아, 상태를 **액션의 부산물로만** 전이하도록 재설계했다. `change_inquiry_status`·`StatusChangeIn`·`STATUS_ORDER`·역행 로직을 완전 제거.
+
+- **신규 상태 `reopened`** — `inquiries.status`는 plain String 컬럼이라 마이그레이션 불필요(값만 추가). `received`는 UI에서 "미배정"으로 표기(백엔드 값 유지, 프론트 담당).
+- **전이(전부 액션 부산물)**:
+  - 배정(`assign`, 기존): 미배정이면 assigned 자동, assigned/in_progress/reopened면 담당자만 교체(상태 유지), done이면 422 잠금.
+  - `POST /admin/inquiries/{id}/ack`(신규): 담당자가 상세 열람 시 프론트가 호출. caller가 담당자이고 status=assigned일 때만 in_progress 전환(status_changed 이벤트), 그 외(비담당·소장·다른 상태·done)는 no-op(에러 아님).
+  - `POST /admin/inquiries/{id}/complete`(신규): 담당자·소장, in_progress/reopened + reply ≥1(아니면 422) → done, 작성자 알림.
+  - `POST /inquiries/{id}/reopen`(신규, RESIDENT): 작성자 본인이 done 민원을 재개 → reopened(status_changed {done→reopened}), 담당자 알림.
+- **완료 잠금(done)**: 관리자 변경(assign·priority·category·reply·complete)은 done이면 422. 재개는 입주민 reopen뿐.
+- **분류 수정 `POST /admin/inquiries/{id}/category`**(신규, 담당자·소장): `INQUIRY_CATEGORY` 코드 검증(null=미분류), done이면 422.
+- **피드백**은 in_progress에 더해 **reopened**에서도 허용.
+- **직원 목록 `GET /admin/staff`에 성명 추가** — `pii_vault.name_enc` 복호(관리 인가 뒤에서만, 복호 실패·부재 시 None). 배정 드롭다운에서 이메일 대신 실명 식별.

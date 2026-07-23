@@ -57,14 +57,21 @@ async def list_staff(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
 ) -> StaffListOut:
-    """직원 목록 — STAFF·MANAGER 역할 사용자(생성 순), 이메일 포함(ADR-0014 개정, H7-5).
+    """직원 목록 — STAFF·MANAGER 역할(생성 순), 이메일·성명 포함(ADR-0014 개정·ADR-0018).
 
-    조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일은 pii_vault 복호로 채운다
-    — 관리 역할 인가 뒤에서만 반환. 복호 실패는 None(행 유지).
+    조회는 MANAGER·STAFF에 개방(배정 드롭다운용, ADR-0018). 이메일·성명은 pii_vault 복호로
+    채운다 — 관리 역할 인가 뒤에서만 반환. 복호 실패·PII 부재는 None(행 유지).
     """
     rows = (
         await session.execute(
-            select(User.id, User.status, User.created_at, UserRole.role, PiiVault.email_enc)
+            select(
+                User.id,
+                User.status,
+                User.created_at,
+                UserRole.role,
+                PiiVault.email_enc,
+                PiiVault.name_enc,
+            )
             .join(
                 UserRole,
                 and_(UserRole.user_id == User.id, UserRole.tenant_id == User.tenant_id),
@@ -84,7 +91,7 @@ async def list_staff(
 
     dek = await crypto.get_dek(session, ctx.tenant_id) if rows else b""
 
-    def decrypt_email(blob: bytes | None) -> str | None:
+    def decrypt(blob: bytes | None) -> str | None:
         if blob is None:
             return None
         try:
@@ -94,7 +101,7 @@ async def list_staff(
 
     # 사용자별 역할 집계(등장 순 유지) — 조인이 역할 수만큼 행을 낸다.
     by_user: dict[uuid.UUID, StaffItem] = {}
-    for user_id, status, created_at, role, email_enc in rows:
+    for user_id, status, created_at, role, email_enc, name_enc in rows:
         item = by_user.get(user_id)
         if item is None:
             by_user[user_id] = StaffItem(
@@ -102,7 +109,8 @@ async def list_staff(
                 roles=[role],
                 status=status,
                 invited_at=created_at,
-                email=decrypt_email(email_enc),
+                email=decrypt(email_enc),
+                name=decrypt(name_enc),
             )
         elif role not in item.roles:
             item.roles.append(role)

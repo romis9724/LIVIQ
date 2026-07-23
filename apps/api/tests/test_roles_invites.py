@@ -363,6 +363,42 @@ async def test_list_staff_includes_decrypted_email(
     assert None in by_email  # vault 없는 시드 소장 행은 None(행 유지)
 
 
+async def test_list_staff_includes_decrypted_name(
+    seeded: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """직원 목록에 성명 표시(ADR-0018) — name_enc 복호. PII 부재 행은 None."""
+    crypto = _crypto()
+    await seeded.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
+    )
+    dek = await crypto.get_dek(seeded, TENANT_ID)
+    vault_id = uuid.uuid4()
+    staff_id = uuid.uuid4()
+    seeded.add(
+        PiiVault(
+            id=vault_id,
+            tenant_id=TENANT_ID,
+            email_enc=crypto.encrypt(dek, "named-staff@example.com"),
+            name_enc=crypto.encrypt(dek, "홍길동"),
+            key_version=1,
+        )
+    )
+    seeded.add(
+        User(id=staff_id, tenant_id=TENANT_ID, status="active", pii_ref=vault_id)
+    )
+    await seeded.flush()
+    seeded.add(UserRole(tenant_id=TENANT_ID, user_id=staff_id, role="STAFF"))
+    await seeded.flush()
+
+    async with _make_app(seeded, fake_redis, FakeMailer(), ctx=_ctx(("MANAGER",))) as mgr:
+        resp = await mgr.get("/admin/staff")
+
+    assert resp.status_code == 200
+    by_id = {item["user_id"]: item for item in resp.json()["items"]}
+    assert by_id[str(staff_id)]["name"] == "홍길동"
+    assert by_id[str(MANAGER_USER_ID)]["name"] is None  # vault 없는 시드 소장 행
+
+
 # ── 임시 비밀번호 강제 변경 게이트 (부트스트랩 SYS_ADMIN) ─────────────────────
 
 

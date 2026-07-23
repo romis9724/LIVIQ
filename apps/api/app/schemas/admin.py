@@ -62,6 +62,7 @@ class StaffItem(BaseModel):
     status: str
     invited_at: datetime.datetime  # 초대(=생성) 시각
     email: str | None = None  # 복호 실패·PII 부재 시 None(행은 유지)
+    name: str | None = None  # 복호 실패·PII 부재(초대 대기 등) 시 None
 
 
 class StaffListOut(BaseModel):

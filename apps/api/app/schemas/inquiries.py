@@ -9,12 +9,13 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 Priority = Literal["urgent", "normal", "low"]
-InquiryStatus = Literal["received", "assigned", "in_progress", "done"]
+InquiryStatus = Literal["received", "assigned", "in_progress", "done", "reopened"]
 # "ai_classified"는 과거 행 읽기 호환용(신규 생성 없음, ADR-0018).
 EventType = Literal["created", "ai_classified", "assigned", "status_changed", "comment"]
 
 __all__ = [
     "AssignIn",
+    "CategoryIn",
     "CommentIn",
     "EventType",
     "InquiryCategoryListOut",
@@ -27,7 +28,6 @@ __all__ = [
     "InquiryStatus",
     "Priority",
     "PriorityIn",
-    "StatusChangeIn",
 ]
 
 
@@ -79,8 +79,8 @@ class AssignIn(BaseModel):
     assignee_user_id: uuid.UUID
 
 
-class StatusChangeIn(BaseModel):
-    status: InquiryStatus
+class CategoryIn(BaseModel):
+    category_code_id: uuid.UUID | None
 
 
 class CommentIn(BaseModel):

@@ -240,9 +240,8 @@ async def test_resident_forbidden_on_admin_endpoints(seeded: AsyncSession) -> No
         assert (
             await c.post(f"/admin/inquiries/{fake}/assign", json={"assignee_user_id": str(fake)})
         ).status_code == 403
-        assert (
-            await c.post(f"/admin/inquiries/{fake}/status", json={"status": "assigned"})
-        ).status_code == 403
+        assert (await c.post(f"/admin/inquiries/{fake}/ack")).status_code == 403
+        assert (await c.post(f"/admin/inquiries/{fake}/complete")).status_code == 403
 
 
 # ── 관리자 목록 필터 ────────────────────────────────────────────────────────
@@ -251,15 +250,14 @@ async def test_resident_forbidden_on_admin_endpoints(seeded: AsyncSession) -> No
 async def test_admin_list_filters_by_status(seeded: AsyncSession) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         received = await _create(author, title="대기", body="b")
-        moved = await _create(author, title="진행", body="b")
+    moved_id = await _create_assign_progress(seeded)  # in_progress
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        await mgr.post(f"/admin/inquiries/{moved['id']}/status", json={"status": "in_progress"})
         listed = (await mgr.get("/admin/inquiries", params={"status": "received"})).json()["items"]
         assert [i["id"] for i in listed] == [received["id"]]
         progress = (await mgr.get("/admin/inquiries", params={"status": "in_progress"})).json()[
             "items"
         ]
-        assert [i["id"] for i in progress] == [moved["id"]]
+        assert [i["id"] for i in progress] == [moved_id]
 
 
 # ── 배정 ──────────────────────────────────────────────────────────────────
@@ -362,16 +360,28 @@ async def test_manager_can_reply_override(seeded: AsyncSession) -> None:
 
 
 async def _create_assign_progress(seeded: AsyncSession) -> str:
+    """접수→배정→담당자 ack(=처리중)까지 진행한 민원 id."""
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="t", body="b")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
         await _assign(mgr, inquiry["id"], STAFF_ID)
     async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
-        moved = await staff.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
-        )
-        assert moved.status_code == 200, moved.text
+        acked = await staff.post(f"/admin/inquiries/{inquiry['id']}/ack")
+        assert acked.status_code == 200 and acked.json()["status"] == "in_progress", acked.text
     return str(inquiry["id"])
+
+
+async def _create_done(seeded: AsyncSession) -> str:
+    """처리중 민원에 답변 1건 남기고 완료 처리한 민원 id."""
+    inquiry_id = await _create_assign_progress(seeded)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        replied = await staff.post(
+            f"/admin/inquiries/{inquiry_id}/comments", json={"body": "처리 완료"}
+        )
+        assert replied.status_code == 200, replied.text
+        done = await staff.post(f"/admin/inquiries/{inquiry_id}/complete")
+        assert done.status_code == 200 and done.json()["status"] == "done", done.text
+    return inquiry_id
 
 
 async def test_author_feedback_in_progress_notifies_assignee(seeded: AsyncSession) -> None:
@@ -410,80 +420,211 @@ async def test_feedback_by_non_author_404(seeded: AsyncSession) -> None:
     assert response.status_code == 404  # 격리 — 존재 여부 노출 안 함
 
 
-# ── 상태 게이트 ────────────────────────────────────────────────────────────
+async def test_feedback_allowed_when_reopened(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        await author.post(f"/inquiries/{inquiry_id}/reopen")  # done → reopened
+        response = await author.post(
+            f"/inquiries/{inquiry_id}/comments", json={"body": "다시 문제입니다"}
+        )
+    assert response.status_code == 200  # reopened에서도 피드백 허용
 
 
-async def test_in_progress_requires_assignee(seeded: AsyncSession) -> None:
+# ── ack(열람 → 처리중) ─────────────────────────────────────────────────────
+
+
+async def test_ack_by_assignee_when_assigned_transitions(seeded: AsyncSession) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="t", body="b")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
         await _assign(mgr, inquiry["id"], STAFF_ID)
-    async with _make_client(seeded, STAFF2_ID, ("STAFF",)) as other_staff:
-        denied = await other_staff.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
-        )
-        assert denied.status_code == 403  # 비담당 직원
     async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
-        ok = await staff.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
-        )
-        assert ok.status_code == 200
+        acked = await staff.post(f"/admin/inquiries/{inquiry['id']}/ack")
+        assert acked.status_code == 200
+        assert acked.json()["status"] == "in_progress"
 
-
-async def test_done_requires_reply(seeded: AsyncSession) -> None:
-    inquiry_id = await _create_assign_progress(seeded)
-    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
-        no_reply = await staff.post(
-            f"/admin/inquiries/{inquiry_id}/status", json={"status": "done"}
-        )
-        assert no_reply.status_code == 422  # 답변 없는 완료 금지
-
-        await staff.post(
-            f"/admin/inquiries/{inquiry_id}/comments", json={"body": "처리 완료했습니다"}
-        )
-        done = await staff.post(
-            f"/admin/inquiries/{inquiry_id}/status", json={"status": "done"}
-        )
-        assert done.status_code == 200
-        assert done.json()["status"] == "done"
-
-
-async def test_status_forward_records_payload(seeded: AsyncSession) -> None:
-    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
-        inquiry = await _create(author, title="t", body="b")
-    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        await _assign(mgr, inquiry["id"], STAFF_ID)
-        response = await mgr.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"}
-        )
-        assert response.status_code == 200
-        assert response.json()["status"] == "in_progress"
-
-        events = (await mgr.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
+        events = (await staff.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
         last = events[-1]
         assert last["type"] == "status_changed"
         assert last["payload"] == {"from": "assigned", "to": "in_progress"}
 
 
-async def test_staff_cannot_move_status_backward(seeded: AsyncSession) -> None:
+async def test_ack_by_non_assignee_is_noop(seeded: AsyncSession) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="t", body="b")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        await mgr.post(f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"})
+        await _assign(mgr, inquiry["id"], STAFF_ID)
+    async with _make_client(seeded, STAFF2_ID, ("STAFF",)) as other_staff:
+        acked = await other_staff.post(f"/admin/inquiries/{inquiry['id']}/ack")
+        assert acked.status_code == 200
+        assert acked.json()["status"] == "assigned"  # no-op — 상태 유지
+
+
+async def test_ack_by_manager_is_noop(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        await _assign(mgr, inquiry["id"], STAFF_ID)  # 소장은 담당자 아님
+        acked = await mgr.post(f"/admin/inquiries/{inquiry['id']}/ack")
+        assert acked.status_code == 200
+        assert acked.json()["status"] == "assigned"  # no-op
+
+
+async def test_ack_on_done_is_noop(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
     async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
-        response = await staff.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "received"}
-        )
-    assert response.status_code == 403
+        acked = await staff.post(f"/admin/inquiries/{inquiry_id}/ack")
+        assert acked.status_code == 200
+        assert acked.json()["status"] == "done"  # no-op — 완료 유지
 
 
-async def test_manager_can_move_status_backward(seeded: AsyncSession) -> None:
+# ── complete(완료) ─────────────────────────────────────────────────────────
+
+
+async def test_complete_requires_reply(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_assign_progress(seeded)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        no_reply = await staff.post(f"/admin/inquiries/{inquiry_id}/complete")
+        assert no_reply.status_code == 422  # 답변 없는 완료 금지
+
+        await staff.post(f"/admin/inquiries/{inquiry_id}/comments", json={"body": "처리 완료"})
+        done = await staff.post(f"/admin/inquiries/{inquiry_id}/complete")
+        assert done.status_code == 200
+        assert done.json()["status"] == "done"
+
+
+async def test_complete_rejected_when_not_in_progress_422(seeded: AsyncSession) -> None:
     async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
         inquiry = await _create(author, title="t", body="b")
     async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
-        await mgr.post(f"/admin/inquiries/{inquiry['id']}/status", json={"status": "in_progress"})
+        await _assign(mgr, inquiry["id"], STAFF_ID)  # assigned(처리중 아님)
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        response = await staff.post(f"/admin/inquiries/{inquiry['id']}/complete")
+    assert response.status_code == 422
+
+
+async def test_complete_from_reopened(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        await author.post(f"/inquiries/{inquiry_id}/reopen")  # done → reopened
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        done = await staff.post(f"/admin/inquiries/{inquiry_id}/complete")  # reply는 이미 있음
+    assert done.status_code == 200
+    assert done.json()["status"] == "done"
+
+
+async def test_complete_notifies_author(seeded: AsyncSession) -> None:
+    await _create_done(seeded)
+    notif = await seeded.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.user_id == AUTHOR_ID,
+            Notification.type == "inquiry_status",
+            Notification.title == "민원이 완료 처리되었습니다",
+        )
+    )
+    assert notif == 1
+
+
+# ── reopen(재접수) ─────────────────────────────────────────────────────────
+
+
+async def test_reopen_by_author_when_done(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        response = await author.post(f"/inquiries/{inquiry_id}/reopen")
+        assert response.status_code == 200
+        assert response.json()["status"] == "reopened"
+
+        events = (await author.get(f"/inquiries/{inquiry_id}/events")).json()["items"]
+        last = events[-1]
+        assert last["type"] == "status_changed"
+        assert last["payload"] == {"from": "done", "to": "reopened"}
+
+    notif = await seeded.scalar(
+        select(func.count())
+        .select_from(Notification)
+        .where(
+            Notification.user_id == STAFF_ID,
+            Notification.title == "담당 민원이 재접수되었습니다",
+        )
+    )
+    assert notif == 1  # 담당자에게 재접수 알림
+
+
+async def test_reopen_by_non_author_404(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
+    async with _make_client(seeded, OTHER_ID, ("RESIDENT",)) as other:
+        response = await other.post(f"/inquiries/{inquiry_id}/reopen")
+    assert response.status_code == 404  # 격리 — 존재 여부 노출 안 함
+
+
+async def test_reopen_rejected_when_not_done_422(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_assign_progress(seeded)  # in_progress
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        response = await author.post(f"/inquiries/{inquiry_id}/reopen")
+    assert response.status_code == 422
+
+
+# ── category(분류 수정) ─────────────────────────────────────────────────────
+
+
+async def test_category_set_by_admin(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
         response = await mgr.post(
-            f"/admin/inquiries/{inquiry['id']}/status", json={"status": "assigned"}
+            f"/admin/inquiries/{inquiry['id']}/category",
+            json={"category_code_id": str(CATEGORY_ID)},
         )
     assert response.status_code == 200
-    assert response.json()["status"] == "assigned"
+    assert response.json()["category_code_id"] == str(CATEGORY_ID)
+
+
+async def test_category_clear_with_null(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b", category_code_id=CATEGORY_ID)
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        response = await mgr.post(
+            f"/admin/inquiries/{inquiry['id']}/category", json={"category_code_id": None}
+        )
+    assert response.status_code == 200
+    assert response.json()["category_code_id"] is None
+
+
+async def test_category_rejects_foreign_group_code_422(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        response = await mgr.post(
+            f"/admin/inquiries/{inquiry['id']}/category",
+            json={"category_code_id": str(NOTICE_CODE_ID)},
+        )
+    assert response.status_code == 422
+
+
+# ── 완료 잠금(done) ────────────────────────────────────────────────────────
+
+
+async def test_done_locks_admin_mutations_422(seeded: AsyncSession) -> None:
+    inquiry_id = await _create_done(seeded)
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        assert (
+            await mgr.post(
+                f"/admin/inquiries/{inquiry_id}/assign",
+                json={"assignee_user_id": str(STAFF2_ID)},
+            )
+        ).status_code == 422
+        assert (
+            await mgr.post(f"/admin/inquiries/{inquiry_id}/priority", json={"priority": "urgent"})
+        ).status_code == 422
+        assert (
+            await mgr.post(
+                f"/admin/inquiries/{inquiry_id}/category",
+                json={"category_code_id": str(CATEGORY_ID)},
+            )
+        ).status_code == 422
+        assert (
+            await mgr.post(f"/admin/inquiries/{inquiry_id}/comments", json={"body": "추가 답변"})
+        ).status_code == 422
