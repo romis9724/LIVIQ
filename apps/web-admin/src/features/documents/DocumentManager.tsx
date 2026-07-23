@@ -2,7 +2,7 @@
 
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/lib/api";
 import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
@@ -32,9 +32,11 @@ export function DocumentManager() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
-  // 검색 버튼/Enter 로만 적용 — 타이핑 중에는 목록이 바뀌지 않는다(한글 IME 조합 오작동 방지).
+  // 검색어 input은 uncontrolled(ref) — controlled value는 한글 IME 조합 중 리렌더로 조합이
+  // 깨진다(마지막 자모 씹힘). 제출 시에만 ref 값을 읽어 적용한다.
+  const searchRef = useRef<HTMLInputElement>(null);
+  // 검색 버튼/Enter 로만 적용 — 타이핑 중에는 목록이 바뀌지 않는다.
   const [appliedQuery, setAppliedQuery] = useState("");
   const [appliedCategory, setAppliedCategory] = useState("");
   const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
@@ -83,7 +85,7 @@ export function DocumentManager() {
 
   const applySearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setAppliedQuery(search);
+    setAppliedQuery(searchRef.current?.value ?? "");
     setAppliedCategory(category);
   };
 
@@ -161,12 +163,12 @@ export function DocumentManager() {
               ))}
             </select>
             <input
+              ref={searchRef}
               className="doc-input doc-search"
               type="search"
-              value={search}
+              defaultValue=""
               placeholder="제목 검색"
               aria-label="문서 제목 검색"
-              onChange={(event) => setSearch(event.target.value)}
             />
             <Button type="submit" variant="secondary">
               검색
@@ -203,11 +205,13 @@ function SummaryCard({
 }) {
   return (
     <div className={`surface-card doc-summary__card doc-summary__card--${tone}`}>
-      <span className="doc-summary__icon" aria-hidden="true">
-        {icon}
+      <span className="doc-summary__label">
+        <span className="doc-summary__icon" aria-hidden="true">
+          {icon}
+        </span>
+        {label}
       </span>
       <span className="doc-summary__count">{count}</span>
-      <span className="doc-summary__label">{label}</span>
     </div>
   );
 }

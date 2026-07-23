@@ -157,15 +157,17 @@ function ActionQueue({ actions }: { actions: DashboardActionQueue }) {
               className={`surface-card dash-action dash-action--${item.tone}${isEmpty ? " dash-action--empty" : ""}`}
             >
               <span className="dash-action__head">
-                <span className="dash-action__icon" aria-hidden="true">
-                  {item.icon}
+                <span className="dash-action__label">
+                  <span className="dash-action__icon" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  {item.label}
                 </span>
                 <span className="dash-action__arrow" aria-hidden="true">
                   →
                 </span>
               </span>
               <span className="dash-action__count">{formatCount(count)}</span>
-              <span className="dash-action__label">{item.label}</span>
             </Link>
           );
         })}
