@@ -8,6 +8,12 @@ export interface NavItem {
   label: string;
 }
 
+/** 내비 섹션 그룹 — title 없으면 헤더 없이 단독 렌더. */
+export interface NavGroup {
+  title?: string;
+  items: readonly NavItem[];
+}
+
 // 내비 항목 카탈로그 — 라우트별 단일 정의(중복 방지).
 const DASHBOARD: NavItem = { href: "/dashboard", icon: "📊", label: "대시보드" };
 const RESIDENTS: NavItem = { href: "/residents", icon: "🙋", label: "주민 관리" };
@@ -21,22 +27,16 @@ const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label
 const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
 const TENANTS: NavItem = { href: "/system/tenants", icon: "🏘", label: "단지 관리" };
 
-// STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·승인 숨김).
-const STAFF_NAV: readonly NavItem[] = [INQUIRIES, NOTICES, DOCUMENTS];
-// SYS_ADMIN은 단지 관리 하나만 — 어떤 단지 콘텐츠에도 접근하지 않는다.
-const SYS_ADMIN_NAV: readonly NavItem[] = [TENANTS];
-// MANAGER(기본): 전체 + 직원 관리(H7-5에서 설정 하위 → 최상위 승격).
-const MANAGER_NAV: readonly NavItem[] = [
-  DASHBOARD,
-  RESIDENTS,
-  NOTICES,
-  INQUIRIES,
-  DOCUMENTS,
-  FEES,
-  FACILITIES,
-  STAFF_MGMT,
-  SETTINGS_CODES,
-  SETTINGS_HOUSEHOLDS,
+// STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·승인 숨김) — 항목이 적어 그룹 없이 flat.
+const STAFF_NAV: readonly NavGroup[] = [{ items: [INQUIRIES, NOTICES, DOCUMENTS] }];
+// SYS_ADMIN은 단지 관리 하나만 — 어떤 단지 콘텐츠에도 접근하지 않는다(flat).
+const SYS_ADMIN_NAV: readonly NavGroup[] = [{ items: [TENANTS] }];
+// MANAGER(기본): 섹션 그룹화 — 대시보드·공지 단독, 입주민 관리·관리소 운영·설정 묶음.
+const MANAGER_NAV: readonly NavGroup[] = [
+  { items: [DASHBOARD, NOTICES] },
+  { title: "입주민 관리", items: [RESIDENTS, FEES, INQUIRIES] },
+  { title: "관리소 운영", items: [STAFF_MGMT, DOCUMENTS, FACILITIES] },
+  { title: "설정", items: [SETTINGS_HOUSEHOLDS, SETTINGS_CODES] },
 ];
 
 export function isSysAdmin(roles: readonly string[]): boolean {
@@ -47,8 +47,8 @@ function isStaffOnly(roles: readonly string[]): boolean {
   return roles.includes("STAFF") && !roles.includes("MANAGER");
 }
 
-/** 역할 → 노출 내비. 미상(에러 등)이면 MANAGER 전체로 폴백 — 서버 403이 최종 방어. */
-export function navForRoles(roles: readonly string[]): readonly NavItem[] {
+/** 역할 → 노출 내비(섹션 그룹). 미상(에러 등)이면 MANAGER 전체로 폴백 — 서버 403이 최종 방어. */
+export function navForRoles(roles: readonly string[]): readonly NavGroup[] {
   if (isSysAdmin(roles)) return SYS_ADMIN_NAV;
   if (isStaffOnly(roles)) return STAFF_NAV;
   return MANAGER_NAV;
