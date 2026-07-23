@@ -3,7 +3,7 @@
 
 import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
 
-export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
+export type InquiryStatus = "received" | "assigned" | "in_progress" | "done" | "reopened";
 export type Priority = "urgent" | "normal" | "low";
 export type InquiryEventType =
   | "created"
@@ -140,6 +140,16 @@ export async function postInquiryFeedback(id: string, body: string): Promise<Inq
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
     body: JSON.stringify({ body }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+// 재확인 요청 — 작성자 본인·status=done 일 때만 허용(그 외 404/422). done→reopened.
+export async function reopenInquiry(id: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}/reopen`, {
+    method: "POST",
+    headers: DEV_HEADERS,
   });
   await ensureOk(response);
   return toInquiry(await response.json());

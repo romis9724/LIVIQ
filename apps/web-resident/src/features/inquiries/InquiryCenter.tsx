@@ -11,12 +11,12 @@ import {
   listInquiryEvents,
   listMyInquiries,
   postInquiryFeedback,
+  reopenInquiry,
   type Inquiry,
   type InquiryCategory,
   type InquiryEvent,
 } from "@/lib/api";
 import {
-  PRIORITY_LABEL,
   commentBody,
   commentKind,
   eventLabel,
@@ -128,11 +128,19 @@ export function InquiryCenter() {
 
   if (selected) {
     return (
-      <InquiryDetail
-        inquiry={selected}
-        categories={categories}
-        onBack={() => setSelected(null)}
-      />
+      <>
+        <InquiryDetail
+          inquiry={selected}
+          categories={categories}
+          onBack={() => setSelected(null)}
+          onToast={showToast}
+        />
+        {toast ? (
+          <div className="inq-toast-slot">
+            <Toast message={toast.message} tone={toast.tone} />
+          </div>
+        ) : null}
+      </>
     );
   }
 
@@ -259,11 +267,6 @@ function InquiryList({
             onClick={() => onSelect(inquiry)}
           >
             <div className="inq-card__top">
-              {inquiry.priority ? (
-                <span className="inq-card__cat" data-priority={inquiry.priority}>
-                  {PRIORITY_LABEL[inquiry.priority]}
-                </span>
-              ) : null}
               {catLabel ? <span className="inq-card__tag">{catLabel}</span> : null}
               <StatusPill status={pill.status} label={pill.label} />
               <span className="inq-card__date">{shortDate(inquiry.createdAt)}</span>
@@ -396,17 +399,22 @@ interface InquiryDetailProps {
   inquiry: Inquiry;
   categories: readonly InquiryCategory[];
   onBack: () => void;
+  onToast: (message: string, tone?: ToastTone) => void;
 }
 
-function InquiryDetail({ inquiry, categories, onBack }: InquiryDetailProps) {
+function InquiryDetail({ inquiry: initial, categories, onBack, onToast }: InquiryDetailProps) {
+  const [inquiry, setInquiry] = useState<Inquiry>(initial);
   const [events, setEvents] = useState<InquiryEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [reopening, setReopening] = useState(false);
   const pill = statusPill(inquiry.status);
   const catLabel = categoryLabelOf(categories, inquiry.categoryCodeId);
-  const canFeedback = inquiry.status === "in_progress";
+  // 피드백은 처리중·재확인 상태에서만 남길 수 있다(백엔드 계약과 동일).
+  const canFeedback = inquiry.status === "in_progress" || inquiry.status === "reopened";
+  const canReopen = inquiry.status === "done";
 
   const load = useCallback(async () => {
     try {
@@ -437,6 +445,20 @@ function InquiryDetail({ inquiry, categories, onBack }: InquiryDetailProps) {
     }
   }, [feedback, sending, canFeedback, inquiry.id, load]);
 
+  const handleReopen = useCallback(async () => {
+    if (reopening) return;
+    setReopening(true);
+    try {
+      setInquiry(await reopenInquiry(inquiry.id));
+      await load();
+      onToast("재확인을 요청했습니다.");
+    } catch (err) {
+      onToast(errorMessage(err), "danger");
+    } finally {
+      setReopening(false);
+    }
+  }, [reopening, inquiry.id, load, onToast]);
+
   return (
     <div className="inq">
       <header className="inq-detail__bar">
@@ -450,11 +472,6 @@ function InquiryDetail({ inquiry, categories, onBack }: InquiryDetailProps) {
         <div className="inq-detail__head">
           <div className="inq-detail__meta">
             <StatusPill status={pill.status} label={pill.label} />
-            {inquiry.priority ? (
-              <span className="inq-card__cat" data-priority={inquiry.priority}>
-                {PRIORITY_LABEL[inquiry.priority]}
-              </span>
-            ) : null}
             {catLabel ? <span className="inq-card__tag">{catLabel}</span> : null}
             <span className="inq-detail__sub">접수 · {shortDate(inquiry.createdAt)}</span>
           </div>
@@ -464,14 +481,31 @@ function InquiryDetail({ inquiry, categories, onBack }: InquiryDetailProps) {
         <Thread inquiry={inquiry} events={events} error={error} onRetry={load} />
       </main>
 
-      <FeedbackComposer
-        value={feedback}
-        onChange={setFeedback}
-        onSend={handleSend}
-        sending={sending}
-        error={sendError}
-        enabled={canFeedback}
-      />
+      {canReopen ? (
+        <div className="inq-composer">
+          <p className="inq-composer__hint">
+            처리 결과가 만족스럽지 않으면 재확인을 요청하세요.
+          </p>
+          <Button
+            type="button"
+            variant="primary"
+            className="inq-submit"
+            disabled={reopening}
+            onClick={handleReopen}
+          >
+            {reopening ? "요청 중…" : "재확인 요청"}
+          </Button>
+        </div>
+      ) : (
+        <FeedbackComposer
+          value={feedback}
+          onChange={setFeedback}
+          onSend={handleSend}
+          sending={sending}
+          error={sendError}
+          enabled={canFeedback}
+        />
+      )}
     </div>
   );
 }

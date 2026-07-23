@@ -31,20 +31,25 @@ describe("eventLabel", () => {
 
 describe("statusPill", () => {
   it("실제 상태를 StatusPill 색상·라벨로 매핑한다", () => {
-    expect(statusPill("received")).toEqual({ status: "received", label: "접수됨" });
+    expect(statusPill("received")).toEqual({ status: "received", label: "미배정" });
     expect(statusPill("assigned")).toEqual({ status: "progress", label: "배정됨" });
     expect(statusPill("in_progress")).toEqual({ status: "progress", label: "처리중" });
     expect(statusPill("done")).toEqual({ status: "done", label: "완료" });
+    expect(statusPill("reopened")).toEqual({ status: "progress", label: "재확인" });
   });
 });
 
 describe("formatStatusChange", () => {
   it("from→to 를 라벨로 조립한다", () => {
-    expect(formatStatusChange({ from: "received", to: "in_progress" })).toBe("접수됨 → 처리중");
+    expect(formatStatusChange({ from: "received", to: "in_progress" })).toBe("미배정 → 처리중");
   });
 
   it("from 없으면 to 라벨만", () => {
     expect(formatStatusChange({ to: "done" })).toBe("완료");
+  });
+
+  it("재확인 요청(done→reopened)을 라벨로 조립한다", () => {
+    expect(formatStatusChange({ from: "done", to: "reopened" })).toBe("완료 → 재확인");
   });
 
   it("알 수 없는 코드는 원문 유지", () => {

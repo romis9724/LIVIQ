@@ -8,7 +8,6 @@ import {
   eventLabel,
   formatStatusChange,
   hasReply,
-  nextStatuses,
   shortDate,
   sortEvents,
 } from "./data";
@@ -43,13 +42,15 @@ describe("countByStatus", () => {
       inquiry({ id: "1", status: "received" }),
       inquiry({ id: "2", status: "assigned" }),
       inquiry({ id: "3", status: "assigned" }),
-      inquiry({ id: "4", status: "done" }),
+      inquiry({ id: "4", status: "reopened" }),
+      inquiry({ id: "5", status: "done" }),
     ];
     expect(countByStatus(rows)).toEqual({
-      all: 4,
+      all: 5,
       received: 1,
       assigned: 2,
       in_progress: 0,
+      reopened: 1,
       done: 1,
     });
   });
@@ -60,19 +61,9 @@ describe("countByStatus", () => {
       received: 0,
       assigned: 0,
       in_progress: 0,
+      reopened: 0,
       done: 0,
     });
-  });
-});
-
-describe("nextStatuses", () => {
-  it("현 상태 이후의 전진 상태만 반환한다", () => {
-    expect(nextStatuses("received")).toEqual(["assigned", "in_progress", "done"]);
-    expect(nextStatuses("in_progress")).toEqual(["done"]);
-  });
-
-  it("done 은 다음 상태가 없다", () => {
-    expect(nextStatuses("done")).toEqual([]);
   });
 });
 
@@ -95,7 +86,7 @@ describe("eventLabel", () => {
 
 describe("formatStatusChange", () => {
   it("from·to 를 상태 라벨로 환산", () => {
-    expect(formatStatusChange({ from: "received", to: "assigned" })).toBe("접수됨 → 배정됨");
+    expect(formatStatusChange({ from: "received", to: "assigned" })).toBe("미배정 → 배정됨");
   });
 
   it("from 이 없으면 to 만", () => {

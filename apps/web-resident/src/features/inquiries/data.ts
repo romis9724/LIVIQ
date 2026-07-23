@@ -3,10 +3,11 @@ import type { StatusKind } from "@liviq/ui";
 import type { InquiryEvent, InquiryEventType, InquiryStatus, Priority } from "@/lib/api";
 
 export const STATUS_LABEL: Record<InquiryStatus, string> = {
-  received: "접수됨",
+  received: "미배정",
   assigned: "배정됨",
   in_progress: "처리중",
   done: "완료",
+  reopened: "재확인",
 };
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
@@ -21,6 +22,7 @@ const STATUS_PILL_KIND: Record<InquiryStatus, StatusKind> = {
   assigned: "progress",
   in_progress: "progress",
   done: "done",
+  reopened: "progress",
 };
 
 export function statusPill(status: InquiryStatus): { status: StatusKind; label: string } {

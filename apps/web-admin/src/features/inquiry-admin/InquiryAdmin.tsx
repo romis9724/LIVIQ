@@ -6,35 +6,34 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 
 import {
   ApiError,
+  ackInquiry,
   assignInquiry,
-  getMe,
+  completeInquiry,
   listAdminInquiries,
   listCodeGroups,
   listInquiryEvents,
   listStaff,
   replyInquiry,
+  setInquiryCategory,
   setInquiryPriority,
-  updateInquiryStatus,
+  type CodeGroup,
   type Inquiry,
   type InquiryEvent,
-  type InquiryStatus,
   type Priority,
   type StaffMember,
 } from "@/lib/api";
-import { INQUIRY_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
+import { INQUIRY_CATEGORY_GROUP, codeLabelMap, codeOptions, type CodeOption } from "@/lib/codes";
 import {
   FILTERS,
   PRIORITY_META,
   PRIORITY_OPTIONS,
   STATUS_META,
-  STATUS_ORDER,
   commentBody,
   commentKind,
   countByStatus,
   eventLabel,
   formatStatusChange,
   hasReply,
-  nextStatuses,
   shortDate,
   sortEvents,
   type FilterId,
@@ -53,7 +52,7 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-/** userId → 표시 라벨(email 우선, 없으면 축약 id). */
+/** userId → 표시 라벨(성명 우선, 없으면 축약 id). */
 function staffLabel(map: Map<string, string>, userId: string | null): string | null {
   if (!userId) return null;
   return map.get(userId) ?? userId.slice(0, 8);
@@ -68,10 +67,9 @@ export function InquiryAdmin() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 배정 드롭다운·역행 권한·라벨용 보조 데이터 — 실패해도 목록은 막지 않는다(getMe 패턴).
-  const [isManager, setIsManager] = useState(false);
+  // 배정 드롭다운·분류 select·라벨용 보조 데이터 — 실패해도 목록은 막지 않는다.
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [categoryMap, setCategoryMap] = useState<Map<string, string>>(new Map());
+  const [codeGroups, setCodeGroups] = useState<CodeGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
@@ -93,14 +91,11 @@ export function InquiryAdmin() {
 
   useEffect(() => {
     void load();
-    void getMe()
-      .then((me) => setIsManager(me.roles.includes("MANAGER")))
-      .catch(() => undefined);
     void listStaff()
       .then(setStaff)
       .catch(() => undefined);
     void listCodeGroups()
-      .then((groups) => setCategoryMap(codeLabelMap(groups, INQUIRY_CATEGORY_GROUP)))
+      .then(setCodeGroups)
       .catch(() => undefined);
   }, [load]);
 
@@ -111,11 +106,24 @@ export function InquiryAdmin() {
     [],
   );
 
+  // userId → 표시 라벨(성명 우선, 없으면 email). 목록 담당 컬럼·상세 스레드 공용.
   const staffMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const member of staff) if (member.email) map.set(member.userId, member.email);
+    for (const member of staff) {
+      const label = member.name ?? member.email;
+      if (label) map.set(member.userId, label);
+    }
     return map;
   }, [staff]);
+
+  const categoryMap = useMemo(
+    () => codeLabelMap(codeGroups, INQUIRY_CATEGORY_GROUP),
+    [codeGroups],
+  );
+  const categoryOptions = useMemo(
+    () => codeOptions(codeGroups, INQUIRY_CATEGORY_GROUP),
+    [codeGroups],
+  );
 
   const counts = useMemo(() => countByStatus(inquiries), [inquiries]);
   const visible = useMemo(() => {
@@ -193,10 +201,10 @@ export function InquiryAdmin() {
       {selected ? (
         <InquiryDetail
           inquiry={selected}
-          isManager={isManager}
           staff={staff}
           staffMap={staffMap}
           categoryMap={categoryMap}
+          categoryOptions={categoryOptions}
           onClose={() => setSelectedId(null)}
           onUpdated={patchLocal}
           showToast={showToast}
@@ -363,10 +371,10 @@ function InquiryRow({ inquiry, categoryMap, staffMap, onOpen }: InquiryRowProps)
 
 interface InquiryDetailProps {
   inquiry: Inquiry;
-  isManager: boolean;
   staff: readonly StaffMember[];
   staffMap: Map<string, string>;
   categoryMap: Map<string, string>;
+  categoryOptions: readonly CodeOption[];
   onClose: () => void;
   onUpdated: (updated: Inquiry) => void;
   showToast: (message: string, tone?: ToastTone) => void;
@@ -374,10 +382,10 @@ interface InquiryDetailProps {
 
 function InquiryDetail({
   inquiry,
-  isManager,
   staff,
   staffMap,
   categoryMap,
+  categoryOptions,
   onClose,
   onUpdated,
   showToast,
@@ -400,6 +408,22 @@ function InquiryDetail({
     void loadEvents();
   }, [loadEvents]);
 
+  // 열람 확인(ack) — 담당자 본인이 assigned 를 열면 서버가 처리중 전환, 그 외 no-op.
+  // inquiry.id 당 1회. 반환 inquiry 로 목록/상세 동기화 후 스레드도 갱신(전환 이벤트 반영).
+  useEffect(() => {
+    let alive = true;
+    void ackInquiry(inquiry.id)
+      .then((updated) => {
+        if (!alive) return;
+        onUpdated(updated);
+        void loadEvents();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [inquiry.id, onUpdated, loadEvents]);
+
   // 열려 있는 동안 Escape 로 닫기 + 배경 스크롤 잠금.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -412,15 +436,22 @@ function InquiryDetail({
   const status = STATUS_META[inquiry.status];
   const priority = inquiry.priority ? PRIORITY_META[inquiry.priority] : null;
   const category = inquiry.categoryCodeId ? (categoryMap.get(inquiry.categoryCodeId) ?? null) : null;
-  const assigned = inquiry.assigneeUserId !== null;
   const replyExists = events !== null && hasReply(events);
 
-  // 상태 게이트 — 서버가 최종 방어(422/403). UI 는 명백한 불가만 비활성.
-  function statusGate(target: InquiryStatus): string | null {
-    if (target === "in_progress" && !assigned) return "담당자 배정 후 처리중 전환 가능";
-    if (target === "done" && events !== null && !replyExists) return "답변 등록 후 완료 가능";
+  // 완료 잠금 — done 이면 모든 편집 비활성(재개는 입주민만). 서버가 최종 방어(422/403).
+  const isDone = inquiry.status === "done";
+  const locked = busy || isDone;
+  const canCompleteStatus = inquiry.status === "in_progress" || inquiry.status === "reopened";
+
+  // 완료 게이트 — 처리중/재확인 + 답변 1건 이상이라야 활성. 이유 문구로 안내.
+  function completeGate(): string | null {
+    if (isDone) return null;
+    if (!canCompleteStatus) return "처리중 상태에서 완료할 수 있습니다";
+    if (events === null) return "처리 내역을 불러오는 중입니다";
+    if (!replyExists) return "답변 등록 후 완료 가능";
     return null;
   }
+  const completeHint = completeGate();
 
   async function run(action: () => Promise<Inquiry>, message: string, reloadThread = true) {
     setBusy(true);
@@ -445,11 +476,13 @@ function InquiryDetail({
     void run(() => setInquiryPriority(inquiry.id, next), "우선순위를 변경했습니다.", false);
   }
 
-  function handleStatus(target: InquiryStatus) {
-    void run(
-      () => updateInquiryStatus(inquiry.id, target),
-      `상태를 '${STATUS_META[target].label}'(으)로 변경했습니다.`,
-    );
+  function handleCategory(value: string) {
+    const next = value === "" ? null : value;
+    void run(() => setInquiryCategory(inquiry.id, next), "분류를 변경했습니다.", false);
+  }
+
+  function handleComplete() {
+    void run(() => completeInquiry(inquiry.id), "민원을 완료 처리했습니다.");
   }
 
   async function handleReply(e: FormEvent) {
@@ -468,11 +501,6 @@ function InquiryDetail({
       setBusy(false);
     }
   }
-
-  const forward = nextStatuses(inquiry.status);
-  const backward = isManager
-    ? STATUS_ORDER.slice(0, STATUS_ORDER.indexOf(inquiry.status)).reverse()
-    : [];
 
   const assignableStaff = staff.filter(
     (m) => m.email && (m.roles.includes("MANAGER") || m.roles.includes("STAFF")),
@@ -520,12 +548,18 @@ function InquiryDetail({
         <div className="ia-panel__body">
           <p className="ia-panel__origin">{inquiry.body}</p>
 
+          {isDone ? (
+            <p className="ia-locked" role="status">
+              완료된 민원은 수정할 수 없습니다.
+            </p>
+          ) : null}
+
           <div className="ia-controls">
             <label className="ia-control">
               <span className="ia-control__label">담당자</span>
               <select
                 className="ia-select"
-                disabled={busy}
+                disabled={locked}
                 value={inquiry.assigneeUserId ?? ""}
                 onChange={(e) => handleAssign(e.target.value)}
               >
@@ -534,7 +568,7 @@ function InquiryDetail({
                 </option>
                 {assignableStaff.map((m) => (
                   <option key={m.userId} value={m.userId}>
-                    {m.email}
+                    {m.name ?? m.email}
                   </option>
                 ))}
               </select>
@@ -544,7 +578,7 @@ function InquiryDetail({
               <span className="ia-control__label">우선순위</span>
               <select
                 className="ia-select"
-                disabled={busy}
+                disabled={locked}
                 value={inquiry.priority ?? ""}
                 onChange={(e) => handlePriority(e.target.value)}
               >
@@ -555,41 +589,38 @@ function InquiryDetail({
                 ))}
               </select>
             </label>
+
+            <label className="ia-control">
+              <span className="ia-control__label">분류</span>
+              <select
+                className="ia-select"
+                disabled={locked}
+                value={inquiry.categoryCodeId ?? ""}
+                onChange={(e) => handleCategory(e.target.value)}
+              >
+                <option value="">분류 없음</option>
+                {categoryOptions.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
-          <div className="ia-control__label">상태 변경</div>
-          <div className="ia-statusbtns">
-            {forward.map((target, i) => {
-              const gate = statusGate(target);
-              return (
-                <span key={target} className="ia-statusbtn__wrap">
-                  <button
-                    type="button"
-                    className={i === 0 ? "btn btn--primary btn--sm" : "btn btn--secondary btn--sm"}
-                    disabled={busy || gate !== null}
-                    onClick={() => handleStatus(target)}
-                  >
-                    {STATUS_META[target].label}
-                  </button>
-                  {gate ? <span className="ia-hint">{gate}</span> : null}
-                </span>
-              );
-            })}
-            {backward.map((target) => (
+          {!isDone ? (
+            <div className="ia-complete">
               <button
-                key={target}
                 type="button"
-                className="btn btn--ghost btn--sm"
-                disabled={busy}
-                onClick={() => handleStatus(target)}
+                className="btn btn--primary btn--sm"
+                disabled={busy || completeHint !== null}
+                onClick={handleComplete}
               >
-                ↩ {STATUS_META[target].label}
+                민원 완료
               </button>
-            ))}
-            {forward.length === 0 && backward.length === 0 ? (
-              <span className="ia-hint">더 변경할 상태가 없습니다.</span>
-            ) : null}
-          </div>
+              {completeHint ? <span className="ia-hint">{completeHint}</span> : null}
+            </div>
+          ) : null}
 
           <div className="ia-control__label ia-thread__label">처리 내역</div>
           <Thread events={events} error={eventsError} staffMap={staffMap} onRetry={loadEvents} />
@@ -604,11 +635,15 @@ function InquiryDetail({
               rows={3}
               placeholder="입주민에게 전달할 답변을 입력하세요."
               value={reply}
-              disabled={busy}
+              disabled={locked}
               onChange={(e) => setReply(e.target.value)}
             />
             <div className="ia-composer__actions">
-              <Button type="submit" variant="primary" disabled={busy || reply.trim().length === 0}>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={locked || reply.trim().length === 0}
+              >
                 답변 등록
               </Button>
             </div>

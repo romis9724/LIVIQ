@@ -262,7 +262,7 @@ export async function reindexDocument(id: string): Promise<DocumentItem> {
 
 // ── 민원 관리 (docs/01 §13) ────────────────────────────────────────────────
 
-export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
+export type InquiryStatus = "received" | "assigned" | "in_progress" | "done" | "reopened";
 export type Priority = "urgent" | "normal" | "low";
 // ai_classified 는 신규 생성 없음 — 과거 이벤트 읽기 호환(ADR-0018).
 export type InquiryEventType =
@@ -369,11 +369,35 @@ export async function assignInquiry(id: string, assigneeUserId: string): Promise
   return toInquiry(await response.json());
 }
 
-export async function updateInquiryStatus(id: string, status: InquiryStatus): Promise<Inquiry> {
-  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/status`, {
+/** 열람 확인(ack) — 서버가 caller==담당자 && assigned 일 때만 in_progress 전환, 그 외 no-op. body 없음. */
+export async function ackInquiry(id: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/ack`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+/** 민원 완료 처리 — 담당자·소장, in_progress/reopened + 답변 1건 이상이라야 성공(아니면 422/403). body 없음. */
+export async function completeInquiry(id: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/complete`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+/** 분류 코드 지정(null=분류 없음). 코드 검증·done 이면 422. */
+export async function setInquiryCategory(
+  id: string,
+  categoryCodeId: string | null,
+): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/category`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ category_code_id: categoryCodeId }),
   });
   await ensureOk(response);
   return toInquiry(await response.json());
@@ -1344,6 +1368,7 @@ export interface StaffMember {
   status: string; // invited|active|inactive
   invitedAt: string;
   email: string | null; // 복호 실패·PII 부재 시 null
+  name: string | null; // pii_vault 복호 성명, 부재·실패 시 null
 }
 
 function toStaff(raw: {
@@ -1352,6 +1377,7 @@ function toStaff(raw: {
   status: string;
   invited_at: string;
   email?: string | null;
+  name?: string | null;
 }): StaffMember {
   return {
     userId: raw.user_id,
@@ -1359,6 +1385,7 @@ function toStaff(raw: {
     status: raw.status,
     invitedAt: raw.invited_at,
     email: raw.email ?? null,
+    name: raw.name ?? null,
   };
 }
 
@@ -1374,6 +1401,7 @@ export async function listStaff(): Promise<StaffMember[]> {
       status: string;
       invited_at: string;
       email?: string | null;
+      name?: string | null;
     }[]
   ).map(toStaff);
 }
