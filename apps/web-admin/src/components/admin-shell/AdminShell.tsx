@@ -122,23 +122,41 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="admin-nav" aria-label="관리 메뉴">
-          {nav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            const badge = badges[item.href];
+          {nav.map((group, groupIndex) => {
+            const headingId = group.title ? `admin-nav-group-${groupIndex}` : undefined;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="admin-nav__item"
-                data-active={active || undefined}
-                aria-current={active ? "page" : undefined}
+              <div
+                key={group.title ?? `group-${groupIndex}`}
+                className="admin-nav__group"
+                role="group"
+                aria-labelledby={headingId}
               >
-                <span className="admin-nav__icon" aria-hidden="true">
-                  {item.icon}
-                </span>
-                <span className="admin-nav__label">{item.label}</span>
-                {badge ? <span className="admin-nav__badge">{badge}</span> : null}
-              </Link>
+                {group.title ? (
+                  <p className="admin-nav__section" id={headingId}>
+                    {group.title}
+                  </p>
+                ) : null}
+                {group.items.map((item) => {
+                  const active =
+                    pathname === item.href || pathname.startsWith(`${item.href}/`);
+                  const badge = badges[item.href];
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="admin-nav__item"
+                      data-active={active || undefined}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      <span className="admin-nav__icon" aria-hidden="true">
+                        {item.icon}
+                      </span>
+                      <span className="admin-nav__label">{item.label}</span>
+                      {badge ? <span className="admin-nav__badge">{badge}</span> : null}
+                    </Link>
+                  );
+                })}
+              </div>
             );
           })}
         </nav>

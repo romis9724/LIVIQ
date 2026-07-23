@@ -15,7 +15,16 @@ class AiStats(BaseModel):
     avg_token_output: float | None
     answer_rate: float | None  # status=answered 비율
     fallback_rate: float | None  # status=fallback 비율
-    needs_review_rate: float | None  # 검수 플래그(대기·완료 포함) 비율
+
+
+class ActionQueueStats(BaseModel):
+    """오늘 할 일 — 기간 무관 현재 상태 open 카운트(대시보드 최상단). tenant 격리(규칙 3)."""
+
+    approvals_pending: int  # 가입 승인 대기(User.status=pending)
+    inquiries_unassigned: int  # 미배정 민원(status=received)
+    inquiries_in_progress: int  # 처리중 민원(status=in_progress)
+    notices_draft: int  # 임시저장 공지(status=draft)
+    notices_scheduled: int  # 예약 발행 예정 공지(status=scheduled)
 
 
 class CacheStats(BaseModel):
@@ -35,6 +44,7 @@ class BudgetStats(BaseModel):
 
 class DashboardStatsOut(BaseModel):
     days: int
+    actions: ActionQueueStats  # 오늘 할 일(기간 무관 open 카운트)
     ai: AiStats
     cache: CacheStats
     budget: BudgetStats
