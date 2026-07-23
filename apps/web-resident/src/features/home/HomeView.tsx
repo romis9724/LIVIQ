@@ -179,7 +179,7 @@ function NoticeSection({ state }: { state: Loadable<Notice[]> }) {
         state.data.map((n, i) => (
           <Link
             key={n.id}
-            href="/notices"
+            href={`/notices?id=${n.id}`}
             className={i < state.data.length - 1 ? "notice-row notice-row--divider" : "notice-row"}
           >
             <span className="notice-row__body">

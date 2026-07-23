@@ -2,6 +2,7 @@
 
 import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, downloadAttachment, listNotices, type Attachment, type Notice } from "@/lib/api";
@@ -24,7 +25,9 @@ export function NoticeBoard() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // 홈 공지 카드 등에서 ?id=<공지> 로 진입하면 해당 상세를 바로 연다.
+  const initialId = useSearchParams().get("id");
+  const [openId, setOpenId] = useState<string | null>(initialId);
 
   const load = useCallback(async () => {
     try {
