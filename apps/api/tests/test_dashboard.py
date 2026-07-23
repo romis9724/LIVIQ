@@ -97,9 +97,7 @@ async def _seed_dashboard(session: AsyncSession) -> None:
         Notice(tenant_id=TENANT_ID, title="임시", body="본문", status="draft", audience="ALL")
     )
     session.add(
-        Notice(
-            tenant_id=TENANT_ID, title="예약", body="본문", status="scheduled", audience="ALL"
-        )
+        Notice(tenant_id=TENANT_ID, title="예약", body="본문", status="scheduled", audience="ALL")
     )
     await session.flush()
 
