@@ -25,12 +25,12 @@ export function NoticeBoard() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // 열린 상세는 URL(?id=<공지>)이 단일 출처 — 목록↔상세가 히스토리 항목이 되어
-  // 홈에서 딥링크로 들어와도 뒤로가기(OS·in-app 모두)가 공지 목록으로 돌아간다.
+  // 열린 상세는 URL(?id=<공지>)이 단일 출처 — 선택 시 push로 히스토리 항목을 쌓고,
+  // 뒤로가기는 router.back()으로 "온 곳"(홈이면 홈·목록이면 목록)으로 그대로 돌아간다.
   const router = useRouter();
   const openId = useSearchParams().get("id");
   const openNotice = useCallback((id: string) => router.push(`/notices?id=${id}`), [router]);
-  const backToList = useCallback(() => router.push("/notices"), [router]);
+  const goBack = useCallback(() => router.back(), [router]);
 
   const load = useCallback(async () => {
     try {
@@ -49,7 +49,7 @@ export function NoticeBoard() {
 
   const open = openId ? notices.find((n) => n.id === openId) ?? null : null;
   if (open) {
-    return <NoticeDetail notice={open} onBack={backToList} />;
+    return <NoticeDetail notice={open} onBack={goBack} />;
   }
 
   return (
