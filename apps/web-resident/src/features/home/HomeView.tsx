@@ -9,6 +9,7 @@ import {
   listNotices,
   listNotifications,
   type Inquiry,
+  type Me,
   type Notice,
 } from "@/lib/api";
 import { feeDelta, formatWon, getFees, type FeeData } from "../fees/api";
@@ -41,7 +42,7 @@ export function HomeView() {
   const [inquiry, setInquiry] = useState<Loadable<Inquiry | null>>({ status: "loading" });
   const [unread, setUnread] = useState<Loadable<number>>({ status: "loading" });
   // 인사말용 본인 실명·세대. 실패해도 "안녕하세요" 폴백이라 별도 오류 UI 없음.
-  const [greetingText, setGreetingText] = useState("안녕하세요");
+  const [me, setMe] = useState<Me | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -60,7 +61,7 @@ export function HomeView() {
     run(listMyInquiries().then((all) => recentInquiry(all)), setInquiry);
     run(listNotifications().then(unreadCount), setUnread);
     getMe()
-      .then((me) => alive && setGreetingText(greeting(me.displayName, me.unitLabel)))
+      .then((data) => alive && setMe(data))
       .catch(() => {}); // 실패 시 기본 인사말 유지
 
     return () => {
@@ -71,7 +72,10 @@ export function HomeView() {
   return (
     <div className="home">
       <header className="home__header">
-        <h1 className="home__greeting">{greetingText}</h1>
+        <div className="home__identity">
+          <h1 className="home__greeting">{greeting(me?.displayName ?? null)}</h1>
+          {me?.unitLabel ? <span className="home__unit">{me.unitLabel}</span> : null}
+        </div>
         {unread.status === "ready" && unread.data > 0 ? (
           <Link href="/me" className="home__unread">
             <span aria-hidden="true">🔔</span> 안 읽은 알림 {unread.data}건
