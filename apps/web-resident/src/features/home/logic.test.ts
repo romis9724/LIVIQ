@@ -116,16 +116,11 @@ describe("currentPeriod / periodLabel", () => {
 });
 
 describe("greeting", () => {
-  it("이름과 세대가 있으면 둘 다 노출한다", () => {
-    expect(greeting("최주민", "401동 201호")).toBe("안녕하세요, 최주민님 (401동 201호)");
-  });
-
-  it("세대가 없으면 이름만 노출한다", () => {
-    expect(greeting("최주민", null)).toBe("안녕하세요, 최주민님");
+  it("이름이 있으면 이름만 노출한다(세대는 별도 표기)", () => {
+    expect(greeting("최주민")).toBe("안녕하세요, 최주민님");
   });
 
   it("이름이 없으면 기본 인사말", () => {
-    expect(greeting(null, "401동 201호")).toBe("안녕하세요");
-    expect(greeting(null, null)).toBe("안녕하세요");
+    expect(greeting(null)).toBe("안녕하세요");
   });
 });

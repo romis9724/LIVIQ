@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { NoticeBoard } from "@/features/notices/NoticeBoard";
 
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function NoticesPage() {
-  return <NoticeBoard />;
+  // NoticeBoard 가 useSearchParams(?id=) 를 쓰므로 Suspense 경계 필요(App Router 프리렌더).
+  return (
+    <Suspense fallback={null}>
+      <NoticeBoard />
+    </Suspense>
+  );
 }

@@ -36,11 +36,10 @@ export function periodLabel(period: string): string {
 }
 
 /**
- * 홈 인사말. 실명·세대는 서버가 본인 vault만 복호해 내려준 값(마스킹 대상 아님).
- * 이름+세대 → "안녕하세요, 최주민님 (401동 201호)" · 이름만 → "안녕하세요, 최주민님" ·
- * 이름 없음 → "안녕하세요".
+ * 홈 인사말. 실명은 서버가 본인 vault만 복호해 내려준 값(마스킹 대상 아님).
+ * 세대(동/호)는 인사말에 넣지 않고 별도 회색 보조 텍스트로 표기(나 메뉴와 동일).
+ * 이름 있음 → "안녕하세요, 최주민님" · 이름 없음 → "안녕하세요".
  */
-export function greeting(name: string | null, unit: string | null): string {
-  if (!name) return "안녕하세요";
-  return unit ? `안녕하세요, ${name}님 (${unit})` : `안녕하세요, ${name}님`;
+export function greeting(name: string | null): string {
+  return name ? `안녕하세요, ${name}님` : "안녕하세요";
 }

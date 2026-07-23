@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button, CitationCard, ConfidenceBadge, EmptyState, Skeleton } from "@liviq/ui";
 import type { ConfidenceStatus } from "@liviq/ui";
 import { ApiError, feeDelta, formatWon, getFees, type FeeData } from "./api";
@@ -34,6 +35,7 @@ const FALLBACK_TEXT =
   "확정 데이터만으로는 정확히 설명하기 어려워요. 자세한 산출 내역은 관리사무소에서 확인해 주세요.";
 
 export function FeesView() {
+  const router = useRouter();
   const [period, setPeriod] = useState<string>(currentMonth());
   const [data, setData] = useState<FeeData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,9 +68,19 @@ export function FeesView() {
   return (
     <div className="fees">
       <header className="fees__header">
-        <h1 id="main" className="fees__title">
-          관리비
-        </h1>
+        <div className="fees__head-left">
+          <button
+            type="button"
+            className="fees__back"
+            aria-label="뒤로가기"
+            onClick={() => router.back()}
+          >
+            ←
+          </button>
+          <h1 id="main" className="fees__title">
+            관리비
+          </h1>
+        </div>
         <div className="fees__month-field">
           <label htmlFor="fees-month" className="sr-only">
             조회 월
