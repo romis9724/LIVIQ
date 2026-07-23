@@ -263,24 +263,38 @@ export async function reindexDocument(id: string): Promise<DocumentItem> {
 // ── 민원 관리 (docs/01 §13) ────────────────────────────────────────────────
 
 export type InquiryStatus = "received" | "assigned" | "in_progress" | "done";
-export type AiPriority = "urgent" | "normal" | "low";
+export type Priority = "urgent" | "normal" | "low";
+// ai_classified 는 신규 생성 없음 — 과거 이벤트 읽기 호환(ADR-0018).
+export type InquiryEventType =
+  | "created"
+  | "ai_classified"
+  | "assigned"
+  | "status_changed"
+  | "comment";
 
 export interface Inquiry {
   id: string;
   title: string;
   body: string;
   status: InquiryStatus;
-  aiPriority: AiPriority | null;
-  categoryId: string | null;
-  aiSuggestedCategoryId: string | null;
+  priority: Priority | null;
+  categoryCodeId: string | null;
   assigneeUserId: string | null;
   authorUserId: string;
   createdAt: string;
 }
 
+export interface InquiryEvent {
+  id: string;
+  type: InquiryEventType;
+  actorUserId: string | null;
+  payload: Record<string, unknown> | null;
+  createdAt: string;
+}
+
 export interface AdminInquiryParams {
   status?: InquiryStatus;
-  categoryId?: string;
+  categoryCodeId?: string;
 }
 
 interface RawInquiry {
@@ -288,11 +302,18 @@ interface RawInquiry {
   title: string;
   body: string;
   status: InquiryStatus;
-  ai_priority: AiPriority | null;
-  category_id: string | null;
-  ai_suggested_category_id: string | null;
+  priority: Priority | null;
+  category_code_id: string | null;
   assignee_user_id: string | null;
   author_user_id: string;
+  created_at: string;
+}
+
+interface RawInquiryEvent {
+  id: string;
+  type: InquiryEventType;
+  actor_user_id: string | null;
+  payload: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -302,11 +323,20 @@ function toInquiry(raw: RawInquiry): Inquiry {
     title: raw.title,
     body: raw.body,
     status: raw.status,
-    aiPriority: raw.ai_priority,
-    categoryId: raw.category_id,
-    aiSuggestedCategoryId: raw.ai_suggested_category_id,
+    priority: raw.priority,
+    categoryCodeId: raw.category_code_id,
     assigneeUserId: raw.assignee_user_id,
     authorUserId: raw.author_user_id,
+    createdAt: raw.created_at,
+  };
+}
+
+function toInquiryEvent(raw: RawInquiryEvent): InquiryEvent {
+  return {
+    id: raw.id,
+    type: raw.type,
+    actorUserId: raw.actor_user_id,
+    payload: raw.payload,
     createdAt: raw.created_at,
   };
 }
@@ -315,7 +345,7 @@ function toInquiry(raw: RawInquiry): Inquiry {
 export function buildInquiryQuery(params: AdminInquiryParams): string {
   const search = new URLSearchParams();
   if (params.status) search.set("status", params.status);
-  if (params.categoryId) search.set("category_id", params.categoryId);
+  if (params.categoryCodeId) search.set("category_code_id", params.categoryCodeId);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }
@@ -347,6 +377,38 @@ export async function updateInquiryStatus(id: string, status: InquiryStatus): Pr
   });
   await ensureOk(response);
   return toInquiry(await response.json());
+}
+
+/** 우선순위 지정(null=지정안함). 담당자·소장. */
+export async function setInquiryPriority(id: string, priority: Priority | null): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/priority`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ priority }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+/** 담당자 답변(payload kind=reply). 담당자 본인·소장만(아니면 403). */
+export async function replyInquiry(id: string, body: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/comments`, {
+    method: "POST",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+/** 처리 내역 타임라인 — 관리자도 조회 가능(경로는 /admin 아님 주의). */
+export async function listInquiryEvents(id: string): Promise<InquiryEvent[]> {
+  const response = await apiFetch(`${API_BASE_URL}/inquiries/${id}/events`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawInquiryEvent[]).map(toInquiryEvent);
 }
 
 // ── 공지사항 게시판 (docs/01 §13 · H8-1, 규칙 6 — 발송은 사람 확정) ───────────────

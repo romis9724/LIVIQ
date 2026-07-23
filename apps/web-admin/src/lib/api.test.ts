@@ -35,13 +35,13 @@ describe("buildInquiryQuery", () => {
     expect(buildInquiryQuery({ status: "assigned" })).toBe("?status=assigned");
   });
 
-  it("category_id 만 조립", () => {
-    expect(buildInquiryQuery({ categoryId: "cat-1" })).toBe("?category_id=cat-1");
+  it("category_code_id 만 조립", () => {
+    expect(buildInquiryQuery({ categoryCodeId: "cat-1" })).toBe("?category_code_id=cat-1");
   });
 
   it("둘 다 있으면 함께 조립", () => {
-    expect(buildInquiryQuery({ status: "done", categoryId: "cat-1" })).toBe(
-      "?status=done&category_id=cat-1",
+    expect(buildInquiryQuery({ status: "done", categoryCodeId: "cat-1" })).toBe(
+      "?status=done&category_code_id=cat-1",
     );
   });
 });

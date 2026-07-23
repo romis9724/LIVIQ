@@ -7,13 +7,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ApiError,
   createInquiry,
+  listInquiryCategories,
   listInquiryEvents,
   listMyInquiries,
+  postInquiryFeedback,
   type Inquiry,
+  type InquiryCategory,
   type InquiryEvent,
 } from "@/lib/api";
 import {
   PRIORITY_LABEL,
+  commentBody,
+  commentKind,
   eventLabel,
   formatStatusChange,
   sortEvents,
@@ -41,10 +46,28 @@ function shortDate(iso: string): string {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
+function messageTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${date.getMonth() + 1}/${date.getDate()} ${hh}:${mm}`;
+}
+
+// 카테고리 코드 id → 라벨. 미매칭/없음이면 null.
+function categoryLabelOf(
+  categories: readonly InquiryCategory[],
+  id: string | null,
+): string | null {
+  if (!id) return null;
+  return categories.find((c) => c.id === id)?.label ?? null;
+}
+
 export function InquiryCenter() {
   const [view, setView] = useState<View>("list");
   const [selected, setSelected] = useState<Inquiry | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
+  const [categories, setCategories] = useState<InquiryCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -71,6 +94,21 @@ export function InquiryCenter() {
     void load();
   }, [load]);
 
+  // 카테고리 라벨 매핑용 — 실패해도 화면 차단 없이 칩만 생략(비필수).
+  useEffect(() => {
+    let alive = true;
+    listInquiryCategories()
+      .then((items) => {
+        if (alive) setCategories(items);
+      })
+      .catch(() => {
+        // 카테고리 로드 실패는 무시 — 칩·select 옵션만 비워둔다
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(
     () => () => {
       if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -89,7 +127,13 @@ export function InquiryCenter() {
   );
 
   if (selected) {
-    return <InquiryDetail inquiry={selected} onBack={() => setSelected(null)} />;
+    return (
+      <InquiryDetail
+        inquiry={selected}
+        categories={categories}
+        onBack={() => setSelected(null)}
+      />
+    );
   }
 
   return (
@@ -123,6 +167,7 @@ export function InquiryCenter() {
       {view === "list" ? (
         <InquiryList
           inquiries={inquiries}
+          categories={categories}
           loading={loading}
           loadError={loadError}
           onSelect={setSelected}
@@ -133,7 +178,11 @@ export function InquiryCenter() {
           onSubmitCta={() => setView("submit")}
         />
       ) : (
-        <SubmitForm onSubmitted={handleSubmitted} onError={(m) => showToast(m, "danger")} />
+        <SubmitForm
+          categories={categories}
+          onSubmitted={handleSubmitted}
+          onError={(m) => showToast(m, "danger")}
+        />
       )}
 
       {toast ? (
@@ -147,6 +196,7 @@ export function InquiryCenter() {
 
 interface InquiryListProps {
   inquiries: readonly Inquiry[];
+  categories: readonly InquiryCategory[];
   loading: boolean;
   loadError: string | null;
   onSelect: (inquiry: Inquiry) => void;
@@ -156,6 +206,7 @@ interface InquiryListProps {
 
 function InquiryList({
   inquiries,
+  categories,
   loading,
   loadError,
   onSelect,
@@ -199,6 +250,7 @@ function InquiryList({
     <main className="inq__list">
       {inquiries.map((inquiry) => {
         const pill = statusPill(inquiry.status);
+        const catLabel = categoryLabelOf(categories, inquiry.categoryCodeId);
         return (
           <button
             key={inquiry.id}
@@ -207,9 +259,12 @@ function InquiryList({
             onClick={() => onSelect(inquiry)}
           >
             <div className="inq-card__top">
-              {inquiry.aiPriority ? (
-                <span className="inq-card__cat">{PRIORITY_LABEL[inquiry.aiPriority]}</span>
+              {inquiry.priority ? (
+                <span className="inq-card__cat" data-priority={inquiry.priority}>
+                  {PRIORITY_LABEL[inquiry.priority]}
+                </span>
               ) : null}
+              {catLabel ? <span className="inq-card__tag">{catLabel}</span> : null}
               <StatusPill status={pill.status} label={pill.label} />
               <span className="inq-card__date">{shortDate(inquiry.createdAt)}</span>
             </div>
@@ -222,13 +277,15 @@ function InquiryList({
 }
 
 interface SubmitFormProps {
+  categories: readonly InquiryCategory[];
   onSubmitted: (created: Inquiry) => void | Promise<void>;
   onError: (message: string) => void;
 }
 
-function SubmitForm({ onSubmitted, onError }: SubmitFormProps) {
+function SubmitForm({ categories, onSubmitted, onError }: SubmitFormProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+  const [categoryCodeId, setCategoryCodeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
@@ -236,9 +293,14 @@ function SubmitForm({ onSubmitted, onError }: SubmitFormProps) {
     if (!title.trim() || !body.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const created = await createInquiry({ title: title.trim(), body: body.trim() });
+      const created = await createInquiry({
+        title: title.trim(),
+        body: body.trim(),
+        categoryCodeId: categoryCodeId || null,
+      });
       setTitle("");
       setBody("");
+      setCategoryCodeId("");
       await onSubmitted(created);
     } catch (err) {
       onError(err instanceof ApiError || err instanceof Error ? err.message : "접수에 실패했습니다.");
@@ -261,16 +323,28 @@ function SubmitForm({ onSubmitted, onError }: SubmitFormProps) {
           <div className="inq-field-help">사진 첨부는 추후 지원될 예정입니다.</div>
         </div>
 
-        <div className="inq-ai">
-          <div className="inq-ai__head">
-            <span className="inq-ai__mark" aria-hidden="true">
-              L
-            </span>
-            <span className="inq-ai__label">AI가 분류합니다</span>
+        <div className="inq-field">
+          <label htmlFor="inq-category" className="inq-field-label">
+            분류
+          </label>
+          <div className="inq-select">
+            <select
+              id="inq-category"
+              className="inq-select__input"
+              value={categoryCodeId}
+              onChange={(e) => setCategoryCodeId(e.target.value)}
+            >
+              <option value="">분류 선택(선택 안 함)</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <p className="inq-field-help">
-            접수하면 AI가 카테고리와 우선순위를 자동으로 분류해 담당자에게 전달합니다.
-          </p>
+          <div className="inq-field-help">
+            분류를 고르면 담당 부서에 더 빨리 전달됩니다. 비워두어도 접수됩니다.
+          </div>
         </div>
 
         <div className="inq-field">
@@ -318,10 +392,21 @@ function SubmitForm({ onSubmitted, onError }: SubmitFormProps) {
   );
 }
 
-function InquiryDetail({ inquiry, onBack }: { inquiry: Inquiry; onBack: () => void }) {
+interface InquiryDetailProps {
+  inquiry: Inquiry;
+  categories: readonly InquiryCategory[];
+  onBack: () => void;
+}
+
+function InquiryDetail({ inquiry, categories, onBack }: InquiryDetailProps) {
   const [events, setEvents] = useState<InquiryEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const pill = statusPill(inquiry.status);
+  const catLabel = categoryLabelOf(categories, inquiry.categoryCodeId);
+  const canFeedback = inquiry.status === "in_progress";
 
   const load = useCallback(async () => {
     try {
@@ -336,6 +421,22 @@ function InquiryDetail({ inquiry, onBack }: { inquiry: Inquiry; onBack: () => vo
     void load();
   }, [load]);
 
+  const handleSend = useCallback(async () => {
+    const text = feedback.trim();
+    if (!text || sending || !canFeedback) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await postInquiryFeedback(inquiry.id, text);
+      setFeedback("");
+      await load();
+    } catch (err) {
+      setSendError(errorMessage(err));
+    } finally {
+      setSending(false);
+    }
+  }, [feedback, sending, canFeedback, inquiry.id, load]);
+
   return (
     <div className="inq">
       <header className="inq-detail__bar">
@@ -344,28 +445,45 @@ function InquiryDetail({ inquiry, onBack }: { inquiry: Inquiry; onBack: () => vo
         </button>
         <span className="inq-detail__barlabel">민원 상세</span>
       </header>
-      <main id="main" className="inq-detail">
-        <div className="inq-detail__meta">
-          {inquiry.aiPriority ? (
-            <span className="inq-card__cat">{PRIORITY_LABEL[inquiry.aiPriority]}</span>
-          ) : null}
-          <StatusPill status={pill.status} label={pill.label} />
-        </div>
-        <h1 className="inq-detail__title">{inquiry.title}</h1>
-        <div className="inq-detail__sub">접수 · {shortDate(inquiry.createdAt)}</div>
-        <p className="inq-detail__body">{inquiry.body}</p>
 
-        <Timeline events={events} error={error} onRetry={load} />
+      <main id="main" className="inq-detail">
+        <div className="inq-detail__head">
+          <div className="inq-detail__meta">
+            <StatusPill status={pill.status} label={pill.label} />
+            {inquiry.priority ? (
+              <span className="inq-card__cat" data-priority={inquiry.priority}>
+                {PRIORITY_LABEL[inquiry.priority]}
+              </span>
+            ) : null}
+            {catLabel ? <span className="inq-card__tag">{catLabel}</span> : null}
+            <span className="inq-detail__sub">접수 · {shortDate(inquiry.createdAt)}</span>
+          </div>
+          <h1 className="inq-detail__title">{inquiry.title}</h1>
+        </div>
+
+        <Thread inquiry={inquiry} events={events} error={error} onRetry={load} />
       </main>
+
+      <FeedbackComposer
+        value={feedback}
+        onChange={setFeedback}
+        onSend={handleSend}
+        sending={sending}
+        error={sendError}
+        enabled={canFeedback}
+      />
     </div>
   );
 }
 
-function Timeline({
+// 대화 스레드 — 원 민원(작성자 최초 글)을 첫 항목으로, 이후 events 를 시스템/발신자별로 렌더.
+function Thread({
+  inquiry,
   events,
   error,
   onRetry,
 }: {
+  inquiry: Inquiry;
   events: InquiryEvent[] | null;
   error: string | null;
   onRetry: () => void;
@@ -380,39 +498,118 @@ function Timeline({
       />
     );
   }
-  if (events === null) {
-    return (
-      <div className="inq-timeline-loading">
-        <Skeleton height="3rem" />
-        <Skeleton height="3rem" />
-      </div>
-    );
-  }
+
   return (
-    <ol className="inq-timeline">
-      {events.map((ev, i) => {
-        const last = i === events.length - 1; // 시간순 오름차순 → 마지막이 최신
-        const desc = ev.type === "status_changed" ? formatStatusChange(ev.payload) : null;
-        return (
-          <li key={ev.id} className="inq-timeline__item">
-            <div className="inq-timeline__rail">
-              <span
-                className="inq-timeline__dot"
-                data-current={last || undefined}
-                aria-hidden="true"
-              />
-              {!last ? <span className="inq-timeline__line" aria-hidden="true" /> : null}
-            </div>
-            <div className="inq-timeline__body">
-              <div className="inq-timeline__title" data-muted={!last || undefined}>
-                {eventLabel(ev.type)}
-              </div>
-              {desc ? <div className="inq-timeline__desc">{desc}</div> : null}
-              <div className="inq-timeline__time">{shortDate(ev.createdAt)}</div>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <div className="inq-thread">
+      {/* 원 민원 — 내가 최초로 접수한 글 (우측 정렬) */}
+      <article className="inq-msg" data-side="me">
+        <div className="inq-msg__who">나</div>
+        <div className="inq-msg__bubble">{inquiry.body}</div>
+        <div className="inq-msg__time">{messageTime(inquiry.createdAt)}</div>
+      </article>
+
+      {events === null ? (
+        <div className="inq-thread__loading">
+          <Skeleton height="3rem" />
+          <Skeleton height="3rem" />
+        </div>
+      ) : (
+        events.map((ev) => <ThreadEntry key={ev.id} event={ev} />)
+      )}
+    </div>
+  );
+}
+
+function ThreadEntry({ event: ev }: { event: InquiryEvent }) {
+  if (ev.type === "comment") {
+    const kind = commentKind(ev.payload);
+    const text = commentBody(ev.payload);
+    if (kind === "reply") {
+      return (
+        <article className="inq-msg" data-side="staff">
+          <div className="inq-msg__who">관리사무소</div>
+          <div className="inq-msg__bubble">{text}</div>
+          <div className="inq-msg__time">{messageTime(ev.createdAt)}</div>
+        </article>
+      );
+    }
+    if (kind === "feedback") {
+      return (
+        <article className="inq-msg" data-side="me">
+          <div className="inq-msg__who">나</div>
+          <div className="inq-msg__bubble">{text}</div>
+          <div className="inq-msg__time">{messageTime(ev.createdAt)}</div>
+        </article>
+      );
+    }
+    return null; // 알 수 없는 kind 는 표시하지 않음
+  }
+
+  // 시스템 이벤트 — 타임라인 레일에 muted 로 표시(말풍선 아님)
+  const desc = ev.type === "status_changed" ? formatStatusChange(ev.payload) : null;
+  return (
+    <div className="inq-sysevent">
+      <span className="inq-sysevent__dot" aria-hidden="true" />
+      <span className="inq-sysevent__label">{eventLabel(ev.type)}</span>
+      {desc ? <span className="inq-sysevent__desc">{desc}</span> : null}
+      <span className="inq-sysevent__time">{messageTime(ev.createdAt)}</span>
+    </div>
+  );
+}
+
+interface FeedbackComposerProps {
+  value: string;
+  onChange: (value: string) => void;
+  onSend: () => void;
+  sending: boolean;
+  error: string | null;
+  enabled: boolean;
+}
+
+function FeedbackComposer({
+  value,
+  onChange,
+  onSend,
+  sending,
+  error,
+  enabled,
+}: FeedbackComposerProps) {
+  return (
+    <div className="inq-composer">
+      {!enabled ? (
+        <p className="inq-composer__hint">
+          처리중일 때 처리 내용에 대해 피드백을 남길 수 있습니다.
+        </p>
+      ) : null}
+      {error ? (
+        <p className="inq-composer__error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="inq-composer__row">
+        <label htmlFor="inq-feedback" className="sr-only">
+          피드백 입력
+        </label>
+        <textarea
+          id="inq-feedback"
+          className="inq-composer__input"
+          rows={1}
+          maxLength={4000}
+          disabled={!enabled || sending}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={enabled ? "처리 내용에 대한 피드백을 남겨주세요." : "피드백 비활성"}
+        />
+        <Button
+          type="button"
+          variant="primary"
+          className="inq-composer__send"
+          disabled={!enabled || sending || !value.trim()}
+          onClick={onSend}
+        >
+          {sending ? "전송 중…" : "보내기"}
+        </Button>
+      </div>
+    </div>
   );
 }

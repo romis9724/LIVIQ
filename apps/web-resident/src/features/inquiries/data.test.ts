@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 
 import type { InquiryEvent } from "@/lib/api";
-import { eventLabel, formatStatusChange, sortEvents, statusPill } from "./data";
+import {
+  commentBody,
+  commentKind,
+  eventLabel,
+  formatStatusChange,
+  sortEvents,
+  statusPill,
+} from "./data";
 
 function event(overrides: Partial<InquiryEvent>): InquiryEvent {
   return {
@@ -47,6 +54,31 @@ describe("formatStatusChange", () => {
   it("payload 없거나 to 없으면 null", () => {
     expect(formatStatusChange(null)).toBeNull();
     expect(formatStatusChange({ from: "received" })).toBeNull();
+  });
+});
+
+describe("commentKind", () => {
+  it("reply·feedback kind 를 그대로 반환한다", () => {
+    expect(commentKind({ kind: "reply", body: "확인했습니다" })).toBe("reply");
+    expect(commentKind({ kind: "feedback", body: "감사합니다" })).toBe("feedback");
+  });
+
+  it("알 수 없는 kind·payload 없음이면 null", () => {
+    expect(commentKind({ kind: "other" })).toBeNull();
+    expect(commentKind({})).toBeNull();
+    expect(commentKind(null)).toBeNull();
+  });
+});
+
+describe("commentBody", () => {
+  it("문자열 body 를 반환한다", () => {
+    expect(commentBody({ kind: "reply", body: "처리 완료" })).toBe("처리 완료");
+  });
+
+  it("body 가 없거나 문자열이 아니면 빈 문자열", () => {
+    expect(commentBody({ kind: "reply" })).toBe("");
+    expect(commentBody({ body: 42 })).toBe("");
+    expect(commentBody(null)).toBe("");
   });
 });
 
