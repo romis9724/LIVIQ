@@ -454,19 +454,19 @@ citations(id, tenant_id, message_id,
 ### 4.4 민원·공지
 
 ```sql
-inquiry_categories(id, tenant_id, name, default_assignee_role, sla_hours)
-
+-- 민원 분류는 공통 코드 그룹 INQUIRY_CATEGORY(§4.10). inquiry_categories 테이블은 H8-9에서 폐기(ADR-0018).
 inquiries(id, tenant_id, household_id, author_user_id,
-          category_id NULL, title, body text,
-          ai_suggested_category_id NULL, ai_priority,  -- urgent|normal|low (키워드 기반)
+          category_code_id NULL,                        -- FK → codes (INQUIRY_CATEGORY, RESTRICT), 입주민 선택
+          title, body text,
+          priority NULL,                                -- urgent|normal|low (담당자 수동 지정, AI 없음)
           status,                                       -- received|assigned|in_progress|done
           assignee_user_id NULL, attachments jsonb,
           created_at, updated_at)
 
--- 민원 타임라인 (화면 "민원 상세 타임라인"의 원천 — 상태·배정 변경마다 기록, H2-3)
-inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified|assigned|status_changed|comment
-               actor_user_id NULL,                     -- NULL = 시스템(AI 분류 등)
-               payload jsonb,                          -- {from, to, category_id, note, ...}
+-- 민원 타임라인 (화면 "민원 상세 대화 스레드"의 원천 — 상태·배정·답변/피드백마다 기록, H2-3·H8-9)
+inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified(과거호환)|assigned|status_changed|comment
+               actor_user_id NULL,                     -- NULL = 시스템
+               payload jsonb,                          -- 상태:{from,to} · 배정:{assignee_user_id} · comment:{kind:reply|feedback, body}
                created_at)
 
 -- 공지 (H8-1 게시판 전환 — AI 초안 폐기, [ADR-0015]. 작성·수정·삭제·고정·임시저장·예약 발행)
