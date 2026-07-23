@@ -1406,12 +1406,12 @@ export async function listStaff(): Promise<StaffMember[]> {
   ).map(toStaff);
 }
 
-/** 자기 단지에 직원(STAFF) 초대 메일 발송. 202. 409=이미 등록된 이메일. */
-export async function inviteStaff(email: string): Promise<void> {
+/** 자기 단지에 직원(STAFF) 초대 메일 발송. 202. 409=이미 등록된 이메일. name은 pii_vault 암호화 저장. */
+export async function inviteStaff(input: { email: string; name: string }): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/admin/staff/invite`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email: input.email, name: input.name }),
   });
   await ensureOk(response);
 }
