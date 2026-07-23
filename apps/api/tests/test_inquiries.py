@@ -414,9 +414,7 @@ async def test_feedback_rejected_when_not_in_progress_422(seeded: AsyncSession) 
 async def test_feedback_by_non_author_404(seeded: AsyncSession) -> None:
     inquiry_id = await _create_assign_progress(seeded)
     async with _make_client(seeded, OTHER_ID, ("RESIDENT",)) as other:
-        response = await other.post(
-            f"/inquiries/{inquiry_id}/comments", json={"body": "남의 민원"}
-        )
+        response = await other.post(f"/inquiries/{inquiry_id}/comments", json={"body": "남의 민원"})
     assert response.status_code == 404  # 격리 — 존재 여부 노출 안 함
 
 

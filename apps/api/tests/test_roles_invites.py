@@ -221,9 +221,7 @@ async def test_staff_invite_accept_login_journey(
     email = "newstaff@example.com"
     password = "brand-new-staff-pass"
     async with _make_app(seeded, fake_redis, mailer, ctx=_ctx(("MANAGER",))) as mgr:
-        invited = await mgr.post(
-            "/admin/staff/invite", json={"email": email, "name": "신입직원"}
-        )
+        invited = await mgr.post("/admin/staff/invite", json={"email": email, "name": "신입직원"})
         assert invited.status_code == 202
     token = mailer.last_token()
 
@@ -395,9 +393,7 @@ async def test_list_staff_includes_decrypted_name(
             key_version=1,
         )
     )
-    seeded.add(
-        User(id=staff_id, tenant_id=TENANT_ID, status="active", pii_ref=vault_id)
-    )
+    seeded.add(User(id=staff_id, tenant_id=TENANT_ID, status="active", pii_ref=vault_id))
     await seeded.flush()
     seeded.add(UserRole(tenant_id=TENANT_ID, user_id=staff_id, role="STAFF"))
     await seeded.flush()

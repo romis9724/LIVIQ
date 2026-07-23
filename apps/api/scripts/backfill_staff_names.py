@@ -48,9 +48,7 @@ def _has_name(crypto: PiiCrypto, dek: bytes, blob: bytes | None) -> bool:
         return True
 
 
-async def _backfill_tenant(
-    session: AsyncSession, crypto: PiiCrypto, tenant_id: uuid.UUID
-) -> int:
+async def _backfill_tenant(session: AsyncSession, crypto: PiiCrypto, tenant_id: uuid.UUID) -> int:
     """한 단지의 이름 없는 MANAGER·STAFF에 이름 부여. 채운 계정 수 반환."""
     await session.execute(
         text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))

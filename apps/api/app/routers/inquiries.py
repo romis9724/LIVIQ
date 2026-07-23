@@ -120,16 +120,19 @@ def _guard_not_done(inquiry: Inquiry) -> None:
 
 async def _reply_count(session: AsyncSession, inquiry: Inquiry) -> int:
     """민원의 담당자 답변(comment·kind=reply) 이벤트 수 — 완료 게이트용(ADR-0018)."""
-    return await session.scalar(
-        select(func.count())
-        .select_from(InquiryEvent)
-        .where(
-            InquiryEvent.tenant_id == inquiry.tenant_id,
-            InquiryEvent.inquiry_id == inquiry.id,
-            InquiryEvent.type == "comment",
-            InquiryEvent.payload["kind"].astext == "reply",
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(InquiryEvent)
+            .where(
+                InquiryEvent.tenant_id == inquiry.tenant_id,
+                InquiryEvent.inquiry_id == inquiry.id,
+                InquiryEvent.type == "comment",
+                InquiryEvent.payload["kind"].astext == "reply",
+            )
         )
-    ) or 0
+        or 0
+    )
 
 
 # ── 입주민 ────────────────────────────────────────────────────────────────
