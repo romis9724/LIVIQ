@@ -753,6 +753,8 @@ export interface paths {
         /**
          * Invite Staff
          * @description 자기 단지에 직원(STAFF) 초대 — 계정 생성 + 초대 토큰 + 메일. 중복 이메일 409.
+         *
+         *     이름은 pii_vault.name_enc로 저장해 목록에서 이메일 대신 실명으로 식별한다(ADR-0018).
          */
         post: operations["invite_staff_admin_staff_invite_post"];
         delete?: never;
@@ -2431,6 +2433,19 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /**
+         * InviteStaffIn
+         * @description 직원 초대 — 소장이 이름을 입력해 목록 식별이 가능하도록 name 필수(ADR-0018).
+         */
+        InviteStaffIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Name */
+            name: string;
         };
         /** LoginIn */
         LoginIn: {
@@ -4871,7 +4886,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InviteIn"];
+                "application/json": components["schemas"]["InviteStaffIn"];
             };
         };
         responses: {
