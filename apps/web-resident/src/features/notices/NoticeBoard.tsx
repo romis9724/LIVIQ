@@ -2,7 +2,7 @@
 
 import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError, downloadAttachment, listNotices, type Attachment, type Notice } from "@/lib/api";
@@ -25,9 +25,12 @@ export function NoticeBoard() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // 홈 공지 카드 등에서 ?id=<공지> 로 진입하면 해당 상세를 바로 연다.
-  const initialId = useSearchParams().get("id");
-  const [openId, setOpenId] = useState<string | null>(initialId);
+  // 열린 상세는 URL(?id=<공지>)이 단일 출처 — 목록↔상세가 히스토리 항목이 되어
+  // 홈에서 딥링크로 들어와도 뒤로가기(OS·in-app 모두)가 공지 목록으로 돌아간다.
+  const router = useRouter();
+  const openId = useSearchParams().get("id");
+  const openNotice = useCallback((id: string) => router.push(`/notices?id=${id}`), [router]);
+  const backToList = useCallback(() => router.push("/notices"), [router]);
 
   const load = useCallback(async () => {
     try {
@@ -46,7 +49,7 @@ export function NoticeBoard() {
 
   const open = openId ? notices.find((n) => n.id === openId) ?? null : null;
   if (open) {
-    return <NoticeDetail notice={open} onBack={() => setOpenId(null)} />;
+    return <NoticeDetail notice={open} onBack={backToList} />;
   }
 
   return (
@@ -61,7 +64,7 @@ export function NoticeBoard() {
         notices={notices}
         loading={loading}
         loadError={loadError}
-        onSelect={setOpenId}
+        onSelect={openNotice}
         onRetry={() => {
           setLoading(true);
           void load();
