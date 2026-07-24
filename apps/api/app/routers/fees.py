@@ -58,14 +58,9 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 관리비 엑셀 크기 상한
 PREVIEW_MAX_LEVEL = 1  # 업로드 미리보기 노출 트리 레벨(대분류·중분류)
 EXPLAIN_MAX_LEVEL = 1  # AI 설명 프롬프트에 넣을 트리 레벨(상위 항목만 — 토큰 절감)
 
-HOUSEHOLD_DIVISOR = 574  # 분배 세대수(단지 확정 상수, H8-7)
+HOUSEHOLD_DIVISOR = 574  # 분배 세대수(단지 확정 상수, H8-7 — DB 세대 수와 무관한 비즈니스 상수)
 TOTAL_ROW_NAME = "합계"  # 트리 합계행 항목명 — total_amount 소스
 SUMMARY_ROOT_NAMES = ("공용관리비", "개별사용료", "장기수선충당금 월부과액")
-
-# ponytail: 데모 — 401동 201호 1세대만 부과. 전 세대 팬아웃은 세대별 실사용 분리(전용 항목) 설계 후.
-TARGET_BUILDING = "401"
-TARGET_FLOOR = 2
-TARGET_UNIT = 201
 
 
 # ── 업로드·검증(MANAGER) ─────────────────────────────────────────────────────
@@ -131,7 +126,7 @@ async def get_upload(
     )
 
 
-# ── 확정 적재(MANAGER만, 401동 201호 세대 교체) ─────────────────────────────
+# ── 확정 적재(MANAGER만, 전 세대 균등 적재) ─────────────────────────────────
 
 
 @admin_router.post("/uploads/{upload_id}/apply", response_model=FeeApplyOut)
@@ -152,36 +147,35 @@ async def apply_fees(
     data = await storage.get(upload.file_key)
     rows = parse_fee_total_xlsx(data)
     divided = divide_fee_tree(rows, HOUSEHOLD_DIVISOR)
+    total = _total_from_breakdown(divided)
 
-    household_id = await _target_household(session, ctx.tenant_id)
-    if household_id is None:
-        raise HTTPException(
-            status_code=422,
-            detail=f"{TARGET_BUILDING}동 {TARGET_UNIT}호 세대가 없습니다 — 세대를 먼저 등록하세요",
-        )
-
-    # 단일 트랜잭션(get_tenant_session이 begin) — 해당 세대·월 1건 교체.
-    await session.execute(
-        delete(Fee).where(
-            Fee.tenant_id == ctx.tenant_id,
-            Fee.household_id == household_id,
-            Fee.period == upload.period,
-        )
+    household_ids = list(
+        await session.scalars(select(Household.id).where(Household.tenant_id == ctx.tenant_id))
     )
-    session.add(
-        Fee(
-            tenant_id=ctx.tenant_id,
-            household_id=household_id,
-            period=upload.period,
-            breakdown=divided,
-            total_amount=_total_from_breakdown(divided),
-            source="excel",
-            upload_id=upload.id,
-        )
+    # 단일 트랜잭션(get_tenant_session이 begin) — 해당 월 전 세대 교체(재적용 멱등).
+    # 세대당 동일 divided 트리·총액(574 균등분배, 코드 계산 — AI 미개입, 규칙 5).
+    await session.execute(
+        delete(Fee).where(Fee.tenant_id == ctx.tenant_id, Fee.period == upload.period)
+    )
+    session.add_all(
+        [
+            Fee(
+                tenant_id=ctx.tenant_id,
+                household_id=hid,
+                period=upload.period,
+                breakdown=divided,
+                total_amount=total,
+                source="excel",
+                upload_id=upload.id,
+            )
+            for hid in household_ids
+        ]
     )
     upload.status = "applied"
     await session.flush()
-    return FeeApplyOut(upload_id=upload.id, status="applied", period=upload.period, applied=1)
+    return FeeApplyOut(
+        upload_id=upload.id, status="applied", period=upload.period, applied=len(household_ids)
+    )
 
 
 # ── 조회 ────────────────────────────────────────────────────────────────────
@@ -352,20 +346,6 @@ async def explain(
 
 
 # ── 헬퍼 ────────────────────────────────────────────────────────────────────
-
-
-async def _target_household(session: AsyncSession, tenant_id: uuid.UUID) -> uuid.UUID | None:
-    """분배 대상 세대(401동 201호) id — 데모 스코프."""
-    return await session.scalar(
-        select(Household.id)
-        .join(Building, Building.id == Household.building_id)
-        .where(
-            Household.tenant_id == tenant_id,
-            Building.name == TARGET_BUILDING,
-            Household.floor == TARGET_FLOOR,
-            Household.unit_no == TARGET_UNIT,
-        )
-    )
 
 
 async def _get_fee_upload(
