@@ -100,6 +100,9 @@
 - **AI 검수 큐**: 카드별 (질문·AI답변·근거·신뢰도) → [승인]/[수정 후 승인]/[반려]. 승인 이력 감사.
 - **문서 색인 상태**: pending/indexing/indexed/failed 가시화 + 실패 사유·재시도.
 - **시설 도우미**: "원인 후보"임을 명시(단정 X), 근거 이력 링크.
+- **단지 트윈**(H9): 3D 뷰도 라이트 테마·토큰 색 유지 — 오버레이 색은 semantic 토큰(success/warning/danger)만,
+  범례 상시 표시(색만으로 상태 전달 금지 — 세대 클릭 상세로 텍스트 병기). 세대원 성함은 **마스킹 표시**(명부 규칙과 동일).
+  WebGL 미지원·geometry 미설정은 명시적 빈 상태(§9)로 안내.
 
 ## 6. 접근성 (WCAG 2.2 AA)
 
@@ -118,6 +121,7 @@
 - 애니메이션은 `transform/opacity`만. 레이아웃 속성 애니 금지.
 - 이미지: 명시적 width/height, 본문 외 lazy, AVIF/WebP.
 - 번들 예산(랜딩<150KB/앱<300KB gz), 무거운 라이브러리 동적 import.
+  **예외(H9)**: 관리자 `/twin` 라우트는 deck.gl(WebGL) 탑재로 예산 초과 허용 — 라우트 단위 dynamic import로 격리해 타 페이지 번들 무영향이 조건.
 - PWA: manifest·설치 가능. 오프라인 셸은 **공지 등 `tenant-public`만** 캐시. **관리비·민원·개인 대화는 service worker 캐시 금지**(`Cache-Control: no-store`). 오프라인 화면엔 데이터 기준 시점·stale 표시. 로그아웃·계정 전환 시 캐시 purge([06 §6](06-security-privacy.md)).
 
 ## 8. 콘텐츠/표현 가이드 (한국어)

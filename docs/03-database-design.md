@@ -39,6 +39,7 @@ erDiagram
   codes ||--o{ documents : "문서분류"
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
+  households ||--o| household_geometries : "3D 폴리곤(H9)"
   unit_types ||--o{ floor_plans : "평면도"
   floor_plans ||--o{ plan_devices : "장치"
   facilities ||--o| plan_devices : "포인트"
@@ -84,6 +85,15 @@ erDiagram
     uuid id PK
     uuid tenant_id FK
     string name
+  }
+  household_geometries {
+    uuid id PK
+    uuid tenant_id FK
+    uuid household_id FK
+    jsonb polygon_2d
+    jsonb polygon_3d
+    numeric base_z
+    numeric floor_height
   }
   floor_plans {
     uuid id PK
@@ -591,6 +601,26 @@ plan_devices(id, tenant_id, floor_plan_id,
 
 **접근 통제**: 입주민은 **본인 세대**의 `floor_plans`/`plan_devices`만 열람. 타 세대 평면도 접근 절대 불가 — **RLS는 tenant 경계까지만 보장**하고, 본인 세대 한정은 **앱 소유권 검증**(`household_id` 일치)으로 강제한다([06]). 단지 배치도·공용층은 인증 입주민 공통 열람.
 
+**단지 3D 트윈 geometry** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md)) — 위 세대 내부 2D 평면도와 별개 표면(단지 외형 3D):
+
+```sql
+-- 세대 3D 폴리곤 (units.json 업로드 산물 — 렌더 전용, PostGIS 미도입)
+household_geometries(id, tenant_id,
+                     household_id,           -- FK → households(tenant_id, id) composite
+                     polygon_2d jsonb,       -- [[lon,lat] × n]
+                     polygon_3d jsonb,       -- [[lon,lat,z] × n] — 렌더 정본(업로드 산물 그대로, 재계산 없음)
+                     base_z numeric, floor_height numeric,
+                     area_m2 numeric NULL, unit_type_label text NULL,  -- 표시용(unit_types 마스터와 무관한 원본 라벨)
+                     created_at, updated_at)
+  UNIQUE(tenant_id, household_id)
+```
+
+> **적재 계약**: `POST /admin/twin/geometry`가 `units.json`의 unit을 (동명→`buildings.name`, `floor`, `ho`→`households.unit_no`)로
+> 매칭해 적재 — matched만 반영·unmatched는 검증 리포트로 반환, **재업로드=tenant 전체 교체**(단일 트랜잭션).
+> geometry 생성 파이프라인(shapefile→units.json)은 LIVIQ 밖(외부 도구) — LIVIQ는 이 계약만 소유한다.
+> soft delete 대상 아님(§3 목록 제외 — 교체 업로드가 수명주기). RLS는 표준 tenant 격리(§5 일반 규칙).
+> 세대원·입주 상태는 이 테이블이 아니라 **기존 명부(`users`)·`households`가 원천**([ADR-0019](adr/0019-complex-twin-3d.md) — 신규 명부 테이블 없음).
+
 ### 4.9 outbox (PG→Neo4j 동기화)
 
 ```sql
@@ -687,6 +717,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 - 벡터: `content_chunks` HNSW (cosine). 검색 전 `tenant_id`·`visibility` 선필터.
 - 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`, `codes(tenant_id, group_id, sort_order)`(코드 트리 정렬 조회), `notices(tenant_id, category_code_id)`·`documents(tenant_id, category_code_id)`(분류 필터 조회 — H8-6).
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
+- 트윈 geometry: `household_geometries UNIQUE(tenant_id, household_id)`가 조회를 커버(전량 로드 1쿼리 — 추가 인덱스 불요, H9).
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.
 

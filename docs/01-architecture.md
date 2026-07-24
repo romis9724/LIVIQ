@@ -201,7 +201,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -346,6 +346,21 @@
 | `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조(notices·documents FK) 존재 시 409(H8-6 적용) — 비활성(active=false)으로 숨김 권장 |
 
 > 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블(`notices.category_code_id` NULL 허용·`documents.category_code_id` NOT NULL)은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조 전환됐다(적용됨). 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다.
+
+**단지 트윈** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md), 화면: 관리자 단지 트윈)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/twin/geometry` | MANAGER | 세대 폴리곤 전량(정적 — 클라 1회 로드). geometry 미설정 tenant는 404 |
+| `POST /admin/twin/geometry` | MANAGER | `units.json` 업로드 — (동·층·호)로 `households` 매칭, 검증 리포트(matched/unmatched) 반환, **재업로드=전체 교체**(단일 트랜잭션, unmatched는 스킵+리포트) |
+| `GET /admin/twin/overlay` | MANAGER | `kind=occupancy\|inquiries\|fees\|facilities` — `household_id→값` 맵(설비는 동 단위 맵). H9-1은 occupancy만, 나머지 H9-2 |
+| `GET /admin/twin/households/{id}` | MANAGER | 세대 상세(H9-2) — 세대 정보·세대원(명부 **마스킹 표시**, H7-9 규칙)·미종결 민원·당월 관리비 |
+
+> 오버레이 의미: occupancy=세대원 수(명부 `users` — `pre_registered`·`pending`·`active`, `household_id` 집계, 0=공실) ·
+> inquiries=미종결 민원 수(`author_user_id`→`users.household_id` 경유) · fees=당월 부과액 ·
+> facilities=`location`≈동명 매칭 설비의 최악 상태(**동 단위** tint — 설비-세대 정식 매핑은 백로그).
+> 메뉴 노출 게이트: `GET /me` 응답에 `has_twin`(tenant geometry 존재 여부) 추가 — 상태 단일 출처 유지.
+> 트윈은 **조회 전용·AI 미연동**(규칙 2 — 세대·개인 단위 데이터 LLM 전송 없음, [ADR-0019](adr/0019-complex-twin-3d.md)).
 
 **알림함** (횡단 · [ADR-0012](adr/0012-in-app-notification-only.md), 화면: 입주민 나>알림함)
 

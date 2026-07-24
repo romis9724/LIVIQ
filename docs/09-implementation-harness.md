@@ -373,6 +373,23 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H8-10 | 관리자 콘솔 정리(메뉴·대시보드) | 운영자 요청(2026-07-24): ①사이드바 flat 10개→**섹션 그룹화** — 대시보드·공지사항 단독 + 입주민 관리(주민/관리비/민원)·관리소 운영(직원/문서/시설)·설정(동호수/코드). STAFF·SYS_ADMIN은 flat 유지(`roles.ts` NavItem[]→NavGroup[]). 대메뉴 헤더 가시성 — 한글 무효 uppercase 제거·블루 액센트 바·구분선 ②대시보드 개편: **검수 필요율 KPI 제거**(사후 검수 큐 H8-7 폐지로 stale, `needs_review_rate` 스키마·집계·프런트·api-types drop), **오늘 할 일 액션 큐**(`ActionQueueStats` 기간 무관 open 카운트 — 승인 대기·미배정/처리중 민원·임시저장/예약 공지, tenant+deleted_at 필터, 담당 화면 딥링크), 위계 재구성(액션 히어로→민원/시설→AI 도우미 sunken 강등) ③카드 색 체계: 액션 카드 카테고리 tone(상단 스트립+아이콘 칩)·데이터 카드 좌측 tone 보더·기간 세그먼트 컨트롤(디자인 토큰만) | 액션 큐 카운트 tenant 격리(**CRITICAL**)·MANAGER 인가·게이트 그린(pytest·vitest·build·api-types drift) + 시각 실측(라이트·모바일) | ✅ 완료 — pytest test_dashboard 10·vitest admin 139·typecheck·lint·build 그린, api-types 재생성(needs_review_rate 제거·actions 추가). 라이브 실측(1280·375px): 메뉴 그룹 헤더 액센트 바 구분·액션 큐 승인 대기 1 강조·카드 tone 색 전면 적용·콘솔 에러 0 |
 | H8-8 | 입주민 프로필·나 개편 | 운영자 요청(2026-07-22): ①`GET /me`에 `display_name`·`unit_label` 추가 — 본인 세션 소유 pii_vault 복호(`crypto.decrypt`)+household·building 조인, `app.tenant_id` 격리(규칙 2·3, 타인 PII 아님·복호 실패 None 흡수·500 금지) ②홈 인사 "안녕하세요, {실명}님 ({동}동 {호}호)"(`greeting` 순수 헬퍼) ③나 헤더 `roleLabel`→실명+동/호 ④나 **설정 섹션 통째 제거**(AI추천·다크·언어·알림수신 토글, 알림함·개인정보·로그아웃 유지) ⑤마스킹 안내 '타인 정보' 한정으로 수정 ⑥나 **관리비 요약 카드**(당월 합계+`/fees` 자세히→) | 본인 실명 노출·미배정 폴백 단위테스트 + tenant 격리 + 게이트 그린(@liviq/ui 토큰 포함) + 시각 실측 | ✅ 완료 — pytest 293(cov 95.8%)·@liviq/ui 16·vitest(resident 109·admin 130)·build·mypy 그린. 라이브 실측: /me 반환(display_name=최주민·unit_label=401동 201호), 홈 인사·나 헤더·설정 제거·관리비 카드(176,601원·/fees 링크)·마스킹 문구 시각 검증. PII 복호는 본인 user_id+tenant_id 소유 vault만 |
 
+### 8.11 H9 체크리스트 (단지 3D 트윈)
+
+> 근거: 사용자 인터뷰 확정(2026-07-24, [ADR-0019](adr/0019-complex-twin-3d.md)) — 프로토타입(AI_digitaltwin_apartment repo)의
+> 세대 3D geometry를 제품 기능 "단지 트윈"으로 흡수. **범용 설계**(geometry 있는 tenant만 활성) + deck.gl 3D 직행(2D 그리드 없음).
+> **데이터 현황**: 파일럿 tenant = 첫마을 4단지 — `buildings`(401~405동)·`households`(322세대)는 H7-7,
+> 명부 892건(페르소나 유래)은 H7-9로 **기존재**. 신규 적재는 geometry(units.json)뿐. 세대원·입주 상태는 기존 명부가 원천(신규 명부 테이블 없음).
+> 근거 설계: [00 §3.8](00-requirements.md) FR-TWIN-07~10 · [01 §13](01-architecture.md) 단지 트윈 표 · [03 §4.8](03-database-design.md) `household_geometries` · [04](04-menu-structure.md) 메뉴 · [05 §5·§7](05-ui-ux-design.md) · [11 §3.4.1](11-data-architecture.md).
+> 각 작업 단위는 §3.1 사이클을 따르고, 머지는 단위별 사용자 확인 후 진행.
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H9-0 | 설계 갱신 | 00 §3.8(FR-TWIN-07~10)·01 §13(트윈 표+`/me` has_twin)·03 §2 ERD·§4.8·§7·04(메뉴·매트릭스·여정)·05(§5 트윈 UX·§7 번들 예외)·11 §3.4.1 + [ADR-0019](adr/0019-complex-twin-3d.md) 신설 | 설계 문서 PR 머지(구현 착수 전) | 진행 중 |
+| H9-1 | 데이터 계층 + 3D 뷰 + 입주 오버레이 | `household_geometries` 마이그레이션(+표준 RLS — Alembic custom) · `POST/GET /admin/twin/geometry`(units.json 파싱·Pydantic 검증·동층호 매칭 검증 리포트·전체 교체) · `GET /admin/twin/overlay?kind=occupancy`(명부 인원 집계) · `GET /me`에 `has_twin` · web-admin `/twin`(deck.gl dynamic import — 3D 폴리곤·occupancy tint·범례·빈 상태) + 사이드바 '관리소 운영' 그룹에 조건 노출 · 첫마을 units.json 실업로드(운영 절차 — 322세대 matched 확인) | tenant 격리·MANAGER 인가 테스트(**CRITICAL**) + 매칭 검증 리포트(unmatched 스킵·리포트 반환) 테스트 + 재업로드 전체 교체 멱등 테스트 + 게이트 그린(pytest cov·vitest·build·api-types drift) + 시각 실측(1280·375px) | |
+| H9-2 | 오버레이 3종 + 세대 상세 패널 | `overlay` kind 확장 — inquiries(미종결, author→household 경유)·fees(당월 부과액 밴드)·facilities(**동 단위** — location≈동명 매칭 최악 상태) · `GET /admin/twin/households/{id}` 세대 상세(세대 정보·세대원 명부 **마스킹**·미종결 민원 목록·당월 관리비) · 폴리곤 클릭→상세 패널·오버레이 세그먼트 토글·범례 · 관리비 오버레이 재료: H8-7 apply의 1세대 데모 한정을 **전 세대 적용**으로 전환 | 소유권·tenant 격리 테스트(**CRITICAL** — 타 tenant 세대 상세 404) + 오버레이 집계 정합 테스트 + fees 전 세대 apply 회귀(기존 테스트 갱신) + 게이트 그린 + 시각 실측 | |
+
+> **백로그(수요 확인 후)**: 페르소나 부가정보(차량·관계·직업 — 세대원 확장 테이블 별도 설계) · 트윈 집계 AI 읽기 도구(동/단지 통계만 — 개인 단위 금지, 규칙 2) · VWorld 실사 3D · 설비-세대 정식 매핑 · 대시보드 액션 큐↔트윈 딥링크.
+
 ## 9. 정의: "완료(Done)"
 
 
