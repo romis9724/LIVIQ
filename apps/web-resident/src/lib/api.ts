@@ -381,6 +381,7 @@ export interface Me {
   mustChangePassword: boolean; // true면 비밀번호 변경 강제(H7-2, 주민 흐름은 미사용)
   displayName: string | null; // 본인 실명(서버가 본인 vault만 복호, 미제출 시 null)
   unitLabel: string | null; // "{동}동 {호}호"(세대 미배정 시 null)
+  tenantName: string | null; // 소속 단지(아파트)명 — 조회 실패 시 null
 }
 
 export async function getMe(): Promise<Me> {
@@ -394,5 +395,6 @@ export async function getMe(): Promise<Me> {
     mustChangePassword: body.must_change_password ?? false,
     displayName: body.display_name ?? null,
     unitLabel: body.unit_label ?? null,
+    tenantName: body.tenant_name ?? null,
   };
 }

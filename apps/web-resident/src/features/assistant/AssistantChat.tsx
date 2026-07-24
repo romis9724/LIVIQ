@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
+import { getMe } from "@/lib/api";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
@@ -29,11 +30,23 @@ function fallbackText(reason: string | null): string {
 export function AssistantChat() {
   const { messages, ask, pending } = useAssistantStream();
   const [draft, setDraft] = useState("");
+  // 헤더 부제용 소속 단지명. 실패하면 단지명 없이 기본 문구만.
+  const [tenantName, setTenantName] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    let alive = true;
+    getMe()
+      .then((me) => alive && setTenantName(me.tenantName))
+      .catch(() => {}); // 실패 시 기본 부제 유지
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const submit = (question: string) => {
     void ask(question);
@@ -50,7 +63,9 @@ export function AssistantChat() {
         </span>
         <span className="assistant__heading">
           <span className="assistant__title">AI 비서</span>
-          <span className="assistant__sub">래미안 한강 1단지 · 출처 기반 응대</span>
+          <span className="assistant__sub">
+            {tenantName ? `${tenantName} · 출처 기반 응대` : "출처 기반 응대"}
+          </span>
         </span>
       </header>
 

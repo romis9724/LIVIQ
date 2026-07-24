@@ -8,6 +8,7 @@ import {
   periodLabel,
   recentInquiry,
   recentNotices,
+  unitWithTenant,
   unreadCount,
 } from "./logic";
 
@@ -121,5 +122,22 @@ describe("greeting", () => {
 
   it("이름이 없으면 기본 인사말", () => {
     expect(greeting(null)).toBe("안녕하세요");
+  });
+});
+
+describe("unitWithTenant", () => {
+  it("단지명과 세대가 모두 있으면 '단지명 세대' 로 잇는다", () => {
+    expect(unitWithTenant("첫마을 4단지 푸르지오", "401동 201호")).toBe(
+      "첫마을 4단지 푸르지오 401동 201호",
+    );
+  });
+
+  it("단지명이 없으면 세대만 반환한다", () => {
+    expect(unitWithTenant(null, "401동 201호")).toBe("401동 201호");
+  });
+
+  it("세대가 없으면 null(단지명만으론 표기하지 않는다)", () => {
+    expect(unitWithTenant("첫마을 4단지 푸르지오", null)).toBeNull();
+    expect(unitWithTenant(null, null)).toBeNull();
   });
 });

@@ -67,6 +67,7 @@ class InviteAcceptIn(BaseModel):
 class MeOut(BaseModel):
     status: str  # status='registered'가 온보딩 필요 신호(ADR-0014)
     tenant_id: uuid.UUID | None
+    tenant_name: str | None = None  # 소속 단지명(아파트명 표시용) — 조회 실패 시 None
     user_id: uuid.UUID | None
     roles: list[str]
     must_change_password: bool = False  # True면 웹은 비밀번호 변경 화면으로 강제(H7-2)

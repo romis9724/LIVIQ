@@ -43,3 +43,15 @@ export function periodLabel(period: string): string {
 export function greeting(name: string | null): string {
   return name ? `안녕하세요, ${name}님` : "안녕하세요";
 }
+
+/**
+ * 세대 표기에 아파트명을 붙인다: "첫마을 4단지 푸르지오 401동 201호".
+ * 단지명 없으면 세대만, 세대 없으면 null(표기 생략).
+ */
+export function unitWithTenant(
+  tenantName: string | null,
+  unitLabel: string | null,
+): string | null {
+  if (!unitLabel) return null;
+  return tenantName ? `${tenantName} ${unitLabel}` : unitLabel;
+}

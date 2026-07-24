@@ -1251,6 +1251,7 @@ export interface Me {
   mustChangePassword: boolean; // true면 비밀번호 변경 화면으로 강제(H7-2)
   email: string | null; // 로그인 이메일(세션 저장분) — 구세션은 null(H7-5)
   hasTwin: boolean; // 단지에 세대 geometry 존재 여부 — 트윈 메뉴 게이트(H9-1)
+  tenantName: string | null; // 소속 단지(아파트)명 — SYS_ADMIN 시스템 테넌트는 프런트가 표시 제외
 }
 
 export async function getMe(): Promise<Me> {
@@ -1264,6 +1265,7 @@ export async function getMe(): Promise<Me> {
     mustChangePassword: body.must_change_password ?? false,
     email: body.email ?? null,
     hasTwin: body.has_twin ?? false,
+    tenantName: body.tenant_name ?? null,
   };
 }
 

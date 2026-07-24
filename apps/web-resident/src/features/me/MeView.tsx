@@ -6,7 +6,7 @@ import { Skeleton } from "@liviq/ui";
 import { API_BASE_URL } from "@/lib/dev-context";
 import { ApiError, getMe, type Me } from "@/lib/api";
 import { formatWon, getFees, type FeeData } from "../fees/api";
-import { currentPeriod } from "../home/logic";
+import { currentPeriod, unitWithTenant } from "../home/logic";
 import { NotificationInbox } from "./NotificationInbox";
 import { accountStatusLabel, feePeriodLabel, roleLabel } from "./logic";
 import "./me.css";
@@ -57,7 +57,7 @@ export function MeView() {
             <>
               <div className="me-profile__name">{me.displayName ?? roleLabel(me.roles)}</div>
               <div className="me-profile__sub">
-                {me.unitLabel ?? accountStatusLabel(me.status)}
+                {unitWithTenant(me.tenantName, me.unitLabel) ?? accountStatusLabel(me.status)}
               </div>
             </>
           ) : meError ? (
