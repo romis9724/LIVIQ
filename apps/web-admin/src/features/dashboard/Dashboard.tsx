@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ApiError,
   getDashboardStats,
+  getMe,
   type DashboardActionQueue,
   type DashboardStats,
 } from "@/lib/api";
@@ -36,6 +37,18 @@ export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // 헤더에 붙일 소속 단지명. 실패하면 단지명 없이 기간 문구만.
+  const [tenantName, setTenantName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getMe()
+      .then((me) => alive && setTenantName(me.tenantName))
+      .catch(() => {}); // 실패 시 단지명 생략
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const load = useCallback(async (period: number) => {
     setLoading(true);
@@ -61,7 +74,7 @@ export function Dashboard() {
             대시보드
           </h1>
           <p className="admin-page__lede">
-            래미안 한강 1단지 · 최근 {days}일 기준 운영 지표
+            {tenantName ? `${tenantName} · ` : ""}최근 {days}일 기준 운영 지표
           </p>
         </div>
         <div className="dash-period" role="group" aria-label="기간">

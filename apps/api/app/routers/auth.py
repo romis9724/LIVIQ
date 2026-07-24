@@ -415,6 +415,18 @@ async def _own_profile(
     return display_name, unit_label
 
 
+async def _tenant_name(db: AsyncSession, tenant_id: uuid.UUID) -> str | None:
+    """소속 단지명(tenants는 RLS 예외 — 멤버십 인가로 조회 가능, 아파트명 표시용).
+
+    tenant 컨텍스트는 _own_profile이 이미 설정. 조회 실패는 None 흡수(/me는 화면 분기, 500 금지).
+    """
+    try:
+        return await db.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
+    except Exception:  # noqa: BLE001 — 조회 실패는 단지명 미표시로 흡수
+        logger.warning("me tenant_name 조회 실패", exc_info=True)
+        return None
+
+
 async def _tenant_has_geometry(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
     """해당 tenant에 세대 3D geometry가 1건이라도 있는지(트윈 메뉴 노출 신호, H9-1).
 
@@ -444,11 +456,13 @@ async def me(
     """
     tenant_id = uuid.UUID(session.tenant_id)
     display_name, unit_label = await _own_profile(db, crypto, tenant_id, uuid.UUID(session.user_id))
-    # _own_profile이 app.tenant_id를 이미 설정 — 같은 세션에서 격리된 geometry 존재 조회.
+    # _own_profile이 app.tenant_id를 이미 설정 — 같은 세션에서 격리된 조회.
+    tenant_name = await _tenant_name(db, tenant_id)
     has_twin = await _tenant_has_geometry(db, tenant_id)
     return MeOut(
         status=session.status,
         tenant_id=tenant_id,
+        tenant_name=tenant_name,
         user_id=uuid.UUID(session.user_id),
         roles=list(session.roles),
         must_change_password=session.must_change_password,

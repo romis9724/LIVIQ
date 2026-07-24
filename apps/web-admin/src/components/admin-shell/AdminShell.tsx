@@ -117,7 +117,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </span>
           <span className="admin-sidebar__brand-text">
             <span className="admin-sidebar__name">LIVIQ</span>
-            <span className="admin-sidebar__role">관리자 콘솔</span>
+            <span className="admin-sidebar__role">
+              {!isSysAdmin(roles) && me?.tenantName ? me.tenantName : "관리자 콘솔"}
+            </span>
           </span>
         </div>
 

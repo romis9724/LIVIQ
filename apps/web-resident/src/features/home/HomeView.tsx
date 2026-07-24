@@ -21,6 +21,7 @@ import {
   periodLabel,
   recentInquiry,
   recentNotices,
+  unitWithTenant,
   unreadCount,
 } from "./logic";
 import "./home.css";
@@ -74,7 +75,10 @@ export function HomeView() {
       <header className="home__header">
         <div className="home__identity">
           <h1 className="home__greeting">{greeting(me?.displayName ?? null)}</h1>
-          {me?.unitLabel ? <span className="home__unit">{me.unitLabel}</span> : null}
+          {(() => {
+            const unit = unitWithTenant(me?.tenantName ?? null, me?.unitLabel ?? null);
+            return unit ? <span className="home__unit">{unit}</span> : null;
+          })()}
         </div>
         {unread.status === "ready" && unread.data > 0 ? (
           <Link href="/me" className="home__unread">

@@ -466,3 +466,4 @@ async def test_me_exposes_own_name_and_unit(
     body = me.json()
     assert body["display_name"] == "최주민"
     assert body["unit_label"] == "401동 201호"
+    assert body["tenant_name"] == "단지A"  # 소속 단지명(아파트명 표시용)

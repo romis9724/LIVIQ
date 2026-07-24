@@ -2726,6 +2726,8 @@ export interface components {
             status: string;
             /** Tenant Id */
             tenant_id: string | null;
+            /** Tenant Name */
+            tenant_name?: string | null;
             /** Unit Label */
             unit_label?: string | null;
             /** User Id */
