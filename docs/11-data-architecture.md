@@ -113,6 +113,21 @@ flowchart TD
   AP -->|거절| RJ[rejected + 사유]
 ```
 
+### 3.4.1 트윈 geometry 업로드 (H9 · [ADR-0019](adr/0019-complex-twin-3d.md))
+
+세대 3D 폴리곤의 원천은 **외부 파이프라인 산출물 `units.json`**(shapefile 세대 분할 — LIVIQ 밖 도구)이다.
+LIVIQ는 업로드 계약만 소유: (동명·층·호)로 `households` 매칭 → matched만 적재·unmatched는 검증 리포트,
+재업로드는 tenant 전체 교체(단일 트랜잭션 — 관리비 확정과 동일 패턴). 스키마: [03 §4.8](03-database-design.md).
+
+```mermaid
+flowchart LR
+  SHP[shapefile + 호수 xlsx] -.외부 도구.-> UJ[units.json 세대 폴리곤]
+  UJ --> UPL[업로드 · 동층호 매칭 검증]
+  UPL -->|unmatched| RP2[검증 리포트 미일치 세대]
+  UPL -->|matched| HG[(household_geometries 전체 교체)]
+  HG --> TW[관리자 3D 트윈 뷰 · 오버레이는 명부·민원·관리비·설비 조인]
+```
+
 ### 3.5 PG→Neo4j 동기화
 
 시설 쓰기는 도메인 행과 `outbox_events`를 **한 트랜잭션**에 기록(이중 쓰기 금지). `ai-worker`가 순차 폴링해 Neo4j MERGE, 실패는 재시도. 전체 리플레이로 그래프 재구성 가능. 순서(`sequence`)·중복 차단(`dedupe_key`)·`FOR UPDATE SKIP LOCKED` claim·노드 `last_applied_version`(역전 방지)·삭제 tombstone·재시도 초과 시 DLQ는 [03 §4.9](03-database-design.md).
