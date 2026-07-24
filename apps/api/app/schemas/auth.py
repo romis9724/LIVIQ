@@ -75,6 +75,7 @@ class MeOut(BaseModel):
     # 미제출·미배정·admin 등에선 None — optional 유지(admin 앱도 이 스키마 소비).
     display_name: str | None = None
     unit_label: str | None = None  # "{동}동 {호}호"(unit_no=완전 호수, H8-5/H8-7)
+    has_twin: bool = False  # 단지 트윈 geometry 적재 여부(관리자 트윈 메뉴 노출 신호, H9-1)
 
 
 class TenantDirectoryItem(BaseModel):

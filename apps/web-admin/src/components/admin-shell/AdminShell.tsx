@@ -106,7 +106,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
     return <ShellLoading />;
   }
 
-  const nav = navForRoles(roles);
+  const nav = navForRoles(roles, { hasTwin: me?.hasTwin ?? false });
 
   return (
     <div className="admin-shell">

@@ -1,0 +1,90 @@
+/* 단지 트윈 — 3D 캔버스 무대 + 범례. 토큰만 사용(H9-1). 캔버스 fill RGB 는 twin-data 예외. */
+
+.twin-stage {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* deck.gl 캔버스 컨테이너 — 절대 배치 캔버스를 담을 상대 좌표계 + 고정 높이. */
+.twin-canvas {
+  position: relative;
+  width: 100%;
+  height: min(72vh, 720px);
+  min-height: 360px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  /* 3D 프리즘 대비를 위한 옅은 표면 배경(베이스맵 타일 없음). */
+  background: var(--color-surface-sunken);
+}
+
+.twin-canvas--loading,
+.twin-canvas--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  padding: var(--space-6);
+}
+
+/* 범례 — 캔버스 위 좌하단 오버레이. 색+텍스트 병기(색 단독 금지). */
+.twin-legend {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  background: color-mix(in oklch, var(--color-surface) 88%, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  backdrop-filter: blur(6px);
+}
+.twin-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.twin-legend__swatch {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  /* background-color 는 인라인 스타일(twin-data RGB 상수) — 캔버스 fill 과 동일 출처. */
+}
+
+/* 빈/오류 상태 카드 — 중앙 정렬 안내. */
+.twin-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-6);
+}
+.twin-empty__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.twin-empty__link:hover {
+  background: color-mix(in oklch, var(--color-accent) 88%, var(--color-text));
+}
+.twin-empty__link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

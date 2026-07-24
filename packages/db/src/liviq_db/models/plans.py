@@ -1,6 +1,7 @@
-"""평면도·디지털트윈 — floor_plans·plan_devices (docs/03 §4.8).
+"""평면도·디지털트윈 — floor_plans·plan_devices·household_geometries (docs/03 §4.8).
 
 배경 이미지 + 좌표 레이어. 마커는 정적 데이터(IoT 미연동).
+H9(ADR-0019): household_geometries — units.json 업로드 산물인 세대 3D 폴리곤(렌더 전용).
 """
 
 from __future__ import annotations
@@ -8,8 +9,8 @@ from __future__ import annotations
 import decimal
 import uuid
 
-from sqlalchemy import Index, Integer, Numeric, String, Text, text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Index, Integer, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, IdMixin, TenantMixin, TimestampMixin, tenant_fk, tenant_id_unique
@@ -60,3 +61,29 @@ class PlanDevice(IdMixin, TenantMixin, TimestampMixin, Base):
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_key: Mapped[str | None] = mapped_column(String, nullable=True)
     facility_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class HouseholdGeometry(IdMixin, TenantMixin, TimestampMixin, Base):
+    """세대 3D 폴리곤 (units.json 업로드 산물 — 렌더 전용, PostGIS 미도입, H9/ADR-0019)."""
+
+    __tablename__ = "household_geometries"
+    __table_args__ = (
+        tenant_id_unique("household_geometries"),
+        UniqueConstraint(
+            "tenant_id", "household_id", name="uq_household_geometries_tenant_household"
+        ),
+        tenant_fk(
+            "household_id",
+            "households",
+            name="fk_household_geometries_household",
+            ondelete="CASCADE",
+        ),
+    )
+
+    household_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    polygon_2d: Mapped[list] = mapped_column(JSONB, nullable=False)  # [[lon,lat], ...]
+    polygon_3d: Mapped[list] = mapped_column(JSONB, nullable=False)  # [[lon,lat,z], ...]
+    base_z: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
+    floor_height: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
+    area_m2: Mapped[decimal.Decimal | None] = mapped_column(Numeric, nullable=True)
+    unit_type_label: Mapped[str | None] = mapped_column(String, nullable=True)

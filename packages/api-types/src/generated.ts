@@ -935,6 +935,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/twin/geometry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Geometry
+         * @description 적재된 세대 geometry 목록(building/floor/unit 조인). geometry 0건이면 빈 목록.
+         */
+        get: operations["list_geometry_admin_twin_geometry_get"];
+        put?: never;
+        /**
+         * Upload Geometry
+         * @description units.json 업로드 → 명부 매칭분 전체 교체(delete-then-insert, 단일 트랜잭션).
+         *
+         *     파일이 JSON 아니거나 `units` 배열이 없으면 400. 검증 실패·명부 미매칭 unit은 스킵하고
+         *     리포트(matched/unmatched/표본)로 돌려준다.
+         */
+        post: operations["upload_geometry_admin_twin_geometry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/twin/overlay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Overlay
+         * @description 세대 상태 오버레이. occupancy = 세대원 수(geometry 있는 세대만, 0명 세대는 생략).
+         *
+         *     inquiries·fees·facilities 등 다른 kind는 H9-2 — 그 외 값은 400.
+         */
+        get: operations["get_overlay_admin_twin_overlay_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/assistant/ask": {
         parameters: {
             query?: never;
@@ -1714,6 +1763,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_upload_geometry_admin_twin_geometry_post */
+        Body_upload_geometry_admin_twin_geometry_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_new_version_documents__document_id__file_post */
         Body_upload_new_version_documents__document_id__file_post: {
             /** File */
@@ -2228,6 +2282,58 @@ export interface components {
              */
             upload_id: string;
         };
+        /**
+         * GeometryItem
+         * @description 세대 1건의 geometry + 명부 좌표(building/floor/unit).
+         */
+        GeometryItem: {
+            /** Area M2 */
+            area_m2: number | null;
+            /** Base Z */
+            base_z: number;
+            /** Building Name */
+            building_name: string;
+            /** Floor */
+            floor: number;
+            /** Floor Height */
+            floor_height: number;
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /** Polygon 2D */
+            polygon_2d: unknown[];
+            /** Polygon 3D */
+            polygon_3d: unknown[];
+            /** Unit No */
+            unit_no: number;
+            /** Unit Type Label */
+            unit_type_label: string | null;
+        };
+        /** GeometryListOut */
+        GeometryListOut: {
+            /** Items */
+            items: components["schemas"]["GeometryItem"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * GeometryUploadReport
+         * @description 업로드 결과 — 매칭·미매칭 집계 + 교체 여부.
+         */
+        GeometryUploadReport: {
+            /** Matched */
+            matched: number;
+            /** Replaced */
+            replaced: boolean;
+            /** Total Units */
+            total_units: number;
+            /** Unmatched */
+            unmatched: number;
+            /** Unmatched Samples */
+            unmatched_samples: string[];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2545,6 +2651,11 @@ export interface components {
             /** Email */
             email?: string | null;
             /**
+             * Has Twin
+             * @default false
+             */
+            has_twin: boolean;
+            /**
              * Must Change Password
              * @default false
              */
@@ -2717,6 +2828,18 @@ export interface components {
              * @enum {string}
              */
             type: "notice" | "inquiry_status" | "approval" | "system";
+        };
+        /**
+         * OverlayOut
+         * @description 세대 상태 오버레이 — household_id(str) → 값. occupancy는 세대원 수.
+         */
+        OverlayOut: {
+            /** Kind */
+            kind: string;
+            /** Values */
+            values: {
+                [key: string]: number;
+            };
         };
         /** PasswordChangeIn */
         PasswordChangeIn: {
@@ -5249,6 +5372,114 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_geometry_admin_twin_geometry_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeometryListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_geometry_admin_twin_geometry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_geometry_admin_twin_geometry_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeometryUploadReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_overlay_admin_twin_overlay_get: {
+        parameters: {
+            query: {
+                kind: string;
+            };
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlayOut"];
+                };
             };
             /** @description Validation Error */
             422: {

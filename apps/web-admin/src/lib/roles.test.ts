@@ -57,6 +57,28 @@ describe("navForRoles", () => {
   it("역할 미상(빈 배열)은 MANAGER 전체로 폴백한다", () => {
     expect(flatHrefs(navForRoles([]))).toContain("/dashboard");
   });
+
+  it("hasTwin이면 MANAGER 관리소 운영 끝에 단지 트윈을 노출한다(시설 뒤)", () => {
+    const ops = navForRoles(["MANAGER"], { hasTwin: true }).find(
+      (g) => g.title === "관리소 운영",
+    );
+    expect(ops?.items.map((i) => i.href)).toEqual([
+      "/staff",
+      "/documents",
+      "/facilities",
+      "/twin",
+    ]);
+  });
+
+  it("hasTwin 미전달(기본)이면 단지 트윈을 노출하지 않는다", () => {
+    expect(flatHrefs(navForRoles(["MANAGER"]))).not.toContain("/twin");
+    expect(flatHrefs(navForRoles(["MANAGER"], { hasTwin: false }))).not.toContain("/twin");
+  });
+
+  it("STAFF·SYS_ADMIN은 hasTwin이라도 단지 트윈을 노출하지 않는다", () => {
+    expect(flatHrefs(navForRoles(["STAFF"], { hasTwin: true }))).not.toContain("/twin");
+    expect(flatHrefs(navForRoles(["SYS_ADMIN"], { hasTwin: true }))).not.toContain("/twin");
+  });
 });
 
 describe("roleHome", () => {

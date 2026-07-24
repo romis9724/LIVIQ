@@ -16,7 +16,7 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import auth_tokens
@@ -45,7 +45,15 @@ from app.schemas.auth import (
     TenantDirectoryOut,
 )
 from app.session import SessionData, SessionStore, get_redis, get_session_store
-from liviq_db.models import Building, Household, PiiVault, Tenant, User, UserRole
+from liviq_db.models import (
+    Building,
+    Household,
+    HouseholdGeometry,
+    PiiVault,
+    Tenant,
+    User,
+    UserRole,
+)
 
 logger = logging.getLogger("app.auth")
 router = APIRouter(tags=["auth"])
@@ -407,6 +415,23 @@ async def _own_profile(
     return display_name, unit_label
 
 
+async def _tenant_has_geometry(db: AsyncSession, tenant_id: uuid.UUID) -> bool:
+    """해당 tenant에 세대 3D geometry가 1건이라도 있는지(트윈 메뉴 노출 신호, H9-1).
+
+    tenant 컨텍스트는 _own_profile이 이미 설정. 조회 실패는 False로 흡수(/me는 화면 분기, 500 금지).
+    """
+    try:
+        count = await db.scalar(
+            select(func.count())
+            .select_from(HouseholdGeometry)
+            .where(HouseholdGeometry.tenant_id == tenant_id)
+        )
+        return bool(count)
+    except Exception:  # noqa: BLE001 — 조회 실패는 트윈 미노출로 흡수
+        logger.warning("me has_twin 조회 실패", exc_info=True)
+        return False
+
+
 @router.get("/me", response_model=MeOut)
 async def me(
     session: Annotated[SessionData, Depends(get_session_raw)],
@@ -419,6 +444,8 @@ async def me(
     """
     tenant_id = uuid.UUID(session.tenant_id)
     display_name, unit_label = await _own_profile(db, crypto, tenant_id, uuid.UUID(session.user_id))
+    # _own_profile이 app.tenant_id를 이미 설정 — 같은 세션에서 격리된 geometry 존재 조회.
+    has_twin = await _tenant_has_geometry(db, tenant_id)
     return MeOut(
         status=session.status,
         tenant_id=tenant_id,
@@ -428,6 +455,7 @@ async def me(
         email=session.email or None,
         display_name=display_name,
         unit_label=unit_label,
+        has_twin=has_twin,
     )
 
 
