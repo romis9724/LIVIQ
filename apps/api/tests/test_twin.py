@@ -31,7 +31,16 @@ from conftest import MANAGER_USER_ID, TENANT_ID, seed_tenant
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import HouseholdGeometry, User
+from liviq_db.models import (
+    Building,
+    Facility,
+    Fee,
+    Household,
+    HouseholdGeometry,
+    Inquiry,
+    PiiVault,
+    User,
+)
 
 TENANT_B_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 _KEK = base64.b64encode(b"0" * 32).decode()
@@ -86,6 +95,7 @@ def _client(
         tenant_id, MANAGER_USER_ID, roles=roles, visibilities=visibilities_for(roles)
     )
     app.dependency_overrides[get_tenant_session] = lambda: db_session
+    app.dependency_overrides[get_pii_crypto] = lambda: PiiCrypto(_KEK)
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -214,8 +224,193 @@ async def test_overlay_unsupported_kind_400(seeded: tuple) -> None:
     session, _ = seeded
     async with _client(session) as c:
         await _upload(c)
-        r = await c.get("/admin/twin/overlay", params={"kind": "inquiries"})
+        r = await c.get("/admin/twin/overlay", params={"kind": "bogus"})
     assert r.status_code == 400
+
+
+# ── inquiries·fees·facilities 오버레이 (H9-2) ─────────────────────────────────
+
+
+def _add_inquiry(session: AsyncSession, household_id: uuid.UUID, *, status: str) -> None:
+    session.add(
+        Inquiry(
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            author_user_id=MANAGER_USER_ID,
+            title="누수 신고",
+            body="본문",
+            status=status,
+            priority="normal",
+        )
+    )
+
+
+def _add_fee(session: AsyncSession, household_id: uuid.UUID, period: str, total: int) -> None:
+    session.add(
+        Fee(
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            period=period,
+            breakdown=[{"name": "합계", "level": 0, "amount": total}],
+            total_amount=total,
+            source="excel",
+        )
+    )
+
+
+async def test_overlay_inquiries_counts_open(seeded: tuple) -> None:
+    session, mapping = seeded
+    hid = mapping[(3, 301)]
+    async with _client(session) as c:
+        await _upload(c)  # geometry: (3,301)·(3,302)
+        # (3,301): 미종결 2건 + 완료 1건(제외). (3,302): 0건 → 키 생략.
+        _add_inquiry(session, hid, status="received")
+        _add_inquiry(session, hid, status="in_progress")
+        _add_inquiry(session, hid, status="done")
+        await session.flush()
+        ov = await c.get("/admin/twin/overlay", params={"kind": "inquiries"})
+    assert ov.status_code == 200
+    body = ov.json()
+    assert body["kind"] == "inquiries"
+    assert body["values"] == {str(hid): 2.0}
+
+
+async def test_overlay_fees_uses_latest_period(seeded: tuple) -> None:
+    session, mapping = seeded
+    h1, h2 = mapping[(3, 301)], mapping[(3, 302)]
+    async with _client(session) as c:
+        await _upload(c)  # geometry: (3,301)·(3,302)
+        _add_fee(session, h1, "2026-05", 100000)  # 과거 월 — 제외
+        _add_fee(session, h1, "2026-06", 120000)  # 당월(최신)
+        _add_fee(session, h2, "2026-06", 130000)
+        await session.flush()
+        ov = await c.get("/admin/twin/overlay", params={"kind": "fees"})
+    assert ov.status_code == 200
+    assert ov.json()["values"] == {str(h1): 120000.0, str(h2): 130000.0}
+
+
+async def test_overlay_facilities_dong_worst_severity(seeded: tuple) -> None:
+    session, mapping = seeded
+    # 101동 세대 1곳 + 202동 세대 1곳에 geometry 직접 적재(동 매칭 스코프 확인).
+    b202 = uuid.uuid4()
+    session.add(Building(id=b202, tenant_id=TENANT_ID, name="202", floors=10))
+    await session.flush()
+    h202 = uuid.uuid4()
+    session.add(
+        Household(
+            id=h202, tenant_id=TENANT_ID, building_id=b202, floor=3, unit_no=301, status="active"
+        )
+    )
+    await session.flush()
+    h101 = mapping[(3, 301)]
+    for hid in (h101, h202):
+        session.add(
+            HouseholdGeometry(
+                tenant_id=TENANT_ID,
+                household_id=hid,
+                polygon_2d=_POLY_2D,
+                polygon_3d=_POLY_3D,
+                base_z=decimal.Decimal("3.0"),
+                floor_height=decimal.Decimal("2.8"),
+            )
+        )
+    # 101동 설비: fault(2) + check(1) → 최악 2. 미매칭 location은 세대 오버레이 제외.
+    session.add(Facility(tenant_id=TENANT_ID, name="EV", location="101동", status="fault"))
+    session.add(Facility(tenant_id=TENANT_ID, name="복도등", location="101동", status="check"))
+    session.add(Facility(tenant_id=TENANT_ID, name="정문", location="관리사무소", status="risk"))
+    await session.flush()
+    async with _client(session) as c:
+        ov = await c.get("/admin/twin/overlay", params={"kind": "facilities"})
+    assert ov.status_code == 200
+    # 101동 세대만 최악 2.0 · 202동(매칭 설비 없음)·미매칭 location(관리사무소) 생략.
+    assert ov.json()["values"] == {str(h101): 2.0}
+
+
+# ── 세대 상세 (H9-2) ──────────────────────────────────────────────────────────
+
+
+async def _add_member(
+    session: AsyncSession,
+    crypto: PiiCrypto,
+    household_id: uuid.UUID,
+    *,
+    name: str,
+    role: str = "RESIDENT",
+    status: str = "active",
+) -> None:
+    dek = await crypto.get_dek(session, TENANT_ID)
+    vault_id = uuid.uuid4()
+    session.add(
+        PiiVault(
+            id=vault_id, tenant_id=TENANT_ID, name_enc=crypto.encrypt(dek, name), key_version=1
+        )
+    )
+    session.add(
+        User(
+            id=uuid.uuid4(),
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            status=status,
+            pii_ref=vault_id,
+        )
+    )
+    await session.flush()
+
+
+async def test_household_detail_masks_members_and_aggregates(seeded: tuple) -> None:
+    session, mapping = seeded
+    hid = mapping[(3, 301)]
+    crypto = PiiCrypto(_KEK)
+    await _add_member(session, crypto, hid, name="홍길동")
+    _add_inquiry(session, hid, status="received")
+    _add_inquiry(session, hid, status="done")  # 종결 — 제외
+    _add_fee(session, hid, "2026-05", 100000)
+    _add_fee(session, hid, "2026-06", 120000)  # 최신 → current_fee
+    await session.flush()
+    async with _client(session) as c:
+        r = await c.get(f"/admin/twin/households/{hid}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["building_name"] == "101"
+    assert (body["floor"], body["unit_no"]) == (3, 301)
+    # 실명 마스킹만 — 원문 부재(규칙 2·6).
+    assert body["members"] == [{"name_masked": "홍*동", "role": "RESIDENT", "status": "active"}]
+    assert "홍길동" not in r.text
+    # 미종결 민원만.
+    assert len(body["open_inquiries"]) == 1
+    assert body["open_inquiries"][0]["status"] == "received"
+    # 당월(최신 period) 관리비.
+    assert body["current_fee"] == {"period": "2026-06", "total": 120000}
+
+
+async def test_household_detail_no_data_defaults(seeded: tuple) -> None:
+    session, mapping = seeded
+    hid = mapping[(3, 302)]
+    async with _client(session) as c:
+        r = await c.get(f"/admin/twin/households/{hid}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["members"] == []
+    assert body["open_inquiries"] == []
+    assert body["current_fee"] is None
+    assert body["unit_type_label"] is None
+
+
+async def test_household_detail_cross_tenant_404(seeded: tuple) -> None:
+    session, mapping = seeded
+    hid = mapping[(3, 301)]  # 단지A 세대
+    async with _client(session, tenant_id=TENANT_B_ID) as c:  # 다른 단지 컨텍스트
+        r = await c.get(f"/admin/twin/households/{hid}")
+    assert r.status_code == 404  # 존재 노출 금지
+
+
+async def test_household_detail_staff_and_resident_denied(seeded: tuple) -> None:
+    session, mapping = seeded
+    hid = mapping[(3, 301)]
+    async with _client(session, roles=("STAFF",)) as c:
+        assert (await c.get(f"/admin/twin/households/{hid}")).status_code == 403
+    async with _client(session, roles=("RESIDENT",)) as c:
+        assert (await c.get(f"/admin/twin/households/{hid}")).status_code == 403
 
 
 # ── /me has_twin ─────────────────────────────────────────────────────────────

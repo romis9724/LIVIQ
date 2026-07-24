@@ -1,6 +1,6 @@
 """관리비 라우터 통합 — 실 PG + FakeStorage + fake LLM(SSE).
 
-단지 총액 트리 업로드·미리보기 → 세대수(574) 균등분배 후 401동 201호 1건 적재(H8-7)
+단지 총액 트리 업로드·미리보기 → 세대수(574) 균등분배 후 전 세대 적재(H9-2)
 → 본인 세대·승인 후 월만(FR-FEE-03) → AI 설명(SSE·확정 데이터 출처) → 역할 가드(규칙 4·5).
 xlsx 픽스처는 openpyxl로 코드 생성(바이너리 커밋 금지).
 """
@@ -32,7 +32,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Building, Fee, Household, User
+from liviq_db.models import Fee, User
 
 _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _TREE_HEADER = ("분류", "우리단지총액")
@@ -116,26 +116,6 @@ async def _add_resident(
     await session.flush()
 
 
-async def _add_target_household(session: AsyncSession) -> uuid.UUID:
-    """401동 201호(2층) 세대 시드 — apply 분배 대상."""
-    building_id = uuid.uuid4()
-    session.add(Building(id=building_id, tenant_id=TENANT_ID, name="401", floors=25))
-    await session.flush()
-    hid = uuid.uuid4()
-    session.add(
-        Household(
-            id=hid,
-            tenant_id=TENANT_ID,
-            building_id=building_id,
-            floor=2,
-            unit_no=201,
-            status="active",
-        )
-    )
-    await session.flush()
-    return hid
-
-
 def _row(name: str, level: int, amount: int) -> dict[str, object]:
     return {"name": name, "level": level, "amount": amount}
 
@@ -214,25 +194,25 @@ async def test_get_upload_detail_not_found_404(
     assert resp.status_code == 404
 
 
-# ── 확정 적재(401동 201호 1건) ─────────────────────────────────────────────
+# ── 확정 적재(전 세대 균등) ─────────────────────────────────────────────────
 
 
-async def test_apply_inserts_single_household_with_divided_tree(
+async def test_apply_inserts_all_households_with_divided_tree(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
-    target = await _add_target_household(db_session)
     storage = FakeStorage()
     async with _client(db_session, storage) as c:
         up = await _upload(c, _tree_xlsx(), "2026-07")
         apply = await c.post(f"/admin/fees/uploads/{up.json()['upload_id']}/apply")
     assert apply.status_code == 200, apply.text
-    assert apply.json()["applied"] == 1
+    # seed_tenant가 세대 3개 시드 → 전 세대 적재.
+    assert apply.json()["applied"] == len(households)
 
     fees = list(await db_session.scalars(select(Fee).where(Fee.period == "2026-07")))
-    assert len(fees) == 1
+    assert len(fees) == len(households)
+    assert {fee.household_id for fee in fees} == set(households.values())
     fee = fees[0]
-    assert fee.household_id == target
-    assert fee.total_amount == 176601
+    assert fee.total_amount == 176601  # 세대당 동일 균등분배 총액
     assert fee.source == "excel"
     # breakdown = 순서 보존 리스트.
     assert isinstance(fee.breakdown, list)
@@ -241,25 +221,27 @@ async def test_apply_inserts_single_household_with_divided_tree(
     assert neg["amount"] == -273  # 음수 유지
 
 
-async def test_apply_without_target_household_422(
-    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
-) -> None:
-    storage = FakeStorage()  # 401동 201호 미시드 → 422
+async def test_apply_zero_households_applies_none(db_session: AsyncSession) -> None:
+    # 세대 0건 단지 — 에러 아님, applied=0(브리프 결정).
+    await seed_tenant(db_session, households=())
+    storage = FakeStorage()
     async with _client(db_session, storage) as c:
         up = await _upload(c, _tree_xlsx(), "2026-07")
         apply = await c.post(f"/admin/fees/uploads/{up.json()['upload_id']}/apply")
-    assert apply.status_code == 422
+    assert apply.status_code == 200, apply.text
+    assert apply.json()["applied"] == 0
+    count = await db_session.scalar(select(func.count()).select_from(Fee))
+    assert count == 0
 
 
-async def test_apply_replaces_target_household_month(
+async def test_apply_replaces_all_households_month(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
-    target = await _add_target_household(db_session)
-    # 기존 7월 데이터(값 다름) — apply가 교체.
+    # 기존 7월 데이터(값 다름) — apply가 전 세대 교체(중복 없음).
     db_session.add(
         Fee(
             tenant_id=TENANT_ID,
-            household_id=target,
+            household_id=households[(3, 301)],
             period="2026-07",
             breakdown=[_row("합계", 0, 1)],
             total_amount=1,
@@ -272,14 +254,13 @@ async def test_apply_replaces_target_household_month(
         up = await _upload(c, _tree_xlsx(), "2026-07")
         await c.post(f"/admin/fees/uploads/{up.json()['upload_id']}/apply")
     july = list(await db_session.scalars(select(Fee).where(Fee.period == "2026-07")))
-    assert len(july) == 1
-    assert july[0].total_amount == 176601
+    assert len(july) == len(households)  # 세대당 1건 — 중복·잔재 없음
+    assert all(fee.total_amount == 176601 for fee in july)
 
 
 async def test_apply_requires_validated_status(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
-    await _add_target_household(db_session)
     storage = FakeStorage()
     async with _client(db_session, storage) as c:
         up = await _upload(c, _tree_xlsx(), "2026-07")
@@ -516,7 +497,6 @@ async def test_resident_cannot_upload(
 async def test_staff_cannot_apply(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
-    await _add_target_household(db_session)
     storage = FakeStorage()
     async with _client(db_session, storage) as c:
         up = await _upload(c, _tree_xlsx(), "2026-07")

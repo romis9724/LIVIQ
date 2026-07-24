@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import datetime
 import uuid
 
 from pydantic import BaseModel, ConfigDict
@@ -58,7 +59,49 @@ class GeometryListOut(BaseModel):
 
 
 class OverlayOut(BaseModel):
-    """세대 상태 오버레이 — household_id(str) → 값. occupancy는 세대원 수."""
+    """세대 상태 오버레이 — household_id(str) → 값. kind별 값 의미가 다르다(H9-2).
+
+    occupancy=세대원 수 · inquiries=미종결 민원 수 · fees=당월 관리비(원) ·
+    facilities=동 최악 설비 severity(normal 0·check 1·fault 2·risk 3).
+    """
 
     kind: str
     values: dict[str, float]
+
+
+class HouseholdMemberItem(BaseModel):
+    """세대원 1건 — 실명은 마스킹만 노출(원문·생년월일 금지, 규칙 2·6)."""
+
+    name_masked: str
+    role: str
+    status: str
+
+
+class TwinInquiryItem(BaseModel):
+    """세대 미종결 민원 1건(트윈 상세용 요약)."""
+
+    id: uuid.UUID
+    title: str
+    status: str
+    priority: str | None
+    created_at: datetime.datetime
+
+
+class TwinFeeItem(BaseModel):
+    """세대 최신 월 관리비 요약."""
+
+    period: str
+    total: int
+
+
+class HouseholdDetailOut(BaseModel):
+    """세대 상세 — 좌표·세대원(마스킹)·미종결 민원·당월 관리비 (H9-2, MANAGER 전용)."""
+
+    household_id: uuid.UUID
+    building_name: str
+    floor: int
+    unit_no: int
+    unit_type_label: str | None
+    members: list[HouseholdMemberItem]
+    open_inquiries: list[TwinInquiryItem]
+    current_fee: TwinFeeItem | None
