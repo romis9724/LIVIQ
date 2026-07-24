@@ -18,6 +18,7 @@ import {
 import { unitLabel } from "./households-data";
 import { BuildingFormDialog, BulkHouseholdDialog } from "./HouseholdForms";
 import type { BuildingFormValues, BulkHouseholdValues } from "./HouseholdForms";
+import { GeometryUploadPanel } from "./GeometryUploadPanel";
 import "./households.css";
 
 const TOAST_DURATION_MS = 3200;
@@ -211,6 +212,8 @@ export function HouseholdAdmin() {
             />
           </div>
         )}
+
+        <GeometryUploadPanel />
       </main>
 
       {buildingDialog ? (

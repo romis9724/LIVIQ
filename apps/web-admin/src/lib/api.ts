@@ -1250,6 +1250,7 @@ export interface Me {
   roles: string[];
   mustChangePassword: boolean; // true면 비밀번호 변경 화면으로 강제(H7-2)
   email: string | null; // 로그인 이메일(세션 저장분) — 구세션은 null(H7-5)
+  hasTwin: boolean; // 단지에 세대 geometry 존재 여부 — 트윈 메뉴 게이트(H9-1)
 }
 
 export async function getMe(): Promise<Me> {
@@ -1262,6 +1263,7 @@ export async function getMe(): Promise<Me> {
     roles: body.roles,
     mustChangePassword: body.must_change_password ?? false,
     email: body.email ?? null,
+    hasTwin: body.has_twin ?? false,
   };
 }
 
@@ -1897,4 +1899,97 @@ export async function deleteHousehold(id: string): Promise<void> {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
+}
+
+// ── 단지 트윈 (H9-1, ADR-0019 · MANAGER 전용) ──────────────────────────────────
+// geometry는 세대별 2D/3D 폴리곤. 좌표는 [lon,lat](2d)·[lon,lat,z](3d). base_z·floor_height로
+// 층을 쌓는다. 오버레이는 household_id→값(occupancy=세대원 수). 렌더는 features/twin.
+
+export interface TwinGeometryItem {
+  householdId: string;
+  buildingName: string;
+  floor: number;
+  unitNo: number;
+  polygon2d: number[][];
+  polygon3d: number[][];
+  baseZ: number;
+  floorHeight: number;
+  areaM2: number | null;
+  unitTypeLabel: string | null;
+}
+
+export interface TwinUploadReport {
+  totalUnits: number;
+  matched: number;
+  unmatched: number;
+  unmatchedSamples: string[];
+  replaced: boolean;
+}
+
+interface RawGeometryItem {
+  household_id: string;
+  building_name: string;
+  floor: number;
+  unit_no: number;
+  polygon_2d: number[][];
+  polygon_3d: number[][];
+  base_z: number;
+  floor_height: number;
+  area_m2: number | null;
+  unit_type_label: string | null;
+}
+
+function toGeometryItem(raw: RawGeometryItem): TwinGeometryItem {
+  return {
+    householdId: raw.household_id,
+    buildingName: raw.building_name,
+    floor: raw.floor,
+    unitNo: raw.unit_no,
+    polygon2d: raw.polygon_2d,
+    polygon3d: raw.polygon_3d,
+    baseZ: raw.base_z,
+    floorHeight: raw.floor_height,
+    areaM2: raw.area_m2,
+    unitTypeLabel: raw.unit_type_label,
+  };
+}
+
+/** 세대 geometry 목록. 미등록이면 빈 배열. 403=권한 없음. */
+export async function listTwinGeometry(): Promise<TwinGeometryItem[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/twin/geometry`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawGeometryItem[]).map(toGeometryItem);
+}
+
+/** geometry 업로드(units.json) — 기존 전량 교체. 명부 세대와 매칭·미매칭 리포트 반환. */
+export async function uploadTwinGeometry(file: File): Promise<TwinUploadReport> {
+  const form = new FormData();
+  form.set("file", file);
+  // Content-Type 은 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
+  const response = await apiFetch(`${API_BASE_URL}/admin/twin/geometry`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: form,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    totalUnits: body.total_units,
+    matched: body.matched,
+    unmatched: body.unmatched,
+    unmatchedSamples: (body.unmatched_samples as string[]) ?? [],
+    replaced: body.replaced,
+  };
+}
+
+/** 오버레이 값 — household_id(str)→값. 현재 occupancy(세대원 수)만 지원. 그 외 400. */
+export async function getTwinOverlay(kind: "occupancy"): Promise<Record<string, number>> {
+  const response = await apiFetch(
+    `${API_BASE_URL}/admin/twin/overlay?kind=${encodeURIComponent(kind)}`,
+    { headers: DEV_HEADERS },
+  );
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.values as Record<string, number>) ?? {};
 }

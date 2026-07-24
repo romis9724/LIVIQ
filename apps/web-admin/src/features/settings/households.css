@@ -215,6 +215,109 @@
   z-index: 40;
 }
 
+/* ---- 트윈 geometry 업로드 (H9-1) — 하단 접이식 섹션 ---- */
+.hh-geometry {
+  margin-top: var(--space-5);
+}
+.hh-geometry__summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+.hh-geometry__summary::-webkit-details-marker {
+  display: none;
+}
+.hh-geometry__summary::before {
+  content: "▸";
+  color: var(--color-text-muted);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.hh-geometry[open] .hh-geometry__summary::before {
+  transform: rotate(90deg);
+}
+.hh-geometry__summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.hh-geometry__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.hh-geometry__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.hh-geometry__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.hh-geometry__lede {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  max-width: 70ch;
+}
+.hh-geometry__report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.hh-geometry__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+}
+.hh-geometry__stats > div {
+  flex: 1 1 120px;
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+.hh-geometry__stats > div[data-warn] {
+  border-color: color-mix(in oklch, var(--color-warning) 55%, var(--color-border));
+  background: color-mix(in oklch, var(--color-warning) 8%, var(--color-surface));
+}
+.hh-geometry__stats dt {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.hh-geometry__stats dd {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.hh-geometry__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.hh-geometry__unmatched {
+  font-size: var(--text-sm);
+}
+.hh-geometry__unmatched-label {
+  display: block;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+.hh-geometry__unmatched ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 860px) {
   .hh-layout {
     grid-template-columns: 1fr;
