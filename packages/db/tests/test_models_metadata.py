@@ -54,5 +54,6 @@ def test_tenant_scope_table_count() -> None:
     H8-1(ADR-0015): notice_drafts 제거·notice_attachments 신설 — 순증감 0(합계 불변).
     H8-4(ADR-0017): code_groups·codes 신설 — +2.
     H8-9(ADR-0018): inquiry_categories 폐기(코드 그룹 흡수) — -1.
+    H9-1(ADR-0019): household_geometries 신설(세대 3D 폴리곤) — +1.
     """
-    assert len(metadata.tables) == 35
+    assert len(metadata.tables) == 36
