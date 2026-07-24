@@ -962,6 +962,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/twin/households/{household_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Household Detail
+         * @description 세대 상세 — 좌표·세대원(마스킹)·미종결 민원·당월 관리비.
+         *
+         *     tenant 격리(CRITICAL): 타 단지 household_id는 404(존재조차 노출하지 않음). 세대원 실명은
+         *     마스킹만 노출한다(원문·생년월일 금지 — 규칙 2·6, 트윈은 관리자 화면이나 최소 노출).
+         */
+        get: operations["get_household_detail_admin_twin_households__household_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/twin/overlay": {
         parameters: {
             query?: never;
@@ -971,9 +994,10 @@ export interface paths {
         };
         /**
          * Get Overlay
-         * @description 세대 상태 오버레이. occupancy = 세대원 수(geometry 있는 세대만, 0명 세대는 생략).
+         * @description 세대 상태 오버레이 — household_id → 값. 모든 kind가 geometry 있는 세대만 스코프.
          *
-         *     inquiries·fees·facilities 등 다른 kind는 H9-2 — 그 외 값은 400.
+         *     occupancy=세대원 수 · inquiries=미종결 민원 수 · fees=당월 관리비 ·
+         *     facilities=동 최악 설비 severity. 값 없는 세대는 키 생략(0으로 채우지 않음). 그 외 400.
          */
         get: operations["get_overlay_admin_twin_overlay_get"];
         put?: never;
@@ -2374,6 +2398,30 @@ export interface components {
             /** Skipped */
             skipped: number;
         };
+        /**
+         * HouseholdDetailOut
+         * @description 세대 상세 — 좌표·세대원(마스킹)·미종결 민원·당월 관리비 (H9-2, MANAGER 전용).
+         */
+        HouseholdDetailOut: {
+            /** Building Name */
+            building_name: string;
+            current_fee: components["schemas"]["TwinFeeItem"] | null;
+            /** Floor */
+            floor: number;
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /** Members */
+            members: components["schemas"]["HouseholdMemberItem"][];
+            /** Open Inquiries */
+            open_inquiries: components["schemas"]["TwinInquiryItem"][];
+            /** Unit No */
+            unit_no: number;
+            /** Unit Type Label */
+            unit_type_label: string | null;
+        };
         /** HouseholdItem */
         HouseholdItem: {
             /** Floor */
@@ -2393,6 +2441,18 @@ export interface components {
             building: components["schemas"]["BuildingOut"];
             /** Items */
             items: components["schemas"]["HouseholdItem"][];
+        };
+        /**
+         * HouseholdMemberItem
+         * @description 세대원 1건 — 실명은 마스킹만 노출(원문·생년월일 금지, 규칙 2·6).
+         */
+        HouseholdMemberItem: {
+            /** Name Masked */
+            name_masked: string;
+            /** Role */
+            role: string;
+            /** Status */
+            status: string;
         };
         /** HouseholdOut */
         HouseholdOut: {
@@ -2831,7 +2891,10 @@ export interface components {
         };
         /**
          * OverlayOut
-         * @description 세대 상태 오버레이 — household_id(str) → 값. occupancy는 세대원 수.
+         * @description 세대 상태 오버레이 — household_id(str) → 값. kind별 값 의미가 다르다(H9-2).
+         *
+         *     occupancy=세대원 수 · inquiries=미종결 민원 수 · fees=당월 관리비(원) ·
+         *     facilities=동 최악 설비 severity(normal 0·check 1·fault 2·risk 3).
          */
         OverlayOut: {
             /** Kind */
@@ -3107,6 +3170,38 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+        };
+        /**
+         * TwinFeeItem
+         * @description 세대 최신 월 관리비 요약.
+         */
+        TwinFeeItem: {
+            /** Period */
+            period: string;
+            /** Total */
+            total: number;
+        };
+        /**
+         * TwinInquiryItem
+         * @description 세대 미종결 민원 1건(트윈 상세용 요약).
+         */
+        TwinInquiryItem: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Priority */
+            priority: string | null;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -5443,6 +5538,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeometryUploadReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_household_detail_admin_twin_households__household_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                household_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HouseholdDetailOut"];
                 };
             };
             /** @description Validation Error */
