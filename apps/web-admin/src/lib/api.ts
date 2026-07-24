@@ -1983,8 +1983,15 @@ export async function uploadTwinGeometry(file: File): Promise<TwinUploadReport> 
   };
 }
 
-/** 오버레이 값 — household_id(str)→값. 현재 occupancy(세대원 수)만 지원. 그 외 400. */
-export async function getTwinOverlay(kind: "occupancy"): Promise<Record<string, number>> {
+/**
+ * 오버레이 값 — household_id(str)→값. 값 의미는 kind마다 다르다:
+ * occupancy=세대원 수 · inquiries=미종결 민원 수 · fees=당월 관리비(원) ·
+ * facilities=동 최악 설비 severity(0 normal·1 check·2 fault·3 risk).
+ * 값 없는 세대는 맵에서 생략된다(0 아님). 그 외 kind는 400.
+ */
+export async function getTwinOverlay(
+  kind: "occupancy" | "inquiries" | "fees" | "facilities",
+): Promise<Record<string, number>> {
   const response = await apiFetch(
     `${API_BASE_URL}/admin/twin/overlay?kind=${encodeURIComponent(kind)}`,
     { headers: DEV_HEADERS },
@@ -1992,4 +1999,75 @@ export async function getTwinOverlay(kind: "occupancy"): Promise<Record<string, 
   await ensureOk(response);
   const body = await response.json();
   return (body.values as Record<string, number>) ?? {};
+}
+
+// 세대 상세 — 실명은 서버가 마스킹해서 준다(원문 미보유·재마스킹 없음, 규칙 2).
+export interface TwinHouseholdMember {
+  nameMasked: string;
+  role: string;
+  status: string;
+}
+
+export interface TwinOpenInquiry {
+  id: string;
+  title: string;
+  status: string; // received | assigned | in_progress | reopened
+  priority: string | null; // urgent | normal | low
+  createdAt: string;
+}
+
+export interface TwinHouseholdDetail {
+  householdId: string;
+  buildingName: string;
+  floor: number;
+  unitNo: number;
+  unitTypeLabel: string | null;
+  members: TwinHouseholdMember[];
+  openInquiries: TwinOpenInquiry[];
+  currentFee: { period: string; total: number } | null;
+}
+
+interface RawTwinMember {
+  name_masked: string;
+  role: string;
+  status: string;
+}
+
+interface RawTwinInquiry {
+  id: string;
+  title: string;
+  status: string;
+  priority: string | null;
+  created_at: string;
+}
+
+/** 세대 상세(MANAGER) — 세대원(마스킹)·미종결 민원·당월 관리비. 404=세대 없음. */
+export async function getTwinHouseholdDetail(householdId: string): Promise<TwinHouseholdDetail> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/twin/households/${householdId}`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    householdId: body.household_id ?? householdId,
+    buildingName: body.building_name,
+    floor: body.floor,
+    unitNo: body.unit_no,
+    unitTypeLabel: body.unit_type_label ?? null,
+    members: ((body.members as RawTwinMember[]) ?? []).map((m) => ({
+      nameMasked: m.name_masked,
+      role: m.role,
+      status: m.status,
+    })),
+    openInquiries: ((body.open_inquiries as RawTwinInquiry[]) ?? []).map((i) => ({
+      id: i.id,
+      title: i.title,
+      status: i.status,
+      priority: i.priority ?? null,
+      createdAt: i.created_at,
+    })),
+    currentFee: body.current_fee
+      ? { period: body.current_fee.period, total: body.current_fee.total }
+      : null,
+  };
 }

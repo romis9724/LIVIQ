@@ -6,11 +6,14 @@ import type { Color, MapViewState, PickingInfo } from "deck.gl";
 import { EmptyState } from "@liviq/ui";
 import type { TwinGeometryItem } from "@/lib/api";
 import {
-  OCCUPANCY_LEGEND,
+  OVERLAY_LABELS,
   boundsToViewState,
+  colorForOverlay,
   computeBounds,
-  occupancyColor,
+  legendForOverlay,
+  overlayValueText,
   rgbCss,
+  type OverlayKind,
 } from "./twin-data";
 
 // 이 파일은 deck.gl(WebGL)만 다룬다 — TwinView 가 next/dynamic ssr:false 로만 로드한다.
@@ -21,7 +24,9 @@ const INITIAL_BEARING = 20;
 
 interface TwinDeckProps {
   geometry: TwinGeometryItem[];
-  overlay: Record<string, number>; // household_id → 세대원 수
+  overlay: Record<string, number>; // household_id → 값(overlayKind 에 따라 의미가 다름)
+  overlayKind: OverlayKind;
+  onSelectHousehold: (householdId: string) => void;
 }
 
 /** WebGL 지원 여부 — 미지원이면 캔버스 대신 안내를 띄운다(클라이언트 전용). */
@@ -34,7 +39,7 @@ function webglSupported(): boolean {
   }
 }
 
-export function TwinDeck({ geometry, overlay }: TwinDeckProps) {
+export function TwinDeck({ geometry, overlay, overlayKind, onSelectHousehold }: TwinDeckProps) {
   const [failed, setFailed] = useState(false);
   const supported = useMemo(webglSupported, []);
 
@@ -57,22 +62,26 @@ export function TwinDeck({ geometry, overlay }: TwinDeckProps) {
         getPolygon: (d) => d.polygon3d,
         getElevation: (d) => d.floorHeight,
         getFillColor: (d): Color => {
-          const [r, g, b] = occupancyColor(overlay[d.householdId] ?? 0);
+          const [r, g, b] = colorForOverlay(overlayKind, overlay[d.householdId]);
           return [r, g, b, FILL_ALPHA];
         },
         getLineColor: LINE_COLOR,
         getLineWidth: 1,
         lineWidthUnits: "pixels",
-        updateTriggers: { getFillColor: overlay },
+        onClick: (info: PickingInfo<TwinGeometryItem>) => {
+          if (info.object) onSelectHousehold(info.object.householdId);
+          return true;
+        },
+        updateTriggers: { getFillColor: [overlayKind, overlay] },
       }),
-    [geometry, overlay],
+    [geometry, overlay, overlayKind, onSelectHousehold],
   );
 
-  // H9-2 상세 패널 전까지는 hover tooltip(동·호·세대원 수)만 — 클릭 상세는 후속.
+  // hover tooltip — 동·호 + 현재 오버레이 값(예 민원: "402 1202호 · 미종결 2건"). 클릭은 상세 패널.
   const getTooltip = ({ object }: PickingInfo<TwinGeometryItem>) => {
     if (!object) return null;
-    const count = overlay[object.householdId] ?? 0;
-    return { text: `${object.buildingName} ${object.unitNo}호 · 세대원 ${count}명` };
+    const valueText = overlayValueText(overlayKind, overlay[object.householdId]);
+    return { text: `${object.buildingName} ${object.unitNo}호 · ${valueText}` };
   };
 
   if (!supported || failed) {
@@ -97,8 +106,8 @@ export function TwinDeck({ geometry, overlay }: TwinDeckProps) {
         getTooltip={getTooltip}
         onError={() => setFailed(true)}
       />
-      <ul className="twin-legend" aria-label="세대원 수 범례">
-        {OCCUPANCY_LEGEND.map((entry) => (
+      <ul className="twin-legend" aria-label={`${OVERLAY_LABELS[overlayKind]} 범례`}>
+        {legendForOverlay(overlayKind).map((entry) => (
           <li key={entry.label} className="twin-legend__item">
             <span
               className="twin-legend__swatch"
