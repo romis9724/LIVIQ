@@ -1,76 +1,35 @@
-"""parking 계약 — 주차장 대시보드 CRUD (H9-5, MANAGER 전용).
+"""parking 계약 — 지하주차장 배치도·입주민 차량 조회 (H9-5, MANAGER 전용).
 
-1행 = 배정 주차면 1개(위치·차량번호 선택, 세대당 다건). plate는 관리자와 평문으로 오가되 DB엔
-암호화 저장한다(규칙 2 — 이 라우터는 입주민 앱·LLM 미노출). 형식 검증은 하지 않고 길이만 제한.
+배치도는 렌더 페이로드(JSONB)를 그대로 통과시킨다 — 서버는 내용을 해석하지 않는다(YAGNI).
+차량은 DB엔 암호문(plate_enc)만 있고 응답의 plate는 복호 평문이다(규칙 2 — 이 라우터는
+입주민 앱·LLM 미노출). dong·ho는 프로토타입 배치도와 맞춘 표시 포맷("401동"/"1502호").
 """
 
 from __future__ import annotations
 
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 
-class ParkingAssignmentIn(BaseModel):
-    """주차면 생성 입력 — household_id + 위치·차량번호(선택)."""
+class ParkingLayoutOut(BaseModel):
+    """배치도 페이로드(viewBox·buildings·boxes·cores·spots). 미적재면 null."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    household_id: uuid.UUID
-    location_code: str | None = Field(default=None, max_length=40)
-    plate: str | None = Field(default=None, max_length=20)
+    layout: dict | None
 
 
-class ParkingAssignmentUpdateIn(BaseModel):
-    """주차면 수정 입력 — 위치·차량번호 전체 교체(빈 값/null이면 클리어)."""
-
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    location_code: str | None = Field(default=None, max_length=40)
-    plate: str | None = Field(default=None, max_length=20)
-
-
-class ParkingAssignmentOut(BaseModel):
-    """주차면 1건 — plate는 복호 평문."""
+class ParkingVehicleItem(BaseModel):
+    """입주민 차량 1대 — plate는 복호 평문."""
 
     id: uuid.UUID
     household_id: uuid.UUID
-    location_code: str | None
-    plate: str | None
+    dong: str  # 예 "401동"
+    ho: str  # 예 "1502호"
+    plate: str
+    model: str | None
+    is_ev: bool
 
 
-class ParkingAssignmentItem(BaseModel):
-    """대시보드 세대 행의 배정 1건(plate=복호 평문)."""
-
-    id: uuid.UUID
-    location_code: str | None
-    plate: str | None
-
-
-class ParkingHouseholdItem(BaseModel):
-    """대시보드 세대 행 — 배정 1건 이상인 세대만."""
-
-    household_id: uuid.UUID
-    dong: str
-    floor: int
-    ho: int
-    unit_label: str  # 예 "401동 1502호"
-    space_count: int
-    vehicle_count: int
-    assignments: list[ParkingAssignmentItem]
-
-
-class ParkingSummary(BaseModel):
-    """주차 현황 요약 타일."""
-
-    total_spaces: int
-    total_vehicles: int
-    assigned_households: int
-    unassigned_households: int
-
-
-class ParkingDashboardOut(BaseModel):
-    """주차장 대시보드 페이로드 — 요약 + 배정된 세대 목록."""
-
-    summary: ParkingSummary
-    households: list[ParkingHouseholdItem]
+class ParkingVehicleListOut(BaseModel):
+    vehicles: list[ParkingVehicleItem]
+    total: int

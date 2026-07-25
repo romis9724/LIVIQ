@@ -12,7 +12,7 @@ H7-2: admin_tenants(단지 생성·소장 초대, SYS_ADMIN)·staff(직원 초�
 H8-4: codes(공통 코드 레지스트리 CRUD — 쓰기 MANAGER, 조회 MANAGER·STAFF, ADR-0017).
 H8-5: households(동/호수 관리 — 동·세대 CRUD + 층·호 범위 일괄 생성, MANAGER 전용).
 H9-1: twin(단지 트윈 — units.json geometry 업로드·조회 + occupancy 오버레이, MANAGER, ADR-0019).
-H9-5: parking(주차장 대시보드 — 세대 주차면 배정 CRUD·현황 집계, MANAGER 전용).
+H9-5: parking(주차장 대시보드 — 지하주차장 배치도·입주민 차량 조회, MANAGER 전용).
 """
 
 from __future__ import annotations

@@ -634,7 +634,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/admin/parking": {
+    "/admin/parking/layout": {
         parameters: {
             query?: never;
             header?: never;
@@ -642,44 +642,36 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Dashboard
-         * @description 주차 현황 요약 + 배정된 세대 목록(배정 1건 이상인 세대만). 동·층·호 오름차순.
+         * Get Layout
+         * @description 배치도 조회 — 미적재면 `{"layout": null}`(404 아님, 프론트가 빈 상태 렌더).
          */
-        get: operations["get_dashboard_admin_parking_get"];
+        get: operations["get_layout_admin_parking_layout_get"];
         put?: never;
-        /**
-         * Create Assignment
-         * @description 주차면 배정 생성 — household_id가 이 단지 세대여야 한다(아니면 404).
-         */
-        post: operations["create_assignment_admin_parking_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/admin/parking/{assignment_id}": {
+    "/admin/parking/vehicles": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Vehicles
+         * @description 입주민 차량 목록(동·호 오름차순). plate는 복호 평문 — 관리자 전용.
+         */
+        get: operations["list_vehicles_admin_parking_vehicles_get"];
         put?: never;
         post?: never;
-        /**
-         * Delete Assignment
-         * @description 주차면 배정 삭제(leaf — FK 의존자 없음).
-         */
-        delete: operations["delete_assignment_admin_parking__assignment_id__delete"];
+        delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Update Assignment
-         * @description 위치·차량번호 전체 교체(빈 값/null이면 클리어, 값 있으면 재암호화).
-         */
-        patch: operations["update_assignment_admin_parking__assignment_id__patch"];
+        patch?: never;
         trace?: never;
     };
     "/admin/roster": {
@@ -2955,112 +2947,47 @@ export interface components {
             };
         };
         /**
-         * ParkingAssignmentIn
-         * @description 주차면 생성 입력 — household_id + 위치·차량번호(선택).
+         * ParkingLayoutOut
+         * @description 배치도 페이로드(viewBox·buildings·boxes·cores·spots). 미적재면 null.
          */
-        ParkingAssignmentIn: {
-            /**
-             * Household Id
-             * Format: uuid
-             */
-            household_id: string;
-            /** Location Code */
-            location_code?: string | null;
-            /** Plate */
-            plate?: string | null;
+        ParkingLayoutOut: {
+            /** Layout */
+            layout: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
-         * ParkingAssignmentItem
-         * @description 대시보드 세대 행의 배정 1건(plate=복호 평문).
+         * ParkingVehicleItem
+         * @description 입주민 차량 1대 — plate는 복호 평문.
          */
-        ParkingAssignmentItem: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Location Code */
-            location_code: string | null;
-            /** Plate */
-            plate: string | null;
-        };
-        /**
-         * ParkingAssignmentOut
-         * @description 주차면 1건 — plate는 복호 평문.
-         */
-        ParkingAssignmentOut: {
-            /**
-             * Household Id
-             * Format: uuid
-             */
-            household_id: string;
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /** Location Code */
-            location_code: string | null;
-            /** Plate */
-            plate: string | null;
-        };
-        /**
-         * ParkingAssignmentUpdateIn
-         * @description 주차면 수정 입력 — 위치·차량번호 전체 교체(빈 값/null이면 클리어).
-         */
-        ParkingAssignmentUpdateIn: {
-            /** Location Code */
-            location_code?: string | null;
-            /** Plate */
-            plate?: string | null;
-        };
-        /**
-         * ParkingDashboardOut
-         * @description 주차장 대시보드 페이로드 — 요약 + 배정된 세대 목록.
-         */
-        ParkingDashboardOut: {
-            /** Households */
-            households: components["schemas"]["ParkingHouseholdItem"][];
-            summary: components["schemas"]["ParkingSummary"];
-        };
-        /**
-         * ParkingHouseholdItem
-         * @description 대시보드 세대 행 — 배정 1건 이상인 세대만.
-         */
-        ParkingHouseholdItem: {
-            /** Assignments */
-            assignments: components["schemas"]["ParkingAssignmentItem"][];
+        ParkingVehicleItem: {
             /** Dong */
             dong: string;
-            /** Floor */
-            floor: number;
             /** Ho */
-            ho: number;
+            ho: string;
             /**
              * Household Id
              * Format: uuid
              */
             household_id: string;
-            /** Space Count */
-            space_count: number;
-            /** Unit Label */
-            unit_label: string;
-            /** Vehicle Count */
-            vehicle_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Ev */
+            is_ev: boolean;
+            /** Model */
+            model: string | null;
+            /** Plate */
+            plate: string;
         };
-        /**
-         * ParkingSummary
-         * @description 주차 현황 요약 타일.
-         */
-        ParkingSummary: {
-            /** Assigned Households */
-            assigned_households: number;
-            /** Total Spaces */
-            total_spaces: number;
-            /** Total Vehicles */
-            total_vehicles: number;
-            /** Unassigned Households */
-            unassigned_households: number;
+        /** ParkingVehicleListOut */
+        ParkingVehicleListOut: {
+            /** Total */
+            total: number;
+            /** Vehicles */
+            vehicles: components["schemas"]["ParkingVehicleItem"][];
         };
         /** PasswordChangeIn */
         PasswordChangeIn: {
@@ -5066,7 +4993,7 @@ export interface operations {
             };
         };
     };
-    get_dashboard_admin_parking_get: {
+    get_layout_admin_parking_layout_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5086,7 +5013,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ParkingDashboardOut"];
+                    "application/json": components["schemas"]["ParkingLayoutOut"];
                 };
             };
             /** @description Validation Error */
@@ -5100,7 +5027,7 @@ export interface operations {
             };
         };
     };
-    create_assignment_admin_parking_post: {
+    list_vehicles_admin_parking_vehicles_get: {
         parameters: {
             query?: never;
             header?: {
@@ -5112,85 +5039,7 @@ export interface operations {
                 liviq_session?: string | null;
             };
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ParkingAssignmentIn"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ParkingAssignmentOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_assignment_admin_parking__assignment_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-dev-tenant-id"?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                assignment_id: string;
-            };
-            cookie?: {
-                liviq_session?: string | null;
-            };
-        };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_assignment_admin_parking__assignment_id__patch: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-dev-tenant-id"?: string | null;
-                "x-dev-user-id"?: string | null;
-            };
-            path: {
-                assignment_id: string;
-            };
-            cookie?: {
-                liviq_session?: string | null;
-            };
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ParkingAssignmentUpdateIn"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5198,7 +5047,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ParkingAssignmentOut"];
+                    "application/json": components["schemas"]["ParkingVehicleListOut"];
                 };
             };
             /** @description Validation Error */

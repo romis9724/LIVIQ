@@ -1,228 +1,88 @@
-"""parking — 주차장 대시보드 CRUD (MANAGER 전용, H9-5).
+"""parking — 지하주차장 배치도·입주민 차량 조회 (MANAGER 전용, H9-5).
 
-세대에 배정된 주차면(위치·차량번호 선택, 세대당 다건)을 관리한다. 대시보드는 배정 행을 명부
-(households·buildings)에 조인해 세대 단위로 묶고 현황을 집계한다. 차량번호는 저장 시 봉투
-암호화(plate_enc), 조회 시 복호해 관리자에게만 노출한다(규칙 2 — 입주민 앱·LLM 미노출).
+배치도(parking_layouts, 단지당 1행)는 렌더 페이로드를 그대로 반환하고, 차량(parking_vehicles)은
+명부(households·buildings)에 조인해 동·호 표시 문자열과 함께 반환한다. 차량번호는 저장 시
+봉투 암호화(plate_enc), 조회 시 복호해 관리자에게만 노출한다(규칙 2 — 입주민 앱·LLM 미노출).
+적재는 시드 스크립트(seed_parking.py) 경로 — 이 라우터는 읽기 전용이다.
 모든 쿼리는 tenant 컨텍스트 세션 + tenant_id 명시 필터로 이중 방어(규칙 3).
 """
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.parking import (
-    ParkingAssignmentIn,
-    ParkingAssignmentItem,
-    ParkingAssignmentOut,
-    ParkingAssignmentUpdateIn,
-    ParkingDashboardOut,
-    ParkingHouseholdItem,
-    ParkingSummary,
-)
-from liviq_db.models import Building, Household, ParkingAssignment
+from app.schemas.parking import ParkingLayoutOut, ParkingVehicleItem, ParkingVehicleListOut
+from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle
 
 router = APIRouter(prefix="/admin/parking", tags=["parking"])
 
 _MANAGER = require_roles("MANAGER")
+_PLATE_FALLBACK = "*"  # 복호 실패 차량 — 목록엔 남기고 번호만 가린다
 
 
-async def _require_household(
-    session: AsyncSession, tenant_id: uuid.UUID, household_id: uuid.UUID
-) -> None:
-    """household_id가 이 단지 세대인지 검증 — 아니면 404(존재 노출 안 함)."""
-    exists = await session.scalar(
-        select(Household.id).where(Household.tenant_id == tenant_id, Household.id == household_id)
+@router.get("/layout", response_model=ParkingLayoutOut)
+async def get_layout(
+    ctx: Annotated[RequestContext, Depends(_MANAGER)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> ParkingLayoutOut:
+    """배치도 조회 — 미적재면 `{"layout": null}`(404 아님, 프론트가 빈 상태 렌더)."""
+    layout = await session.scalar(
+        select(ParkingLayout.layout).where(ParkingLayout.tenant_id == ctx.tenant_id)
     )
-    if exists is None:
-        raise HTTPException(status_code=404, detail="세대를 찾을 수 없습니다")
+    return ParkingLayoutOut(layout=layout)
 
 
-async def _get_assignment(
-    session: AsyncSession, tenant_id: uuid.UUID, assignment_id: uuid.UUID
-) -> ParkingAssignment:
-    row = await session.scalar(
-        select(ParkingAssignment).where(
-            ParkingAssignment.tenant_id == tenant_id, ParkingAssignment.id == assignment_id
-        )
-    )
-    if row is None:  # 없음·타 단지(RLS 미조회) → 존재 노출 안 함
-        raise HTTPException(status_code=404, detail="주차 배정을 찾을 수 없습니다")
-    return row
-
-
-async def _encrypt_plate(
-    session: AsyncSession, crypto: PiiCrypto, tenant_id: uuid.UUID, plate: str | None
-) -> bytes | None:
-    """차량번호 평문 → 암호문(빈 값이면 None으로 클리어). 평문은 DB에 저장하지 않는다."""
-    if not plate:
-        return None
-    dek = await crypto.get_dek(session, tenant_id)
-    return crypto.encrypt(dek, plate)
-
-
-def _decrypt_plate(crypto: PiiCrypto, dek: bytes | None, plate_enc: bytes | None) -> str | None:
-    """암호문 → 평문(없거나 복호 실패면 None — 대시보드는 값만 숨기고 계속)."""
-    if plate_enc is None or dek is None:
-        return None
-    try:
-        return crypto.decrypt(dek, plate_enc)
-    except Exception:  # noqa: BLE001 — 복호 실패해도 대시보드 렌더는 중단하지 않는다
-        return None
-
-
-@router.get("", response_model=ParkingDashboardOut)
-async def get_dashboard(
+@router.get("/vehicles", response_model=ParkingVehicleListOut)
+async def list_vehicles(
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
-) -> ParkingDashboardOut:
-    """주차 현황 요약 + 배정된 세대 목록(배정 1건 이상인 세대만). 동·층·호 오름차순."""
+) -> ParkingVehicleListOut:
+    """입주민 차량 목록(동·호 오름차순). plate는 복호 평문 — 관리자 전용."""
     rows = (
         await session.execute(
             select(
-                ParkingAssignment.id,
-                ParkingAssignment.household_id,
-                ParkingAssignment.location_code,
-                ParkingAssignment.plate_enc,
+                ParkingVehicle.id,
+                ParkingVehicle.household_id,
+                ParkingVehicle.plate_enc,
+                ParkingVehicle.model,
+                ParkingVehicle.is_ev,
                 Building.name,
-                Household.floor,
                 Household.unit_no,
             )
-            .join(Household, Household.id == ParkingAssignment.household_id)
+            .join(Household, Household.id == ParkingVehicle.household_id)
             .join(Building, Building.id == Household.building_id)
-            .where(ParkingAssignment.tenant_id == ctx.tenant_id)
-            .order_by(
-                Building.name,
-                Household.floor,
-                Household.unit_no,
-                ParkingAssignment.created_at,
-            )
+            .where(ParkingVehicle.tenant_id == ctx.tenant_id)
+            .order_by(Building.name, Household.unit_no, ParkingVehicle.created_at)
         )
     ).all()
+    if not rows:
+        return ParkingVehicleListOut(vehicles=[], total=0)
 
-    dek = await crypto.get_dek(session, ctx.tenant_id) if rows else None
-    total_vehicles = 0
-    # rows가 정렬돼 있으므로 dict 삽입 순서 = 표시 순서(세대 단위 그룹핑).
-    groups: dict[uuid.UUID, dict] = {}
-    for aid, hid, location_code, plate_enc, dong, floor, ho in rows:
-        has_vehicle = plate_enc is not None
-        if has_vehicle:
-            total_vehicles += 1
-        group = groups.get(hid)
-        if group is None:
-            group = {
-                "dong": dong,
-                "floor": floor,
-                "ho": ho,
-                "vehicle_count": 0,
-                "assignments": [],
-            }
-            groups[hid] = group
-        group["assignments"].append(
-            ParkingAssignmentItem(
-                id=aid,
-                location_code=location_code,
-                plate=_decrypt_plate(crypto, dek, plate_enc),
-            )
-        )
-        if has_vehicle:
-            group["vehicle_count"] += 1
+    dek = await crypto.get_dek(session, ctx.tenant_id)
 
-    households = [
-        ParkingHouseholdItem(
+    def plate_of(plate_enc: bytes) -> str:
+        try:
+            return crypto.decrypt(dek, plate_enc)
+        except Exception:  # noqa: BLE001 — 복호 실패해도 목록 렌더는 중단하지 않는다
+            return _PLATE_FALLBACK
+
+    vehicles = [
+        ParkingVehicleItem(
+            id=vid,
             household_id=hid,
-            dong=group["dong"],
-            floor=group["floor"],
-            ho=group["ho"],
-            unit_label=f"{group['dong']}동 {group['ho']}호",
-            space_count=len(group["assignments"]),
-            vehicle_count=group["vehicle_count"],
-            assignments=group["assignments"],
+            dong=f"{dong}동",
+            ho=f"{unit_no}호",
+            plate=plate_of(plate_enc),
+            model=model,
+            is_ev=is_ev,
         )
-        for hid, group in groups.items()
+        for vid, hid, plate_enc, model, is_ev, dong, unit_no in rows
     ]
-
-    total_households = int(
-        await session.scalar(
-            select(func.count()).select_from(Household).where(Household.tenant_id == ctx.tenant_id)
-        )
-        or 0
-    )
-    assigned = len(groups)
-    return ParkingDashboardOut(
-        summary=ParkingSummary(
-            total_spaces=len(rows),
-            total_vehicles=total_vehicles,
-            assigned_households=assigned,
-            unassigned_households=max(total_households - assigned, 0),
-        ),
-        households=households,
-    )
-
-
-@router.post("", response_model=ParkingAssignmentOut, status_code=201)
-async def create_assignment(
-    ctx: Annotated[RequestContext, Depends(_MANAGER)],
-    session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
-    body: ParkingAssignmentIn,
-) -> ParkingAssignmentOut:
-    """주차면 배정 생성 — household_id가 이 단지 세대여야 한다(아니면 404)."""
-    await _require_household(session, ctx.tenant_id, body.household_id)
-    plate = body.plate or None
-    row = ParkingAssignment(
-        tenant_id=ctx.tenant_id,
-        household_id=body.household_id,
-        location_code=body.location_code or None,
-        plate_enc=await _encrypt_plate(session, crypto, ctx.tenant_id, plate),
-    )
-    session.add(row)
-    await session.flush()
-    return ParkingAssignmentOut(
-        id=row.id,
-        household_id=row.household_id,
-        location_code=row.location_code,
-        plate=plate,
-    )
-
-
-@router.patch("/{assignment_id}", response_model=ParkingAssignmentOut)
-async def update_assignment(
-    assignment_id: uuid.UUID,
-    ctx: Annotated[RequestContext, Depends(_MANAGER)],
-    session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
-    body: ParkingAssignmentUpdateIn,
-) -> ParkingAssignmentOut:
-    """위치·차량번호 전체 교체(빈 값/null이면 클리어, 값 있으면 재암호화)."""
-    row = await _get_assignment(session, ctx.tenant_id, assignment_id)
-    plate = body.plate or None
-    row.location_code = body.location_code or None
-    row.plate_enc = await _encrypt_plate(session, crypto, ctx.tenant_id, plate)
-    await session.flush()
-    return ParkingAssignmentOut(
-        id=row.id,
-        household_id=row.household_id,
-        location_code=row.location_code,
-        plate=plate,
-    )
-
-
-@router.delete("/{assignment_id}", status_code=204)
-async def delete_assignment(
-    assignment_id: uuid.UUID,
-    ctx: Annotated[RequestContext, Depends(_MANAGER)],
-    session: Annotated[AsyncSession, Depends(get_tenant_session)],
-) -> Response:
-    """주차면 배정 삭제(leaf — FK 의존자 없음)."""
-    row = await _get_assignment(session, ctx.tenant_id, assignment_id)
-    await session.delete(row)
-    await session.flush()
-    return Response(status_code=204)
+    return ParkingVehicleListOut(vehicles=vehicles, total=len(vehicles))
