@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type MouseEvent, type ReactNode } from "react";
+import { useMemo, type MouseEvent, type ReactNode } from "react";
 import type { ParkingLayout, ParkingSpot } from "@/lib/api";
 import { SPOT_H, SPOT_W, elapsedText, type ParkedCar } from "./parking-sim";
 
@@ -41,9 +41,6 @@ export function ParkingMap({
   onSelect,
   summaryLabel,
 }: ParkingMapProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const viewWidth = viewBoxWidth(layout.viewBox);
-
   const staticLayer = useMemo(() => renderStatic(layout), [layout]);
   const spotLayer = useMemo(
     () => layout.spots.map((spot) => renderSpot(spot, bySpot.get(spot.no), nowMs, activeGroup)),
@@ -54,18 +51,6 @@ export function ParkingMap({
     [layout.spots, selectedNo],
   );
 
-  // 선택된 면이 화면 밖이면 가로 스크롤을 맞춘다(목록 행 클릭 → 지도 포커스).
-  useEffect(() => {
-    const container = scrollRef.current;
-    if (!container || !selected || viewWidth <= 0) return;
-    const ratio = (selected.x + SPOT_W / 2) / viewWidth;
-    const left = ratio * container.scrollWidth - container.clientWidth / 2;
-    const reduced =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
-    container.scrollTo({ left: Math.max(0, left), behavior: reduced ? "auto" : "smooth" });
-  }, [selected, viewWidth]);
-
   function handleClick(event: MouseEvent<SVGSVGElement>) {
     // 면 rect 에 data-no 를 심고 루트에서 위임 — 442개 핸들러를 만들지 않는다.
     const target = (event.target as Element | null)?.closest("[data-no]");
@@ -73,20 +58,12 @@ export function ParkingMap({
     if (no) onSelect(no);
   }
 
-  // 가로 스크롤 영역은 키보드로도 스크롤할 수 있어야 한다(WCAG 2.1.1) — region + tabIndex.
   return (
-    <div
-      className="pk-map"
-      ref={scrollRef}
-      role="region"
-      aria-label="지하주차장 배치도 (가로 스크롤)"
-      tabIndex={0}
-    >
+    <div className="pk-map">
+      {/* 배치도 전체를 한 화면에 — viewBox 비율대로 컨테이너 폭에 맞춰 축소(스크롤 없음). */}
       <svg
         className="pk-map__svg"
         viewBox={layout.viewBox}
-        // 면이 설계 크기(34x64px)보다 작아지지 않게 배치도 폭을 최소치로 둔다 → 좁으면 가로 스크롤.
-        style={{ minWidth: `${viewWidth}px` }}
         role="img"
         aria-label={summaryLabel}
         onClick={handleClick}
@@ -255,15 +232,11 @@ function spotTooltip(spot: ParkingSpot, car: ParkedCar | undefined, nowMs: numbe
   return `${head} — ${car.plate} · ${car.dong} ${car.ho}`;
 }
 
-/** "0 0 3020 1082" → [minX, minY, width, height]. 파싱 실패는 0 으로 둔다(스크롤·프레임만 영향). */
+/** "0 0 3020 1082" → [minX, minY, width, height]. 파싱 실패는 0 으로 둔다(프레임 크기만 영향). */
 function parseViewBox(viewBox: string): [number, number, number, number] {
   const parts = viewBox
     .trim()
     .split(/[\s,]+/)
     .map((v) => Number.parseFloat(v));
   return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 0];
-}
-
-function viewBoxWidth(viewBox: string): number {
-  return parseViewBox(viewBox)[2];
 }

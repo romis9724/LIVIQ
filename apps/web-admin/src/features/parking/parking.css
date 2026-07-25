@@ -192,20 +192,13 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- 배치도 + 목록 2열 ---- */
+/* ---- 배치도 + 목록 ---- */
+/* 배치도가 스크롤 없이 전체로 보이려면 폭이 곧 가독성이다 — 목록은 옆이 아니라 아래로 쌓는다. */
 .pk-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
-}
-.pk-main[data-list] {
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
-}
-@media (max-width: 1100px) {
-  .pk-main[data-list] {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .pk-stage {
@@ -214,17 +207,10 @@
   padding: var(--space-3);
 }
 
-/* 배치도 — viewBox 3020x1082. 좁으면 가로 스크롤(면 번호 가독성 확보). */
+/* 배치도 — viewBox 3020x1082 전체를 한 화면에(스크롤 없음). 폭에 맞춰 비율대로 축소된다. */
 .pk-map {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
   border-radius: var(--radius-md);
 }
-.pk-map:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-/* min-width 는 레이아웃 viewBox 폭(px) — 면 크기가 설계값(34x64) 이하로 줄지 않게 인라인 지정. */
 .pk-map__svg {
   display: block;
   width: 100%;
