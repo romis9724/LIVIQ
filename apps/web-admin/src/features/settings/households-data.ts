@@ -54,10 +54,23 @@ export function countCombos(input: RangeInput): number {
   return floors * units;
 }
 
-/** 완전 호수 라벨. unit_no는 이미 완전 호수(201·1001)이므로 floor를 합성하지 않는다. */
-export function unitLabel(_floor: number, unitNo: number): string {
+/**
+ * 완전 호수 라벨. unit_no는 이미 완전 호수(201·1001)이므로 floor를 합성하지 않는다.
+ * 평면도 타입 라벨이 있으면 "201호(84M)"로 덧붙인다(H9-6 — 트윈 업로드 산물).
+ */
+export function unitLabel(_floor: number, unitNo: number, unitTypeLabel?: string | null): string {
   // seed·온보딩과 동일하게 unit_no가 완전 호수(예: 1001호 = 10층 1호). floor를 앞에 붙이면 "101001"로 깨진다.
-  return `${unitNo}호`;
+  const base = `${unitNo}호`;
+  const code = unitTypeCode(unitTypeLabel);
+  return code ? `${base}(${code})` : base;
+}
+
+/**
+ * 트윈 라벨에서 타입 코드만 추출. "84M(공공임대)" → "84M".
+ * 원본 라벨은 부가설명이 붙어 있어 세대 셀에 그대로 쓰면 줄바꿈으로 깨진다(H9-6 실측).
+ */
+export function unitTypeCode(unitTypeLabel?: string | null): string {
+  return (unitTypeLabel ?? "").replace(/\s*\(.*$/, "").trim();
 }
 
 /** 호 순번 → 완전 호수. 예: 2층 1호 → 201, 10층 3호 → 1003. 서버(expand_household_grid)와 동일. */

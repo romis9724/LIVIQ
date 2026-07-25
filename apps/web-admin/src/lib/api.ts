@@ -1083,6 +1083,7 @@ export interface RosterEntry {
   floor: number | null;
   unitNo: number | null;
   state: string; // unregistered | joined | moved_out
+  vehicles: string[]; // 세대 등록 차량 번호(H9-6 — parking_vehicles 정본 조회 전용, 없으면 빈 배열)
 }
 
 export interface RosterCounts {
@@ -1122,6 +1123,7 @@ export async function listRoster(
         floor: number | null;
         unit_no: number | null;
         state: string;
+        vehicles?: string[] | null;
       }[]
     ).map((raw) => ({
       userId: raw.user_id,
@@ -1130,6 +1132,7 @@ export async function listRoster(
       floor: raw.floor,
       unitNo: raw.unit_no,
       state: raw.state,
+      vehicles: raw.vehicles ?? [],
     })),
     total: body.total,
     counts: {
@@ -1744,6 +1747,7 @@ export interface Household {
   floor: number;
   unitNo: number;
   status: string;
+  unitTypeLabel: string | null; // 평면도 타입(H9-6) — 트윈 units.json 산물, 없으면 null
 }
 
 export interface HouseholdList {
@@ -1776,6 +1780,7 @@ interface RawHousehold {
   floor: number;
   unit_no: number;
   status: string;
+  unit_type_label?: string | null;
 }
 
 function toBuilding(raw: RawBuilding): Building {
@@ -1788,7 +1793,13 @@ function toBuilding(raw: RawBuilding): Building {
 }
 
 function toHousehold(raw: RawHousehold): Household {
-  return { id: raw.id, floor: raw.floor, unitNo: raw.unit_no, status: raw.status };
+  return {
+    id: raw.id,
+    floor: raw.floor,
+    unitNo: raw.unit_no,
+    status: raw.status,
+    unitTypeLabel: raw.unit_type_label ?? null,
+  };
 }
 
 /** 동 목록(+세대 수 집계). 403=권한 없음. */

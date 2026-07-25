@@ -23,7 +23,7 @@ from httpx import ASGITransport
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import Fee, Tenant, User
+from liviq_db.models import Fee, HouseholdGeometry, Tenant, User
 
 TENANT_B_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 
@@ -156,6 +156,7 @@ async def test_bulk_create_range_grid(seeded: AsyncSession) -> None:
         "floor": 1,
         "unit_no": 101,
         "status": "active",
+        "unit_type_label": None,  # 트윈 기하 없는 세대
     }
 
 
@@ -192,6 +193,32 @@ async def test_bulk_create_over_limit_422(seeded: AsyncSession) -> None:
             json={"floor_start": 1, "floor_end": 200, "unit_start": 1, "unit_end": 99},
         )
     assert r.status_code == 422
+
+
+async def test_list_households_exposes_twin_unit_type_label(seeded: AsyncSession) -> None:
+    """평면도 타입은 트윈 기하(household_geometries)에서 읽어 표시한다 — 기하 없는 세대는 None."""
+    async with _client(seeded) as c:
+        bid = await _make_building(c)
+        await c.post(
+            f"/admin/buildings/{bid}/households",
+            json={"floor_start": 1, "floor_end": 2, "unit_start": 1, "unit_end": 1},
+        )
+        items = (await c.get(f"/admin/buildings/{bid}/households")).json()["items"]
+        seeded.add(
+            HouseholdGeometry(
+                tenant_id=TENANT_ID,
+                household_id=uuid.UUID(items[0]["id"]),
+                polygon_2d=[[127.0, 36.5]],
+                polygon_3d=[[127.0, 36.5, 0.0]],
+                base_z=0,
+                floor_height=3,
+                unit_type_label="84M",
+            )
+        )
+        await seeded.flush()
+        listed = (await c.get(f"/admin/buildings/{bid}/households")).json()["items"]
+    assert listed[0]["unit_type_label"] == "84M"
+    assert listed[1]["unit_type_label"] is None
 
 
 # ── 세대 수정 ─────────────────────────────────────────────────────────────────

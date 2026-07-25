@@ -62,6 +62,18 @@ describe("unitLabel · previewLabels", () => {
     expect(unitLabel(2, 201)).toBe("201호");
   });
 
+  it("평면도 타입 라벨이 있으면 호수 뒤에 괄호로 붙인다", () => {
+    expect(unitLabel(2, 201, "84M")).toBe("201호(84M)");
+    expect(unitLabel(2, 201, null)).toBe("201호");
+    expect(unitLabel(2, 201, "")).toBe("201호");
+  });
+
+  it("트윈 라벨의 부가설명은 떼고 타입 코드만 붙인다", () => {
+    // units.json 실데이터가 "84M(공공임대)" 형태 — 그대로 쓰면 괄호가 중첩되고 셀이 깨진다.
+    expect(unitLabel(2, 201, "84M(공공임대)")).toBe("201호(84M)");
+    expect(unitLabel(2, 201, " 59C (공공임대) ")).toBe("201호(59C)");
+  });
+
   it("미리보기는 순번을 완전 호수(floor*100+순번)로 변환", () => {
     // ok = 1~3층 × 순번 1~2 → 101·102·201…
     expect(previewLabels(ok, 3)).toEqual(["101호", "102호", "201호"]);

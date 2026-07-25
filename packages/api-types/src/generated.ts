@@ -106,7 +106,7 @@ export interface paths {
         };
         /**
          * List Households
-         * @description 동의 세대 목록 — 층·호 오름차순.
+         * @description 동의 세대 목록 — 층·호 오름차순. 평면도 타입 라벨은 트윈 기하(1:1)에서 읽어 온다.
          */
         get: operations["list_households_admin_buildings__building_id__households_get"];
         put?: never;
@@ -2475,6 +2475,8 @@ export interface components {
             status: string;
             /** Unit No */
             unit_no: number;
+            /** Unit Type Label */
+            unit_type_label?: string | null;
         };
         /** HouseholdListOut */
         HouseholdListOut: {
@@ -3082,6 +3084,11 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+            /**
+             * Vehicles
+             * @default []
+             */
+            vehicles: string[];
         };
         /** RosterLastUpload */
         RosterLastUpload: {

@@ -241,7 +241,7 @@
 | `POST /admin/staff/{user_id}/deactivate` | MANAGER | STAFF 비활성화(inactive + 세션 즉시 revoke). 자신·MANAGER 대상 400 |
 | `DELETE /admin/staff/{user_id}` | MANAGER | 직원·타 소장 **삭제**(소프트 삭제+PII 비식별+세션 revoke). 자기 자신 400 (H7-6) |
 | `GET /admin/roster/template` | MANAGER | 명부 업로드 양식 xlsx 다운로드(헤더+예시 행 — 파서와 단일 출처, H7-7) |
-| `GET /admin/roster` | MANAGER | 명부 목록(동·호·성함 마스킹·상태: 미가입/가입완료/전출후보) + 총계 + 마지막 업로드 요약 — 검색·페이지네이션 (H7-9) |
+| `GET /admin/roster` | MANAGER | 명부 목록(동·호·성함 마스킹·상태: 미가입/가입완료/전출후보) + 총계 + 마지막 업로드 요약 — 검색·페이지네이션 (H7-9). H9-6: 행에 세대 등록 차량 `vehicles`(`parking_vehicles` 정본 **조회 전용** — 페이지 슬라이스된 세대만 복호, 관리자 세션 한정·LLM 미노출) |
 | `PATCH /admin/roster/{user_id}` | MANAGER | 명부 행 상태 수동 변경(미가입 ↔ 전출 후보 — 소장 판단, H7-9) |
 | `DELETE /admin/roster/{user_id}` | MANAGER | 명부 행 삭제(사전등록 행 — PII vault째 완전 삭제, H7-9) |
 | `POST /admin/tenants` | SYS_ADMIN | 단지 생성(시스템 테넌트 권한, 단지 콘텐츠 비열람) |
@@ -345,14 +345,14 @@
 | `PATCH /admin/codes/{id}` | MANAGER | label·sort_order·active·parent_id(순환 검증) |
 | `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조(notices·documents FK) 존재 시 409(H8-6 적용) — 비활성(active=false)으로 숨김 권장 |
 
-> 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블(`notices.category_code_id` NULL 허용·`documents.category_code_id` NOT NULL)은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조 전환됐다(적용됨). 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다.
+> 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블(`notices.category_code_id` NULL 허용·`documents.category_code_id` NOT NULL)은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조 전환됐다(적용됨). 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다. H9-6: 세대 목록(`GET /admin/buildings/{id}/households`) 응답에 `unit_type_label`이 추가된다 — 트윈 `household_geometries`(세대 1:1)의 라벨을 outerjoin해 **표시만** 하며(`201호(84M)`), 평면도 타입 마스터·수동 지정은 두지 않는다(갱신은 units.json 재업로드 — H9-6에서 업로드 UI를 제거해 엔드포인트 직접 호출·시드 스크립트로만 수행).
 
 **단지 트윈** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md), 화면: 관리자 단지 트윈)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
 | `GET /admin/twin/geometry` | MANAGER | 세대 폴리곤 전량(정적 — 클라 1회 로드). geometry 미설정 tenant는 404 |
-| `POST /admin/twin/geometry` | MANAGER | `units.json` 업로드 — (동·층·호)로 `households` 매칭, 검증 리포트(matched/unmatched) 반환, **재업로드=전체 교체**(단일 트랜잭션, unmatched는 스킵+리포트) |
+| `POST /admin/twin/geometry` | MANAGER | `units.json` 업로드 — (동·층·호)로 `households` 매칭, 검증 리포트(matched/unmatched) 반환, **재업로드=전체 교체**(단일 트랜잭션, unmatched는 스킵+리포트). H9-6: 관리 UI 제거 — 초기 1회 적재 후 재업로드 수요가 없어 엔드포인트만 유지 |
 | `GET /admin/twin/overlay` | MANAGER | `kind=occupancy\|inquiries\|fees\|facilities` — `household_id→값` 맵(설비는 동 단위 맵). H9-1은 occupancy만, 나머지 H9-2 |
 | `GET /admin/twin/households/{id}` | MANAGER | 세대 상세(H9-2) — 세대 정보·세대원(명부 **마스킹 표시**, H7-9 규칙)·미종결 민원·당월 관리비 |
 

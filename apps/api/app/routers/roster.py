@@ -31,7 +31,7 @@ from app.schemas.roster import (
     RosterStateIn,
     RosterUploadOut,
 )
-from liviq_db.models import Building, ExcelUpload, Household, PiiVault, User
+from liviq_db.models import Building, ExcelUpload, Household, ParkingVehicle, PiiVault, User
 
 router = APIRouter(prefix="/admin/roster", tags=["roster"])
 
@@ -76,12 +76,47 @@ _STATE_UNREGISTERED = "unregistered"
 _STATE_JOINED = "joined"
 _STATE_MOVED_OUT = "moved_out"
 MAX_PAGE_SIZE = 200
+_PLATE_FALLBACK = "*"  # 복호 실패 차량 — 목록엔 남기고 번호만 가린다(parking.py와 동일 규약)
 
 
 def _entry_state(status: str, deleted: bool) -> str:
     if status == "inactive":
         return _STATE_MOVED_OUT
     return _STATE_JOINED if deleted else _STATE_UNREGISTERED
+
+
+async def _load_household_vehicles(
+    session: AsyncSession,
+    crypto: PiiCrypto,
+    dek: bytes,
+    tenant_id: uuid.UUID,
+    household_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, list[str]]:
+    """세대별 복호 평문 번호판 맵 — 페이지 슬라이스된 세대만 조회(전체 복호 금지, 성능).
+
+    규칙 2: 반환값은 관리자 세션 한정 — LLM·입주민 앱에 미노출. plate_enc는 봉투 암호문이라
+    여기서만 복호한다(복호 실패 차량은 번호만 가리고 목록엔 남긴다).
+    """
+    if not household_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(ParkingVehicle.household_id, ParkingVehicle.plate_enc)
+            .where(
+                ParkingVehicle.tenant_id == tenant_id,
+                ParkingVehicle.household_id.in_(household_ids),
+            )
+            .order_by(ParkingVehicle.created_at)
+        )
+    ).all()
+    result: dict[uuid.UUID, list[str]] = {}
+    for household_id, plate_enc in rows:
+        try:
+            plate = crypto.decrypt(dek, plate_enc)
+        except Exception:  # noqa: BLE001 — 복호 실패해도 목록 렌더는 중단하지 않는다
+            plate = _PLATE_FALLBACK
+        result.setdefault(household_id, []).append(plate)
+    return result
 
 
 @router.get("", response_model=RosterListOut)
@@ -107,6 +142,7 @@ async def list_roster(
             User.id,
             User.status,
             User.deleted_at,
+            User.household_id,
             PiiVault.name_enc,
             Building.name.label("building_name"),
             Household.floor,
@@ -150,6 +186,14 @@ async def list_roster(
     page_rows = filtered[(page - 1) * size : page * size]
 
     dek = await crypto.get_dek(session, ctx.tenant_id) if page_rows else b""
+    # 페이지 행의 세대만 차량 조회·복호(전체 행 복호 금지, 성능). 세대 없는 행은 빈 리스트.
+    vehicles_by_household = await _load_household_vehicles(
+        session,
+        crypto,
+        dek,
+        ctx.tenant_id,
+        {row.household_id for row in page_rows if row.household_id is not None},
+    )
 
     def masked(name_enc: bytes | None) -> str:
         if name_enc is None:
@@ -177,6 +221,7 @@ async def list_roster(
                 floor=row.floor,
                 unit_no=row.unit_no,
                 state=_entry_state(row.status, row.deleted_at is not None),
+                vehicles=vehicles_by_household.get(row.household_id, []),
             )
             for row in page_rows
         ],

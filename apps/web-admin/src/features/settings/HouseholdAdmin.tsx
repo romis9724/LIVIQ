@@ -18,7 +18,6 @@ import {
 import { unitLabel } from "./households-data";
 import { BuildingFormDialog, BulkHouseholdDialog } from "./HouseholdForms";
 import type { BuildingFormValues, BulkHouseholdValues } from "./HouseholdForms";
-import { GeometryUploadPanel } from "./GeometryUploadPanel";
 import "./households.css";
 
 const TOAST_DURATION_MS = 3200;
@@ -212,8 +211,6 @@ export function HouseholdAdmin() {
             />
           </div>
         )}
-
-        <GeometryUploadPanel />
       </main>
 
       {buildingDialog ? (
@@ -374,7 +371,9 @@ function HouseholdPanel({
         <ul className="hh-grid">
           {households.map((household) => (
             <li key={household.id} className="hh-cell" data-inactive={household.status !== "active" || undefined}>
-              <span className="hh-cell__label">{unitLabel(household.floor, household.unitNo)}</span>
+              <span className="hh-cell__label">
+                {unitLabel(household.floor, household.unitNo, household.unitTypeLabel)}
+              </span>
               <div className="hh-cell__actions">
                 <Button
                   variant="ghost"

@@ -39,6 +39,8 @@ class RosterEntry(BaseModel):
     floor: int | None
     unit_no: int | None
     state: str  # unregistered=미가입 · joined=가입완료(소진) · moved_out=전출 후보
+    # 세대 차량 복호 평문 번호판(H9-6). 규칙 2: 관리자 세션 한정 — LLM·입주민 앱에 미노출.
+    vehicles: list[str] = []
 
 
 class RosterStateIn(BaseModel):

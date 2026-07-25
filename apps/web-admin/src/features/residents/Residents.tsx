@@ -427,66 +427,87 @@ function RosterTable({
         <EmptyState icon="🔍" title="조건에 맞는 세대가 없습니다" description="검색어·필터를 확인해 주세요." />
       ) : (
         <>
-          <table className="apv-roster__table">
-            <thead>
-              <tr>
-                <th scope="col">동</th>
-                <th scope="col">호</th>
-                <th scope="col">성함</th>
-                <th scope="col">상태</th>
-                <th scope="col" className="apv-roster__actions-col">
-                  관리
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {roster.items.map((entry) => (
-                <tr key={entry.userId}>
-                  <td>{entry.buildingName ?? "—"}동</td>
-                  <td>{entry.unitNo ?? "—"}호</td>
-                  <td>{entry.nameMasked}</td>
-                  <td>
-                    <span className={`apv-state apv-state--${entry.state}`}>
-                      {STATE_LABEL[entry.state] ?? entry.state}
-                    </span>
-                  </td>
-                  <td className="apv-roster__actions">
-                    {entry.state === "unregistered" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busyId === entry.userId}
-                        onClick={() => onChangeState(entry, "moved_out")}
-                      >
-                        전출 처리
-                      </Button>
-                    ) : null}
-                    {entry.state === "moved_out" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busyId === entry.userId}
-                        onClick={() => onChangeState(entry, "unregistered")}
-                      >
-                        복원
-                      </Button>
-                    ) : null}
-                    {entry.state !== "joined" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="apv-roster__delete"
-                        disabled={busyId === entry.userId}
-                        onClick={() => onDelete(entry)}
-                      >
-                        삭제
-                      </Button>
-                    ) : null}
-                  </td>
+          <div className="apv-roster__scroll">
+            <table className="apv-roster__table">
+              <thead>
+                <tr>
+                  <th scope="col">동</th>
+                  <th scope="col">호</th>
+                  <th scope="col">성함</th>
+                  <th scope="col">상태</th>
+                  <th scope="col">차량</th>
+                  <th scope="col" className="apv-roster__actions-col">
+                    관리
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {roster.items.map((entry, index) => {
+                  // 명부는 세대 단위로 정렬돼 한 세대에 여러 세대원이 이어진다. 동·호·차량은
+                  // 세대 속성이라 연속 행에서 반복하지 않고 첫 행에만 적는다(세대 묶음이 보이게).
+                  const prev = index > 0 ? roster.items[index - 1] : undefined;
+                  const isSameHousehold =
+                    prev?.buildingName === entry.buildingName && prev?.unitNo === entry.unitNo;
+                  return (
+                  <tr key={entry.userId} data-cont={isSameHousehold || undefined}>
+                    <td className="apv-roster__unit">
+                      {isSameHousehold ? "" : `${entry.buildingName ?? "—"}동`}
+                    </td>
+                    <td className="apv-roster__unit">
+                      {isSameHousehold ? "" : `${entry.unitNo ?? "—"}호`}
+                    </td>
+                    <td className="apv-roster__name">{entry.nameMasked}</td>
+                    <td>
+                      <span className={`apv-state apv-state--${entry.state}`}>
+                        {STATE_LABEL[entry.state] ?? entry.state}
+                      </span>
+                    </td>
+                    <td className="apv-roster__vehicles">
+                      {isSameHousehold
+                        ? ""
+                        : entry.vehicles.length > 0
+                          ? entry.vehicles.join(", ")
+                          : "—"}
+                    </td>
+                    <td className="apv-roster__actions">
+                      {entry.state === "unregistered" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busyId === entry.userId}
+                          onClick={() => onChangeState(entry, "moved_out")}
+                        >
+                          전출 처리
+                        </Button>
+                      ) : null}
+                      {entry.state === "moved_out" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busyId === entry.userId}
+                          onClick={() => onChangeState(entry, "unregistered")}
+                        >
+                          복원
+                        </Button>
+                      ) : null}
+                      {entry.state !== "joined" ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="apv-roster__delete"
+                          disabled={busyId === entry.userId}
+                          onClick={() => onDelete(entry)}
+                        >
+                          삭제
+                        </Button>
+                      ) : null}
+                    </td>
+                  </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="apv-roster__pager">
             <Button
               variant="ghost"
