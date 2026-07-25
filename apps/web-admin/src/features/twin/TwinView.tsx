@@ -24,6 +24,21 @@ const TwinDeck = dynamic(() => import("./TwinDeck").then((m) => m.TwinDeck), {
   ),
 });
 
+// 실사 3D(VWorld/Cesium)도 dynamic 격리(deck.gl 과 동일 — 무거운 스택, ADR-0019 개정 H9-3).
+const VWorldView = dynamic(() => import("./VWorldView").then((m) => m.VWorldView), {
+  ssr: false,
+  loading: () => (
+    <div className="twin-canvas twin-canvas--loading" role="status" aria-live="polite">
+      실사 3D 불러오는 중…
+    </div>
+  ),
+});
+
+// 렌더 엔진 선택 — 기본 3D(deck.gl) / 실사 3D(VWorld). 오버레이·세대 상세는 두 뷰 공통.
+type ViewMode = "deck" | "vworld";
+const VIEW_LABELS: Record<ViewMode, string> = { deck: "기본 3D", vworld: "실사 3D" };
+const VIEW_MODES: readonly ViewMode[] = ["deck", "vworld"];
+
 type GeoState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -42,6 +57,7 @@ export function TwinView() {
   const [overlayKind, setOverlayKind] = useState<OverlayKind>("occupancy");
   const [overlays, setOverlays] = useState<OverlayCache>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("deck");
 
   const load = useCallback(async () => {
     setGeo({ kind: "loading" });
@@ -90,20 +106,37 @@ export function TwinView() {
           세대 3D 모형에 상태를 색으로 겹쳐 봅니다. 확정 데이터만 표시하며 AI는 개입하지 않습니다.
         </p>
         {showSegments ? (
-          <div className="twin-overlays" role="tablist" aria-label="오버레이 선택">
-            {OVERLAY_KINDS.map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                role="tab"
-                aria-selected={overlayKind === kind}
-                className="twin-overlay-tab"
-                data-active={overlayKind === kind || undefined}
-                onClick={() => setOverlayKind(kind)}
-              >
-                {OVERLAY_LABELS[kind]}
-              </button>
-            ))}
+          <div className="twin-controls">
+            <div className="twin-views" role="tablist" aria-label="렌더 방식 선택">
+              {VIEW_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === mode}
+                  className="twin-view-tab"
+                  data-active={viewMode === mode || undefined}
+                  onClick={() => setViewMode(mode)}
+                >
+                  {VIEW_LABELS[mode]}
+                </button>
+              ))}
+            </div>
+            <div className="twin-overlays" role="tablist" aria-label="오버레이 선택">
+              {OVERLAY_KINDS.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  role="tab"
+                  aria-selected={overlayKind === kind}
+                  className="twin-overlay-tab"
+                  data-active={overlayKind === kind || undefined}
+                  onClick={() => setOverlayKind(kind)}
+                >
+                  {OVERLAY_LABELS[kind]}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
       </header>
@@ -113,6 +146,7 @@ export function TwinView() {
           geo={geo}
           overlay={overlay}
           overlayKind={overlayKind}
+          viewMode={viewMode}
           onRetry={() => void load()}
           onSelectHousehold={setSelectedId}
         />
@@ -129,11 +163,19 @@ interface TwinBodyProps {
   geo: GeoState;
   overlay: Record<string, number>;
   overlayKind: OverlayKind;
+  viewMode: ViewMode;
   onRetry: () => void;
   onSelectHousehold: (householdId: string) => void;
 }
 
-function TwinBody({ geo, overlay, overlayKind, onRetry, onSelectHousehold }: TwinBodyProps) {
+function TwinBody({
+  geo,
+  overlay,
+  overlayKind,
+  viewMode,
+  onRetry,
+  onSelectHousehold,
+}: TwinBodyProps) {
   if (geo.kind === "loading") {
     return (
       <section className="surface-card twin-stage">
@@ -180,12 +222,16 @@ function TwinBody({ geo, overlay, overlayKind, onRetry, onSelectHousehold }: Twi
 
   return (
     <section className="surface-card twin-stage">
-      <TwinDeck
-        geometry={geo.geometry}
-        overlay={overlay}
-        overlayKind={overlayKind}
-        onSelectHousehold={onSelectHousehold}
-      />
+      {viewMode === "vworld" ? (
+        <VWorldView />
+      ) : (
+        <TwinDeck
+          geometry={geo.geometry}
+          overlay={overlay}
+          overlayKind={overlayKind}
+          onSelectHousehold={onSelectHousehold}
+        />
+      )}
     </section>
   );
 }

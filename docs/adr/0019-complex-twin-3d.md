@@ -60,3 +60,29 @@
   설비-세대 정식 매핑은 재료(배치도·설비 위치 정규화)가 생기면 재설계.
 - 재검토 신호: 공간 쿼리 수요(PostGIS 승격) · 페르소나 부가정보 화면 수요(세대원 확장 테이블) ·
   트윈 집계 AI 도구 수요 · 다단지 실사 지형 요구(VWorld).
+
+## 개정 노트 (2026-07-24, H9-3 — VWorld 실사 3D 채택)
+
+운영자 인터뷰(2026-07-24)로 **VWorld 실사 3D를 백로그에서 채택**한다. 위 "대안"에서 보류했던
+VWorld를 다음 결정으로 편입:
+
+- **렌더 스택**: 프로토타입(`AI_digitaltwin_apartment/twin/static/dashboard_vworld.html`)의 방식 그대로 —
+  **Cesium**(VWorld WebGL `map.vworld.kr/js/webglMapInit.js.do`)로 실사 3D 건물 타일셋 + 우리 세대를
+  Cesium Primitive로 오버레이·클리핑. deck.gl과 **별개 스택**(대체 아님).
+- **deck.gl과 공존(뷰 토글)**: 기존 deck.gl 뷰(H9-1·2 오버레이·세대 상세)는 **유지**. `/twin`에 "기본
+  3D(deck.gl) ↔ 실사 3D(VWorld)" 뷰 토글 추가. Cesium은 무거우므로 deck.gl과 동일하게 dynamic import 격리.
+- **데이터 재배선**: 프로토타입 Cesium 코드가 부르던 프로토타입 API(`/units`·`/complaints`·`/facilities`)를
+  **LIVIQ 트윈 API**(`GET /admin/twin/geometry`·`overlay`·`households/{id}`)로 교체. geometry·오버레이·세대
+  상세 계약은 H9-1·2 그대로 재사용(신규 백엔드 없음 — 프런트 전용 작업).
+- **API 키**: VWorld 프론트 키는 **서비스 URL(오리진) 도메인 잠금**이라 번들 노출 무방. `NEXT_PUBLIC_VWORLD_API_KEY`
+  env(웹 관례 — 미설정 시 실사 뷰 비활성+안내). 실제 키는 `.env`/`.env.local`(gitignore), `.env.example`엔
+  placeholder만. dev 등록 오리진 = `http://localhost:3001`(web-admin), 운영은 배포 도메인 추가 등록.
+- **화면**: 프로토타입의 풀스크린 다크 몰입형이 아니라 **관리 셀 임베딩**(사이드바·헤더 유지, `/twin` 카드
+  무대에 Cesium 렌더, UI 오버레이는 토큰 기반 밝은 패널 — LIVIQ 라이트 톤과 일관).
+- **보안(CSP)**: 현재 web-admin은 CSP 미설정([06 §6](../06-security-privacy.md))이라 즉시 차단 요소는 없다.
+  **CSP 도입 시** `script-src`·`connect-src`·`img-src`에 `https://*.vworld.kr`(map·api·타일) 허용 필요.
+  프로토타입의 `document.write` 외부 스크립트 주입은 nonce CSP와 충돌 — 포팅 시 **동적 `<script>` append**로
+  교체(호스트 허용). 외부 3rd-party 스크립트 로드는 트윈 실사 뷰 한정.
+- **개인정보**: 실사 뷰도 조회 전용·AI 미연동. VWorld로 나가는 것은 **좌표·타일 요청뿐**(세대원·개인정보
+  전송 없음 — 규칙 2). 세대 상세는 기존 마스킹 경로 재사용.
+- 재검토 신호(추가): VWorld 무료 쿼터·지연 · Cesium 번들 비용 · 운영 도메인 키 갱신.
