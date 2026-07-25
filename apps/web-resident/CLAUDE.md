@@ -5,12 +5,9 @@
 
 ## 구조
 
-```text
-src/app/(resident)/   home · assistant · fees · inquiries · notices · me   # 라우트
-src/features/         assistant · fees · inquiries · notices · me          # 도메인 로직
-src/components/resident-shell/   앱 셸(내비/레이아웃)
-src/lib/              클라이언트 유틸
-```
+라우트는 `src/app/(resident)/<name>/page.tsx`, 도메인 로직은 `src/features/<name>/`,
+셸은 `src/components/resident-shell/`, 클라이언트 유틸은 `src/lib/`.
+화면 카탈로그 단일 출처는 `src/lib/screens.ts` — 목록은 거기와 `ls`로 확인.
 
 ## 명령 (루트에서 turbo가 오케스트레이션)
 
@@ -28,7 +25,7 @@ pnpm --filter @liviq/web-resident test src/lib/screens.test.ts  # 단일 파일�
 
 - 의존: `@liviq/ui`(토큰·컴포넌트) · `@liviq/config-ts`(tsconfig)
 - 피의존: 없음 (앱은 leaf)
-- 외부: (계획) `apps/api` HTTP · JWT 인증
+- 외부: `apps/api` HTTP · 세션 쿠키 인증(credentials CORS)
 - 변경 파급: `@liviq/ui` 토큰/컴포넌트 변경이 이 앱 화면에 직결
 
 ## 핵심 파일

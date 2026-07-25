@@ -26,22 +26,8 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실, H1(RAG)+H2(입주민/관리자)+H3(시설 그래프·AI 도우미)+H4(레이트 리밋·정확 캐시·대시보드·토큰 예산 경고)+H5(모델 확정·평가 확대·알림 루프)+H6(전 화면 실연동·세션 인증·가입→AI E2E)+H7(자체 이메일 인증 전환 — SYS_ADMIN/초대 위계·역할 축소·주민 가입 UI·E2E 재작성·온보딩 UX 보수(회원가입 버튼+단지 선택, 직원 관리 승격)·계정/단지 수명주기(소장 정원 1·삭제=비식별·빈 단지 삭제·단지 비활성화), ADR-0014)+H8-1(공지사항 게시판 전환 — AI 초안 완전 삭제·첨부파일·상단 고정·임시저장·예약 발행 cron·STAFF 발행, ADR-0015)+H8-2(문서 게시판 전환 — 첨부 1개·버전 이력·재업로드 시 벡터 재생성·content_chunks 소스 일반화, ADR-0016)+H8-3(공지 벡터화 — published만 인제스트·검색 조인 검증, ADR-0015 개정 노트)+H8-4(공통 코드 레지스트리 — tenant 계층 코드·설정>코드 관리·기본 시드, ADR-0017)+H8-5(설정>동/호수 관리 — 동·세대 CRUD·FK 보호 삭제)+H8-6(공지·문서 코드 적용 — 공지 분류/기간/대상동/키워드·문서 source_type→코드)+H8-7(관리비 고지서 — 단지 총액 엑셀→세대수(574) 균등분배(코드 계산·AI 미개입)·동/호별 목록·동/호·년월 검색·2단 고지서 UI(트리·당월 1열)·AI 검수 큐 완전 제거)+H8-8(입주민 프로필 노출 — 홈·나에 본인 실명(vault 복호, 본인 세션 한정)+동/호, 나 설정 섹션 제거·마스킹 안내 타인 한정·관리비 요약 카드)+H8-9(민원 개편 — AI 분류 제거·카테고리 코드화(INQUIRY_CATEGORY)·수동 우선순위·담당자 배정/직원 재배정·답변/피드백(comment 이벤트)·상태 게이트(처리중=담당자·완료=답변≥1)·양 앱 상세 재디자인, ADR-0018)+H8-10(관리자 콘솔 정리 — 사이드바 메뉴 섹션 그룹화(입주민 관리·관리소 운영·설정, STAFF/SYS_ADMIN flat)·대시보드 개편(검수 필요율 stale 제거·오늘 할 일 액션 큐(기간 무관 open 카운트·딥링크)·AI 지표 sunken 강등·카드 tone 색 체계)·문서 관리 검색 개편(자동검색→검색 버튼+Enter(한글 IME 버그 수정)·분류 필터·요약카드 대시보드 통일·헤더 강조))+H9-1(단지 3D 트윈 — household_geometries(JSONB·표준 RLS)·units.json 업로드(동층호 매칭·전체 교체)·occupancy 오버레이·/me has_twin 조건 노출·web-admin /twin deck.gl 3D(dynamic ssr:false 격리), ADR-0019)+H9-2(트윈 오버레이 4종(입주·민원·설비 동단위·관리비)·세대 상세 슬라이드오버(세대원 마스킹·미종결 민원·당월 관리비)·관리비 apply 전 세대 전환)+H9-3(실사 3D VWorld/Cesium 뷰 토글 — iframe srcdoc 호스팅(SDK document.write 회피)·세대 shell Primitive·우리 단지만 볼록껍질 클리핑·postMessage 브리지, ADR-0019 개정)+H9-4(트윈 대시보드 개편 — "단지 트윈"→"트윈 대시보드"·대시보드 바로 아래 같은 레벨·현황 패널(타일 4종+최근민원+설비상태, 민원·시설 API 재사용)·실사 3D 전용 컨트롤(렌더 스타일 쉘/포인트/끄기·시점 단지고정/360°회전·렌더링 우리단지만 clip)·포인트 도트로 실사 3D 오버레이 가독성 수정)+H9-5(주차장 대시보드 — 프로토타입 2D 지하주차장 배치도 이식·`parking_layouts`(단지 1행 JSONB — 442면·동 footprint)/`parking_vehicles`(348대·`plate_enc` 봉투 암호화) 표준 RLS·읽기 전용 API 2종(MANAGER)·시드 스크립트(차량 동/호→명부 매칭 348/348)·web-admin `/parking` SVG 배치도+현황 카드+목록 보기·점유는 **시뮬레이션**(시드 고정 — 번호판 카메라 API 교체 지점)·최초 "세대별 배정 표" 버전 폐기 후 지도 이식으로 재설계)+H9-6(평면도 타입 표시·명부 차량 — 세대 목록 `201호(84M)`(트윈 `household_geometries.unit_type_label` 1:1 outerjoin, **표시 전용** — `unit_types` 마스터 버전은 과설계로 폐기)·주민 명부 차량 열(`parking_vehicles` 정본 조회 전용·관리자 세션 복호 평문, 규칙 2)) 완료):
-
-```text
-apps/      web-resident                      # Next.js — 전 화면 실연동(홈·비서 SSE·민원·공지·관리비·나/알림함·가입/온보딩·비밀번호 재설정), 세션 쿠키 인증
-           web-admin                         # Next.js — 전 화면 실연동(대시보드·문서 게시판(작성·수정·버전 이력)·민원·공지사항 게시판·관리비·시설·트윈 대시보드(기본 deck.gl 3D↔실사 VWorld/Cesium 토글·현황 패널·세대 상세)·주차장 대시보드(SVG 배치도·현황·차량 목록)·주민 관리·직원 관리·단지 관리(SYS_ADMIN 뷰)), 세션 쿠키 인증
-           api                               # FastAPI — documents·assistant·inquiries·notices·fees·facilities(+outbox)·dashboard·twin·parking + 인증·레이트리밋·정확캐시 (liviq-api)
-           ai-worker                         # arq — 문서·공지 인제스트(파싱·청킹·임베딩·pgvector)·예약 공지 발행 cron (liviq-ai-worker)
-packages/  ui · config-ts                    # 공유 컴포넌트/설정 (TS)
-           api-types                         # OpenAPI→openapi-typescript 생성물 (TS)
-           ai-core                           # RAG 전체 — LLM·마스킹·검색·인용검증·도구 에이전트(읽기 전용 6종)·그래프 (liviq-ai-core)
-           db                                # SQLAlchemy 38테이블 · Alembic · RLS 정책+role (liviq-db)
-mcp/       gmail·apt MCP 서버 · management_agent (Python — 프로토타입 동결, 신규 AI는 ai-core)
-evals/     규칙 회귀 러너 · env 게이트 어댑터  # LIVIQ_EVAL_API_URL 설정 시 실측(규칙 1·2·3·5·6·8)
-tests/     e2e                               # Playwright 결정론 여정 (@liviq/e2e — @llm 태그는 로컬 전용)
-docs/ refs/                                  # 설계 문서 · 참조 자료
-```
+현재 구현된 것(현실): **H9-6까지 완료.** 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
+워크스페이스 구성은 `ls`·[docs/02](docs/02-directory-structure.md)·[ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
 인증: Redis 세션+**자체 이메일+비밀번호**(Argon2id·검증 메일·auth_tokens — H7-1, [ADR-0014](docs/adr/0014-local-email-auth.md))+역할 가드 — 웹은 세션 쿠키 1차(credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 시드 계정 API 로그인 + 전 여정(설치→단지→초대→명부→가입→승인→AI, H7-4). 다음 단계·백로그: [docs/09 §8.8·§8.3](docs/09-implementation-harness.md).
@@ -50,13 +36,8 @@ Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turb
 ## 자주 쓰는 명령
 
 ```bash
-pnpm install
-pnpm dev         # turbo run dev — 웹 앱 병렬 (apps/*, packages/*)
-pnpm build       # turbo run build
-pnpm lint        # turbo run lint
-pnpm typecheck   # turbo run typecheck
+# 표준 turbo 태스크(install·dev·build·lint·typecheck·start)는 package.json scripts 참조
 pnpm test        # turbo run test — vitest(web 2종+ui) + pytest(Python 4종, cov 80 게이트)
-pnpm start       # turbo run start (build 후)
 uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
 pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
 pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
