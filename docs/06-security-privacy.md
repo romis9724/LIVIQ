@@ -112,6 +112,7 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소화
 ```
 - TLS 1.2+. 저장 시 민감정보 암호화(at-rest), 키는 시크릿 매니저.
+- **VWorld 실사 3D 예외(H9-3, [ADR-0019](adr/0019-complex-twin-3d.md) 개정)**: 관리자 트윈 실사 뷰는 국토부 VWorld 지도(Cesium)를 쓴다 — CSP 도입 시 `script-src`·`connect-src`·`img-src`에 `https://*.vworld.kr` 허용(외부 스크립트 로드는 이 뷰 한정). 프로토타입의 `document.write` 스크립트 주입은 nonce CSP와 충돌하므로 **동적 `<script>` append**로 로드. VWorld로 나가는 것은 **좌표·타일 요청뿐**(개인정보 전송 없음 — 규칙 2). VWorld 프론트 키(`NEXT_PUBLIC_VWORLD_API_KEY`)는 **서비스 URL 도메인 잠금**이라 번들 노출이 시크릿 유출이 아님(§7 예외) — 단 `.env.example`엔 placeholder만, 실제 키는 `.env`/`.env.local`.
 - CSRF: 상태변경 요청 토큰/SameSite. 폼·발송 엔드포인트 레이트 리밋.
 - **클라이언트/PWA 캐시**: 민감 화면(관리비·민원·개인 대화) 응답은 `Cache-Control: no-store`, service worker 캐시는 `tenant-public`(공지 등)만. 로그아웃·계정 전환 시 캐시 purge([05 §7](05-ui-ux-design.md)).
 
