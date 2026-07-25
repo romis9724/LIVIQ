@@ -43,9 +43,9 @@ describe("summarize", () => {
 
 describe("filterDocs", () => {
   const docs = [
-    doc({ id: "1", title: "주차장 운영 세칙", indexStatus: "indexed" }),
-    doc({ id: "2", title: "분리수거 안내문", indexStatus: "failed" }),
-    doc({ id: "3", title: "관리규약", indexStatus: "indexed" }),
+    doc({ id: "1", title: "주차장 운영 세칙", indexStatus: "indexed", categoryCodeId: "rule" }),
+    doc({ id: "2", title: "분리수거 안내문", indexStatus: "failed", categoryCodeId: "guide" }),
+    doc({ id: "3", title: "관리규약", indexStatus: "indexed", categoryCodeId: "rule" }),
   ];
 
   it("상태 all 은 전부 통과", () => {
@@ -63,6 +63,18 @@ describe("filterDocs", () => {
 
   it("상태와 검색을 동시에 적용한다", () => {
     expect(filterDocs(docs, "indexed", "관리").map((d) => d.id)).toEqual(["3"]);
+  });
+
+  it("분류 필터 단독은 해당 분류만 남긴다", () => {
+    expect(filterDocs(docs, "all", "", "rule").map((d) => d.id)).toEqual(["1", "3"]);
+  });
+
+  it("제목과 분류를 동시에 적용한다", () => {
+    expect(filterDocs(docs, "all", "관리", "rule").map((d) => d.id)).toEqual(["3"]);
+  });
+
+  it('"전체 분류"(categoryId 없음)는 분류 조건을 적용하지 않는다', () => {
+    expect(filterDocs(docs, "all", "", "").length).toBe(3);
   });
 });
 

@@ -102,20 +102,19 @@
   }
 }
 .dash-action {
-  /* --tone: 카드 의미색 · --tone-ink: 텍스트 대비 안전한 진한 버전 */
+  /* --tone: 카드 의미색 · --tone-ink: 텍스트 대비 안전한 진한 버전.
+     배경 틴트 없이 흰 카드 + 옅은 tone 테두리, 라벨 위·숫자 우하단(컴팩트). */
   --tone: var(--color-accent);
   --tone-ink: var(--color-accent);
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
   text-decoration: none;
   color: inherit;
-  /* 카드 전면에 옅은 tone 틴트 + tone 상단 스트립으로 카테고리 색을 부여 */
-  background: color-mix(in oklch, var(--tone) 6%, var(--color-surface));
-  border-top: 3px solid var(--tone);
+  border-color: color-mix(in oklch, var(--tone) 55%, var(--color-border));
   transition:
-    border-color var(--duration-fast) var(--ease-out),
     box-shadow var(--duration-fast) var(--ease-out),
     transform var(--duration-fast) var(--ease-out);
 }
@@ -140,20 +139,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
 }
-.dash-action__icon {
+.dash-action__label {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--tone) 22%, var(--color-surface));
-  font-size: var(--text-lg);
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.dash-action__icon {
+  font-size: var(--text-base);
   line-height: 1;
 }
 .dash-action__arrow {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   font-weight: 700;
   color: color-mix(in oklch, var(--tone) 50%, var(--color-text-muted));
   transform: translateX(0);
@@ -162,20 +163,16 @@
     transform var(--duration-fast) var(--ease-out);
 }
 .dash-action__count {
-  font-size: var(--text-title);
+  align-self: flex-end;
+  font-size: var(--text-xl);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--tone-ink);
 }
-.dash-action__label {
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text);
-}
 .dash-action:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-card-hover);
 }
 .dash-action:hover .dash-action__arrow {
@@ -198,11 +195,7 @@
     transform: none;
   }
 }
-/* 카운트 0(할 일 없음) — 카테고리 색(스트립·아이콘 칩)은 유지하고 숫자만 차분하게.
-   할 일이 있는 카드(>0)는 옅은 tone 틴트 배경으로 한 번 더 주목 유도. */
-.dash-action--empty {
-  background: var(--color-surface);
-}
+/* 카운트 0(할 일 없음) — tone 테두리는 유지하고 숫자만 차분하게. */
 .dash-action--empty .dash-action__count {
   color: var(--color-text-muted);
 }
