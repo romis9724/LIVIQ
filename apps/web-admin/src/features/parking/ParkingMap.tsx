@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 import type { ParkingLayout, ParkingSpot } from "@/lib/api";
 import { SPOT_H, SPOT_W, elapsedText, type ParkedCar } from "./parking-sim";
 
@@ -13,6 +21,10 @@ export const EXTERNAL_GROUP = "외부";
 const NUMBER_OFFSET_TOP = 11; // dir=down 면은 위쪽에 번호
 const NUMBER_OFFSET_BOTTOM = 5; // dir=up 면은 아래쪽에 번호
 const HL_PAD = 3; // 선택 강조 테두리 여유
+
+/** 줌 배율 — 1 = 전체 보기(컨테이너 폭에 맞춤), 그 이상은 확대 + 드래그 팬. */
+const ZOOM_STEPS = [1, 1.5, 2, 3] as const;
+const DRAG_THRESHOLD = 4; // px — 이보다 움직였으면 팬 제스처(면 선택 취소)
 
 interface ParkingMapProps {
   layout: ParkingLayout;
@@ -51,7 +63,65 @@ export function ParkingMap({
     [layout.spots, selectedNo],
   );
 
+  const [zoomIndex, setZoomIndex] = useState(0);
+  const zoom = ZOOM_STEPS[zoomIndex] ?? 1;
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  // 확대 상태에서 선택된 면이 화면 밖이면 그 면을 화면 가운데로 옮긴다(목록 행 클릭 → 지도 포커스).
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !selected || zoom === 1) return;
+    const [, , width, height] = parseViewBox(layout.viewBox);
+    if (width <= 0 || height <= 0) return;
+    const left =
+      ((selected.x + SPOT_W / 2) / width) * viewport.scrollWidth - viewport.clientWidth / 2;
+    const top =
+      ((selected.y + SPOT_H / 2) / height) * viewport.scrollHeight - viewport.clientHeight / 2;
+    // behavior:"auto" 고정 — smooth 는 일부 브라우저에서 조용히 무시된다(팬 위치가 안 맞는 버그).
+    viewport.scrollTo({ left: Math.max(0, left), top: Math.max(0, top), behavior: "auto" });
+  }, [selected, zoom, layout.viewBox]);
+
+  // 확대 상태 이동은 드래그 팬 — 스크롤바 대신 지도를 잡아 끈다. 위치는 스크롤 오프셋으로 유지.
+  const dragRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const draggedRef = useRef(false); // 끌고 나서 손을 떼는 순간의 click 은 면 선택으로 보지 않는다
+
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    const viewport = viewportRef.current;
+    if (!viewport || zoom === 1 || event.button !== 0) return;
+    dragRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+      left: viewport.scrollLeft,
+      top: viewport.scrollTop,
+    };
+    draggedRef.current = false;
+    setDragging(true);
+    viewport.setPointerCapture(event.pointerId);
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const viewport = viewportRef.current;
+    const start = dragRef.current;
+    if (!viewport || !start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) draggedRef.current = true;
+    viewport.scrollLeft = start.left - dx;
+    viewport.scrollTop = start.top - dy;
+  }
+
+  function handlePointerUp(event: PointerEvent<HTMLDivElement>) {
+    const viewport = viewportRef.current;
+    if (viewport?.hasPointerCapture(event.pointerId)) {
+      viewport.releasePointerCapture(event.pointerId);
+    }
+    dragRef.current = null;
+    setDragging(false);
+  }
+
   function handleClick(event: MouseEvent<SVGSVGElement>) {
+    if (draggedRef.current) return; // 팬 제스처였다 — 선택 아님
     // 면 rect 에 data-no 를 심고 루트에서 위임 — 442개 핸들러를 만들지 않는다.
     const target = (event.target as Element | null)?.closest("[data-no]");
     const no = target?.getAttribute("data-no");
@@ -60,28 +130,75 @@ export function ParkingMap({
 
   return (
     <div className="pk-map">
-      {/* 배치도 전체를 한 화면에 — viewBox 비율대로 컨테이너 폭에 맞춰 축소(스크롤 없음). */}
-      <svg
-        className="pk-map__svg"
-        viewBox={layout.viewBox}
-        role="img"
-        aria-label={summaryLabel}
-        onClick={handleClick}
-      >
-        {staticLayer}
-        {spotLayer}
-        {selected ? (
-          <rect
-            className="pk-hl"
-            x={selected.x - HL_PAD}
-            y={selected.y - HL_PAD}
-            width={SPOT_W + HL_PAD * 2}
-            height={SPOT_H + HL_PAD * 2}
-            rx={5}
-            pointerEvents="none"
-          />
+      <div className="pk-zoom" role="group" aria-label="배치도 확대·축소">
+        <button
+          type="button"
+          className="pk-zoom__btn"
+          onClick={() => setZoomIndex((i) => Math.max(0, i - 1))}
+          disabled={zoomIndex === 0}
+          aria-label="축소"
+        >
+          −
+        </button>
+        <span className="pk-zoom__value" aria-live="polite">
+          {zoom === 1 ? "전체" : `${zoom}×`}
+        </span>
+        <button
+          type="button"
+          className="pk-zoom__btn"
+          onClick={() => setZoomIndex((i) => Math.min(ZOOM_STEPS.length - 1, i + 1))}
+          disabled={zoomIndex === ZOOM_STEPS.length - 1}
+          aria-label="확대"
+        >
+          +
+        </button>
+        {zoom !== 1 ? (
+          <>
+            <span className="pk-zoom__hint">끌어서 이동</span>
+            <button type="button" className="pk-zoom__reset" onClick={() => setZoomIndex(0)}>
+              전체 보기
+            </button>
+          </>
         ) : null}
-      </svg>
+      </div>
+
+      {/* 배율 1 = 컨테이너 폭에 맞춘 전체 보기. 확대하면 지도를 끌어서 이동(키보드는 방향키 스크롤). */}
+      <div
+        className="pk-map__viewport"
+        ref={viewportRef}
+        data-zoomed={zoom === 1 ? undefined : true}
+        data-dragging={dragging ? true : undefined}
+        role={zoom === 1 ? undefined : "region"}
+        aria-label={zoom === 1 ? undefined : "지하주차장 배치도 (확대 — 끌어서 이동, 방향키 가능)"}
+        tabIndex={zoom === 1 ? undefined : 0}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        <svg
+          className="pk-map__svg"
+          viewBox={layout.viewBox}
+          style={{ width: `${zoom * 100}%` }}
+          role="img"
+          aria-label={summaryLabel}
+          onClick={handleClick}
+        >
+          {staticLayer}
+          {spotLayer}
+          {selected ? (
+            <rect
+              className="pk-hl"
+              x={selected.x - HL_PAD}
+              y={selected.y - HL_PAD}
+              width={SPOT_W + HL_PAD * 2}
+              height={SPOT_H + HL_PAD * 2}
+              rx={5}
+              pointerEvents="none"
+            />
+          ) : null}
+        </svg>
+      </div>
     </div>
   );
 }

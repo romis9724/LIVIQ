@@ -192,13 +192,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- 배치도 + 목록 ---- */
-/* 배치도가 스크롤 없이 전체로 보이려면 폭이 곧 가독성이다 — 목록은 옆이 아니라 아래로 쌓는다. */
+/* ---- 배치도 + 목록 2열 ---- */
+/* 목록을 열면 지도가 남은 폭으로 줄어든다(배치도는 폭에 맞춰 비율 축소 — 스크롤 아님). */
 .pk-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+.pk-main[data-list] {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+@media (max-width: 1100px) {
+  .pk-main[data-list] {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .pk-stage {
@@ -207,15 +215,107 @@
   padding: var(--space-3);
 }
 
-/* 배치도 — viewBox 3020x1082 전체를 한 화면에(스크롤 없음). 폭에 맞춰 비율대로 축소된다. */
+/* 배치도 — 배율 1이면 viewBox 3020x1082 전체가 컨테이너 폭에 맞춰 축소(스크롤 없음). */
 .pk-map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
   border-radius: var(--radius-md);
+}
+.pk-map__viewport {
+  border-radius: var(--radius-md);
+}
+/* 확대 상태 — 면 번호를 읽을 배율로 키우고, 이동은 드래그 팬(스크롤 오프셋을 직접 옮긴다). */
+/* overflow:auto 를 유지해 키보드 방향키 이동(WCAG 2.1.1)은 살리고, 스크롤바만 숨긴다. */
+.pk-map__viewport[data-zoomed] {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  max-height: 70vh;
+  background: var(--pk-frame-fill);
+  cursor: grab;
+  touch-action: none; /* 터치 드래그를 팬으로 쓴다 — 브라우저 기본 스크롤에 넘기지 않음 */
+}
+.pk-map__viewport[data-zoomed]::-webkit-scrollbar {
+  display: none;
+}
+.pk-map__viewport[data-dragging] {
+  cursor: grabbing;
+}
+/* 드래그 중에는 면 텍스트가 선택되지 않게. */
+.pk-map__viewport[data-dragging] .pk-map__svg {
+  pointer-events: none;
+}
+.pk-map__viewport[data-zoomed]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 .pk-map__svg {
   display: block;
-  width: 100%;
   height: auto;
   user-select: none;
+}
+/* 전역 svg 리셋의 max-width:100% 가 확대 배율(인라인 width)을 잘라내므로 줌 상태에서만 해제. */
+.pk-map__viewport[data-zoomed] .pk-map__svg {
+  max-width: none;
+}
+
+/* 줌 컨트롤 — 배치도 위 우측. 전체 보기(1x)에서 축소 버튼은 비활성. */
+.pk-zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  align-self: flex-end;
+}
+.pk-zoom__btn,
+.pk-zoom__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease;
+}
+.pk-zoom__btn {
+  width: 2rem;
+  height: 2rem;
+  font-size: var(--text-base);
+  line-height: 1;
+}
+.pk-zoom__reset {
+  height: 2rem;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+.pk-zoom__btn:hover:not(:disabled),
+.pk-zoom__reset:hover {
+  background: var(--color-surface-sunken);
+  border-color: var(--color-text-muted);
+}
+.pk-zoom__btn:focus-visible,
+.pk-zoom__reset:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pk-zoom__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pk-zoom__value {
+  min-width: 3rem;
+  text-align: center;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+.pk-zoom__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
 }
 
 .pk-frame {
