@@ -28,6 +28,25 @@
   padding: var(--space-6);
 }
 
+/* 실사 3D(VWorld) 지도 컨테이너 — 캔버스 무대를 가득 채운다(VWorld 가 canvas 를 붙임). */
+.twin-vworld-map {
+  position: absolute;
+  inset: 0;
+}
+/* 로드/에러 오버레이 — 준비 전(또는 실패한) 맵 위에 안내를 덮는다. */
+.twin-vworld-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  background: var(--color-surface-sunken);
+}
+
 /* 범례 — 캔버스 위 좌하단 오버레이. 색+텍스트 병기(색 단독 금지). */
 .twin-legend {
   position: absolute;
