@@ -442,18 +442,32 @@ function RosterTable({
                 </tr>
               </thead>
               <tbody>
-                {roster.items.map((entry) => (
-                  <tr key={entry.userId}>
-                    <td>{entry.buildingName ?? "—"}동</td>
-                    <td>{entry.unitNo ?? "—"}호</td>
-                    <td>{entry.nameMasked}</td>
+                {roster.items.map((entry, index) => {
+                  // 명부는 세대 단위로 정렬돼 한 세대에 여러 세대원이 이어진다. 동·호·차량은
+                  // 세대 속성이라 연속 행에서 반복하지 않고 첫 행에만 적는다(세대 묶음이 보이게).
+                  const prev = index > 0 ? roster.items[index - 1] : undefined;
+                  const isSameHousehold =
+                    prev?.buildingName === entry.buildingName && prev?.unitNo === entry.unitNo;
+                  return (
+                  <tr key={entry.userId} data-cont={isSameHousehold || undefined}>
+                    <td className="apv-roster__unit">
+                      {isSameHousehold ? "" : `${entry.buildingName ?? "—"}동`}
+                    </td>
+                    <td className="apv-roster__unit">
+                      {isSameHousehold ? "" : `${entry.unitNo ?? "—"}호`}
+                    </td>
+                    <td className="apv-roster__name">{entry.nameMasked}</td>
                     <td>
                       <span className={`apv-state apv-state--${entry.state}`}>
                         {STATE_LABEL[entry.state] ?? entry.state}
                       </span>
                     </td>
                     <td className="apv-roster__vehicles">
-                      {entry.vehicles.length > 0 ? entry.vehicles.join(", ") : "—"}
+                      {isSameHousehold
+                        ? ""
+                        : entry.vehicles.length > 0
+                          ? entry.vehicles.join(", ")
+                          : "—"}
                     </td>
                     <td className="apv-roster__actions">
                       {entry.state === "unregistered" ? (
@@ -489,7 +503,8 @@ function RosterTable({
                       ) : null}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

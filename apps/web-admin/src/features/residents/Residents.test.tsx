@@ -149,4 +149,34 @@ describe("Roster vehicles column", () => {
     const cell = container.querySelector(".apv-roster__vehicles");
     expect(cell?.textContent).toBe("—");
   });
+
+  it("같은 세대의 이어지는 행은 동·호·차량을 반복하지 않는다", async () => {
+    const household = { buildingName: "103", floor: 2, unitNo: 201, state: "unregistered" };
+    listRoster.mockResolvedValue({
+      items: [
+        { ...household, userId: "r1", nameMasked: "이*수", vehicles: ["12가3456"] },
+        { ...household, userId: "r2", nameMasked: "김*민", vehicles: ["12가3456"] },
+        {
+          ...household,
+          userId: "r3",
+          nameMasked: "박*호",
+          unitNo: 202,
+          vehicles: ["34나7890"],
+        },
+      ],
+      total: 3,
+      counts: { total: 3, unregistered: 3, joined: 0, movedOut: 0 },
+      lastUpload: null,
+    });
+    const { container } = render(<Residents />);
+    await screen.findByText("김*민");
+    const rows = [...container.querySelectorAll(".apv-roster__table tbody tr")];
+    const vehicleText = rows.map((r) => r.querySelector(".apv-roster__vehicles")?.textContent);
+    const unitText = rows.map((r) => r.querySelectorAll(".apv-roster__unit")[1]?.textContent);
+    // 2행은 1행과 같은 세대 → 비움, 3행은 다른 호수 → 다시 표시.
+    expect(vehicleText).toEqual(["12가3456", "", "34나7890"]);
+    expect(unitText).toEqual(["201호", "", "202호"]);
+    expect(rows[1]?.getAttribute("data-cont")).toBe("true");
+    expect(rows[2]?.getAttribute("data-cont")).toBeNull();
+  });
 });

@@ -514,6 +514,26 @@
   border-bottom: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
 }
+/* 세대 묶음: 같은 세대의 두 번째 행부터는 경계선을 지워 한 덩어리로 읽히게 한다. */
+.apv-roster__table tbody tr[data-cont] td {
+  border-top: 0;
+}
+.apv-roster__table tbody tr:not([data-cont]) td {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3); /* 세대 묶음이 시작되는 행에 여백을 줘 그룹 경계를 만든다 */
+}
+.apv-roster__table tbody tr[data-cont] + tr:not([data-cont]) td {
+  border-top-color: var(--color-border-strong);
+}
+.apv-roster__table tbody tr td {
+  border-bottom: 0;
+}
+.apv-roster__unit {
+  font-weight: 600;
+}
+.apv-roster__name {
+  color: var(--color-text);
+}
 .apv-roster__table tbody tr:hover {
   background: color-mix(in oklch, var(--color-text) 3%, transparent);
 }
@@ -535,21 +555,6 @@
 .apv-state--moved_out {
   background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
   color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
-}
-/* 열 폭: 앞 5열은 내용폭으로 고정하고, 남는 폭은 우측 정렬인 관리 열이 흡수한다. */
-.apv-roster__table th:nth-child(-n + 3),
-.apv-roster__table td:nth-child(-n + 3) {
-  width: 84px;
-  white-space: nowrap;
-}
-.apv-roster__table th:nth-child(4),
-.apv-roster__table td:nth-child(4) {
-  width: 104px;
-  white-space: nowrap;
-}
-.apv-roster__table th:nth-child(5),
-.apv-roster__vehicles {
-  width: 220px; /* 번호판 2대까지 한 줄 */
 }
 /* th 기본 정렬(left)보다 명시도가 높아야 헤더가 버튼(오른쪽 정렬)과 맞는다. */
 .apv-roster__table th.apv-roster__actions-col {
