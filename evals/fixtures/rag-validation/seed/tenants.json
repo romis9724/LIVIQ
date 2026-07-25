@@ -1,0 +1,17 @@
+[
+  {
+    "tenant_id": "TENANT-A",
+    "name": "해오름아파트",
+    "synthetic": true
+  },
+  {
+    "tenant_id": "TENANT-B",
+    "name": "푸른마을",
+    "synthetic": true
+  },
+  {
+    "tenant_id": "TENANT-C",
+    "name": "솔빛타운",
+    "synthetic": true
+  }
+]

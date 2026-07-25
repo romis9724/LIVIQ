@@ -1,0 +1,74 @@
+[
+  {
+    "truth_id": "KG-001",
+    "tenant_id": "TENANT-A",
+    "subject": "저수조 T-01",
+    "relation": "SUPPLIES",
+    "object": "급수펌프 P-01",
+    "evidence_document_id": "A-KG-001",
+    "evidence_clause": "관계"
+  },
+  {
+    "truth_id": "KG-002",
+    "tenant_id": "TENANT-A",
+    "subject": "저수조 T-01",
+    "relation": "SUPPLIES",
+    "object": "급수펌프 P-02",
+    "evidence_document_id": "A-KG-001",
+    "evidence_clause": "관계"
+  },
+  {
+    "truth_id": "KG-003",
+    "tenant_id": "TENANT-A",
+    "subject": "급수펌프 P-02",
+    "relation": "SERVES",
+    "object": "402동",
+    "evidence_document_id": "A-KG-001",
+    "evidence_clause": "관계"
+  },
+  {
+    "truth_id": "KG-004",
+    "tenant_id": "TENANT-A",
+    "subject": "급수펌프 P-02",
+    "relation": "HAS_INCIDENT",
+    "object": "베어링 마모",
+    "evidence_document_id": "A-FAC-003",
+    "evidence_clause": "2026-03"
+  },
+  {
+    "truth_id": "KG-005",
+    "tenant_id": "TENANT-A",
+    "subject": "도어 센서 DS-31",
+    "relation": "CONNECTED_TO",
+    "object": "도어 컨트롤러 DC-31",
+    "evidence_document_id": "A-KG-002",
+    "evidence_clause": "관계"
+  },
+  {
+    "truth_id": "KG-006",
+    "tenant_id": "TENANT-A",
+    "subject": "도어 센서 DS-31",
+    "relation": "MAY_CAUSE",
+    "object": "문 재개방 반복",
+    "evidence_document_id": "A-KG-002",
+    "evidence_clause": "증상"
+  },
+  {
+    "truth_id": "KG-007",
+    "tenant_id": "TENANT-A",
+    "subject": "403동 1호기",
+    "relation": "HAS_INCIDENT",
+    "object": "도어 레일 이물질",
+    "evidence_document_id": "A-FAC-004",
+    "evidence_clause": "2026-05"
+  },
+  {
+    "truth_id": "KG-008",
+    "tenant_id": "TENANT-A",
+    "subject": "402동 3층 유도등",
+    "relation": "REQUIRES",
+    "object": "배터리 교체",
+    "evidence_document_id": "A-FAC-005",
+    "evidence_clause": "결과"
+  }
+]

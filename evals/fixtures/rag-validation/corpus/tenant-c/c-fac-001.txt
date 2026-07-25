@@ -1,0 +1,8 @@
+솔빛타운 급수펌프 이력
+
+합성 테스트 문서 | C-FAC-001 | tenant=TENANT-C | revision=1 | visibility=ADMIN
+
+[이력]
+급수펌프 C-P1의 압력 저하는 필터 막힘을 제거해 해소했다.
+
+주의: 이 문서는 LIVIQ 검증을 위해 만든 합성 fixture이며 실제 단지 정보가 아닙니다.

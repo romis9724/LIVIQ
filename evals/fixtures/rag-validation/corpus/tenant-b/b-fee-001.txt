@@ -1,0 +1,8 @@
+푸른마을 관리비 기준
+
+합성 테스트 문서 | B-FEE-001 | tenant=TENANT-B | revision=1 | visibility=RESIDENT
+
+[원칙]
+푸른마을 관리비 설명은 해당 단지의 확정 업로드만 사용한다.
+
+주의: 이 문서는 LIVIQ 검증을 위해 만든 합성 fixture이며 실제 단지 정보가 아닙니다.
