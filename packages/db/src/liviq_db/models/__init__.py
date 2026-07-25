@@ -14,6 +14,7 @@ from .fees import ExcelUpload, Fee
 from .inquiries import Inquiry, InquiryEvent
 from .notices import Notice, NoticeAttachment, Notification
 from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
+from .parking import ParkingAssignment
 from .plans import FloorPlan, HouseholdGeometry, PlanDevice
 from .tenants import Building, Household, Tenant, UnitType
 from .users import AuthToken, Consent, PiiVault, TenantKey, User, UserRole
@@ -61,6 +62,7 @@ __all__ = [
     "Notification",
     "NULLABLE_TENANT_TABLES",
     "OutboxEvent",
+    "ParkingAssignment",
     "PiiVault",
     "PlanDevice",
     "SOFT_DELETE_TABLES",

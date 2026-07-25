@@ -634,6 +634,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/parking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Dashboard
+         * @description 주차 현황 요약 + 배정된 세대 목록(배정 1건 이상인 세대만). 동·층·호 오름차순.
+         */
+        get: operations["get_dashboard_admin_parking_get"];
+        put?: never;
+        /**
+         * Create Assignment
+         * @description 주차면 배정 생성 — household_id가 이 단지 세대여야 한다(아니면 404).
+         */
+        post: operations["create_assignment_admin_parking_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/parking/{assignment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Assignment
+         * @description 주차면 배정 삭제(leaf — FK 의존자 없음).
+         */
+        delete: operations["delete_assignment_admin_parking__assignment_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Assignment
+         * @description 위치·차량번호 전체 교체(빈 값/null이면 클리어, 값 있으면 재암호화).
+         */
+        patch: operations["update_assignment_admin_parking__assignment_id__patch"];
+        trace?: never;
+    };
     "/admin/roster": {
         parameters: {
             query?: never;
@@ -2906,6 +2954,114 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * ParkingAssignmentIn
+         * @description 주차면 생성 입력 — household_id + 위치·차량번호(선택).
+         */
+        ParkingAssignmentIn: {
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /** Location Code */
+            location_code?: string | null;
+            /** Plate */
+            plate?: string | null;
+        };
+        /**
+         * ParkingAssignmentItem
+         * @description 대시보드 세대 행의 배정 1건(plate=복호 평문).
+         */
+        ParkingAssignmentItem: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Location Code */
+            location_code: string | null;
+            /** Plate */
+            plate: string | null;
+        };
+        /**
+         * ParkingAssignmentOut
+         * @description 주차면 1건 — plate는 복호 평문.
+         */
+        ParkingAssignmentOut: {
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Location Code */
+            location_code: string | null;
+            /** Plate */
+            plate: string | null;
+        };
+        /**
+         * ParkingAssignmentUpdateIn
+         * @description 주차면 수정 입력 — 위치·차량번호 전체 교체(빈 값/null이면 클리어).
+         */
+        ParkingAssignmentUpdateIn: {
+            /** Location Code */
+            location_code?: string | null;
+            /** Plate */
+            plate?: string | null;
+        };
+        /**
+         * ParkingDashboardOut
+         * @description 주차장 대시보드 페이로드 — 요약 + 배정된 세대 목록.
+         */
+        ParkingDashboardOut: {
+            /** Households */
+            households: components["schemas"]["ParkingHouseholdItem"][];
+            summary: components["schemas"]["ParkingSummary"];
+        };
+        /**
+         * ParkingHouseholdItem
+         * @description 대시보드 세대 행 — 배정 1건 이상인 세대만.
+         */
+        ParkingHouseholdItem: {
+            /** Assignments */
+            assignments: components["schemas"]["ParkingAssignmentItem"][];
+            /** Dong */
+            dong: string;
+            /** Floor */
+            floor: number;
+            /** Ho */
+            ho: number;
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /** Space Count */
+            space_count: number;
+            /** Unit Label */
+            unit_label: string;
+            /** Vehicle Count */
+            vehicle_count: number;
+        };
+        /**
+         * ParkingSummary
+         * @description 주차 현황 요약 타일.
+         */
+        ParkingSummary: {
+            /** Assigned Households */
+            assigned_households: number;
+            /** Total Spaces */
+            total_spaces: number;
+            /** Total Vehicles */
+            total_vehicles: number;
+            /** Unassigned Households */
+            unassigned_households: number;
+        };
         /** PasswordChangeIn */
         PasswordChangeIn: {
             /** Current Password */
@@ -4898,6 +5054,152 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_admin_parking_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingDashboardOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_assignment_admin_parking_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParkingAssignmentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingAssignmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assignment_admin_parking__assignment_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                assignment_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_assignment_admin_parking__assignment_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                assignment_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ParkingAssignmentUpdateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingAssignmentOut"];
+                };
             };
             /** @description Validation Error */
             422: {
