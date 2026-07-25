@@ -247,6 +247,7 @@ merge(main): 마이그레이션 dry-run → 스테이징 배포 → 스모크 �
 | 동의 변경·설정 토글 서버 연동 | [04 §2](04-menu-structure.md) 나 화면 | H6-3은 표시 전용 — 동의 변경 API 부재. 수요 확인 후 |
 | ~~OAuth 콜백 앱별 복귀~~ | H6-1 | **H7-1에서 대체**(§8.8) — 자체 이메일 인증 전환으로 OAuth 콜백 자체 제거 |
 | 한글 NFD/NFC 정규화 불일치 — 제목 검색 무력화 | [03 §4.2](03-database-design.md) documents·[04 §3](04-menu-structure.md) | **재현되는 사용자 영향 버그**(H8-10 후속 검증 중 발견, 2026-07-25). macOS 파일명은 NFD(분해형) → `DocumentForm.tsx:57`이 제목을 파일명에서 자동 채움 → title이 NFD로 저장(실측 `title = normalize(title, nfc)` → false) → 사용자는 키보드로 NFC 입력 → 부분일치 실패로 **0건**. 영향 4곳: `documents/data.ts:57`·`inquiry-admin/InquiryAdmin.tsx:133`(클라이언트 부분일치)·`documents.py:135`·`fees.py:227`(서버 `ilike` — Postgres도 NFD/NFC 구분, 동 이름은 숫자라 영향 낮음). 수정 방향은 **경계에서 NFC 정규화**(서버 저장 시 — 그러면 검색 4곳은 미변경으로 일치) + 기존 데이터 `normalize(title, nfc)` 마이그레이션 + 파일명 자동 채움 지점 `.normalize("NFC")` 보강. 별도 작업 단위로 착수 |
+| 기존 벡터 일괄 재색인 — 마스킹 기준 소급 적용 | [ADR-0015 개정 노트](adr/0015-notice-board-replaces-ai-draft.md)·[06 §4.2](06-security-privacy.md) | **임베딩 마스킹 수정(PR #73, 2026-07-25)은 소급되지 않는다** — 그 전에 색인된 `content_chunks.embedding`은 원문 임베딩이고, 프로바이더에 원문이 전송된 사실도 취소 불가. 파일럿까지 로컬 Ollama만 썼다면 실질 외부 노출은 없으나, 외부 엔드포인트를 붙인 이력이 있으면 별도 판단 필요. 착수 조건: 재색인 ops 스크립트(문서·공지 전량 재인제스트 큐잉 — 문서는 `index_status` 리셋, 공지는 published 전량) + 벡터 교체 전후 검색 회귀 확인. 재업로드 시엔 개별 자동 해소되므로 **운영 데이터가 쌓이기 전에 실행**하는 편이 싸다 |
 
 ### 8.4 H3 체크리스트 (시설 — Neo4j 그래프·AI 도우미)
 
