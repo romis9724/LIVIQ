@@ -536,7 +536,23 @@
   background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
   color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
 }
-.apv-roster__actions-col {
+/* 열 폭: 앞 5열은 내용폭으로 고정하고, 남는 폭은 우측 정렬인 관리 열이 흡수한다. */
+.apv-roster__table th:nth-child(-n + 3),
+.apv-roster__table td:nth-child(-n + 3) {
+  width: 84px;
+  white-space: nowrap;
+}
+.apv-roster__table th:nth-child(4),
+.apv-roster__table td:nth-child(4) {
+  width: 104px;
+  white-space: nowrap;
+}
+.apv-roster__table th:nth-child(5),
+.apv-roster__vehicles {
+  width: 220px; /* 번호판 2대까지 한 줄 */
+}
+/* th 기본 정렬(left)보다 명시도가 높아야 헤더가 버튼(오른쪽 정렬)과 맞는다. */
+.apv-roster__table th.apv-roster__actions-col {
   text-align: right;
 }
 .apv-roster__actions {
