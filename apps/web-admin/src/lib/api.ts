@@ -1083,6 +1083,7 @@ export interface RosterEntry {
   floor: number | null;
   unitNo: number | null;
   state: string; // unregistered | joined | moved_out
+  vehicles: string[]; // 세대 등록 차량 번호(H9-6 — parking_vehicles 정본 조회 전용, 없으면 빈 배열)
 }
 
 export interface RosterCounts {
@@ -1122,6 +1123,7 @@ export async function listRoster(
         floor: number | null;
         unit_no: number | null;
         state: string;
+        vehicles?: string[] | null;
       }[]
     ).map((raw) => ({
       userId: raw.user_id,
@@ -1130,6 +1132,7 @@ export async function listRoster(
       floor: raw.floor,
       unitNo: raw.unit_no,
       state: raw.state,
+      vehicles: raw.vehicles ?? [],
     })),
     total: body.total,
     counts: {
