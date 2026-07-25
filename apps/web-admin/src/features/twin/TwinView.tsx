@@ -223,7 +223,12 @@ function TwinBody({
   return (
     <section className="surface-card twin-stage">
       {viewMode === "vworld" ? (
-        <VWorldView />
+        <VWorldView
+          geometry={geo.geometry}
+          overlay={overlay}
+          overlayKind={overlayKind}
+          onSelectHousehold={onSelectHousehold}
+        />
       ) : (
         <TwinDeck
           geometry={geo.geometry}
