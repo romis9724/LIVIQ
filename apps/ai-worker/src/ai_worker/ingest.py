@@ -1,4 +1,7 @@
-"""문서 인제스트 — 원본 → 파싱 → 청킹 → 임베딩 → pgvector (docs/01 §5.1, 11 §3.1).
+"""문서 인제스트 — 원본 → 파싱 → 청킹 → 마스킹 → 임베딩 → pgvector (docs/01 §5.1, 11 §3.1).
+
+임베딩 엔드포인트도 LLM 경계다 — 청크 원문 대신 마스킹 텍스트를 전송한다(규칙 2, fail-closed).
+DB에 저장하는 청크 본문은 원문 그대로(RLS 보호 대상이고 인용 표시에 필요).
 
 의존성(다운로드·LLM·세션)은 주입받아 단위 테스트 가능하게 유지한다.
 세션은 호출자(arq 태스크)가 tenant 컨텍스트(`app.tenant_id`)를 설정한 것을 받는다 —
@@ -16,6 +19,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
+from ai_core.masking import MaskingFailedError, ensure_masked
 from ai_core.rag import Chunk, chunk_text
 from ai_worker.parsing import UnsupportedFormatError, extract_text
 from liviq_db.models import ContentChunk, Document, DocumentVersion
@@ -78,7 +82,11 @@ async def ingest_document(
         await _mark_failed(session, document_id)
         return IngestResult(document_id, 0, "failed", error="추출된 텍스트 없음")
 
-    vectors = await embed_chunks(llm, chunks)
+    try:
+        vectors = await embed_chunks(llm, chunks)
+    except MaskingFailedError as exc:
+        await _mark_failed(session, document_id)
+        return IngestResult(document_id, 0, "failed", error=str(exc))
 
     # 멱등 재색인: 기존 청크 삭제 → 재삽입
     await session.execute(
@@ -108,11 +116,15 @@ async def ingest_document(
 
 
 async def embed_chunks(llm: LlmClient, chunks: Sequence[Chunk]) -> list[list[float]]:
-    """청크 본문을 배치로 임베딩(문서·공지 인제스트가 공유)."""
+    """청크를 마스킹 후 배치 임베딩(문서·공지 인제스트가 공유하는 유일한 임베딩 경로).
+
+    마스킹은 여기서 한다 — 호출자마다 거는 가드는 새 호출자가 생길 때마다 빠진다.
+    마스킹 실패는 MaskingFailedError로 그대로 올려 호출자가 색인 실패로 기록한다(fail-closed).
+    """
+    masked = [ensure_masked(c.content).masked_text for c in chunks]
     vectors: list[list[float]] = []
-    for start in range(0, len(chunks), EMBED_BATCH_SIZE):
-        batch = chunks[start : start + EMBED_BATCH_SIZE]
-        vectors.extend(await llm.embed([c.content for c in batch]))
+    for start in range(0, len(masked), EMBED_BATCH_SIZE):
+        vectors.extend(await llm.embed(masked[start : start + EMBED_BATCH_SIZE]))
     return vectors
 
 

@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
+from ai_core.masking import MaskingFailedError
 from ai_worker.ingest import Downloader
 from ai_worker.ingest_notice import ingest_notice
 from liviq_db.models import ContentChunk, Notice, NoticeAttachment, Tenant
@@ -85,6 +86,35 @@ async def _seed_notice(
         objects[storage_key] = data
     await session.flush()
     return tenant.id, notice.id, objects
+
+
+async def test_masking_failure_skips_embedding(
+    session: AsyncSession,
+    fake_llm: LlmClient,
+    embed_payloads: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """공지도 마스킹 실패 시 임베딩 없이 failed — 청크는 남기지 않는다(fail-closed, 규칙 2)."""
+
+    def _boom(text: str, **kwargs: object) -> object:
+        raise MaskingFailedError("마스킹 후 PII 잔존")
+
+    monkeypatch.setattr("ai_worker.ingest.ensure_masked", _boom)
+    tenant_id, notice_id, objects = await _seed_notice(session)
+    result = await ingest_notice(
+        session,
+        llm=fake_llm,
+        download=_downloader(objects, []),
+        notice_id=notice_id,
+        tenant_id=tenant_id,
+    )
+    assert result.status == "failed"
+    assert result.chunk_count == 0
+    assert embed_payloads == []
+    count = await session.scalar(
+        select(func.count()).select_from(ContentChunk).where(ContentChunk.notice_id == notice_id)
+    )
+    assert count == 0
 
 
 async def test_ingest_body_and_parsable_attachments(

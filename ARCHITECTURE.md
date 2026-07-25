@@ -60,7 +60,7 @@ graph TD
 백엔드는 Python(FastAPI·SQLAlchemy·arq), 웹은 TypeScript — 언어 구도·근거는 [ADR-0013](docs/adr/0013-python-backend.md).
 
 **H1(RAG MVP)+H2(입주민/관리자 기능) 완료 상태**: ai-core는 RAG 전체(LLM 클라이언트·PII 마스킹·검색·인용검증·오케스트레이터),
-ai-worker는 문서 인제스트(파싱→청킹→임베딩→pgvector — 항상 최신 버전만, H8-2), api는 `documents`·`assistant` SSE에 더해
+ai-worker는 문서 인제스트(파싱→청킹→**마스킹**→임베딩→pgvector — 항상 최신 버전만, H8-2; 임베딩도 LLM 경계라 원문 미전송, 규칙 2), api는 `documents`·`assistant` SSE에 더해
 **정식 인증 스택** — Redis 세션([ADR-0011](docs/adr/0011-redis-server-session.md))·자체 이메일+비밀번호 인증(Argon2id·검증 메일·auth_tokens, [ADR-0014](docs/adr/0014-local-email-auth.md))·역할 인가 가드(`require_roles`)·
 PII 봉투 암호화([ADR-0010](docs/adr/0010-envelope-encryption-env-master-key.md), `tenant_keys`)·온보딩·가입 승인·명부 업로드.
 dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
