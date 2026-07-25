@@ -40,6 +40,8 @@ erDiagram
   buildings ||--o{ households : "세대"
   unit_types ||--o{ households : "타입참조"
   households ||--o| household_geometries : "3D 폴리곤(H9)"
+  tenants ||--o| parking_layouts : "주차 배치도(H9-5)"
+  households ||--o{ parking_vehicles : "등록 차량(H9-5)"
   unit_types ||--o{ floor_plans : "평면도"
   floor_plans ||--o{ plan_devices : "장치"
   facilities ||--o| plan_devices : "포인트"
@@ -94,6 +96,19 @@ erDiagram
     jsonb polygon_3d
     numeric base_z
     numeric floor_height
+  }
+  parking_layouts {
+    uuid id PK
+    uuid tenant_id FK
+    jsonb layout
+  }
+  parking_vehicles {
+    uuid id PK
+    uuid tenant_id FK
+    uuid household_id FK
+    bytea plate_enc
+    string model
+    bool is_ev
   }
   floor_plans {
     uuid id PK
@@ -662,6 +677,33 @@ codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, 
 > **삭제 정책**: soft delete 대상 **아님**(§3 목록 제외) — **하드 삭제**. is_system 그룹 삭제는 409, 삭제 시 하위 코드 CASCADE. 도메인 테이블(`notices`·`documents`)이 H8-6에서 `codes.id`를 FK **RESTRICT**로 참조하게 됐다(적용됨) → 참조 중 코드 삭제는 DB IntegrityError → API 409, 비활성(`active=false`)으로 숨김 권장.
 > **기본 코드 시드**(규칙 8 — 액션은 코드): 단지 생성 시 시드 + 기존 단지는 마이그레이션 시드. NOTICE_CATEGORY(일반·시설점검·방역소독·회의결과·주민행사·시스템장애 — '일반' 기본), DOC_CATEGORY(규약·회의록·공지·지침·매뉴얼). 그룹은 `is_system=true`(삭제·키 변경 잠금), 코드 행은 단지별 수정·추가·비활성 가능.
 
+### 4.11 주차장 (H9-5 — 지하주차장 배치도·등록 차량)
+
+관리자 주차장 대시보드의 원천. **면 점유 상태는 저장하지 않는다** — 배치도(면 좌표)와 등록 차량만 확정 데이터이고, 어느 면에 어느 차가 있는지는 프론트 시뮬레이션이다(번호판 인식 카메라 연동 시 교체 — [11 §3.4.2](11-data-architecture.md)).
+
+```sql
+-- 지하주차장 배치도 (단지당 1행 · 전량 교체 · 렌더 페이로드 그대로)
+parking_layouts(id, tenant_id,
+                layout jsonb,            -- viewBox · buildings(동명→footprint 맵) · boxes(진입 램프·기계전기실)
+                                         -- · cores · spots[{no, kind(일반|장애인|전기차), x, y, dir}]
+                created_at, updated_at)
+  UNIQUE(tenant_id)
+
+-- 입주민 등록 차량 (세대당 다건 허용 — UNIQUE 없음)
+parking_vehicles(id, tenant_id,
+                 household_id,           -- FK → households(tenant_id, id) composite, ON DELETE CASCADE
+                 plate_enc bytea,        -- 차량번호 봉투 암호화(AES-256-GCM · per-tenant DEK) — 평문 컬럼 없음
+                 model text NULL,        -- 차종(표시용)
+                 is_ev bool default false,
+                 created_at, updated_at)
+  INDEX(household_id), INDEX(tenant_id, household_id)
+```
+
+> **적재 계약**: API는 **읽기 전용**(`GET /admin/parking/layout`·`GET /admin/parking/vehicles`, MANAGER) — 적재는 시드 스크립트(`apps/api/scripts/seed_parking.py` + `scripts/data/parking_layout.json`·`parking_vehicles.json`)가 담당한다. 배치도는 전량 교체, 차량은 delete-then-insert(멱등)이며 차량 (동, 호)를 `buildings.name`·`households.unit_no`로 매칭 — 미매칭은 스킵하고 리포트에 표본을 남긴다(트윈 geometry 업로드와 동일 규율).
+> **파일럿 실적재**(첫마을 4단지): 442면(일반 406·장애인 15·전기차 21)·차량 348대(274세대·EV 29) 전량 매칭(미매칭 0).
+> **차량번호는 PII**: `pii_vault`가 아니라 세대 귀속 업무 테이블에 암호문으로 두고, 복호는 관리자 조회 API만 수행한다(마스킹 없이 전량 표시 — 주차 관리 목적, 입주민 앱·LLM 미노출, [06 §4.1](06-security-privacy.md)).
+> soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`).
+
 ## 5. RLS (행 수준 보안)
 
 ```sql
@@ -704,6 +746,8 @@ CREATE POLICY tenant_isolation ON documents
 | 보관 | 동의 목적·기간 만료 시 파기 배치. 탈퇴 시 즉시 비식별/삭제 |
 | 로그 | `audit_logs`·앱 로그에도 개인정보 비저장(마스킹) |
 
+**차량번호(H9-5)**는 `pii_vault`가 아니라 `parking_vehicles.plate_enc`에 같은 봉투 암호화(per-tenant DEK)로 저장한다 — 세대 귀속 업무 데이터이고 검색 해시가 필요 없다. 복호는 관리자(MANAGER) 주차장 조회 API만 수행하며, **마스킹 없이 전량 표시**(주차 관리 목적 — 입주민 앱·LLM 경로에는 노출하지 않는다, [06 §4.1](06-security-privacy.md)).
+
 **DB 뷰는 복호화하지 않는다** — 복호화·마스킹(`홍*동`)은 복호화 권한을 가진 전용 애플리케이션 서비스만 수행([06 §4.1](06-security-privacy.md)). DB 뷰는 비식별 컬럼 + 검색 해시·상태 배지만 노출한다:
 ```sql
 CREATE VIEW v_users_safe AS
@@ -718,6 +762,7 @@ FROM users u LEFT JOIN pii_vault p ON p.id = u.pii_ref;
 - 빈번 조회: `inquiries(tenant_id, status)`, `notices(tenant_id, status, published_at)`(목록 정렬은 `pinned DESC, published_at DESC`), `notice_attachments(tenant_id, notice_id)`, `fees(tenant_id, household_id, period)`, `messages(conversation_id, created_at)`, `plan_devices(tenant_id, floor_plan_id)`, `plan_devices(tenant_id, household_id)`, `codes(tenant_id, group_id, sort_order)`(코드 트리 정렬 조회), `notices(tenant_id, category_code_id)`·`documents(tenant_id, category_code_id)`(분류 필터 조회 — H8-6).
 - 동기화 큐: `outbox_events(status, created_at)` — `ai-worker` 폴링용.
 - 트윈 geometry: `household_geometries UNIQUE(tenant_id, household_id)`가 조회를 커버(전량 로드 1쿼리 — 추가 인덱스 불요, H9).
+- 주차: 배치도는 `parking_layouts UNIQUE(tenant_id)`로 단지 1행 조회, 차량은 `parking_vehicles(tenant_id, household_id)`(명부 조인 전량 로드 1쿼리, H9-5).
 - `audit_logs`·`messages`는 월 단위 파티셔닝 고려(증가 대비).
 - N+1 방지: 목록은 조인/배치 로드.
 
