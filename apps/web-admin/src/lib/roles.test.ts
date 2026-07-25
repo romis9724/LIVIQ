@@ -30,7 +30,7 @@ describe("navForRoles", () => {
       "설정",
     ]);
     expect(nav.map((g) => g.items.map((i) => i.href))).toEqual([
-      ["/dashboard", "/notices"],
+      ["/dashboard", "/parking", "/notices"],
       ["/residents", "/fees", "/inquiries"],
       ["/staff", "/documents", "/facilities"],
       ["/settings/households", "/settings/codes"],
@@ -58,14 +58,33 @@ describe("navForRoles", () => {
     expect(flatHrefs(navForRoles([]))).toContain("/dashboard");
   });
 
-  it("hasTwin이면 MANAGER 대시보드 바로 아래(첫 그룹)에 트윈 대시보드를 노출한다", () => {
+  it("hasTwin이면 MANAGER 대시보드 바로 아래(첫 그룹)에 트윈·주차장 대시보드를 노출한다", () => {
     const top = navForRoles(["MANAGER"], { hasTwin: true })[0];
-    expect(top?.items.map((i) => i.href)).toEqual(["/dashboard", "/twin", "/notices"]);
+    expect(top?.items.map((i) => i.href)).toEqual(["/dashboard", "/twin", "/parking", "/notices"]);
     // 관리소 운영에는 더 이상 트윈이 없다(대시보드 계열로 이동, H9-4).
     const ops = navForRoles(["MANAGER"], { hasTwin: true }).find(
       (g) => g.title === "관리소 운영",
     );
     expect(ops?.items.map((i) => i.href)).toEqual(["/staff", "/documents", "/facilities"]);
+  });
+
+  it("주차장 대시보드는 hasTwin과 무관하게 MANAGER 첫 그룹에 항상 노출한다 (H9-5)", () => {
+    // 트윈 없음: 대시보드 바로 다음. 트윈 있음: 트윈 바로 다음.
+    expect(navForRoles(["MANAGER"])[0]?.items.map((i) => i.href)).toEqual([
+      "/dashboard",
+      "/parking",
+      "/notices",
+    ]);
+    expect(navForRoles(["MANAGER"], { hasTwin: false })[0]?.items.map((i) => i.href)).toEqual([
+      "/dashboard",
+      "/parking",
+      "/notices",
+    ]);
+  });
+
+  it("STAFF·SYS_ADMIN에는 주차장 대시보드를 노출하지 않는다", () => {
+    expect(flatHrefs(navForRoles(["STAFF"]))).not.toContain("/parking");
+    expect(flatHrefs(navForRoles(["SYS_ADMIN"]))).not.toContain("/parking");
   });
 
   it("hasTwin 미전달(기본)이면 트윈 대시보드를 노출하지 않는다", () => {

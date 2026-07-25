@@ -634,6 +634,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/parking/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Layout
+         * @description 배치도 조회 — 미적재면 `{"layout": null}`(404 아님, 프론트가 빈 상태 렌더).
+         */
+        get: operations["get_layout_admin_parking_layout_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/parking/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Vehicles
+         * @description 입주민 차량 목록(동·호 오름차순). plate는 복호 평문 — 관리자 전용.
+         */
+        get: operations["list_vehicles_admin_parking_vehicles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/roster": {
         parameters: {
             query?: never;
@@ -2906,6 +2946,49 @@ export interface components {
                 [key: string]: number;
             };
         };
+        /**
+         * ParkingLayoutOut
+         * @description 배치도 페이로드(viewBox·buildings·boxes·cores·spots). 미적재면 null.
+         */
+        ParkingLayoutOut: {
+            /** Layout */
+            layout: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * ParkingVehicleItem
+         * @description 입주민 차량 1대 — plate는 복호 평문.
+         */
+        ParkingVehicleItem: {
+            /** Dong */
+            dong: string;
+            /** Ho */
+            ho: string;
+            /**
+             * Household Id
+             * Format: uuid
+             */
+            household_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Ev */
+            is_ev: boolean;
+            /** Model */
+            model: string | null;
+            /** Plate */
+            plate: string;
+        };
+        /** ParkingVehicleListOut */
+        ParkingVehicleListOut: {
+            /** Total */
+            total: number;
+            /** Vehicles */
+            vehicles: components["schemas"]["ParkingVehicleItem"][];
+        };
         /** PasswordChangeIn */
         PasswordChangeIn: {
             /** Current Password */
@@ -4898,6 +4981,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_layout_admin_parking_layout_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingLayoutOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_vehicles_admin_parking_vehicles_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingVehicleListOut"];
+                };
             };
             /** @description Validation Error */
             422: {

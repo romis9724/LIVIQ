@@ -23,6 +23,7 @@ const DOCUMENTS: NavItem = { href: "/documents", icon: "📁", label: "문서 �
 const FEES: NavItem = { href: "/fees", icon: "💰", label: "관리비 관리" };
 const FACILITIES: NavItem = { href: "/facilities", icon: "🏢", label: "시설 관리" };
 const TWIN: NavItem = { href: "/twin", icon: "🧊", label: "트윈 대시보드" };
+const PARKING: NavItem = { href: "/parking", icon: "🅿️", label: "주차장 대시보드" };
 const STAFF_MGMT: NavItem = { href: "/staff", icon: "🪪", label: "직원 관리" };
 const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label: "코드 관리" };
 const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
@@ -34,8 +35,9 @@ const STAFF_NAV: readonly NavGroup[] = [{ items: [INQUIRIES, NOTICES, DOCUMENTS]
 const SYS_ADMIN_NAV: readonly NavGroup[] = [{ items: [TENANTS] }];
 // MANAGER(기본): 섹션 그룹화 — 대시보드·공지 단독, 입주민 관리·관리소 운영·설정 묶음.
 // 트윈 대시보드는 geometry 등록(hasTwin) 시에만 대시보드 바로 아래 같은 레벨로 노출(H9-4 — 확정 데이터 현황판).
+// 주차장 대시보드는 트윈 바로 다음에 항상 노출(H9-5 — 확정 데이터 현황판, geometry 불필요).
 function managerNav(hasTwin: boolean): readonly NavGroup[] {
-  const top = hasTwin ? [DASHBOARD, TWIN, NOTICES] : [DASHBOARD, NOTICES];
+  const top = hasTwin ? [DASHBOARD, TWIN, PARKING, NOTICES] : [DASHBOARD, PARKING, NOTICES];
   return [
     { items: top },
     { title: "입주민 관리", items: [RESIDENTS, FEES, INQUIRIES] },
