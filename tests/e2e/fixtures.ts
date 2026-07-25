@@ -3,6 +3,8 @@
 
 import path from "node:path";
 
+import { expect, type Page, type Response } from "@playwright/test";
+
 // 세션 로그인 셋업(auth.setup.ts)이 저장하고 여정 프로젝트가 재사용하는 storageState 경로.
 export const STORAGE_STATE = path.join(__dirname, ".auth", "session.json");
 
@@ -91,6 +93,34 @@ export const NOTICE2 = {
   title: "E2E 승강기 점검 공지",
   body: "다음 주 월요일 승강기 정기 점검이 예정되어 있습니다.",
 };
+
+/**
+ * 폼 제출이 **요청으로 이어질 때까지** 재시도한다 — 하이드레이션 경합의 결정론적 방어.
+ *
+ * Next dev는 라우트를 첫 방문에 컴파일한다(CI에서 특히 느리다). 그 사이 SSR HTML은 이미 떠 있어
+ * `fill`·`click`은 성공하지만 React 핸들러가 미부착이라 **조용히 삼켜진다** — 이후 하이드레이션이
+ * controlled input 을 빈 값으로 되돌려, 화면엔 "입력칸도 비고 아무 일도 안 일어난" 상태만 남는다.
+ * 그래서 클릭의 성공 여부를 DOM 이 아니라 **네트워크 요청 발생**으로 판정한다.
+ * 고정 sleep 없음(프로젝트 테스트 규칙) — expect 재시도만 쓴다.
+ *
+ * 요청이 나갔다면 즉시 반환하므로 성공한 제출이 중복 실행되지 않는다.
+ */
+export async function submitUntilRequested(
+  page: Page,
+  submit: () => Promise<void>,
+  matchResponse: (response: Response) => boolean,
+  options: { attemptTimeout?: number; timeout?: number } = {},
+): Promise<Response> {
+  const { attemptTimeout = 15_000, timeout = 60_000 } = options;
+  let result: Response | undefined;
+  await expect(async () => {
+    const pending = page.waitForResponse(matchResponse, { timeout: attemptTimeout });
+    await submit();
+    result = await pending;
+  }).toPass({ timeout });
+  if (!result) throw new Error("제출이 요청으로 이어지지 않았습니다");
+  return result;
+}
 
 /** 이번 달(YYYY-MM) — FeesView.currentMonth()과 동일 규칙. */
 export function currentMonth(now: Date = new Date()): string {
