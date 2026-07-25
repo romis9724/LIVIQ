@@ -124,7 +124,13 @@ async def seed_document(session: AsyncSession, *, storage_key: str) -> tuple[uui
 
 
 @pytest.fixture
-def fake_llm() -> LlmClient:
+def embed_payloads() -> list[str]:
+    """fake_llm이 임베딩 엔드포인트로 실제 보낸 텍스트 누적 — 마스킹 검증용(규칙 2)."""
+    return []
+
+
+@pytest.fixture
+def fake_llm(embed_payloads: list[str]) -> LlmClient:
     """임베딩만 쓰는 가짜 LLM — 입력 개수만큼 고정 벡터 반환."""
     settings = AiCoreSettings(  # type: ignore[call-arg]
         LLM_BASE_URL="http://llm.test/v1",
@@ -137,6 +143,7 @@ def fake_llm() -> LlmClient:
         import json
 
         texts = json.loads(request.content)["input"]
+        embed_payloads.extend(texts)
         data = [{"index": i, "embedding": [0.01] * EMBED_DIM} for i in range(len(texts))]
         return httpx.Response(200, json={"data": data})
 

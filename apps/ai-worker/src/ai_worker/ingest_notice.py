@@ -3,8 +3,9 @@
 발행 시점·published 수정·첨부 변경마다 재인제스트된다(H8-3, ADR-0015 개정 노트). 잡이 늦게
 돌 때를 대비해 **published·미삭제가 아니면 스킵**한다(인제스트 published-only는 검색 조인
 검증과 함께 미발행 공지 미노출의 이중 방어). 재인제스트는 멱등 — 기존 notice 청크 전체 삭제
-후 재삽입(chunk_index 연속). 마스킹 미적용: 공지는 전 입주민 공개 문서라 임베딩이 추가 노출을
-만들지 않는다(documents 인제스트 선례, ADR-0015).
+후 재삽입(chunk_index 연속). 임베딩 페이로드는 `embed_chunks`가 마스킹한다 — 규칙 2가 금지하는
+것은 입주민 노출이 아니라 **LLM 프로바이더 전송**이라, 공개 문서라는 사실이 면제 사유가 되지
+않는다(공지 본문에도 "101동 홍길동님 택배" 같은 개인정보가 들어온다).
 
 세션은 호출자(arq 태스크·cron)가 tenant 컨텍스트(`app.tenant_id`)를 설정한 것을 받는다 —
 worker role은 BYPASSRLS 없이 RLS를 그대로 받는다(docs/03 §5).
@@ -20,6 +21,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
+from ai_core.masking import MaskingFailedError
 from ai_core.rag import chunk_text
 from ai_worker.ingest import Downloader, embed_chunks
 from ai_worker.parsing import SUPPORTED_SUFFIXES, extract_text
@@ -30,7 +32,7 @@ from liviq_db.models import ContentChunk, Notice, NoticeAttachment
 class NoticeIngestResult:
     notice_id: uuid.UUID
     chunk_count: int
-    status: str  # indexed | skipped
+    status: str  # indexed | skipped | failed
 
 
 async def ingest_notice(
@@ -84,7 +86,11 @@ async def ingest_notice(
     if not chunks:
         return NoticeIngestResult(notice_id, 0, "indexed")
 
-    vectors = await embed_chunks(llm, chunks)
+    try:
+        vectors = await embed_chunks(llm, chunks)
+    except MaskingFailedError:
+        # fail-closed(규칙 2) — 위에서 기존 청크를 이미 지웠으므로 stale 벡터도 남지 않는다.
+        return NoticeIngestResult(notice_id, 0, "failed")
     session.add_all(
         ContentChunk(
             tenant_id=tenant_id,
