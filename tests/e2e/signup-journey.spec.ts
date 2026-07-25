@@ -10,13 +10,31 @@
 //
 // 멱등: globalSetup(seed.ts)과 beforeAll이 name LIKE 'E2E-%' 단지를 정리한다(리트라이는 새 워커에서
 // beforeAll을 재실행하므로 globalSetup 미재실행에도 clean slate가 보장된다).
+//
+// 결정론 규율: 폼 제출은 **요청 발생**으로 판정한다(submitUntilRequested). Next dev 는 라우트를 첫
+// 방문에 컴파일하고, 그 사이 SSR HTML 위의 클릭은 핸들러 미부착으로 조용히 삼켜진다 — CI 에서
+// "아무 일도 안 일어난" 실패로 나타난다(PR #67). 3.2초 뒤 사라지는 토스트는 단정 대상으로 쓰지 않고,
+// 서버 파생 상태(행 배지·URL)로 확인한다.
+//
+// 함정: 로그인은 **이메일당 분당 5회**(auth.LOGIN_RATE_PER_MIN)로 제한된다. 이 여정은 주민 계정으로
+// 2회 로그인하므로, 스위트를 1분 안에 3회 이상 연달아 돌리면 429 로 실패한다(제품 버그 아님) —
+// 반복 안정성을 확인할 때는 실행 간 60초 이상 간격을 둘 것.
 
 import path from "node:path";
 
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import type { Client } from "pg";
 
-import { E2E, JOURNEY, MISMATCH_PERSON, PORTS, ROSTER_PERSON, SYS, maskName } from "./fixtures";
+import {
+  E2E,
+  JOURNEY,
+  MISMATCH_PERSON,
+  PORTS,
+  ROSTER_PERSON,
+  SYS,
+  maskName,
+  submitUntilRequested,
+} from "./fixtures";
 import {
   connectPg,
   findUserByEmail,
@@ -46,20 +64,29 @@ async function freshContext(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ storageState: { cookies: [], origins: [] } });
 }
 
+/** 로그인 폼 제출 — 첫 방문 라우트라 하이드레이션 경합을 요청 발생으로 판정한다. */
+async function login(page: Page, origin: string, email: string, password: string): Promise<void> {
+  await page.goto(`${origin}/login`);
+  const response = await submitUntilRequested(
+    page,
+    async () => {
+      await page.getByLabel("이메일").fill(email);
+      await page.getByLabel("비밀번호").fill(password);
+      await page.getByRole("button", { name: "로그인" }).click();
+    },
+    (res) => res.url().endsWith("/auth/login") && res.request().method() === "POST",
+  );
+  expect(response.status(), `${email} 로그인이 200이어야 함`).toBe(200);
+}
+
 /** 관리자 콘솔 로그인(web-admin). 성공 시 window.location="/" → 역할별 첫 진입으로 라우팅된다. */
 async function adminLogin(page: Page, email: string, password: string): Promise<void> {
-  await page.goto(`${ADMIN}/login`);
-  await page.getByLabel("이메일").fill(email);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
+  await login(page, ADMIN, email, password);
 }
 
 /** 입주민 앱 로그인(web-resident). 성공 시 루트(/)가 /me 상태로 화면을 분기한다. */
 async function residentLogin(page: Page, email: string, password: string): Promise<void> {
-  await page.goto(`${RESIDENT}/login`);
-  await page.getByLabel("이메일").fill(email);
-  await page.getByLabel("비밀번호").fill(password);
-  await page.getByRole("button", { name: "로그인" }).click();
+  await login(page, RESIDENT, email, password);
 }
 
 /**
@@ -84,10 +111,17 @@ async function signupResident(
     // 사전 선택 확인 — 링크의 단지가 select에 반영되어 있어야 한다.
     await expect(page.getByLabel("단지")).toHaveValue(tenantId);
   }
-  await page.getByLabel("이메일").fill(email);
-  await page.getByLabel("비밀번호", { exact: true }).fill(password);
-  await page.getByLabel("비밀번호 확인").fill(password);
-  await page.getByRole("button", { name: "가입하기" }).click();
+  const signedUp = await submitUntilRequested(
+    page,
+    async () => {
+      await page.getByLabel("이메일").fill(email);
+      await page.getByLabel("비밀번호", { exact: true }).fill(password);
+      await page.getByLabel("비밀번호 확인").fill(password);
+      await page.getByRole("button", { name: "가입하기" }).click();
+    },
+    (res) => res.url().endsWith("/auth/signup") && res.request().method() === "POST",
+  );
+  expect(signedUp.status(), `${email} 가입이 201이어야 함`).toBe(201);
   await expect(page.getByText("인증 메일을 보냈습니다")).toBeVisible();
 }
 
@@ -121,13 +155,20 @@ async function completeOnboarding(page: Page, person: Applicant): Promise<void> 
   await page.getByRole("checkbox").first().check(); // 전체 동의(필수+선택)
   await page.getByRole("button", { name: "다음" }).click();
 
-  await page.getByLabel("성명").fill(person.name);
-  await page.getByLabel("생년월일").fill(person.birth);
-  await page.locator("#signup-dong").fill(person.dong); // 숫자 직접 입력(H7-8)
-  await page.locator("#signup-ho").fill(person.ho);
-  await page.getByRole("button", { name: "가입 신청" }).click();
+  const submitted = await submitUntilRequested(
+    page,
+    async () => {
+      await page.getByLabel("성명").fill(person.name);
+      await page.getByLabel("생년월일").fill(person.birth);
+      await page.locator("#signup-dong").fill(person.dong); // 숫자 직접 입력(H7-8)
+      await page.locator("#signup-ho").fill(person.ho);
+      await page.getByRole("button", { name: "가입 신청" }).click();
+    },
+    (res) => res.url().includes("/onboarding") && res.request().method() === "POST",
+  );
+  expect(submitted.ok(), "온보딩 제출이 성공해야 함").toBe(true);
 
-  await expect(page).toHaveURL(/\/pending/);
+  await page.waitForURL(/\/pending/, { timeout: 60_000 });
   await expect(page.getByText("관리소장 승인을 기다리고 있어요")).toBeVisible();
 }
 
@@ -166,8 +207,23 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     await adminLogin(sysPage, SYS.email, E2E.password); // SYS_ADMIN 비번 = 시드 PASSWORD_HASH
     await expect(sysPage).toHaveURL(/\/system\/tenants/); // SYS_ADMIN 첫 진입=단지 관리
 
-    await sysPage.getByLabel("단지 이름").fill(JOURNEY.tenantName);
-    await sysPage.getByRole("button", { name: "단지 생성" }).click();
+    // 단지 관리도 첫 방문 라우트 — 생성 클릭이 하이드레이션 전에 삼켜지지 않았는지 요청으로 확인한다.
+    // 생성 후 화면은 목록을 재조회하므로(created_at 확보) 그 GET 까지 기다린다. 기다리지 않으면
+    // 늦게 끝난 생성 흐름의 토스트가 다음 단계(초대)의 토스트를 덮어써 판정이 흔들린다.
+    const listRefreshed = sysPage.waitForResponse(
+      (res) => res.url().endsWith("/admin/tenants") && res.request().method() === "GET",
+    );
+    const created = await submitUntilRequested(
+      sysPage,
+      async () => {
+        await sysPage.getByLabel("단지 이름").fill(JOURNEY.tenantName);
+        await sysPage.getByRole("button", { name: "단지 생성" }).click();
+      },
+      (res) => res.url().endsWith("/admin/tenants") && res.request().method() === "POST",
+    );
+    expect(created.status(), "단지 생성이 201이어야 함").toBe(201);
+    await listRefreshed;
+
     const tenantRow = sysPage.locator(".tn-row").filter({ hasText: JOURNEY.tenantName });
     await expect(tenantRow).toBeVisible();
 
@@ -176,10 +232,17 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     await seedJourneyHouseholds(pg, journeyTenantId);
 
     // 소장 초대(UI 폼, 202) → 알려진 초대 토큰 INSERT.
-    await tenantRow.getByLabel("소장 초대 이메일").fill(JOURNEY.managerEmail);
-    await tenantRow.getByRole("button", { name: "소장 초대" }).click();
-    await expect(sysPage.getByText("소장 초대 메일을 발송했습니다", { exact: false })).toBeVisible();
-    // 초대 후 행이 현재 소장(수락 대기) 표시로 전환된다 — 단지당 소장 1명(H7-6).
+    // 초대도 요청 발생으로 판정한다(토스트는 3.2초 뒤 사라지는 전이 상태라 단정 대상으로 부적절).
+    const invited = await submitUntilRequested(
+      sysPage,
+      async () => {
+        await tenantRow.getByLabel("소장 초대 이메일").fill(JOURNEY.managerEmail);
+        await tenantRow.getByRole("button", { name: "소장 초대" }).click();
+      },
+      (res) => res.url().includes("/invite-manager") && res.request().method() === "POST",
+    );
+    expect(invited.status(), "소장 초대가 202여야 함").toBe(202);
+    // 초대 후 행이 현재 소장(수락 대기) 표시로 전환된다 — 단지당 소장 1명(H7-6). 서버 파생 상태라 내구적.
     await expect(tenantRow.getByText("수락 대기")).toBeVisible();
 
     const manager = await findUserByEmail(pg, JOURNEY.managerEmail);
@@ -198,22 +261,37 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     mgrCtx = await freshContext(browser);
     mgrPage = await mgrCtx.newPage();
 
-    // 초대 수락(비밀번호 설정) → 로그인.
+    // 초대 수락(비밀번호 설정) → 로그인. 첫 방문 라우트라 제출을 요청 발생으로 판정한다.
     await mgrPage.goto(`${ADMIN}/invite?token=${JOURNEY.inviteToken}`);
-    await mgrPage.getByLabel("새 비밀번호", { exact: true }).fill(JOURNEY.password);
-    await mgrPage.getByLabel("새 비밀번호 확인").fill(JOURNEY.password);
-    await mgrPage.getByRole("button", { name: "계정 활성화" }).click();
+    const accepted = await submitUntilRequested(
+      mgrPage,
+      async () => {
+        await mgrPage.getByLabel("새 비밀번호", { exact: true }).fill(JOURNEY.password);
+        await mgrPage.getByLabel("새 비밀번호 확인").fill(JOURNEY.password);
+        await mgrPage.getByRole("button", { name: "계정 활성화" }).click();
+      },
+      (res) => res.url().endsWith("/auth/invite/accept") && res.request().method() === "POST",
+    );
+    expect(accepted.status(), "초대 수락이 204여야 함").toBe(204);
     await expect(mgrPage.getByText("계정이 활성화되었습니다")).toBeVisible();
 
     await adminLogin(mgrPage, JOURNEY.managerEmail, JOURNEY.password);
-    await expect(mgrPage).toHaveURL(/\/dashboard/); // MANAGER 첫 진입=대시보드(H7-6)
+    // MANAGER 첫 진입=대시보드(H7-6). 첫 방문 라우트 컴파일이 expect 기본 15초를 넘길 수 있어
+    // 네비게이션 예산(config navigationTimeout)으로 기다린다 — 상한이지 sleep 아니다.
+    await mgrPage.waitForURL(/\/dashboard/, { timeout: 60_000 });
 
-    // 직원 초대(202) → 목록에 초대됨 행.
+    // 직원 초대(202) → 목록에 초대됨 행. 토스트는 전이 상태라 요청·목록 상태로 판정한다.
     await mgrPage.goto(`${ADMIN}/staff`);
-    await mgrPage.getByLabel("직원 이름").fill("박직원");
-    await mgrPage.getByLabel("직원 이메일").fill(JOURNEY.staffEmail);
-    await mgrPage.getByRole("button", { name: "직원 초대" }).click();
-    await expect(mgrPage.getByText("직원 초대 메일을 발송했습니다", { exact: false })).toBeVisible();
+    const staffInvited = await submitUntilRequested(
+      mgrPage,
+      async () => {
+        await mgrPage.getByLabel("직원 이름").fill("박직원");
+        await mgrPage.getByLabel("직원 이메일").fill(JOURNEY.staffEmail);
+        await mgrPage.getByRole("button", { name: "직원 초대" }).click();
+      },
+      (res) => res.url().includes("/admin/staff/invite") && res.request().method() === "POST",
+    );
+    expect(staffInvited.status(), "직원 초대가 202여야 함").toBe(202);
     await expect(mgrPage.getByText("초대됨")).toBeVisible();
 
     // 명부 업로드(신규 1건 — 김입주/101동 3층 301호).
@@ -244,12 +322,18 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
       .filter({ hasText: maskName(ROSTER_PERSON.name) });
     await expect(matchedCard).toBeVisible();
     await expect(matchedCard.getByText("명부 일치")).toBeVisible();
-    await matchedCard.getByRole("button", { name: "승인" }).click();
-    await expect(mgrPage.getByText("승인 완료", { exact: false })).toBeVisible();
+    const approved = await submitUntilRequested(
+      mgrPage,
+      async () => {
+        await matchedCard.getByRole("button", { name: "승인" }).click();
+      },
+      (res) => res.url().includes("/approve") && res.request().method() === "POST",
+    );
+    expect(approved.status(), "승인이 204여야 함").toBe(204);
 
     // 승인으로 대기 세션 revoke(ADR-0011) → 주민 재로그인 → 활성 → 홈.
     await residentLogin(applicant, JOURNEY.applicantEmail, JOURNEY.password);
-    await expect(applicant).toHaveURL(/\/home/);
+    await applicant.waitForURL(/\/home/, { timeout: 60_000 });
     await expect(applicant.getByText("무엇이든 물어보세요")).toBeVisible();
   });
 
