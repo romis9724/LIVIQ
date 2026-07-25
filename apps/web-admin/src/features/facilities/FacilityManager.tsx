@@ -57,28 +57,40 @@ export function FacilityManager() {
     toastTimer.current = setTimeout(() => setToast(null), TOAST_DURATION_MS);
   }, []);
 
+  // 응답 순서 가드 — 늦게 도착한 옛 요청이 최신 결과를 덮어쓰지 못하게 한다. 첫 조회가 느리면
+  // (CI 콜드스타트) 등록 직후 재조회가 먼저 끝나고, 뒤늦은 첫 응답이 방금 만든 설비를 지웠다.
+  const listSeq = useRef(0);
+  const detailSeq = useRef(0);
+
   const loadList = useCallback(async (keepSelection?: string) => {
+    const seq = ++listSeq.current;
     setLoading(true);
     try {
       const items = await listFacilities();
+      if (seq !== listSeq.current) return; // 더 최신 조회가 이미 반영됨 — 이 결과는 버린다
       setFacilities(items);
       setLoadError(null);
       setSelectedId((prev) => keepSelection ?? prev ?? items[0]?.id ?? null);
     } catch (err) {
+      if (seq !== listSeq.current) return;
       setLoadError(errorMessage(err));
     } finally {
-      setLoading(false);
+      if (seq === listSeq.current) setLoading(false); // 로딩 해제도 최신 요청만
     }
   }, []);
 
   const loadDetail = useCallback(async (id: string) => {
+    const seq = ++detailSeq.current;
     setDetailLoading(true);
     try {
-      setDetail(await getFacility(id));
+      const item = await getFacility(id);
+      if (seq !== detailSeq.current) return; // 다른 설비를 이미 선택함
+      setDetail(item);
     } catch (err) {
+      if (seq !== detailSeq.current) return;
       showToast(errorMessage(err), "danger");
     } finally {
-      setDetailLoading(false);
+      if (seq === detailSeq.current) setDetailLoading(false);
     }
   }, [showToast]);
 
