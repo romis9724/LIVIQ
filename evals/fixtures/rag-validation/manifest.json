@@ -1,0 +1,1086 @@
+{
+  "version": "2026-07-25",
+  "synthetic_only": true,
+  "documents": [
+    {
+      "document_id": "A-RULE-001-V1",
+      "tenant_id": "TENANT-A",
+      "title": "해오름아파트 관리규약 구판",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": false,
+      "effective_date": "2025-01-01",
+      "topic_ko": "인테리어 공사와 반려동물",
+      "topic_en": "renovation and pets",
+      "clauses": [
+        {
+          "label": "제18조",
+          "text": "세대 공사는 평일 08:00부터 19:00까지 가능하다."
+        },
+        {
+          "label": "제27조",
+          "text": "반려동물은 공용부에서 목줄을 착용한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-rule-001-v1.md",
+      "sha256": "d2ec3b099adee43e10294eb9d961a881f6182ac8320c333882fd2a73590d232b",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-RULE-001-V2",
+      "tenant_id": "TENANT-A",
+      "title": "해오름아파트 관리규약 현행판",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 2,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "인테리어 공사와 반려동물",
+      "topic_en": "renovation and pets",
+      "clauses": [
+        {
+          "label": "제18조",
+          "text": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다."
+        },
+        {
+          "label": "제27조",
+          "text": "반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-rule-001-v2.txt",
+      "sha256": "d3cb408f8bc9051b674ee306e7317f8de4ac13528189da6766141e926d19b1d7",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-RULE-002",
+      "tenant_id": "TENANT-A",
+      "title": "Parking and Waste Operations Policy",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 3,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "방문차량과 재활용 배출",
+      "topic_en": "visitor parking and recycling",
+      "clauses": [
+        {
+          "label": "Article 9",
+          "text": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour."
+        },
+        {
+          "label": "Article 14",
+          "text": "Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-rule-002.docx",
+      "sha256": "c44c05bd3ccdaca0b3db8379415ffd98f8ae656a3c3f1a16b8c7e33811484712",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-RULE-003",
+      "tenant_id": "TENANT-A",
+      "title": "공동생활 소음 및 시설 이용규정",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "층간소음과 커뮤니티실",
+      "topic_en": "noise and community room",
+      "clauses": [
+        {
+          "label": "제6조",
+          "text": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다."
+        },
+        {
+          "label": "제12조",
+          "text": "커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-rule-003.pdf",
+      "sha256": "fbeb7e809fe972728ca67b5fb3f2282f6f00ba145885ab7abaf438669ba922d2",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-NOTICE-001",
+      "tenant_id": "TENANT-A",
+      "title": "7월 10일 단수 안내",
+      "category": "공지",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "단수 일정",
+      "topic_en": "water outage schedule",
+      "clauses": [
+        {
+          "label": "일정",
+          "text": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다."
+        },
+        {
+          "label": "준비",
+          "text": "입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-notice-001.md",
+      "sha256": "6ab9d0e6f0b85d01d8e62af692ee08a7a810d3e9ffc3bc80aa727dbbf2f2cbab",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-NOTICE-002",
+      "tenant_id": "TENANT-A",
+      "title": "엘리베이터 정기점검 안내",
+      "category": "공지",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "엘리베이터 점검",
+      "topic_en": "elevator inspection",
+      "clauses": [
+        {
+          "label": "점검시간",
+          "text": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다."
+        },
+        {
+          "label": "이용안내",
+          "text": "점검 중에는 403동 2호기를 이용한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-notice-002.txt",
+      "sha256": "fcde8d045024ba515035f7d57e9287f3c423fd85a876af7159378bed25674116",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-NOTICE-003",
+      "tenant_id": "TENANT-A",
+      "title": "Summer Community Event Notice",
+      "category": "공지",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "주민행사",
+      "topic_en": "resident event",
+      "clauses": [
+        {
+          "label": "Event",
+          "text": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00."
+        },
+        {
+          "label": "Registration",
+          "text": "Residents must register in the management-office application by July 20."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-notice-003.docx",
+      "sha256": "b0dac44bb2f2e23be4ff89c3be2fe72312bba66ed904cd2c55784ee1fc88ac1b",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-NOTICE-004-DRAFT",
+      "tenant_id": "TENANT-A",
+      "title": "미발행 방역 일정 초안",
+      "category": "공지",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": false,
+      "effective_date": "2025-01-01",
+      "topic_ko": "미발행 공지",
+      "topic_en": "unpublished notice",
+      "clauses": [
+        {
+          "label": "초안",
+          "text": "방역 예정일은 내부 조율 중이며 입주민에게 공개하지 않는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-notice-004-draft.pdf",
+      "sha256": "6b968c0621f1a98b7c31865167d04e47d1be7e2404b2d1bcc4036e8aef749969",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-GUIDE-001",
+      "tenant_id": "TENANT-A",
+      "title": "이사 예약 안내",
+      "category": "생활안내",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "이사 예약",
+      "topic_en": "moving reservation",
+      "clauses": [
+        {
+          "label": "예약",
+          "text": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다."
+        },
+        {
+          "label": "가능시간",
+          "text": "이사 가능 시간은 매일 09:00부터 17:00까지다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-guide-001.md",
+      "sha256": "698d777d60c9c1c8db95ba4ee59ec0c9f606a5d06d2cff3f6c538fc8dc2d7b53",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-GUIDE-002",
+      "tenant_id": "TENANT-A",
+      "title": "차량 등록 안내",
+      "category": "생활안내",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "차량 등록",
+      "topic_en": "vehicle registration",
+      "clauses": [
+        {
+          "label": "등록",
+          "text": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다."
+        },
+        {
+          "label": "추가차량",
+          "text": "추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-guide-002.txt",
+      "sha256": "d0e75baf00c7d2b2e4c401f1ebca084783658c5c42169520dc2f59a6cf6f05dc",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-GUIDE-003",
+      "tenant_id": "TENANT-A",
+      "title": "Bulky Waste Disposal Guide",
+      "category": "생활안내",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "대형폐기물",
+      "topic_en": "bulky waste",
+      "clauses": [
+        {
+          "label": "Procedure",
+          "text": "Attach the district-issued disposal label before placing bulky waste in the designated area."
+        },
+        {
+          "label": "Time",
+          "text": "Disposal is permitted on Wednesdays from 18:00 to 21:00."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-guide-003.docx",
+      "sha256": "f92e368e07056801a5c64113cd287cb8f6330a242ee57b5d3c1bbd8c13cbe072",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-GUIDE-004",
+      "tenant_id": "TENANT-A",
+      "title": "공용시설 예약 안내",
+      "category": "생활안내",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "게스트룸과 회의실 예약",
+      "topic_en": "guest room and meeting room booking",
+      "clauses": [
+        {
+          "label": "게스트룸",
+          "text": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다."
+        },
+        {
+          "label": "회의실",
+          "text": "회의실은 회당 최대 3시간 예약할 수 있다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-guide-004.pdf",
+      "sha256": "e29fbb58fe6a47f634d9d8a0608e7647b385888f6067f9bccf2708d8b59d1004",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-FEE-001",
+      "tenant_id": "TENANT-A",
+      "title": "관리비 조회 및 설명 기준",
+      "category": "관리비",
+      "visibility": "RESIDENT",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "관리비 확정 데이터",
+      "topic_en": "confirmed fee data",
+      "clauses": [
+        {
+          "label": "원칙",
+          "text": "관리비 화면과 AI 설명은 관리자가 확정한 월별 업로드 데이터만 사용한다."
+        },
+        {
+          "label": "금지",
+          "text": "AI는 관리비를 재계산하거나 부과 금액을 확정하지 않는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-fee-001.md",
+      "sha256": "b2785c648f8d2067afa2e165efa233ede50950018f3b5c65136288855cdccbc4",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-FEE-002",
+      "tenant_id": "TENANT-A",
+      "title": "공용에너지 비용 안내",
+      "category": "관리비",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "공용전기와 난방비",
+      "topic_en": "shared electricity and heating fees",
+      "clauses": [
+        {
+          "label": "공용전기",
+          "text": "공용전기 항목에는 승강기와 복도 조명 사용량이 포함된다."
+        },
+        {
+          "label": "난방비",
+          "text": "난방비 증감은 사용량과 공급단가의 영향을 함께 받는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-fee-002.txt",
+      "sha256": "b7d3d8c7e2ef4b182d697d6bf9b4b934c1a83952aa8a514514e107fa5bae2ddf",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-FAC-001",
+      "tenant_id": "TENANT-A",
+      "title": "Elevator Inspection Manual",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "엘리베이터 이상 대응",
+      "topic_en": "elevator fault response",
+      "clauses": [
+        {
+          "label": "Shutdown",
+          "text": "Stop operation and request vendor inspection when door obstruction repeats."
+        },
+        {
+          "label": "Prohibition",
+          "text": "Management staff must not bypass the door sensor."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-fac-001.docx",
+      "sha256": "00222ad53c3a1444e6a320725e757a35669c702c170718f0f8a3bfe499ad4da6",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-FAC-002",
+      "tenant_id": "TENANT-A",
+      "title": "중앙보일러 운영 매뉴얼",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "보일러 압력 이상",
+      "topic_en": "boiler pressure anomaly",
+      "clauses": [
+        {
+          "label": "정상범위",
+          "text": "순환계통 압력의 정상 운전 범위는 1.5bar부터 2.0bar다."
+        },
+        {
+          "label": "저압",
+          "text": "압력이 1.2bar 미만이면 누수 여부를 확인하고 책임자에게 보고한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-fac-002.pdf",
+      "sha256": "aa2f56aabd49ff081103c7c656dca8bf88679064c4e97ce04fe7ce2643589ec3",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-FAC-003",
+      "tenant_id": "TENANT-A",
+      "title": "급수펌프 장애 이력",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "급수펌프 진동",
+      "topic_en": "water pump vibration",
+      "clauses": [
+        {
+          "label": "2026-03",
+          "text": "펌프 P-02의 진동 원인은 베어링 마모였고 베어링 교체 후 정상화됐다."
+        },
+        {
+          "label": "재발징후",
+          "text": "진동값 7mm/s 이상과 금속음이 동시에 발생하면 같은 원인을 우선 점검한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-fac-003.md",
+      "sha256": "c897b90beb96904a89afdcd1d5ecc23b69d93e3904996a4894cd3dd285f72389",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-FAC-004",
+      "tenant_id": "TENANT-A",
+      "title": "403동 엘리베이터 장애 이력",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "엘리베이터 문 끼임",
+      "topic_en": "elevator door obstruction",
+      "clauses": [
+        {
+          "label": "2026-05",
+          "text": "403동 1호기 문 끼임은 도어 레일 이물질 제거로 해소됐다."
+        },
+        {
+          "label": "주의",
+          "text": "같은 증상이 반복되면 센서 정렬 상태를 추가 점검한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-fac-004.txt",
+      "sha256": "cdf7ca177e58b6c9090b490f91cbe5105153f7ed0a4150d10d230607176efc24",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-FAC-005",
+      "tenant_id": "TENANT-A",
+      "title": "Fire-Safety Inspection Result",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "소방시설 점검",
+      "topic_en": "fire safety inspection",
+      "clauses": [
+        {
+          "label": "Finding",
+          "text": "The June 2026 inspection requires replacement of the exit-light battery on the third floor of Building 402."
+        },
+        {
+          "label": "Due date",
+          "text": "The target completion date is July 5, 2026."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-fac-005.docx",
+      "sha256": "ed359fed90c567338a8a56f948ff86053c1bb67e391249e824d9863e05db1663",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-ONB-001",
+      "tenant_id": "TENANT-A",
+      "title": "입주민 가입 및 승인 안내",
+      "category": "온보딩",
+      "visibility": "ALL",
+      "revision": 2,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "입주민 가입 승인",
+      "topic_en": "resident signup approval",
+      "clauses": [
+        {
+          "label": "가입",
+          "text": "입주민은 단지를 선택하고 이메일을 검증한 뒤 세대정보를 입력한다."
+        },
+        {
+          "label": "승인",
+          "text": "관리소장 승인 전 계정은 pending 상태이며 업무 API에 접근할 수 없다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-onb-001.pdf",
+      "sha256": "a4d6684e69d33ccd300a5fed07af44dd21a055c136e86da4f3cdd0159ef8ceba",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-PRIV-001",
+      "tenant_id": "TENANT-A",
+      "title": "개인정보 처리 안내",
+      "category": "개인정보",
+      "visibility": "ALL",
+      "revision": 2,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "개인정보 보호",
+      "topic_en": "privacy protection",
+      "clauses": [
+        {
+          "label": "LLM",
+          "text": "이름, 연락처, 동호수 등 개인정보는 LLM 호출 전에 마스킹하며 실패하면 호출을 중단한다."
+        },
+        {
+          "label": "보관",
+          "text": "탈퇴 또는 보관기간 만료 시 개인정보를 삭제하거나 비식별 처리한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-priv-001.md",
+      "sha256": "da88db91b4b651c97ff55597e93e861559d005fd7213af5e836a75f9103aed05",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-AUTH-001",
+      "tenant_id": "TENANT-A",
+      "title": "계정 및 비밀번호 안내",
+      "category": "인증",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "이메일 인증과 비밀번호 재설정",
+      "topic_en": "email verification and password reset",
+      "clauses": [
+        {
+          "label": "이메일",
+          "text": "가입 검증 링크는 24시간 동안 유효하고 검증 전에는 로그인할 수 없다."
+        },
+        {
+          "label": "재설정",
+          "text": "비밀번호 재설정 링크는 1시간 동안 유효하며 한 번 사용하면 폐기된다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-auth-001.txt",
+      "sha256": "4369043c4f58847d257864d216cdb78e641f25b894a47955b1a4274cbbfc281c",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-INQ-001",
+      "tenant_id": "TENANT-A",
+      "title": "Resident Inquiry Workflow",
+      "category": "민원",
+      "visibility": "ALL",
+      "revision": 3,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "민원 처리 절차",
+      "topic_en": "inquiry workflow",
+      "clauses": [
+        {
+          "label": "Submission",
+          "text": "Residents select the category and enter the inquiry themselves; AI does not classify inquiries."
+        },
+        {
+          "label": "Completion",
+          "text": "An inquiry can be completed only after at least one staff response."
+        },
+        {
+          "label": "Reopen",
+          "text": "The author may reopen a completed inquiry."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-inq-001.docx",
+      "sha256": "e4b0b241673fbe2c6647dcee3f54d35a903dcc28fe23597d252b195f30f5dad0",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-SAFE-001",
+      "tenant_id": "TENANT-A",
+      "title": "화재 발생 시 행동요령",
+      "category": "안전",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "화재 대피",
+      "topic_en": "fire evacuation",
+      "clauses": [
+        {
+          "label": "신고",
+          "text": "화재를 발견하면 119에 신고하고 주변에 알린 뒤 안전한 계단으로 대피한다."
+        },
+        {
+          "label": "금지",
+          "text": "화재 시 엘리베이터를 이용하지 않는다."
+        },
+        {
+          "label": "AI한계",
+          "text": "AI 안내는 공식 재난 지시를 대체하지 않는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-safe-001.pdf",
+      "sha256": "2ab7c943370d5621324ac49ee6d897c79d6a378680c92906c7027292aeb55546",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-SAFE-002",
+      "tenant_id": "TENANT-A",
+      "title": "가스 냄새 발생 시 행동요령",
+      "category": "안전",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "가스 누출 의심",
+      "topic_en": "suspected gas leak",
+      "clauses": [
+        {
+          "label": "초기조치",
+          "text": "불꽃과 전기 스위치를 조작하지 말고 창문을 열어 환기한 뒤 가스 공급을 차단한다."
+        },
+        {
+          "label": "연락",
+          "text": "안전한 장소에서 119와 도시가스 긴급센터에 연락한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-safe-002.md",
+      "sha256": "7c66242e4a2a01f84abc656ad73cdee8870c53a5db79aaf833f92e314f5de9fa",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-MEET-001-V1",
+      "tenant_id": "TENANT-A",
+      "title": "6월 입주자대표회의 회의록 초안",
+      "category": "회의록",
+      "visibility": "COUNCIL",
+      "revision": 1,
+      "is_current": false,
+      "effective_date": "2025-01-01",
+      "topic_ko": "주차 차단기 교체",
+      "topic_en": "parking gate replacement",
+      "clauses": [
+        {
+          "label": "초안결정",
+          "text": "주차 차단기 교체일을 7월 8일로 잠정 검토했다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-meet-001-v1.txt",
+      "sha256": "fdf77ec4f1855e3ac19845e8d0074c364d9f1000d8dbea509d47dcc991d9b438",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-MEET-001-V2",
+      "tenant_id": "TENANT-A",
+      "title": "June Resident Council Minutes - Final",
+      "category": "회의록",
+      "visibility": "RESIDENT",
+      "revision": 2,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "주차 차단기 교체",
+      "topic_en": "parking gate replacement",
+      "clauses": [
+        {
+          "label": "Decision",
+          "text": "The parking-gate replacement date was confirmed as July 22, 2026."
+        },
+        {
+          "label": "Budget",
+          "text": "The approved budget ceiling is KRW 12 million."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-a/a-meet-001-v2.docx",
+      "sha256": "702d77b442507ed6f4f61f8b91b8d493a9b8e433d2f48196fa2414d4bc8de2ef",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-MANUAL-001",
+      "tenant_id": "TENANT-A",
+      "title": "LIVIQ 비서 이용 안내",
+      "category": "매뉴얼",
+      "visibility": "ALL",
+      "revision": 2,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "AI 비서의 범위",
+      "topic_en": "AI assistant scope",
+      "clauses": [
+        {
+          "label": "근거",
+          "text": "AI 비서는 검색된 근거와 출처를 함께 제시하고 근거가 없으면 담당자 연결을 안내한다."
+        },
+        {
+          "label": "액션",
+          "text": "AI 도구는 읽기 전용이며 삭제, 발송, 권한 변경을 직접 실행하지 않는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-a/a-manual-001.pdf",
+      "sha256": "1193fe467844787c7609c1a40dd18c5078df29e27c35c5773c5ac6e6bc0a588a",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "A-KG-001",
+      "tenant_id": "TENANT-A",
+      "title": "급수계통 설비 관계 설명서",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "급수계통 관계",
+      "topic_en": "water supply system relationships",
+      "clauses": [
+        {
+          "label": "관계",
+          "text": "저수조 T-01은 급수펌프 P-01과 P-02에 물을 공급하고 두 펌프는 401동과 402동을 담당한다."
+        },
+        {
+          "label": "영향",
+          "text": "P-02 정지 시 402동 고층부 수압이 먼저 낮아질 수 있다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-a/a-kg-001.md",
+      "sha256": "1f59b1154dfa633b8c5573f731fd04ca0f98b5b18dfb60af67498ebdbfd5239a",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "A-KG-002",
+      "tenant_id": "TENANT-A",
+      "title": "엘리베이터 부품 관계 설명서",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "엘리베이터 부품 관계",
+      "topic_en": "elevator component relationships",
+      "clauses": [
+        {
+          "label": "관계",
+          "text": "403동 1호기의 도어 센서 DS-31은 도어 컨트롤러 DC-31에 연결된다."
+        },
+        {
+          "label": "증상",
+          "text": "DS-31 정렬 불량은 문 재개방 반복의 원인 후보가 될 수 있다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-a/a-kg-002.txt",
+      "sha256": "8cd4a689be00fff5a6f16d7a5f068c8c5698583873d1ff33e37a633f7a1247d4",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "B-RULE-001",
+      "tenant_id": "TENANT-B",
+      "title": "Green Village Management Rules",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "푸른마을 공사시간",
+      "topic_en": "Green Village renovation hours",
+      "clauses": [
+        {
+          "label": "Article 11",
+          "text": "Apartment renovation work is permitted on weekdays only, from 08:30 to 17:30."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-b/b-rule-001.docx",
+      "sha256": "80fc84210b450f26ab072f99b99e2f612976834a6c0bc638c6a95ffc39fb3fc3",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "B-NOTICE-001",
+      "tenant_id": "TENANT-B",
+      "title": "푸른마을 주차장 도색 안내",
+      "category": "공지",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "푸른마을 주차장 도색",
+      "topic_en": "Green Village parking repainting",
+      "clauses": [
+        {
+          "label": "일정",
+          "text": "2026년 7월 18일 지하 1층 주차장 도색으로 차량 이동이 필요하다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-b/b-notice-001.pdf",
+      "sha256": "8c704ce6774906b47ad7df1d7700c59943d4448f1410ca78d8a1e1feeb6b46a2",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "B-FAC-001",
+      "tenant_id": "TENANT-B",
+      "title": "푸른마을 승강기 이력",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "푸른마을 승강기",
+      "topic_en": "Green Village elevator",
+      "clauses": [
+        {
+          "label": "이력",
+          "text": "B동 승강기 진동은 가이드슈 교체 후 해소됐다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-b/b-fac-001.md",
+      "sha256": "1543843e89d87d8958f696ee524c99bfb9cca2a5b29b31aa2615f050b3d1ed6b",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "B-FEE-001",
+      "tenant_id": "TENANT-B",
+      "title": "푸른마을 관리비 기준",
+      "category": "관리비",
+      "visibility": "RESIDENT",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "푸른마을 관리비",
+      "topic_en": "Green Village fee policy",
+      "clauses": [
+        {
+          "label": "원칙",
+          "text": "푸른마을 관리비 설명은 해당 단지의 확정 업로드만 사용한다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-b/b-fee-001.txt",
+      "sha256": "f3682c6516eb991a6a66c5b4d1588f26c26443e8770c45262bbe969db8624a2e",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "B-PRIV-001",
+      "tenant_id": "TENANT-B",
+      "title": "Green Village Privacy Notice",
+      "category": "개인정보",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "푸른마을 개인정보",
+      "topic_en": "Green Village privacy",
+      "clauses": [
+        {
+          "label": "Isolation",
+          "text": "Green Village personal data and documents must not be disclosed to another tenant."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-b/b-priv-001.docx",
+      "sha256": "f6719fce3cc4396ef567fd3480fde2881c5211a7cbb8c4cb7c62da25ca5126a0",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "C-RULE-001",
+      "tenant_id": "TENANT-C",
+      "title": "솔빛타운 관리규약",
+      "category": "규약",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "솔빛타운 공사시간",
+      "topic_en": "Solbit Town renovation hours",
+      "clauses": [
+        {
+          "label": "제7조",
+          "text": "솔빛타운의 세대 공사는 평일 10:00부터 17:00까지만 가능하다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-c/c-rule-001.pdf",
+      "sha256": "752282fed95e902fee7e0f9e6dda4aca746cd5045c19404b53bfbda61aa970e5",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "C-NOTICE-001",
+      "tenant_id": "TENANT-C",
+      "title": "솔빛타운 정전 안내",
+      "category": "공지",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "솔빛타운 정전",
+      "topic_en": "Solbit Town power outage",
+      "clauses": [
+        {
+          "label": "일정",
+          "text": "2026년 7월 30일 02:00부터 04:00까지 전기설비 점검으로 정전된다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "MD",
+      "relative_path": "corpus/tenant-c/c-notice-001.md",
+      "sha256": "de5011fc025dd8c359bedc5a92094ff744e9e219f9a750bea5d0215412c425f1",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "C-FAC-001",
+      "tenant_id": "TENANT-C",
+      "title": "솔빛타운 급수펌프 이력",
+      "category": "시설",
+      "visibility": "ADMIN",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "솔빛타운 급수펌프",
+      "topic_en": "Solbit Town water pump",
+      "clauses": [
+        {
+          "label": "이력",
+          "text": "급수펌프 C-P1의 압력 저하는 필터 막힘을 제거해 해소했다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "TXT",
+      "relative_path": "corpus/tenant-c/c-fac-001.txt",
+      "sha256": "a7da53eaa87c03efa3a5fe8199cbdee329fb52763bf89905c40d61e5fd09f978",
+      "page_or_section": "문서 본문"
+    },
+    {
+      "document_id": "C-FEE-001",
+      "tenant_id": "TENANT-C",
+      "title": "Solbit Town Fee Policy",
+      "category": "관리비",
+      "visibility": "RESIDENT",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "솔빛타운 관리비",
+      "topic_en": "Solbit Town fee policy",
+      "clauses": [
+        {
+          "label": "Principle",
+          "text": "Fee explanations must use only confirmed uploads belonging to Solbit Town."
+        }
+      ],
+      "synthetic": true,
+      "language": "EN",
+      "file_format": "DOCX",
+      "relative_path": "corpus/tenant-c/c-fee-001.docx",
+      "sha256": "223249cfd57880dad242d1cacefe9d84fe3bf8ba7800f295e820319d6f36e1d9",
+      "page_or_section": "p.1"
+    },
+    {
+      "document_id": "C-PRIV-001",
+      "tenant_id": "TENANT-C",
+      "title": "솔빛타운 개인정보 안내",
+      "category": "개인정보",
+      "visibility": "ALL",
+      "revision": 1,
+      "is_current": true,
+      "effective_date": "2026-06-01",
+      "topic_ko": "솔빛타운 개인정보",
+      "topic_en": "Solbit Town privacy",
+      "clauses": [
+        {
+          "label": "격리",
+          "text": "솔빛타운 데이터는 다른 단지의 검색과 캐시에 포함하지 않는다."
+        }
+      ],
+      "synthetic": true,
+      "language": "KO",
+      "file_format": "PDF",
+      "relative_path": "corpus/tenant-c/c-priv-001.pdf",
+      "sha256": "b905eeee8e90bae86c1e365e67d960956009025e9ea375e7570a17621e0cdf6d",
+      "page_or_section": "p.1"
+    }
+  ]
+}

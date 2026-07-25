@@ -1,0 +1,8 @@
+6월 입주자대표회의 회의록 초안
+
+합성 테스트 문서 | A-MEET-001-V1 | tenant=TENANT-A | revision=1 | visibility=COUNCIL
+
+[초안결정]
+주차 차단기 교체일을 7월 8일로 잠정 검토했다.
+
+주의: 이 문서는 LIVIQ 검증을 위해 만든 합성 fixture이며 실제 단지 정보가 아닙니다.

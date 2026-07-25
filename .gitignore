@@ -55,3 +55,9 @@ mcp/apt_mng_agent.zip
 
 # 테스트 아티팩트
 .coverage
+
+# 로컬 문서 (신청서 등 — 커밋 대상 아님)
+_local/
+
+# 검증·리포트 생성 산출물 (fixture는 evals/fixtures에 커밋, 산출물은 재생성 대상)
+outputs/
