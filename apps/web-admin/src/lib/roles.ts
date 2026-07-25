@@ -22,7 +22,7 @@ const INQUIRIES: NavItem = { href: "/inquiries", icon: "🛠", label: "민원 �
 const DOCUMENTS: NavItem = { href: "/documents", icon: "📁", label: "문서 관리" };
 const FEES: NavItem = { href: "/fees", icon: "💰", label: "관리비 관리" };
 const FACILITIES: NavItem = { href: "/facilities", icon: "🏢", label: "시설 관리" };
-const TWIN: NavItem = { href: "/twin", icon: "🧊", label: "단지 트윈" };
+const TWIN: NavItem = { href: "/twin", icon: "🧊", label: "트윈 대시보드" };
 const STAFF_MGMT: NavItem = { href: "/staff", icon: "🪪", label: "직원 관리" };
 const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label: "코드 관리" };
 const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
@@ -33,13 +33,13 @@ const STAFF_NAV: readonly NavGroup[] = [{ items: [INQUIRIES, NOTICES, DOCUMENTS]
 // SYS_ADMIN은 단지 관리 하나만 — 어떤 단지 콘텐츠에도 접근하지 않는다(flat).
 const SYS_ADMIN_NAV: readonly NavGroup[] = [{ items: [TENANTS] }];
 // MANAGER(기본): 섹션 그룹화 — 대시보드·공지 단독, 입주민 관리·관리소 운영·설정 묶음.
-// 단지 트윈은 geometry 등록(hasTwin) 시에만 관리소 운영 끝에 노출(H9-1).
+// 트윈 대시보드는 geometry 등록(hasTwin) 시에만 대시보드 바로 아래 같은 레벨로 노출(H9-4 — 확정 데이터 현황판).
 function managerNav(hasTwin: boolean): readonly NavGroup[] {
-  const ops = hasTwin ? [STAFF_MGMT, DOCUMENTS, FACILITIES, TWIN] : [STAFF_MGMT, DOCUMENTS, FACILITIES];
+  const top = hasTwin ? [DASHBOARD, TWIN, NOTICES] : [DASHBOARD, NOTICES];
   return [
-    { items: [DASHBOARD, NOTICES] },
+    { items: top },
     { title: "입주민 관리", items: [RESIDENTS, FEES, INQUIRIES] },
-    { title: "관리소 운영", items: ops },
+    { title: "관리소 운영", items: [STAFF_MGMT, DOCUMENTS, FACILITIES] },
     { title: "설정", items: [SETTINGS_HOUSEHOLDS, SETTINGS_CODES] },
   ];
 }

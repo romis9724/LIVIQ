@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import type { TwinGeometryItem } from "@/lib/api";
-import { colorForOverlay, type OverlayKind, type Rgb } from "./twin-data";
+import { colorForOverlay, type OverlayKind, type RenderStyle, type Rgb } from "./twin-data";
 import { buildVWorldSrcdoc } from "./vworld-iframe";
 import { centerOf } from "./vworld-render";
 
@@ -31,6 +31,10 @@ interface UseVWorldParams {
   geometry: TwinGeometryItem[];
   overlay: Record<string, number>;
   overlayKind: OverlayKind;
+  renderStyle: RenderStyle; // 쉘·포인트·끄기
+  cameraLock: boolean; // 시점 단지 고정
+  orbit: boolean; // 360° 자동 회전
+  clipOn: boolean; // 우리 단지만 표시(clip)
   onSelectHousehold: (householdId: string) => void;
 }
 
@@ -69,6 +73,10 @@ export function useVWorld({
   geometry,
   overlay,
   overlayKind,
+  renderStyle,
+  cameraLock,
+  orbit,
+  clipOn,
   onSelectHousehold,
 }: UseVWorldParams): VWorldState {
   const [status, setStatus] = useState<VWorldStatus>("loading");
@@ -84,10 +92,12 @@ export function useVWorld({
   const overlayRef = useRef(overlay);
   const overlayKindRef = useRef(overlayKind);
   const onSelectRef = useRef(onSelectHousehold);
+  const controlsRef = useRef({ renderStyle, cameraLock, clipOn });
   geometryRef.current = geometry;
   overlayRef.current = overlay;
   overlayKindRef.current = overlayKind;
   onSelectRef.current = onSelectHousehold;
+  controlsRef.current = { renderStyle, cameraLock, clipOn };
 
   // iframe → 부모 메시지 수신. srcdoc origin 은 신뢰 못하므로(about:srcdoc) 소스 참조로 검증.
   useEffect(() => {
@@ -120,11 +130,16 @@ export function useVWorld({
     setStatus("loading");
     setError(null);
     const g = geometryRef.current;
+    const c = controlsRef.current;
     iframe.contentWindow.postMessage(
       {
         type: "init",
         center: centerOf(g),
         units: unitsFor(g, overlayRef.current, overlayKindRef.current),
+        // 컨트롤 초기값을 함께 넘긴다 — iframe 이 첫 화면을 한 번에 확정하게(ready 후 재적용은 no-op).
+        style: c.renderStyle,
+        lock: c.cameraLock,
+        clip: c.clipOn,
       },
       "*",
     );
@@ -140,6 +155,27 @@ export function useVWorld({
       "*",
     );
   }, [overlay, overlayKind, geometry, status]);
+
+  // 컨트롤 변경 → iframe 전달(ready 이후). status 의존으로 초기 ready 시 현재 값 동기화도 겸한다.
+  useEffect(() => {
+    if (status !== "ready") return;
+    iframeRef.current?.contentWindow?.postMessage({ type: "style", style: renderStyle }, "*");
+  }, [renderStyle, status]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    iframeRef.current?.contentWindow?.postMessage({ type: "camera", cmd: "lock", on: cameraLock }, "*");
+  }, [cameraLock, status]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    iframeRef.current?.contentWindow?.postMessage({ type: "camera", cmd: "orbit", on: orbit }, "*");
+  }, [orbit, status]);
+
+  useEffect(() => {
+    if (status !== "ready") return;
+    iframeRef.current?.contentWindow?.postMessage({ type: "clip", on: clipOn }, "*");
+  }, [clipOn, status]);
 
   return { status, error, srcDoc, iframeRef, onLoad };
 }

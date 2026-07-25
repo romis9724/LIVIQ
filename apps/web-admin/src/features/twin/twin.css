@@ -130,8 +130,9 @@
   outline-offset: 2px;
 }
 
-/* 오버레이 세그먼트 컨트롤 (입주/민원/관리비/설비) — 대시보드 기간 세그먼트와 동일 톤. */
-.twin-overlays {
+/* 오버레이·렌더스타일 세그먼트 컨트롤 — 대시보드 기간 세그먼트와 동일 톤. */
+.twin-overlays,
+.twin-styles {
   display: inline-flex;
   flex: none;
   gap: var(--space-1);
@@ -140,7 +141,8 @@
   border-radius: var(--radius-md);
   background-color: var(--color-surface-sunken);
 }
-.twin-overlay-tab {
+.twin-overlay-tab,
+.twin-style-tab {
   appearance: none;
   cursor: pointer;
   min-height: 34px;
@@ -156,17 +158,249 @@
     color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out);
 }
-.twin-overlay-tab:hover {
+.twin-overlay-tab:hover,
+.twin-style-tab:hover {
   color: var(--color-text);
 }
-.twin-overlay-tab[data-active] {
+.twin-overlay-tab[data-active],
+.twin-style-tab[data-active] {
   color: var(--color-text);
   background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
-.twin-overlay-tab:focus-visible {
+.twin-overlay-tab:focus-visible,
+.twin-style-tab:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* 실사 3D 전용 컨트롤 묶음 — 렌더 스타일 + 시점/렌더링 토글. 좁으면 줄바꿈. */
+.twin-vworld-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.twin-toggles {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.twin-toggle {
+  appearance: none;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.twin-toggle:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+.twin-toggle[data-active] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.twin-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ============ 레이아웃 — 현황판 + 3D 무대 2열(H9-4) ============ */
+.twin-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .twin-layout {
+    grid-template-columns: 1fr; /* 좁으면 현황판을 무대 위로 쌓는다. */
+  }
+}
+
+/* 현황판 — 타일 + 최근민원 + 설비상태(LIVIQ 토큰 재구성). */
+.twin-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.twin-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.twin-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.twin-tile__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.twin-tile__value {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.twin-tile__unit {
+  margin-left: 2px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.twin-tile[data-tone="warn"] .twin-tile__value {
+  color: color-mix(in oklch, var(--color-warning) 55%, var(--color-text));
+}
+.twin-tile[data-tone="danger"] .twin-tile__value {
+  color: var(--color-danger);
+}
+
+.twin-status__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.twin-status__title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.twin-status__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.twin-status__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.twin-status__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.twin-status__row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.twin-status__date {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.twin-status__row-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text);
+  /* 긴 제목은 2줄로 자른다. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 설비 상태 목록 — 상태 점 + 이름 + 상태 라벨. */
+.twin-status__facilities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.twin-status__facility {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+.twin-status__facility:last-child {
+  border-bottom: 0;
+}
+.twin-status__facility-name {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.twin-status__facility-state {
+  flex: none;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+/* 설비 상태 점 — 색 단독 아님(옆에 상태 라벨 병기). */
+.twin-status-dot {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--color-text-muted);
+}
+.twin-status-dot[data-status="normal"] {
+  background: var(--color-success);
+}
+.twin-status-dot[data-status="check"] {
+  background: var(--color-warning);
+}
+.twin-status-dot[data-status="fault"] {
+  background: color-mix(in oklch, var(--color-warning) 40%, var(--color-danger));
+}
+.twin-status-dot[data-status="risk"] {
+  background: var(--color-danger);
+}
+
+/* 최근민원 상태 pill — 기본(warning) 외 상태별 톤. */
+.twin-pill[data-status="done"] {
+  background: color-mix(in oklch, var(--color-success) 14%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-success) 36%, transparent);
+  color: color-mix(in oklch, var(--color-success) 50%, var(--color-text));
+}
+.twin-pill[data-status="received"],
+.twin-pill[data-status="assigned"] {
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-accent) 34%, transparent);
+  color: var(--color-accent);
 }
 
 /* ============ 세대 상세 — 우측 슬라이드오버(민원 상세 패턴 준용) ============ */

@@ -9,6 +9,7 @@ import {
   computeBounds,
   legendForOverlay,
   occupancyColor,
+  occupancyMetrics,
   overlayValueText,
   rgbCss,
 } from "./twin-data";
@@ -27,6 +28,24 @@ function item(polygon2d: number[][]): TwinGeometryItem {
     unitTypeLabel: null,
   };
 }
+
+describe("occupancyMetrics", () => {
+  const geo = [{ householdId: "a" }, { householdId: "b" }, { householdId: "c" }, { householdId: "d" }];
+
+  it("입주(세대원>0) 세대 비율을 반올림 %로 낸다", () => {
+    // a=2인·b=1인 입주, c=0·d=미상(맵 없음) 공실 → 2/4 = 50%.
+    const m = occupancyMetrics(geo, { a: 2, b: 1, c: 0 });
+    expect(m.total).toBe(4);
+    expect(m.occupiedCount).toBe(2);
+    expect(m.occupancyRate).toBe(50);
+  });
+
+  it("세대가 없으면 rate는 null(0 나누기 회피)", () => {
+    const m = occupancyMetrics([], {});
+    expect(m.total).toBe(0);
+    expect(m.occupancyRate).toBeNull();
+  });
+});
 
 describe("occupancyColor", () => {
   it("공실(0·음수)은 중립 회색", () => {
