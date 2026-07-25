@@ -7,6 +7,7 @@ import {
   legendForOverlay,
   rgbCss,
   type OverlayKind,
+  type RenderStyle,
 } from "./twin-data";
 import { useVWorld } from "./useVWorld";
 
@@ -18,6 +19,10 @@ interface VWorldViewProps {
   geometry: TwinGeometryItem[];
   overlay: Record<string, number>; // household_id → 값(overlayKind 에 따라 의미가 다름)
   overlayKind: OverlayKind;
+  renderStyle: RenderStyle; // 쉘·포인트·끄기(실사 3D 전용)
+  cameraLock: boolean; // 시점 단지 고정
+  orbit: boolean; // 360° 자동 회전
+  clipOn: boolean; // 우리 단지만 표시
   onSelectHousehold: (householdId: string) => void;
 }
 
@@ -29,7 +34,7 @@ interface VWorldViewProps {
  * 실측 이슈 회피 — 문서 파싱 중인 iframe 이라 document.write 정상). 데이터·오버레이·세대 선택은
  * TwinDeck 과 동일 계약(props)으로 받는다 — 상세 패널은 TwinView 소유.
  */
-export function VWorldView({ geometry, overlay, overlayKind, onSelectHousehold }: VWorldViewProps) {
+export function VWorldView(props: VWorldViewProps) {
   if (!VWORLD_KEY) {
     return (
       <div className="twin-canvas twin-canvas--fallback">
@@ -43,15 +48,7 @@ export function VWorldView({ geometry, overlay, overlayKind, onSelectHousehold }
   }
 
   // 키 확인 후에만 뷰어 훅을 태운다 — 훅 호출을 조건부로 두지 않도록 하위 컴포넌트로 분리.
-  return (
-    <VWorldCanvas
-      apiKey={VWORLD_KEY}
-      geometry={geometry}
-      overlay={overlay}
-      overlayKind={overlayKind}
-      onSelectHousehold={onSelectHousehold}
-    />
-  );
+  return <VWorldCanvas apiKey={VWORLD_KEY} {...props} />;
 }
 
 interface VWorldCanvasProps extends VWorldViewProps {
@@ -63,6 +60,10 @@ function VWorldCanvas({
   geometry,
   overlay,
   overlayKind,
+  renderStyle,
+  cameraLock,
+  orbit,
+  clipOn,
   onSelectHousehold,
 }: VWorldCanvasProps) {
   const { status, error, srcDoc, iframeRef, onLoad } = useVWorld({
@@ -70,6 +71,10 @@ function VWorldCanvas({
     geometry,
     overlay,
     overlayKind,
+    renderStyle,
+    cameraLock,
+    orbit,
+    clipOn,
     onSelectHousehold,
   });
 

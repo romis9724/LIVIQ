@@ -50,15 +50,23 @@ export function buildVWorldSrcdoc(apiKey: string): string {
   var GROUND_HEIGHT_M = 25;   // 지반 고도(m) 상수 — 단지 규모엔 지형 샘플링 없이 충분
   var SHELL_ALPHA = 0.22;     // 실사 건물이 비치도록 낮은 틴트
   var SHELL_SCALE = 1.2;      // 실사 건물보다 살짝 키워 반투명 쉘이 감싸도록
+  var POINT_ALPHA = 0.9;      // 포인트 도트 — 실사 건물 위에서도 잘 보이게 진하게(가독성 수정, H9-4)
+  var POINT_SIZE = 10;        // 포인트 픽셀 크기
   var POLL_MS = 300;
   var POLL_MAX = 100;         // 30초(300ms×100) 내 뷰어 준비 실패 → error
 
   var viewer = null;
-  var primitive = null;
+  var primitive = null;         // 세대 shell Primitive(반투명 압출)
+  var points = null;            // 세대 중심 PointPrimitiveCollection(가독성 — H9-4)
+  var pointByUid = {};          // householdId → PointPrimitive(recolor 대상)
   var idSet = null;
   var units = [];
   var center = null;
   var started = false;
+  var style = "shell";          // 렌더 스타일 — shell·point·off(부모가 postMessage 로 전환)
+  var locked = false;           // 시점 단지 고정(lookAt 궤도 회전)
+  var orbitTimer = null;        // 360° 자동 회전 setInterval 핸들
+  var orbitHeading = 0;         // 현재 회전 방위(rad)
   var buildingTileset = null;   // VWorld 3D 건물 타일셋(map4) — 우리 단지 볼록껍질로 클리핑
   var poiTilesets = [];         // POI 타일셋 — 클립 시 숨김
   var clipOn = true;            // 기본 우리 단지만 표시(첫마을 4단지 외 건물 숨김)
@@ -100,16 +108,61 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     primitive = viewer.scene.primitives.add(new C.Primitive({
       geometryInstances: instances,
       appearance: new C.PerInstanceColorAppearance({ flat: true, translucent: true, closed: false }),
-      asynchronous: false
+      asynchronous: false,
+      show: style === "shell"
     }));
   }
 
-  // 오버레이 변경 → per-instance 색 교체(기하 재생성 없음). 아직 컴파일 전이면 새 색으로 재생성.
+  // 폴리곤 무게중심 [lon,lat] — 포인트 도트 위치.
+  function centroid(coords) {
+    var sx = 0, sy = 0, i;
+    for (i = 0; i < coords.length; i++) { sx += coords[i][0]; sy += coords[i][1]; }
+    return [sx / coords.length, sy / coords.length];
+  }
+
+  // 세대 중심 도트 컬렉션 — 반투명 쉘이 안 보이는 희소/균일 오버레이(입주·민원·관리비) 가독성용(H9-4).
+  // disableDepthTestDistance=∞ 로 실사 건물에 가려지지 않고 항상 위에 뜬다(프로토타입 방식).
+  function buildPoints() {
+    var C = Cesium, i, u, c;
+    points = viewer.scene.primitives.add(new C.PointPrimitiveCollection());
+    points.show = style === "point";
+    for (i = 0; i < units.length; i++) {
+      u = units[i];
+      c = centroid(u.polygon2d);
+      pointByUid[u.householdId] = points.add({
+        position: C.Cartesian3.fromDegrees(c[0], c[1], GROUND_HEIGHT_M + u.baseZ + u.floorHeight / 2),
+        pixelSize: POINT_SIZE,
+        color: rgba(u.rgb, POINT_ALPHA),
+        outlineColor: C.Color.BLACK.withAlpha(0.35),
+        outlineWidth: 1,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        id: u.householdId
+      });
+    }
+  }
+
+  // 렌더 스타일 전환 — shell·point·off. 부모 세그먼트 토글이 postMessage 로 지시.
+  function applyStyle(s) {
+    style = s;
+    if (primitive) primitive.show = s === "shell";
+    if (points) points.show = s === "point";
+  }
+
+  // 오버레이 변경 → shell per-instance 색 + 포인트 색 교체(기하 재생성 없음).
   function recolor(colors) {
+    var C = Cesium, i, u, c, attrs, pt;
+    // 포인트·상태값은 shell 컴파일 여부와 무관하게 항상 갱신.
+    for (i = 0; i < units.length; i++) {
+      u = units[i];
+      c = colors[u.householdId];
+      if (!c) continue;
+      u.rgb = c;
+      pt = pointByUid[u.householdId];
+      if (pt) pt.color = rgba(c, POINT_ALPHA);
+    }
     if (!primitive) return;
-    var C = Cesium, i, c, attrs;
     if (!primitive.ready) {
-      for (i = 0; i < units.length; i++) { c = colors[units[i].householdId]; if (c) units[i].rgb = c; }
+      // 아직 GPU 컴파일 전이면 속성 접근 불가 → 새 색으로 shell 재생성.
       viewer.scene.primitives.remove(primitive);
       buildShell();
       return;
@@ -117,7 +170,6 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     for (i = 0; i < units.length; i++) {
       c = colors[units[i].householdId];
       if (!c) continue;
-      units[i].rgb = c;
       attrs = primitive.getGeometryInstanceAttributes(units[i].householdId);
       if (attrs) attrs.color = C.ColorGeometryInstanceAttribute.toValue(rgba(c, SHELL_ALPHA), attrs.color);
     }
@@ -128,6 +180,7 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     var C = Cesium;
     var handler = new C.ScreenSpaceEventHandler(viewer.scene.canvas);
     function pick(pos) {
+      if (style === "off") return null;   // 오버레이 끄면 세대 피킹도 비활성
       var picks = viewer.scene.drillPick(pos, 8), i, p;
       for (i = 0; i < picks.length; i++) {
         p = picks[i];
@@ -225,6 +278,34 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     }, 500);
   }
 
+  // ── 시점: 단지 고정 & 360° 회전 (프로토타입 lookAt 궤도) ──
+  // lookAt 으로 카메라 기준점을 단지 중심에 잠그면 드래그·자동회전이 중심 궤도 회전이 된다.
+  function lookTarget() {
+    return Cesium.Cartesian3.fromDegrees(center[0], center[1], GROUND_HEIGHT_M + 40);
+  }
+  function setLock(on) {
+    locked = on;
+    if (!viewer || !center) return;
+    if (on) {
+      orbitHeading = viewer.camera.heading;
+      viewer.camera.lookAt(lookTarget(), new Cesium.HeadingPitchRange(orbitHeading, Cesium.Math.toRadians(-33), 560));
+    } else {
+      stopOrbit();
+      viewer.camera.lookAtTransform(Cesium.Matrix4.IDENTITY);   // 자유 시점 복귀
+    }
+  }
+  function startOrbit() {
+    if (!viewer || !center || orbitTimer) return;
+    if (!locked) setLock(true);
+    orbitTimer = setInterval(function () {
+      orbitHeading += Cesium.Math.toRadians(0.3);   // 한 바퀴 약 40초
+      viewer.camera.lookAt(lookTarget(), new Cesium.HeadingPitchRange(orbitHeading, Cesium.Math.toRadians(-33), 560));
+    }, 40);
+  }
+  function stopOrbit() {
+    if (orbitTimer) { clearInterval(orbitTimer); orbitTimer = null; }
+  }
+
   // 조감도 initPosition 으로 맵 시작 후 뷰어 준비 폴링(프로토타입 startMap/waitViewer).
   function startMap() {
     if (typeof vw === "undefined" || !vw.Map) {
@@ -250,6 +331,8 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     if (window.ws3d && ws3d.viewer && ws3d.viewer.scene) {
       viewer = ws3d.viewer;
       buildShell();
+      buildPoints();     // 포인트 도트도 미리 생성 — 스타일 토글은 show 만 바꾼다
+      applyStyle(style);
       attachPicking();
       setupTilesets();   // 우리 단지 외 건물 클리핑(clipOn 기본 true)
       post({ type: "ready" });
@@ -273,6 +356,13 @@ export function buildVWorldSrcdoc(apiKey: string): string {
       startMap();
     } else if (d.type === "recolor") {
       if (d.colors) recolor(d.colors);
+    } else if (d.type === "style") {
+      if (typeof d.style === "string") applyStyle(d.style);
+    } else if (d.type === "camera") {
+      if (d.cmd === "lock") setLock(!!d.on);
+      else if (d.cmd === "orbit") { if (d.on) startOrbit(); else stopOrbit(); }
+    } else if (d.type === "clip") {
+      applyClip(!!d.on);
     }
   });
 })();

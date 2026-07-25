@@ -58,19 +58,17 @@ describe("navForRoles", () => {
     expect(flatHrefs(navForRoles([]))).toContain("/dashboard");
   });
 
-  it("hasTwin이면 MANAGER 관리소 운영 끝에 단지 트윈을 노출한다(시설 뒤)", () => {
+  it("hasTwin이면 MANAGER 대시보드 바로 아래(첫 그룹)에 트윈 대시보드를 노출한다", () => {
+    const top = navForRoles(["MANAGER"], { hasTwin: true })[0];
+    expect(top?.items.map((i) => i.href)).toEqual(["/dashboard", "/twin", "/notices"]);
+    // 관리소 운영에는 더 이상 트윈이 없다(대시보드 계열로 이동, H9-4).
     const ops = navForRoles(["MANAGER"], { hasTwin: true }).find(
       (g) => g.title === "관리소 운영",
     );
-    expect(ops?.items.map((i) => i.href)).toEqual([
-      "/staff",
-      "/documents",
-      "/facilities",
-      "/twin",
-    ]);
+    expect(ops?.items.map((i) => i.href)).toEqual(["/staff", "/documents", "/facilities"]);
   });
 
-  it("hasTwin 미전달(기본)이면 단지 트윈을 노출하지 않는다", () => {
+  it("hasTwin 미전달(기본)이면 트윈 대시보드를 노출하지 않는다", () => {
     expect(flatHrefs(navForRoles(["MANAGER"]))).not.toContain("/twin");
     expect(flatHrefs(navForRoles(["MANAGER"], { hasTwin: false }))).not.toContain("/twin");
   });

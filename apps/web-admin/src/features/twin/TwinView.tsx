@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Button, EmptyState } from "@liviq/ui";
@@ -10,8 +10,16 @@ import {
   listTwinGeometry,
   type TwinGeometryItem,
 } from "@/lib/api";
-import { OVERLAY_KINDS, OVERLAY_LABELS, type OverlayKind } from "./twin-data";
+import {
+  OVERLAY_KINDS,
+  OVERLAY_LABELS,
+  RENDER_STYLES,
+  RENDER_STYLE_LABELS,
+  type OverlayKind,
+  type RenderStyle,
+} from "./twin-data";
 import { TwinDetailPanel } from "./TwinDetailPanel";
+import { TwinStatusPanel } from "./TwinStatusPanel";
 import "./twin.css";
 
 // deck.gl 은 무겁다 — /twin 에서만 클라이언트로 로드해 타 페이지 번들에 새지 않게 한다(ADR-0019).
@@ -47,6 +55,14 @@ type GeoState =
 // 받아온 kind 는 캐시해 토글 시 재요청을 막는다(geometry 는 1회 로드).
 type OverlayCache = Partial<Record<OverlayKind, Record<string, number>>>;
 
+// 실사 3D 전용 컨트롤 상태(deck.gl 엔 대응 개념 없음 — 실사 3D 에서만 노출).
+interface VWorldControls {
+  renderStyle: RenderStyle;
+  cameraLock: boolean;
+  orbit: boolean;
+  clipOn: boolean;
+}
+
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
   return "알 수 없는 오류가 발생했습니다.";
@@ -58,6 +74,24 @@ export function TwinView() {
   const [overlays, setOverlays] = useState<OverlayCache>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
+
+  // 실사 3D 컨트롤 — 렌더 스타일·시점·clip. 뷰 전환에도 유지(iframe 재마운트 시 ready 효과가 재동기화).
+  const [renderStyle, setRenderStyle] = useState<RenderStyle>("shell");
+  const [cameraLock, setCameraLock] = useState(false);
+  const [orbit, setOrbit] = useState(false);
+  const [clipOn, setClipOn] = useState(true);
+
+  // 시점 토글 — 회전은 고정을 함의하고, 고정 해제는 회전도 끈다(iframe 동작과 일치).
+  const toggleLock = () =>
+    setCameraLock((on) => {
+      if (on) setOrbit(false);
+      return !on;
+    });
+  const toggleOrbit = () =>
+    setOrbit((on) => {
+      if (!on) setCameraLock(true);
+      return !on;
+    });
 
   const load = useCallback(async () => {
     setGeo({ kind: "loading" });
@@ -93,50 +127,63 @@ export function TwinView() {
     };
   }, [overlayKind, geo.kind, overlays]);
 
-  const showSegments = geo.kind === "ready";
+  const showControls = geo.kind === "ready";
   const overlay = overlays[overlayKind] ?? {};
+  const controls: VWorldControls = { renderStyle, cameraLock, orbit, clipOn };
 
   return (
     <>
       <header className="admin-page__header">
         <h1 id="main" className="admin-page__title">
-          단지 트윈
+          트윈 대시보드
         </h1>
         <p className="admin-page__lede">
           세대 3D 모형에 상태를 색으로 겹쳐 봅니다. 확정 데이터만 표시하며 AI는 개입하지 않습니다.
         </p>
-        {showSegments ? (
+        {showControls ? (
           <div className="twin-controls">
-            <div className="twin-views" role="tablist" aria-label="렌더 방식 선택">
-              {VIEW_MODES.map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  role="tab"
-                  aria-selected={viewMode === mode}
-                  className="twin-view-tab"
-                  data-active={viewMode === mode || undefined}
-                  onClick={() => setViewMode(mode)}
-                >
-                  {VIEW_LABELS[mode]}
-                </button>
-              ))}
-            </div>
-            <div className="twin-overlays" role="tablist" aria-label="오버레이 선택">
-              {OVERLAY_KINDS.map((kind) => (
-                <button
-                  key={kind}
-                  type="button"
-                  role="tab"
-                  aria-selected={overlayKind === kind}
-                  className="twin-overlay-tab"
-                  data-active={overlayKind === kind || undefined}
-                  onClick={() => setOverlayKind(kind)}
-                >
-                  {OVERLAY_LABELS[kind]}
-                </button>
-              ))}
-            </div>
+            <TabGroup
+              label="렌더 방식 선택"
+              className="twin-views"
+              tabClassName="twin-view-tab"
+              options={VIEW_MODES}
+              labels={VIEW_LABELS}
+              active={viewMode}
+              onSelect={setViewMode}
+            />
+            <TabGroup
+              label="오버레이 선택"
+              className="twin-overlays"
+              tabClassName="twin-overlay-tab"
+              options={OVERLAY_KINDS}
+              labels={OVERLAY_LABELS}
+              active={overlayKind}
+              onSelect={setOverlayKind}
+            />
+            {viewMode === "vworld" ? (
+              <div className="twin-vworld-controls">
+                <TabGroup
+                  label="렌더 스타일"
+                  className="twin-styles"
+                  tabClassName="twin-style-tab"
+                  options={RENDER_STYLES}
+                  labels={RENDER_STYLE_LABELS}
+                  active={renderStyle}
+                  onSelect={setRenderStyle}
+                />
+                <div className="twin-toggles" role="group" aria-label="시점·렌더링">
+                  <ToggleButton pressed={cameraLock} onClick={toggleLock}>
+                    단지 고정
+                  </ToggleButton>
+                  <ToggleButton pressed={orbit} onClick={toggleOrbit}>
+                    360° 회전
+                  </ToggleButton>
+                  <ToggleButton pressed={clipOn} onClick={() => setClipOn((v) => !v)}>
+                    우리 단지만
+                  </ToggleButton>
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -144,9 +191,11 @@ export function TwinView() {
       <main className="admin-page__main">
         <TwinBody
           geo={geo}
+          occupancy={overlays.occupancy ?? {}}
           overlay={overlay}
           overlayKind={overlayKind}
           viewMode={viewMode}
+          controls={controls}
           onRetry={() => void load()}
           onSelectHousehold={setSelectedId}
         />
@@ -159,20 +208,84 @@ export function TwinView() {
   );
 }
 
+interface TabGroupProps<T extends string> {
+  label: string;
+  className: string;
+  tabClassName: string;
+  options: readonly T[];
+  labels: Record<T, string>;
+  active: T;
+  onSelect: (value: T) => void;
+}
+
+/** 세그먼트 탭 그룹(뷰·오버레이·스타일 공용) — role=tablist·aria-selected. */
+function TabGroup<T extends string>({
+  label,
+  className,
+  tabClassName,
+  options,
+  labels,
+  active,
+  onSelect,
+}: TabGroupProps<T>) {
+  return (
+    <div className={className} role="tablist" aria-label={label}>
+      {options.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          role="tab"
+          aria-selected={active === opt}
+          className={tabClassName}
+          data-active={active === opt || undefined}
+          onClick={() => onSelect(opt)}
+        >
+          {labels[opt]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+interface ToggleButtonProps {
+  pressed: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}
+
+/** 시점·렌더링 온오프 토글 — aria-pressed. */
+function ToggleButton({ pressed, onClick, children }: ToggleButtonProps) {
+  return (
+    <button
+      type="button"
+      className="twin-toggle"
+      aria-pressed={pressed}
+      data-active={pressed || undefined}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
 interface TwinBodyProps {
   geo: GeoState;
+  occupancy: Record<string, number>;
   overlay: Record<string, number>;
   overlayKind: OverlayKind;
   viewMode: ViewMode;
+  controls: VWorldControls;
   onRetry: () => void;
   onSelectHousehold: (householdId: string) => void;
 }
 
 function TwinBody({
   geo,
+  occupancy,
   overlay,
   overlayKind,
   viewMode,
+  controls,
   onRetry,
   onSelectHousehold,
 }: TwinBodyProps) {
@@ -221,22 +334,29 @@ function TwinBody({
   }
 
   return (
-    <section className="surface-card twin-stage">
-      {viewMode === "vworld" ? (
-        <VWorldView
-          geometry={geo.geometry}
-          overlay={overlay}
-          overlayKind={overlayKind}
-          onSelectHousehold={onSelectHousehold}
-        />
-      ) : (
-        <TwinDeck
-          geometry={geo.geometry}
-          overlay={overlay}
-          overlayKind={overlayKind}
-          onSelectHousehold={onSelectHousehold}
-        />
-      )}
-    </section>
+    <div className="twin-layout">
+      <TwinStatusPanel geometry={geo.geometry} occupancy={occupancy} />
+      <section className="surface-card twin-stage">
+        {viewMode === "vworld" ? (
+          <VWorldView
+            geometry={geo.geometry}
+            overlay={overlay}
+            overlayKind={overlayKind}
+            renderStyle={controls.renderStyle}
+            cameraLock={controls.cameraLock}
+            orbit={controls.orbit}
+            clipOn={controls.clipOn}
+            onSelectHousehold={onSelectHousehold}
+          />
+        ) : (
+          <TwinDeck
+            geometry={geo.geometry}
+            overlay={overlay}
+            overlayKind={overlayKind}
+            onSelectHousehold={onSelectHousehold}
+          />
+        )}
+      </section>
+    </div>
   );
 }

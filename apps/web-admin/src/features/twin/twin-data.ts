@@ -42,6 +42,23 @@ const SEMANTIC: {
   danger: [210, 68, 70], // 빨강 (--color-danger 근사)
 };
 
+export interface OccupancyMetrics {
+  total: number;
+  occupiedCount: number;
+  occupancyRate: number | null; // 세대 0이면 null(0 나누기 회피 — 프런트는 '–' 표기)
+}
+
+/** 총세대·입주 세대수·입주율(입주=세대원>0) — 현황 타일용. geometry/occupancy 파생(H9-4). */
+export function occupancyMetrics(
+  geometry: readonly { householdId: string }[],
+  occupancy: Record<string, number>,
+): OccupancyMetrics {
+  const total = geometry.length;
+  const occupiedCount = geometry.filter((g) => (occupancy[g.householdId] ?? 0) > 0).length;
+  const occupancyRate = total > 0 ? Math.round((occupiedCount / total) * 100) : null;
+  return { total, occupiedCount, occupancyRate };
+}
+
 /** 세대원 수 → 폴리곤 채움 색. 0=공실 회색 · 1~2인 옅은 블루 · 3인+ 진한 블루. */
 export function occupancyColor(count: number): Rgb {
   if (count <= 0) return OCCUPANCY_COLORS.vacant;
@@ -50,6 +67,15 @@ export function occupancyColor(count: number): Rgb {
 }
 
 export type OverlayKind = "occupancy" | "inquiries" | "fees" | "facilities";
+
+// 실사 3D 렌더 스타일 — 쉘(반투명 압출)·포인트(중심 도트)·끄기. 희소/균일 오버레이는 포인트가 잘 보인다(H9-4).
+export type RenderStyle = "shell" | "point" | "off";
+export const RENDER_STYLES: readonly RenderStyle[] = ["shell", "point", "off"];
+export const RENDER_STYLE_LABELS: Record<RenderStyle, string> = {
+  shell: "쉘",
+  point: "포인트",
+  off: "끄기",
+};
 
 /** 세그먼트·범례·상세에서 함께 쓰는 오버레이 순서·라벨. */
 export const OVERLAY_KINDS: readonly OverlayKind[] = [
