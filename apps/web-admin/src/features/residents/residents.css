@@ -489,10 +489,18 @@
   border-color: color-mix(in oklch, var(--color-accent) 45%, var(--color-border));
   box-shadow: var(--shadow-card);
 }
+/* 좁은 화면(375px)에서 열이 늘어도 레이아웃이 깨지지 않게 가로 스크롤로 흘린다. */
+.apv-roster__scroll {
+  overflow-x: auto;
+}
 .apv-roster__table {
   width: 100%;
   border-collapse: collapse;
   font-size: var(--text-sm);
+}
+.apv-roster__vehicles {
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 .apv-roster__table th {
   text-align: left;

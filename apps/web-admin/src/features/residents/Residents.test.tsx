@@ -50,7 +50,15 @@ beforeEach(() => {
   listApprovals.mockResolvedValue([...SIGNUPS]);
   listRoster.mockResolvedValue({
     items: [
-      { nameMasked: "박*부", buildingName: "103", floor: 15, unitNo: 1502, state: "unregistered" },
+      {
+        userId: "r1",
+        nameMasked: "박*부",
+        buildingName: "103",
+        floor: 15,
+        unitNo: 1502,
+        state: "unregistered",
+        vehicles: ["12가3456", "34나7890"],
+      },
     ],
     total: 1,
     counts: { total: 1, unregistered: 1, joined: 0, movedOut: 0 },
@@ -108,5 +116,37 @@ describe("Approvals", () => {
     listApprovals.mockResolvedValue([]);
     render(<Residents />);
     expect(await screen.findByText(/대기 중인 가입 신청이 없습니다/)).toBeDefined();
+  });
+});
+
+describe("Roster vehicles column", () => {
+  it("차량 열에 세대 소유 번호판을 콤마로 노출한다", async () => {
+    render(<Residents />);
+    await screen.findByText("박*부");
+    expect(screen.getByRole("columnheader", { name: "차량" })).toBeDefined();
+    expect(screen.getByText("12가3456, 34나7890")).toBeDefined();
+  });
+
+  it("차량이 없으면 – 로 표시한다", async () => {
+    listRoster.mockResolvedValue({
+      items: [
+        {
+          userId: "r2",
+          nameMasked: "이*수",
+          buildingName: "103",
+          floor: 2,
+          unitNo: 201,
+          state: "joined",
+          vehicles: [],
+        },
+      ],
+      total: 1,
+      counts: { total: 1, unregistered: 0, joined: 1, movedOut: 0 },
+      lastUpload: null,
+    });
+    const { container } = render(<Residents />);
+    await screen.findByText("이*수");
+    const cell = container.querySelector(".apv-roster__vehicles");
+    expect(cell?.textContent).toBe("—");
   });
 });

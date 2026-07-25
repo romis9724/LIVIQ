@@ -5,7 +5,9 @@ xlsx 픽스처는 openpyxl로 코드 생성한다(바이너리 커밋 금지).
 
 from __future__ import annotations
 
+import base64
 import io
+import uuid
 from collections.abc import AsyncIterator
 
 import httpx
@@ -20,9 +22,25 @@ from openpyxl import Workbook
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import ExcelUpload, PiiVault, User
+from liviq_db.models import ExcelUpload, ParkingVehicle, PiiVault, User
 
 _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+# 봉투 암호화 KEK — conftest의 PII_MASTER_KEY(env)와 동일해야 엔드포인트 복호와 일치.
+_KEK = base64.b64encode(b"0" * 32).decode()
+
+
+async def _add_vehicle(session: AsyncSession, household_id: uuid.UUID, *, plate: str) -> None:
+    """세대 차량 직접 적재(운영 경로는 seed_parking — 명부는 읽기만)."""
+    crypto = PiiCrypto(_KEK)
+    dek = await crypto.get_dek(session, TENANT_ID)
+    session.add(
+        ParkingVehicle(
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            plate_enc=crypto.encrypt(dek, plate),
+        )
+    )
+    await session.flush()
 
 
 def _xlsx(rows: list[tuple[object, ...]], *, header: tuple[str, ...] | None = None) -> bytes:
@@ -291,6 +309,31 @@ async def test_roster_list_search_filter_and_pagination(
 async def test_roster_list_requires_manager(seeded: None, db_session: AsyncSession) -> None:
     app = _build_app(db_session, FakeStorage(), roles=("STAFF",))
     assert (await _get_roster(app)).status_code == 403
+
+
+# ── 세대 차량 노출 (H9-6, 규칙 2 — 관리자 세션 한정) ──────────────────────────
+
+
+async def test_roster_exposes_household_vehicles(db_session: AsyncSession) -> None:
+    """명부 행에 세대 차량 복호 평문 번호판이 붙는다. 차량 없는 세대는 빈 리스트."""
+    mapping = await seed_tenant(db_session)  # (3,301)·(3,302)·(5,501) in 동 "101"
+    app = _build_app(db_session, FakeStorage())
+    data = _xlsx(
+        [
+            ("김일", "1990-01-01", "101", 3, 301),
+            ("이이", "1985-02-02", "101", 3, 302),
+        ]
+    )
+    assert (await _upload(app, data)).status_code == 200
+
+    # (3,301)에 차량 2대 · (3,302)에는 0대.
+    await _add_vehicle(db_session, mapping[(3, 301)], plate="12가3456")
+    await _add_vehicle(db_session, mapping[(3, 301)], plate="78나9012")
+
+    body = (await _get_roster(app)).json()
+    by_unit = {i["unit_no"]: i for i in body["items"]}
+    assert sorted(by_unit[301]["vehicles"]) == ["12가3456", "78나9012"]
+    assert by_unit[302]["vehicles"] == []
 
 
 async def test_roster_state_change_and_delete(seeded: None, db_session: AsyncSession) -> None:
