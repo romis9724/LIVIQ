@@ -246,6 +246,7 @@ merge(main): 마이그레이션 dry-run → 스테이징 배포 → 스모크 �
 | ~~get_dek 최초 생성 경합(uq 위반)~~ | [ADR-0010](adr/0010-envelope-encryption-env-master-key.md) | **해소(PR #28, 2026-07-18)** — ON CONFLICT DO NOTHING+재조회 원자화, 결정론 경합 pytest(RED 재현 후 GREEN) |
 | 동의 변경·설정 토글 서버 연동 | [04 §2](04-menu-structure.md) 나 화면 | H6-3은 표시 전용 — 동의 변경 API 부재. 수요 확인 후 |
 | ~~OAuth 콜백 앱별 복귀~~ | H6-1 | **H7-1에서 대체**(§8.8) — 자체 이메일 인증 전환으로 OAuth 콜백 자체 제거 |
+| 한글 NFD/NFC 정규화 불일치 — 제목 검색 무력화 | [03 §4.2](03-database-design.md) documents·[04 §3](04-menu-structure.md) | **재현되는 사용자 영향 버그**(H8-10 후속 검증 중 발견, 2026-07-25). macOS 파일명은 NFD(분해형) → `DocumentForm.tsx:57`이 제목을 파일명에서 자동 채움 → title이 NFD로 저장(실측 `title = normalize(title, nfc)` → false) → 사용자는 키보드로 NFC 입력 → 부분일치 실패로 **0건**. 영향 4곳: `documents/data.ts:57`·`inquiry-admin/InquiryAdmin.tsx:133`(클라이언트 부분일치)·`documents.py:135`·`fees.py:227`(서버 `ilike` — Postgres도 NFD/NFC 구분, 동 이름은 숫자라 영향 낮음). 수정 방향은 **경계에서 NFC 정규화**(서버 저장 시 — 그러면 검색 4곳은 미변경으로 일치) + 기존 데이터 `normalize(title, nfc)` 마이그레이션 + 파일명 자동 채움 지점 `.normalize("NFC")` 보강. 별도 작업 단위로 착수 |
 
 ### 8.4 H3 체크리스트 (시설 — Neo4j 그래프·AI 도우미)
 
