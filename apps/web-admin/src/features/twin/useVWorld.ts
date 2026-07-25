@@ -1,36 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import type { TwinGeometryItem } from "@/lib/api";
-import type { OverlayKind } from "./twin-data";
-import {
-  attachPicking,
-  buildShellPrimitive,
-  centerOf,
-  destroyViewer,
-  enforceCamera,
-  getReadyViewer,
-  loadVWorldScript,
-  recolorShell,
-  startVWorldMap,
-} from "./vworld-render";
-
-// VWorld 맵 컨테이너 id — 뷰 토글로 단일 인스턴스만 마운트되므로 고정 id로 충분.
-const CONTAINER_ID = "vworld-map";
-const VIEWER_POLL_MS = 300;
-const VIEWER_POLL_MAX = 100; // 30초(300ms×100) 내 준비 실패 → 에러
-
-// Cesium 런타임 객체 ref — 좁은 any 경계(vworld-render 와 동일 이유).
-/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- VWorld 전역, 번들 타입 없음 */
-type CesiumRef = any;
+import { colorForOverlay, type OverlayKind, type Rgb } from "./twin-data";
+import { buildVWorldSrcdoc } from "./vworld-iframe";
+import { centerOf } from "./vworld-render";
 
 export type VWorldStatus = "loading" | "ready" | "error";
 
 export interface VWorldState {
   status: VWorldStatus;
   error: string | null;
-  containerId: string;
+  srcDoc: string;
+  iframeRef: RefObject<HTMLIFrameElement | null>;
+  onLoad: () => void;
+}
+
+// iframe 에 넘기는 세대 단위 — 좌표·색·householdId 뿐(개인정보 없음, 규칙 2).
+interface UnitMessage {
+  householdId: string;
+  polygon2d: number[][];
+  baseZ: number;
+  floorHeight: number;
+  rgb: Rgb;
 }
 
 interface UseVWorldParams {
@@ -41,9 +34,35 @@ interface UseVWorldParams {
   onSelectHousehold: (householdId: string) => void;
 }
 
+/** 세대별 오버레이 색을 부모가 계산(colorForOverlay 재사용) — iframe 은 색 로직을 모른다. */
+function colorsFor(
+  geometry: readonly TwinGeometryItem[],
+  overlay: Record<string, number>,
+  overlayKind: OverlayKind,
+): Record<string, Rgb> {
+  const out: Record<string, Rgb> = {};
+  for (const g of geometry) out[g.householdId] = colorForOverlay(overlayKind, overlay[g.householdId]);
+  return out;
+}
+
+function unitsFor(
+  geometry: readonly TwinGeometryItem[],
+  overlay: Record<string, number>,
+  overlayKind: OverlayKind,
+): UnitMessage[] {
+  return geometry.map((g) => ({
+    householdId: g.householdId,
+    polygon2d: g.polygon2d,
+    baseZ: g.baseZ,
+    floorHeight: g.floorHeight,
+    rgb: colorForOverlay(overlayKind, overlay[g.householdId]),
+  }));
+}
+
 /**
- * VWorld 실사 3D 뷰어 수명주기 훅 — 스크립트 로드 → 맵 시작 → 뷰어 폴링 → shell·피킹 배치,
- * 언마운트 시 뷰어 파괴·타이머 정리(SPA 재토글 안전). 오버레이 변경은 재초기화 없이 recolor.
+ * VWorld 실사 3D iframe 수명주기 훅 — srcdoc 생성·데이터 postMessage·클릭 수신(H9-3b, ADR-0019 개정).
+ * 렌더는 iframe(vworld-iframe.ts) 안에서, 부모는 색 계산·상태·범례를 담당한다. iframe 파괴가 곧 정리라
+ * 별도 Cesium destroy 는 없다(React 가 iframe 을 제거). 오버레이 변경은 recolor 로 재초기화 없이 갱신.
  */
 export function useVWorld({
   apiKey,
@@ -55,89 +74,72 @@ export function useVWorld({
   const [status, setStatus] = useState<VWorldStatus>("loading");
   const [error, setError] = useState<string | null>(null);
 
-  const viewerRef = useRef<CesiumRef>(null);
-  const primitiveRef = useRef<CesiumRef>(null);
-  const handlerRef = useRef<CesiumRef>(null);
-  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // 최신 오버레이·콜백을 init effect 재실행 없이 참조(init 은 apiKey·geometry 로만 재실행).
+  // srcdoc 은 apiKey 로만 결정 — 메모이즈해 오버레이 변경 때 iframe 이 재로드되지 않게 한다.
+  const srcDoc = useMemo(() => buildVWorldSrcdoc(apiKey), [apiKey]);
+
+  // 최신 값 참조(리스너·onLoad 를 재생성하지 않고 최신 데이터로 init/select 처리).
+  const geometryRef = useRef(geometry);
   const overlayRef = useRef(overlay);
   const overlayKindRef = useRef(overlayKind);
   const onSelectRef = useRef(onSelectHousehold);
+  geometryRef.current = geometry;
   overlayRef.current = overlay;
   overlayKindRef.current = overlayKind;
   onSelectRef.current = onSelectHousehold;
 
+  // iframe → 부모 메시지 수신. srcdoc origin 은 신뢰 못하므로(about:srcdoc) 소스 참조로 검증.
   useEffect(() => {
-    let disposed = false;
+    function onMessage(event: MessageEvent) {
+      const iframe = iframeRef.current;
+      if (!iframe || event.source !== iframe.contentWindow) return; // 임의 메시지 차단
+      const data: unknown = event.data;
+      if (!data || typeof data !== "object") return;
+      const type = (data as { type?: unknown }).type;
+      if (type === "ready") {
+        setStatus("ready");
+        setError(null);
+      } else if (type === "error") {
+        const message = (data as { message?: unknown }).message;
+        setError(typeof message === "string" ? message : "실사 3D 초기화에 실패했습니다.");
+        setStatus("error");
+      } else if (type === "select") {
+        const id = (data as { householdId?: unknown }).householdId;
+        if (typeof id === "string") onSelectRef.current(id);
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  // iframe 로드 완료(문서·VWorld 스크립트 파싱 끝) → 최신 데이터로 init 전송.
+  const onLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
     setStatus("loading");
     setError(null);
+    const g = geometryRef.current;
+    iframe.contentWindow.postMessage(
+      {
+        type: "init",
+        center: centerOf(g),
+        units: unitsFor(g, overlayRef.current, overlayKindRef.current),
+      },
+      "*",
+    );
+  }, []);
 
-    const fail = (message: string) => {
-      if (disposed) return;
-      setError(message);
-      setStatus("error");
-    };
-
-    const onReady = (viewer: CesiumRef) => {
-      if (disposed) return;
-      viewerRef.current = viewer;
-      const center = centerOf(geometry);
-      const ids = new Set(geometry.map((g) => g.householdId));
-      primitiveRef.current = buildShellPrimitive(
-        viewer,
-        geometry,
-        overlayRef.current,
-        overlayKindRef.current,
-      );
-      handlerRef.current = attachPicking(viewer, ids, (id) => onSelectRef.current(id));
-      timersRef.current.push(enforceCamera(viewer, center));
-      setStatus("ready");
-    };
-
-    const poll = (tries: number) => {
-      if (disposed) return;
-      const viewer = getReadyViewer();
-      if (viewer) {
-        onReady(viewer);
-      } else if (tries >= VIEWER_POLL_MAX) {
-        fail("실사 3D 초기화에 실패했습니다. VWorld 인증키·서비스 URL 등록을 확인해 주세요.");
-      } else {
-        timersRef.current.push(setTimeout(() => poll(tries + 1), VIEWER_POLL_MS));
-      }
-    };
-
-    loadVWorldScript(apiKey)
-      .then(() => {
-        if (disposed) return;
-        startVWorldMap(CONTAINER_ID, centerOf(geometry));
-        poll(0);
-      })
-      .catch((e: unknown) => fail(e instanceof Error ? e.message : "실사 3D 로드에 실패했습니다."));
-
-    return () => {
-      disposed = true;
-      for (const t of timersRef.current) clearTimeout(t);
-      timersRef.current = [];
-      handlerRef.current?.destroy?.();
-      handlerRef.current = null;
-      // ponytail: 언마운트 시 전역 뷰어 파괴. VWorld 전역 재초기화 안전성은 라이브 검증 필요 —
-      //           재토글이 불안정하면 iframe 격리로 승급.
-      destroyViewer();
-      viewerRef.current = null;
-      primitiveRef.current = null;
-      const container = document.getElementById(CONTAINER_ID);
-      if (container) container.innerHTML = "";
-    };
-  }, [apiKey, geometry]);
-
-  // 오버레이·오버레이 종류 변경 → shell recolor(재초기화 없이 GPU 속성 교체).
+  // 오버레이·오버레이 종류 변경 → recolor 전송(ready 이후에만, init 이 초기 색을 이미 실음).
   useEffect(() => {
-    const viewer = viewerRef.current;
-    const primitive = primitiveRef.current;
-    if (status !== "ready" || !viewer || !primitive) return;
-    primitiveRef.current = recolorShell(viewer, primitive, geometry, overlay, overlayKind);
+    if (status !== "ready") return;
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: "recolor", colors: colorsFor(geometry, overlay, overlayKind) },
+      "*",
+    );
   }, [overlay, overlayKind, geometry, status]);
 
-  return { status, error, containerId: CONTAINER_ID };
+  return { status, error, srcDoc, iframeRef, onLoad };
 }

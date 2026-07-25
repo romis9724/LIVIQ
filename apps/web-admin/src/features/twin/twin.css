@@ -28,10 +28,13 @@
   padding: var(--space-6);
 }
 
-/* 실사 3D(VWorld) 지도 컨테이너 — 캔버스 무대를 가득 채운다(VWorld 가 canvas 를 붙임). */
+/* 실사 3D(VWorld) 지도 iframe — 캔버스 무대를 가득 채운다(iframe 안에서 VWorld 가 canvas 를 붙임). */
 .twin-vworld-map {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 /* 로드/에러 오버레이 — 준비 전(또는 실패한) 맵 위에 안내를 덮는다. */
 .twin-vworld-status {

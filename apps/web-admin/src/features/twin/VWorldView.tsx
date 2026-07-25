@@ -24,7 +24,10 @@ interface VWorldViewProps {
 /**
  * 실사 3D(VWorld/Cesium) 뷰 — 관리 셀 임베딩(ADR-0019 개정, H9-3b).
  * VWorld WebGL 위에 세대 shell Primitive 를 얹어 오버레이 색으로 상태를 겹쳐 본다.
- * 데이터·오버레이·세대 선택은 TwinDeck 과 동일 계약(props)으로 받는다 — 상세 패널은 TwinView 소유.
+ * 렌더는 iframe(vworld-iframe.ts) 안에서 수행하고, 부모는 세대별 색 계산·상태·범례를 담당한다
+ * (VWorld 가 검증 후 document.write 로 주입하는 Cesium 엔진이 페이지 로드 후 동적 로드로는 안 뜨는
+ * 실측 이슈 회피 — 문서 파싱 중인 iframe 이라 document.write 정상). 데이터·오버레이·세대 선택은
+ * TwinDeck 과 동일 계약(props)으로 받는다 — 상세 패널은 TwinView 소유.
  */
 export function VWorldView({ geometry, overlay, overlayKind, onSelectHousehold }: VWorldViewProps) {
   if (!VWORLD_KEY) {
@@ -62,7 +65,7 @@ function VWorldCanvas({
   overlayKind,
   onSelectHousehold,
 }: VWorldCanvasProps) {
-  const { status, error, containerId } = useVWorld({
+  const { status, error, srcDoc, iframeRef, onLoad } = useVWorld({
     apiKey,
     geometry,
     overlay,
@@ -72,8 +75,14 @@ function VWorldCanvas({
 
   return (
     <div className="twin-canvas">
-      {/* 컨테이너는 항상 렌더 — 훅이 useEffect 에서 id 로 VWorld 맵을 붙인다. */}
-      <div id={containerId} className="twin-vworld-map" />
+      {/* 실사 3D 는 iframe 안에서 렌더 — onLoad 에서 훅이 데이터를 postMessage 로 넘긴다. */}
+      <iframe
+        ref={iframeRef}
+        className="twin-vworld-map"
+        srcDoc={srcDoc}
+        onLoad={onLoad}
+        title="실사 3D 지도"
+      />
 
       {status === "loading" ? (
         <div className="twin-vworld-status" role="status" aria-live="polite">
