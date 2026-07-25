@@ -2073,3 +2073,129 @@ export async function getTwinHouseholdDetail(householdId: string): Promise<TwinH
       : null,
   };
 }
+
+// ── 주차장 대시보드 (H9-5 · MANAGER 전용) ──────────────────────────────────────
+// 지하주차장 2D 배치도. 레이아웃(면·동 footprint)은 시드 데이터, 점유는 클라이언트
+// 시뮬레이션(features/parking/parking-sim — ★ 번호판 인식 API 교체 지점).
+// plate 는 서버가 복호한 평문 차량번호 — 관리자 세션에만 노출(입주민 앱·LLM 미노출, 규칙 2).
+
+export type ParkingSpotKind = "일반" | "장애인" | "전기차";
+
+/** 주차면 1개. x·y 는 배치도 좌표(면 34x64px), dir 는 차량 진행 방향(글리프 회전). */
+export interface ParkingSpot {
+  no: string; // "001" — 레이아웃 내 고유 면 번호
+  kind: ParkingSpotKind;
+  x: number;
+  y: number;
+  dir: "up" | "down";
+}
+
+/** 동 footprint — 실제 shp 유래 폴리곤(배치도 좌표계). cx·cy 는 동명·엘리베이터 라벨 위치. */
+export interface ParkingBuilding {
+  name: string;
+  outline: number[][];
+  cx: number;
+  cy: number;
+}
+
+/** 램프·기계전기실 등 주차면 아닌 구역 박스. */
+export interface ParkingBox {
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 엘리베이터 코어 — 동별 1개. 시뮬레이션의 "자기 동 근처 선호" 기준점. */
+export interface ParkingCore {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface ParkingLayout {
+  viewBox: string; // "0 0 3020 1082"
+  buildings: ParkingBuilding[];
+  boxes: ParkingBox[];
+  cores: ParkingCore[];
+  spots: ParkingSpot[];
+}
+
+/** 입주민 등록 차량. plate 는 복호된 평문(개인정보), dong·ho 는 세대 라벨. */
+export interface ParkingVehicle {
+  id: string;
+  householdId: string;
+  dong: string;
+  ho: string;
+  plate: string;
+  model: string | null;
+  isEv: boolean;
+}
+
+interface RawParkingBuilding {
+  outline: number[][];
+  cx: number;
+  cy: number;
+}
+
+interface RawParkingLayout {
+  viewBox: string;
+  buildings: Record<string, RawParkingBuilding>;
+  boxes: ParkingBox[];
+  cores: ParkingCore[];
+  spots: ParkingSpot[];
+}
+
+interface RawParkingVehicle {
+  id: string;
+  household_id: string;
+  dong: string;
+  ho: string;
+  plate: string;
+  model: string | null;
+  is_ev: boolean;
+}
+
+/** buildings 는 동명 키 맵 — 렌더 순서를 고정하려고 동명 정렬 배열로 바꾼다. */
+function toLayout(raw: RawParkingLayout): ParkingLayout {
+  const buildings = Object.entries(raw.buildings ?? {})
+    .map(([name, b]) => ({ name, outline: b.outline, cx: b.cx, cy: b.cy }))
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  return {
+    viewBox: raw.viewBox,
+    buildings,
+    boxes: raw.boxes ?? [],
+    cores: raw.cores ?? [],
+    spots: raw.spots ?? [],
+  };
+}
+
+/** 지하주차장 배치도. 시드 전이면 null(빈 상태 안내). 403=권한 없음. */
+export async function getParkingLayout(): Promise<ParkingLayout | null> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/parking/layout`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return body.layout ? toLayout(body.layout as RawParkingLayout) : null;
+}
+
+/** 입주민 등록 차량 목록(plate 복호). 미등록이면 빈 배열. 403=권한 없음. */
+export async function listParkingVehicles(): Promise<ParkingVehicle[]> {
+  // ponytail: 응답의 total 은 items 길이와 동일 — 파생 가능하니 배열만 반환(페이징 생기면 추가).
+  const response = await apiFetch(`${API_BASE_URL}/admin/parking/vehicles`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return ((body.vehicles as RawParkingVehicle[]) ?? []).map((v) => ({
+    id: v.id,
+    householdId: v.household_id,
+    dong: v.dong,
+    ho: v.ho,
+    plate: v.plate,
+    model: v.model ?? null,
+    isEv: v.is_ev,
+  }));
+}

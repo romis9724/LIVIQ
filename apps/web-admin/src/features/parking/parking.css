@@ -1,0 +1,562 @@
+/*
+ * 주차장 대시보드 — 현황 카드 + 지하주차장 2D 배치도 + 차량 목록. (H9-5)
+ * DOM 크롬은 전부 디자인 토큰. 배치도(SVG) 상태 색만 프로토타입 팔레트를 CSS 변수로 고정한다
+ * (twin-data RGB 상수와 같은 설계 예외 — docs/05 §5: 캔버스/배치도 색은 토큰 외 허용).
+ */
+
+.pk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+
+  /* ---- 배치도 팔레트(프로토타입 유지 — 토큰 예외) · 지도와 범례가 같은 출처를 쓴다 ---- */
+  --pk-frame-fill: #fafbfc;
+  --pk-frame-stroke: #8b929c;
+  --pk-box-fill: #fef3c7;
+  --pk-box-stroke: #d9a92c;
+  --pk-box-text: #8a6d1a;
+  --pk-building-fill: #e8edf4;
+  --pk-building-stroke: #94a3b8;
+  --pk-building-text: #475569;
+  --pk-empty-fill: #e8f7ee;
+  --pk-empty-stroke: #34a05e;
+  --pk-resident-fill: #dbeafe;
+  --pk-resident-stroke: #60a5fa;
+  --pk-resident-glyph: #3b82f6;
+  --pk-external-fill: #ffedd5;
+  --pk-external-stroke: #ea580c;
+  --pk-accessible-fill: #e3edfd;
+  --pk-accessible-stroke: #3b82f6;
+  --pk-label: #94a3b8;
+  --pk-select: #ef4444;
+}
+
+/* ---- 시뮬레이션 고지 — 실데이터 오인 방지(헤더 안) ---- */
+.pk-sim-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed color-mix(in oklch, var(--color-warning) 50%, var(--color-border));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--color-warning) 8%, var(--color-surface));
+  font-size: var(--text-sm);
+  color: color-mix(in oklch, var(--color-warning) 42%, var(--color-text));
+}
+
+/* ---- 현황 카드 5종 — 전체/주차 는 중립, 나머지는 지도 색 의미와 일치 ---- */
+.pk-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pk-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.pk-tile__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.pk-tile__value {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.pk-tile__unit {
+  margin-left: 4px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+/* 색은 보조 — 의미는 라벨(입주민·외부·빈자리)이 전달한다. */
+.pk-tile[data-tone="resident"] {
+  border-left-color: var(--color-accent);
+}
+.pk-tile[data-tone="resident"] .pk-tile__value {
+  color: var(--color-accent);
+}
+.pk-tile[data-tone="external"] {
+  border-left-color: var(--color-warning);
+}
+.pk-tile[data-tone="external"] .pk-tile__value {
+  color: color-mix(in oklch, var(--color-warning) 55%, var(--color-text));
+}
+.pk-tile[data-tone="empty"] {
+  border-left-color: var(--color-success);
+}
+.pk-tile[data-tone="empty"] .pk-tile__value {
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+
+/* ---- 동별 칩 + 목록 토글 ---- */
+.pk-groups {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pk-chip {
+  appearance: none;
+  cursor: pointer;
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.pk-chip:hover {
+  color: var(--color-text);
+  border-color: var(--color-border-strong);
+}
+.pk-chip[data-tone="external"] {
+  background: color-mix(in oklch, var(--color-warning) 12%, var(--color-surface));
+  border-color: color-mix(in oklch, var(--color-warning) 34%, transparent);
+  color: color-mix(in oklch, var(--color-warning) 46%, var(--color-text));
+}
+.pk-chip[data-active] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.pk-chip[data-tone="external"][data-active] {
+  color: var(--color-surface);
+  background: color-mix(in oklch, var(--color-warning) 70%, var(--color-text));
+  border-color: transparent;
+}
+.pk-chip:focus-visible,
+.pk-list-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pk-list-toggle {
+  appearance: none;
+  cursor: pointer;
+  margin-left: auto;
+  min-height: 32px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+.pk-list-toggle:hover {
+  background: var(--color-surface-sunken);
+}
+.pk-list-toggle[data-active] {
+  color: var(--color-surface);
+  background: var(--color-text);
+  border-color: var(--color-text);
+}
+
+/* ---- 선택한 면 안내(aria-live) ---- */
+.pk-answer {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--text-base);
+  line-height: 1.5;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 배치도 + 목록 2열 ---- */
+.pk-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.pk-main[data-list] {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+}
+@media (max-width: 1100px) {
+  .pk-main[data-list] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pk-stage {
+  position: relative;
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+/* 배치도 — viewBox 3020x1082. 좁으면 가로 스크롤(면 번호 가독성 확보). */
+.pk-map {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border-radius: var(--radius-md);
+}
+.pk-map:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+/* min-width 는 레이아웃 viewBox 폭(px) — 면 크기가 설계값(34x64) 이하로 줄지 않게 인라인 지정. */
+.pk-map__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.pk-frame {
+  fill: var(--pk-frame-fill);
+  stroke: var(--pk-frame-stroke);
+  stroke-width: 3;
+}
+.pk-box {
+  fill: var(--pk-box-fill);
+  stroke: var(--pk-box-stroke);
+}
+.pk-box__label {
+  font-size: 12px;
+  fill: var(--pk-box-text);
+}
+.pk-building {
+  fill: var(--pk-building-fill);
+  stroke: var(--pk-building-stroke);
+  stroke-width: 2;
+}
+.pk-building__name {
+  font-size: 17px;
+  font-weight: 700;
+  fill: var(--pk-building-text);
+}
+.pk-building__core {
+  font-size: 17px;
+}
+
+/* 면 — 상태별 채움/테두리. 장애인 빈면은 연청(아이콘 ♿ 병기). */
+.pk-spot {
+  cursor: pointer;
+  stroke-width: 1.5;
+  fill: var(--pk-empty-fill);
+  stroke: var(--pk-empty-stroke);
+  transition: fill var(--duration-fast) var(--ease-out);
+}
+.pk-spot[data-state="empty"][data-kind="장애인"] {
+  fill: var(--pk-accessible-fill);
+  stroke: var(--pk-accessible-stroke);
+}
+.pk-spot[data-state="resident"] {
+  fill: var(--pk-resident-fill);
+  stroke: var(--pk-resident-stroke);
+}
+.pk-spot[data-state="external"] {
+  fill: var(--pk-external-fill);
+  stroke: var(--pk-external-stroke);
+}
+/* hover 는 채움을 바꾸지 않는다(상태 색 유지) — 선택 예고로 붉은 테두리만 굵게. */
+.pk-spot:hover {
+  stroke: var(--pk-select);
+  stroke-width: 3;
+}
+
+.pk-car__body {
+  fill: var(--pk-resident-glyph);
+}
+.pk-car[data-state="external"] .pk-car__body {
+  fill: var(--pk-external-stroke);
+}
+.pk-car__glass {
+  fill: #fff;
+  opacity: 0.55;
+}
+.pk-spot__icon {
+  font-size: 13px;
+}
+.pk-spot__icon--ev {
+  font-size: 11px;
+}
+.pk-spot__no {
+  font-size: 8px;
+  fill: var(--pk-label);
+}
+
+/* 소속 필터가 걸리면 해당 없는 면을 흐리게(강조는 남은 면). */
+.pk-cell[data-dim] {
+  opacity: 0.3;
+}
+
+/* 선택 면 — 붉은 테두리 펄스(모션 축소 설정에서는 정지). */
+.pk-hl {
+  fill: none;
+  stroke: var(--pk-select);
+  stroke-width: 3;
+  animation: pk-hl-pulse 1.2s ease-in-out infinite;
+}
+@keyframes pk-hl-pulse {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pk-hl {
+    animation: none;
+  }
+}
+
+/* ---- 범례 ---- */
+.pk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.pk-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pk-legend__sw {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border-strong);
+  background: var(--color-surface-sunken);
+}
+.pk-legend__sw[data-state="empty"] {
+  background: var(--pk-empty-fill);
+  border-color: var(--pk-empty-stroke);
+}
+.pk-legend__sw[data-state="resident"] {
+  background: var(--pk-resident-fill);
+  border-color: var(--pk-resident-stroke);
+}
+.pk-legend__sw[data-state="external"] {
+  background: var(--pk-external-fill);
+  border-color: var(--pk-external-stroke);
+}
+.pk-legend__sw[data-state="accessible"] {
+  background: var(--pk-accessible-fill);
+  border-color: var(--pk-accessible-stroke);
+}
+.pk-legend__sw[data-state="ev"] {
+  background: var(--pk-box-fill);
+  border-color: var(--pk-box-stroke);
+}
+.pk-legend__sw[data-state="selected"] {
+  background: transparent;
+  border-color: var(--pk-select);
+  border-width: 2px;
+}
+
+/* ---- 주차 차량 목록 패널 ---- */
+.pk-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+}
+.pk-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.pk-panel__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.pk-panel__count {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.pk-panel__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.pk-panel__filter-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.pk-panel__empty {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 네이티브 select — 화살표 여백만 확보(폼 필드 톤 유지). */
+.pk-select {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  cursor: pointer;
+  min-height: 34px;
+  padding: 0 var(--space-8) 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-text-muted) 50%),
+    linear-gradient(135deg, var(--color-text-muted) 50%, transparent 50%);
+  background-position:
+    right var(--space-4) center,
+    right calc(var(--space-4) - 5px) center;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+.pk-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pk-table-scroll {
+  max-height: 560px;
+  overflow-y: auto;
+}
+.pk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.pk-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-2);
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border-strong);
+}
+.pk-table td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.pk-table tr[data-selected] td {
+  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+}
+.pk-table td[data-external] {
+  font-weight: 600;
+  color: color-mix(in oklch, var(--color-warning) 50%, var(--color-text));
+}
+.pk-table__plate {
+  letter-spacing: 0.02em;
+}
+.pk-table__elapsed {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+/* 면 번호 버튼 — 지도 포커스 트리거(키보드 대안 경로). */
+.pk-table__spot {
+  appearance: none;
+  cursor: pointer;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+.pk-table__spot:hover {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.pk-table__spot[aria-current] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.pk-table__spot:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ---- 개인정보 주의 문구 ---- */
+.pk-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* ---- 빈/오류 상태 ---- */
+.pk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-12) var(--space-6);
+}
+
+/* ---- 좁은 화면 ---- */
+@media (max-width: 880px) {
+  .pk-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pk-list-toggle {
+    margin-left: 0;
+  }
+}
