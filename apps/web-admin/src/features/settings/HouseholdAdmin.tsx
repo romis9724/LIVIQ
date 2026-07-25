@@ -374,7 +374,9 @@ function HouseholdPanel({
         <ul className="hh-grid">
           {households.map((household) => (
             <li key={household.id} className="hh-cell" data-inactive={household.status !== "active" || undefined}>
-              <span className="hh-cell__label">{unitLabel(household.floor, household.unitNo)}</span>
+              <span className="hh-cell__label">
+                {unitLabel(household.floor, household.unitNo, household.unitTypeLabel)}
+              </span>
               <div className="hh-cell__actions">
                 <Button
                   variant="ghost"

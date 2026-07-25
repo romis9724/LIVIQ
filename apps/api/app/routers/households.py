@@ -30,7 +30,15 @@ from app.schemas.households import (
     HouseholdUpdateIn,
     expand_household_grid,
 )
-from liviq_db.models import Building, Fee, Household, Inquiry, PlanDevice, User
+from liviq_db.models import (
+    Building,
+    Fee,
+    Household,
+    HouseholdGeometry,
+    Inquiry,
+    PlanDevice,
+    User,
+)
 
 router = APIRouter(prefix="/admin/buildings", tags=["households"])
 household_router = APIRouter(prefix="/admin/households", tags=["households"])
@@ -175,23 +183,40 @@ async def list_households(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     building_id: uuid.UUID,
 ) -> HouseholdListOut:
-    """동의 세대 목록 — 층·호 오름차순."""
+    """동의 세대 목록 — 층·호 오름차순. 평면도 타입 라벨은 트윈 기하(1:1)에서 읽어 온다."""
     building = await _get_building(session, ctx.tenant_id, building_id)
-    households = list(
-        await session.scalars(
-            select(Household)
+    rows = (
+        await session.execute(
+            select(
+                Household.id,
+                Household.floor,
+                Household.unit_no,
+                Household.status,
+                HouseholdGeometry.unit_type_label,
+            )
+            .outerjoin(
+                HouseholdGeometry,
+                (HouseholdGeometry.household_id == Household.id)
+                & (HouseholdGeometry.tenant_id == ctx.tenant_id),
+            )
             .where(
                 Household.tenant_id == ctx.tenant_id,
                 Household.building_id == building_id,
             )
             .order_by(Household.floor, Household.unit_no)
         )
-    )
+    ).all()
     return HouseholdListOut(
         building=BuildingOut(id=building.id, name=building.name, floors=building.floors),
         items=[
-            HouseholdItem(id=h.id, floor=h.floor, unit_no=h.unit_no, status=h.status)
-            for h in households
+            HouseholdItem(
+                id=household_id,
+                floor=floor,
+                unit_no=unit_no,
+                status=status,
+                unit_type_label=unit_type_label,
+            )
+            for household_id, floor, unit_no, status, unit_type_label in rows
         ],
     )
 

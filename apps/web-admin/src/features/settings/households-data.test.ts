@@ -62,6 +62,12 @@ describe("unitLabel · previewLabels", () => {
     expect(unitLabel(2, 201)).toBe("201호");
   });
 
+  it("평면도 타입 라벨이 있으면 호수 뒤에 괄호로 붙인다", () => {
+    expect(unitLabel(2, 201, "84M")).toBe("201호(84M)");
+    expect(unitLabel(2, 201, null)).toBe("201호");
+    expect(unitLabel(2, 201, "")).toBe("201호");
+  });
+
   it("미리보기는 순번을 완전 호수(floor*100+순번)로 변환", () => {
     // ok = 1~3층 × 순번 1~2 → 101·102·201…
     expect(previewLabels(ok, 3)).toEqual(["101호", "102호", "201호"]);

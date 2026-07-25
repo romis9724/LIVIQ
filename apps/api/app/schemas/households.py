@@ -76,6 +76,9 @@ class HouseholdItem(BaseModel):
     floor: int
     unit_no: int
     status: str
+    # 평면도 타입 라벨(H9-6) — 트윈 units.json 업로드 산물(household_geometries)을 그대로 표시.
+    # 별도 마스터·수동 지정 없음: 타입 갱신은 트윈 파일 재업로드로만 이뤄진다.
+    unit_type_label: str | None = None
 
 
 class HouseholdListOut(BaseModel):
