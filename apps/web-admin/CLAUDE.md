@@ -5,11 +5,8 @@
 
 ## 구조
 
-```text
-src/app/    dashboard · inquiries · notices(+new) · documents · facilities
-src/features/   위 라우트별 도메인 로직 (inquiry-admin · notice-composer · dashboard …)
-src/components/admin-shell/   관리 셸(내비/레이아웃)
-```
+라우트는 `src/app/<name>/page.tsx`, 도메인 로직은 `src/features/<name>/`, 셸은 `src/components/admin-shell/`.
+(목록은 `ls`로 확인 — 여기 적으면 금방 낡는다.)
 
 ## 명령
 
@@ -27,23 +24,23 @@ pnpm --filter @liviq/web-admin test src/lib/codes.test.ts    # 단일 파일만 
 
 - 의존: `@liviq/ui` · `@liviq/config-ts`
 - 피의존: 없음 (앱은 leaf)
-- 외부: (계획) `apps/api` HTTP · JWT 인증
+- 외부: `apps/api` HTTP · 세션 쿠키 인증(credentials CORS)
 - 변경 파급: `@liviq/ui` 변경이 공지사항·문서 게시판 UI에 직결
 
 ## 핵심 파일
 
-- `src/features/notice-composer/NoticeComposer.tsx` — 공지 **초안**만 생성, 자동발송 금지
+- `src/features/notices/` — 공지사항 게시판. **AI 미개입**(ADR-0015로 AI 초안 완전 삭제), STAFF 발행·예약 발행
 - `src/app/documents/page.tsx` — 문서 검색/요약 (출처 인용 · 회의록은 문서 유형으로 통합)
 
 ## 자주 하는 수정 패턴
 
-- **새 관리 라우트 추가** — `src/app/<name>/page.tsx` + `src/features/<name>/` 도메인 로직 생성. 예시: `src/app/notices/page.tsx` · `src/features/notice-composer/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
-- **features/ 도메인 로직 수정** — `src/features/<name>/`에서 데이터·컴포넌트 수정. 예시: `src/features/notice-composer/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
+- **새 관리 라우트 추가** — `src/app/<name>/page.tsx` + `src/features/<name>/` 도메인 로직 생성. 예시: `src/app/notices/page.tsx` · `src/features/notices/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
+- **features/ 도메인 로직 수정** — `src/features/<name>/`에서 데이터·컴포넌트 수정. 예시: `src/features/notices/`. 검증: `pnpm --filter @liviq/web-admin typecheck`
 - **테스트 추가** — 컴포넌트는 `<Name>.test.tsx`, 순수 로직은 `data.test.ts` 규칙. 예시: `src/features/dashboard/Dashboard.test.tsx` · `src/lib/codes.test.ts`. 검증: `pnpm --filter @liviq/web-admin test`
 
 ## 규칙 (Why)
 
-- 공지·알림은 초안까지만. 입주민 자동발송 금지. Why: 절대규칙 6.
+- 공지는 AI 미개입 일반 게시판. AI의 입주민 자동발송 금지. Why: 절대규칙 6 · ADR-0015.
 - AI 요약·검색 결과에 근거 문서·조항 표기. Why: 절대규칙 1.
 - UI는 `@liviq/ui`만. 하드코딩 금지. WCAG 2.2 AA. Why: 접근성·일관성.
 - 모든 데이터 조회는 서버에서 tenant·역할 검증 전제. Why: 절대규칙 3·4.
