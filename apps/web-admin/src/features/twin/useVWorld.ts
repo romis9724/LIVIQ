@@ -92,10 +92,12 @@ export function useVWorld({
   const overlayRef = useRef(overlay);
   const overlayKindRef = useRef(overlayKind);
   const onSelectRef = useRef(onSelectHousehold);
+  const controlsRef = useRef({ renderStyle, cameraLock, clipOn });
   geometryRef.current = geometry;
   overlayRef.current = overlay;
   overlayKindRef.current = overlayKind;
   onSelectRef.current = onSelectHousehold;
+  controlsRef.current = { renderStyle, cameraLock, clipOn };
 
   // iframe → 부모 메시지 수신. srcdoc origin 은 신뢰 못하므로(about:srcdoc) 소스 참조로 검증.
   useEffect(() => {
@@ -128,11 +130,16 @@ export function useVWorld({
     setStatus("loading");
     setError(null);
     const g = geometryRef.current;
+    const c = controlsRef.current;
     iframe.contentWindow.postMessage(
       {
         type: "init",
         center: centerOf(g),
         units: unitsFor(g, overlayRef.current, overlayKindRef.current),
+        // 컨트롤 초기값을 함께 넘긴다 — iframe 이 첫 화면을 한 번에 확정하게(ready 후 재적용은 no-op).
+        style: c.renderStyle,
+        lock: c.cameraLock,
+        clip: c.clipOn,
       },
       "*",
     );

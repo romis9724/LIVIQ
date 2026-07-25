@@ -77,7 +77,8 @@ export function TwinView() {
 
   // 실사 3D 컨트롤 — 렌더 스타일·시점·clip. 뷰 전환에도 유지(iframe 재마운트 시 ready 효과가 재동기화).
   const [renderStyle, setRenderStyle] = useState<RenderStyle>("shell");
-  const [cameraLock, setCameraLock] = useState(false);
+  // 단지 고정 기본 on — 인트로 후 iframe initialLock 이 재적용해 단지를 화면 중앙에 둔다.
+  const [cameraLock, setCameraLock] = useState(true);
   const [orbit, setOrbit] = useState(false);
   const [clipOn, setClipOn] = useState(true);
 
