@@ -40,6 +40,7 @@ export const SYS = {
 export const JOURNEY = {
   tenantName: "E2E-여정단지",
   managerEmail: "e2e-manager@example.com",
+  managerName: "E2E소장", // 소장 초대 폼 필수 입력 — pii_vault.name_enc 저장 후 단지 목록에 표시
   staffEmail: "e2e-staff@example.com",
   applicantEmail: "e2e-applicant@example.com", // 명부 일치 주민
   mismatchEmail: "e2e-mismatch@example.com", // 명부 불일치 주민

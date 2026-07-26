@@ -236,6 +236,7 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     const invited = await submitUntilRequested(
       sysPage,
       async () => {
+        await tenantRow.getByLabel("소장 이름").fill(JOURNEY.managerName);
         await tenantRow.getByLabel("소장 초대 이메일").fill(JOURNEY.managerEmail);
         await tenantRow.getByRole("button", { name: "소장 초대" }).click();
       },

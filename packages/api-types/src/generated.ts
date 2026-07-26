@@ -2669,13 +2669,21 @@ export interface components {
             /** Token */
             token: string;
         };
-        /** InviteIn */
+        /**
+         * InviteIn
+         * @description 소장 초대 — 직원 초대(InviteStaffIn)와 같은 계약으로 name 필수.
+         *
+         *     이름이 없으면 SYS_ADMIN 단지 목록에서 소장을 이메일로만 식별해야 한다. 직원 목록에
+         *     성명을 넣은 근거(ADR-0018)가 소장에도 그대로 적용된다.
+         */
         InviteIn: {
             /**
              * Email
              * Format: email
              */
             email: string;
+            /** Name */
+            name: string;
         };
         /**
          * InviteStaffIn
@@ -3240,11 +3248,13 @@ export interface components {
         };
         /**
          * TenantManagerItem
-         * @description 단지의 현재 소장(H7-6) — 이메일은 복호 실패·PII 부재 시 None.
+         * @description 단지의 현재 소장(H7-6) — 이메일·성명은 복호 실패·PII 부재 시 None.
          */
         TenantManagerItem: {
             /** Email */
             email?: string | null;
+            /** Name */
+            name?: string | null;
             /** Status */
             status: string;
             /**

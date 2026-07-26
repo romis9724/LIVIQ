@@ -51,6 +51,49 @@ async def _require_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> Tenant
     return tenant
 
 
+async def _manager_pii(
+    session: AsyncSession,
+    crypto: PiiCrypto,
+    tenant_id: uuid.UUID,
+    pii_ref: uuid.UUID | None,
+) -> tuple[str | None, str | None]:
+    """소장의 (이메일, 성명) 복호. 어느 쪽이든 실패·부재면 그 항목만 None.
+
+    이름 필수화(소장 초대) 전에 만들어진 계정은 `name_enc`가 없다 — 한쪽 부재가 다른 쪽
+    표시를 가리지 않도록 항목별로 처리한다. SYS_ADMIN에게 노출되는 건 자신이 초대한 소장의
+    식별 정보뿐이다(단지 콘텐츠 비열람 원칙 유지).
+    """
+    if pii_ref is None:
+        return None, None
+    # 복호 대상 행을 읽기 전에 tenant 컨텍스트를 그 단지로 전환한다(RLS).
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
+    )
+    row = (
+        await session.execute(
+            select(PiiVault.email_enc, PiiVault.name_enc).where(
+                PiiVault.id == pii_ref, PiiVault.tenant_id == tenant_id
+            )
+        )
+    ).first()
+    if row is None:
+        return None, None
+    try:
+        dek = await crypto.get_dek(session, tenant_id)
+    except Exception:  # noqa: BLE001 — DEK 부재·불일치는 미기록 표시
+        return None, None
+
+    def decrypt(enc: bytes | None) -> str | None:
+        if enc is None:
+            return None
+        try:
+            return crypto.decrypt(dek, enc)
+        except Exception:  # noqa: BLE001 — 복호 실패는 미기록 표시
+            return None
+
+    return decrypt(row.email_enc), decrypt(row.name_enc)
+
+
 async def _managers_of(session: AsyncSession, tenant_id: uuid.UUID) -> list[User]:
     """단지의 비삭제 MANAGER 사용자(생성 순). auth_lookup 세션 전제(전역 SELECT)."""
     return list(
@@ -105,25 +148,10 @@ async def list_tenants(
         manager_item: TenantManagerItem | None = None
         if managers:
             head = managers[0]
-            email: str | None = None
-            if head.pii_ref is not None:
-                await session.execute(
-                    text("SELECT set_config('app.tenant_id', :t, true)").bindparams(
-                        t=str(tenant.id)
-                    )
-                )
-                enc = await session.scalar(
-                    select(PiiVault.email_enc).where(
-                        PiiVault.id == head.pii_ref, PiiVault.tenant_id == tenant.id
-                    )
-                )
-                if enc is not None:
-                    try:
-                        dek = await crypto.get_dek(session, tenant.id)
-                        email = crypto.decrypt(dek, enc)
-                    except Exception:  # noqa: BLE001 — 복호 실패는 미기록 표시
-                        email = None
-            manager_item = TenantManagerItem(user_id=head.id, email=email, status=head.status)
+            email, name = await _manager_pii(session, crypto, tenant.id, head.pii_ref)
+            manager_item = TenantManagerItem(
+                user_id=head.id, email=email, name=name, status=head.status
+            )
         items.append(
             TenantItem(
                 id=tenant.id,
@@ -162,6 +190,7 @@ async def invite_manager(
         tenant_id=tenant_id,
         email=body.email,
         role="MANAGER",
+        name=body.name,  # pii_vault.name_enc — 목록에서 이메일 대신 실명 식별(직원 초대와 동일)
         actor_user_id=ctx.user_id,  # 권한변경 감사는 create_invite가 기록(docs/06 §8)
         # SYS_ADMIN 계정은 **정의상 시스템 테넌트 소속**이다(docs/06 §2 계정 생성 위계) —
         # 요청 컨텍스트의 tenant_id가 아니라 그 사실을 넘긴다. 그래야 감사 행이 대상 단지에
