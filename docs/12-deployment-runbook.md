@@ -4,13 +4,15 @@
 > 릴리스 스펙: [09 §4.3](09-implementation-harness.md) · 보안 경계: [06 §6.1·§7](06-security-privacy.md)
 > 성격: **운영자가 배포·롤백 중에 읽는 절차서**다. 설계 근거는 위 문서들이 소유하고, 여기엔 순서와 명령만 둔다.
 >
-> **형상이 둘이다.** §1~§8은 **3-tier VM**(ADR-0020), **§9는 사내 단일 호스트(WSL Docker + GitLab CI)**
-> ([ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md)). compose 파일·env 계약·이미지는 공유하고
-> 프로필 선택과 레지스트리만 다르다 — §2의 env 규약과 §7 롤백 원칙은 두 형상 공통이다.
+> **형상이 둘이다.** 이 문서는 **3-tier VM**(ADR-0020) 절차서다. 두 번째 형상인 **사내 단일 호스트
+> (WSL Docker + GitLab CI)**([ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md))의 절차는
+> **[13-gitlab-wsl-deploy.md](13-gitlab-wsl-deploy.md)가 소유**하고, §9에 차이만 요약해 둔다.
+> compose 파일·env 계약·이미지는 공유하며 §2의 env 규약과 §7 롤백 원칙은 두 형상 공통이다.
 
 **전제 3가지**
 
 1. **CI는 이미지만 만든다.** `release.yml`이 main push마다 4종을 GHCR에 올린다. VM에 들어가는 건 **사람**이다 — 배포 자격증명을 CI에 두지 않는다([09 §4](09-implementation-harness.md)).
+   - 범위 예외 1건: **개발·검증용 WSL 1호스트**는 GitLab CI가 배포까지 한다([13](13-gitlab-wsl-deploy.md)). Runner가 배포 대상 호스트 안에서 돌아 SSH 키도 레지스트리 자격증명도 **필요하지 않으므로** 이 전제의 취지는 유지된다. 운영 VM 배포는 아래 절차가 그대로 단일 출처다.
 2. **배포·롤백은 `IMAGE_TAG`= 커밋 sha 핀으로만 한다.** `latest`는 편의 포인터일 뿐 배포에 쓰지 않는다(같은 태그의 실체가 push마다 바뀌어 "직전으로 되돌리기"가 성립하지 않는다).
 3. **DB 접속 롤이 프로세스마다 다르다**(H10-2, [03 §5.1](03-database-design.md)). env에 URL 3개가 필요하고, 틀리면 `migrate` 스텝이 배포를 **중단**시킨다.
 
@@ -206,108 +208,19 @@ docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profil
 
 ---
 
-## 9. 사내 단일 호스트 배포 (WSL Docker + GitLab CI)
+## 9. 사내 단일 호스트 배포 (WSL Docker + GitLab CI) → [13](13-gitlab-wsl-deploy.md)
 
-> [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) 형상. 대상: Windows Server(192.168.10.140)의 WSL2 안 Docker.
-> **여기서는 CI가 배포까지 한다** — 러너가 대상 호스트 안에 있어 내보낼 배포 키가 없다(§1~§8의 "사람이 들어간다"와 다른 이유로 같은 원칙을 지킨다).
+> **절차는 [13-gitlab-wsl-deploy.md](13-gitlab-wsl-deploy.md)가 단일 출처다.** 이 절은 두 형상의 차이만 남긴다.
+>
+> 이 절의 초안(H12-1)은 실호스트 검증 전에 쓴 것이라 **틀린 값이 여럿 있었다** — 러너 태그(`wsl-140` → 실제 `wsl`,`docker`), 배포 소스(레지스트리 pull → **로컬 빌드 이미지**), `IMAGE_PREFIX`(레지스트리 경로 → 로컬 이름 `liviq-`), `API_ENV`(`production` → TLS 미종단이라 `local`), `CADDY_HTTP`(80 → 8080). 실측판은 13이다.
 
-### 9.1 호스트 준비 (WSL 안, 1회)
-
-```bash
-# Docker Engine (Docker Desktop 아님 — 규모 기준 유상 라이선스 회피)
-curl -fsSL https://get.docker.com | sh
-
-# GitLab Runner
-curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | sudo bash
-sudo apt install -y gitlab-runner git
-```
-
-**러너 등록** — GitLab 프로젝트 → Settings → CI/CD → Runners → **New project runner**에서 태그 `wsl-140`을 지정해 만들고, 표시된 `glrt-` 토큰으로:
-
-```bash
-sudo gitlab-runner register --non-interactive   --url http://192.168.10.153   --token glrt-...   --executor shell   --description "wsl-140"
-```
-
-| 함정 | 내용 |
-|---|---|
-| **URL** | GitLab 정본 주소(`http://192.168.10.153`). **`:5050`은 Container Registry 포트**다 — 리버스 프록시가 API를 흘려줘 등록은 되지만 레지스트리 vhost 설정이 바뀌면 조용히 깨진다 |
-| **executor** | `shell`. `docker-windows`는 Windows 컨테이너 전용이라 형상 불일치(러너는 `os=linux`) |
-| **태그** | `glrt-` 방식에서는 **UI에서** 지정한다(CLI `--tag-list` 무시) |
-| **docker 권한** | `shell` executor는 `gitlab-runner` 사용자로 돈다 → `sudo usermod -aG docker gitlab-runner` 후 재시작. 빼먹으면 첫 잡에서 `permission denied ... docker daemon socket` |
-
-**WSL 운영 설정** — 이걸 안 하면 서버 재시작 후 서비스가 살아나지 않는다.
-
-```ini
-# /etc/wsl.conf  (WSL 안)
-[boot]
-systemd=true
-```
-
-```ini
-# %USERPROFILE%\.wslconfig  (Windows 쪽)
-[wsl2]
-memory=8GB                 # WSL2 기본값은 호스트 메모리를 크게 잡는다
-networkingMode=mirrored    # Server 2025 / Win11 22H2+ 에서만. 호스트 IP 공유로 portproxy 불요
-```
-
-- `mirrored`를 못 쓰는 버전(Server 2022 등)이면 부팅 시 `netsh interface portproxy`로 WSL2 IP를 다시 매핑하는 스크립트가 필요하다 — WSL2 IP는 재시작마다 바뀐다.
-- **Windows 작업 스케줄러**에 "시스템 시작 시 `wsl.exe -d Ubuntu -u root /bin/true`"를 등록해 WSL을 로그온과 무관하게 올린다.
-- **DB 볼륨을 `/mnt/c` 아래에 두지 않는다**(9p 파일시스템 — 성능 붕괴). WSL ext4 안에 둔다.
-
-### 9.2 env 파일
-
-§2의 계약을 그대로 쓰되, 단일 호스트라 값이 다르다.
-
-```bash
-sudo install -m 0600 infra/env.prod.example /etc/liviq/env.prod
-sudo vi /etc/liviq/env.prod
-```
-
-| 키 | 단일 호스트 값 | 비고 |
+| | §1~§8 (3-tier VM) | [13](13-gitlab-wsl-deploy.md) (WSL 1호스트) |
 |---|---|---|
-| `IMAGE_PREFIX` | `192.168.10.153:5050/dhkim/liviq/` | **끝의 슬래시 포함**(ADR-0021 결정 5 — 구분자가 prefix에 들어간다) |
-| `IMAGE_TAG` | 배포할 커밋 sha | `latest` 금지 |
-| `DATA_BIND`·`APP_BIND` | `127.0.0.1` | 같은 호스트 — tier 방어선이 없다 |
-| `CADDY_HTTP`/`HTTPS` | `80` / `443` | LAN에서 닿는 유일한 면 |
-| `*_SITE` | 사내 도메인 또는 호스트 IP | 스킴 `http`면 자동 TLS 없음 |
-| `API_ENV` | `production` | 세션 쿠키 `Secure` — TLS 전제. HTTP로 운영하면 로그인이 안 된다(그 경우만 `local`) |
-| `FORWARDED_ALLOW_IPS` | `*` | 감사 로그 클라이언트 IP 정확도(§2) |
-| DB URL 3종 | 호스트 `postgres`(컨테이너명) | 3-URL 접속 롤 계약은 불변([03 §5.1](03-database-design.md)) |
+| 대상 | VM 3대, 외부 공개 운영 | Windows Server WSL2 Docker 1대, 사내 개발·검증 |
+| 배포 주체 | **사람**이 VM에 들어간다 | **CI**가 한다 — 러너가 대상 호스트 안이라 내보낼 배포 키가 없다(전제 1의 취지 유지) |
+| 이미지 | GHCR pull | 같은 호스트에서 빌드한 로컬 이미지(push→pull 왕복 없음). 레지스트리 게시는 스모크 통과 후 이력·백업용 |
+| tier 격리 | 네트워크 방어선 성립 | **없음** — 단일 호스트. 그래서 사내망 전용이고, 절대 규칙 3의 방어는 앱 필터 + DB RLS 2층([03 §5.1](03-database-design.md))에 의존한다 |
+| 불변 | 3-URL 접속 롤 계약 · `migrate` 2단계 · `IMAGE_TAG`=커밋 sha 핀 · Caddy same-origin `/api` — **양쪽 동일**(compose·이미지에 들어 있다) |
 
-레지스트리 pull 자격증명은 CI 잡이 `$CI_REGISTRY_*`로 처리하므로, **수동 배포를 할 때만** `docker login`이 필요하다.
+이 형상의 한계(알고 쓰기): tier 네트워크 격리 없음 · 빌드가 배포 호스트 자원 점유 · 무중단 배포 아님(`up -d` 교체 중 짧은 중단).
 
-### 9.3 배포 (CI가 수행)
-
-`main` push → 파이프라인이 이미지 4종을 빌드·push하고, `wsl-140` 러너에서 배포 잡이 실행된다:
-
-```bash
-docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml   --profile data --profile app --profile web up -d
-```
-
-**1호스트 3프로필** = H10-1 스모크와 같은 형상이다. 순서는 compose가 `depends_on`+`healthcheck`로 강제한다(같은 호스트라 tier 간 `required: false`가 실제로 기다린다).
-
-배포 후 확인:
-
-```bash
-docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml logs migrate
-#   기대: "Running upgrade … → <head>" 뒤에
-#         "[runtime_roles] 접속 롤 수렴·검증 완료: liviq_app, liviq_worker"
-```
-
-최초 SYS_ADMIN 부트스트랩은 §4와 동일하다(`api`가 아니라 **`migrate` 서비스로** 실행 — api는 런타임 롤이라 시드가 깨진다).
-
-### 9.4 롤백
-
-§7과 같은 조작이다 — `IMAGE_TAG`를 이전 sha로 바꿔 `pull` → `up -d`. 파이프라인을 다시 돌리지 않고 호스트에서 직접 해도 되고, GitLab에서 이전 커밋의 파이프라인을 재실행해도 된다.
-
-```bash
-sudo sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=<이전 sha>/" /etc/liviq/env.prod
-docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile app --profile web pull
-docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile app --profile web up -d
-```
-
-### 9.5 이 형상의 한계 (알고 쓰기)
-
-- **tier 네트워크 격리가 없다.** 단일 호스트이므로 ADR-0020 결정 2의 세 번째 방어선이 성립하지 않는다 → **사내망 파일럿·스테이징 용도**로만 쓰고 외부 공개는 3-tier로 간다.
-- **빌드가 배포 호스트 자원을 먹는다.** 빌드 중 서비스 지연이 관측되면 빌드 러너를 분리한다.
-- **무중단 배포가 아니다.** `up -d` 교체 중 짧은 중단이 있다.
