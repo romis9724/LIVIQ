@@ -1,0 +1,58 @@
+# 루트 빌드 컨텍스트 제외 목록 (ADR-0020 · docs/09 §4.3)
+# 이미지 4종(api·ai-worker·web-resident·web-admin)이 모두 레포 루트를 컨텍스트로 쓴다.
+# 여기서 빼면 웹 빌드까지 깨지므로, 소스·매니페스트·lock 파일은 절대 제외하지 않는다.
+# (부정 패턴 `!`은 쓰지 않는다 — 순서 의존으로 실수하기 쉽다.)
+
+# ── 시크릿 (최우선 — 이미지 레이어 유출 차단) ────────────────────
+.env
+.env.*
+*.pem
+*.key
+**/service-credential.json
+**/tokens.json
+mcp/
+
+# ── VCS·에디터·OS ────────────────────────────────────────────
+.git
+.github
+.githooks
+.gitignore
+.claude
+.idea
+.vscode
+**/.DS_Store
+
+# ── 의존성·가상환경 (이미지 안에서 새로 설치한다) ────────────────
+**/node_modules
+.pnpm-store
+.venv
+**/.venv
+
+# ── 빌드 산출물·캐시 ─────────────────────────────────────────
+**/.next
+**/.next-build
+**/dist
+**/out
+.turbo
+**/.turbo
+**/__pycache__
+**/*.pyc
+**/*.tsbuildinfo
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+
+# ── 테스트·커버리지 산출물 ────────────────────────────────────
+coverage
+**/coverage
+htmlcov
+.coverage
+test-results
+playwright-report
+**/*.log
+
+# ── 런타임에 불필요한 문서·로컬 자료 ──────────────────────────
+docs
+refs
+_local
+outputs

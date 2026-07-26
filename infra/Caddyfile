@@ -1,0 +1,67 @@
+# LIVIQ web tier 리버스 프록시 (ADR-0020 결정 4 / docs/01 §14 / docs/06 §6.1)
+#
+# 사이트 2개(입주민·관리자). 주소는 env 치환이라 로컬 스모크와 운영이 같은 파일을 쓴다.
+#   로컬 스모크: 기본값 http://resident.localhost / http://admin.localhost (스킴 http → 자동 TLS 없음)
+#   운영: RESIDENT_SITE=liviq.example.com 처럼 **스킴 없이 실도메인** → Caddy 자동 HTTPS(+80 리다이렉트)
+# 업스트림도 env 치환 — 1호스트(컨테이너명)와 3-tier(app tier 프라이빗 IP)를 같은 파일로 커버한다.
+{
+	# 관리 API는 쓰지 않는다 — 컨테이너 내부라도 표면을 남기지 않는다.
+	admin off
+}
+
+# 두 사이트 공통: 보안 헤더 + 액세스 로그. snippet으로 한 곳에서만 관리한다(헤더 드리프트 방지).
+(liviq_common) {
+	# docs/06 §6 헤더 세트. 프록시가 일괄 적용한다(앱별 중복 설정 금지).
+	header {
+		# HSTS는 HTTPS 응답에서만 브라우저가 존중한다 — 로컬 http 스모크에서는 무시된다.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options nosniff
+		# DENY: 우리 페이지를 외부 프레임에 넣는 것을 막는다. web-admin 트윈의 iframe **srcdoc**은
+		# HTTP 응답이 아니라 인라인 문서라 이 헤더의 영향을 받지 않는다(프레임 소유자가 우리 페이지).
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# Caddy가 붙이는 서버 식별 헤더 제거.
+		-Server
+	}
+	# Content-Security-Policy는 **의도적 미적용** — 프로젝트에 CSP가 아직 도입되지 않았고
+	# (docs/06 §6은 "CSP 도입 시" 서술), 지금 넣으면 web-admin 트윈의 VWorld Cesium
+	# (외부 스크립트 + iframe srcdoc)이 깨진다. VWorld 예외(script-src·connect-src·img-src에
+	# https://*.vworld.kr) 정리 후 별도 작업으로 도입한다.
+
+	log {
+		output stdout
+		format json
+	}
+}
+
+# ── 입주민 웹 ────────────────────────────────────────────────────
+{$RESIDENT_SITE:http://resident.localhost} {
+	import liviq_common
+
+	# handle_path = 매칭된 prefix를 **벗겨서** 프록시한다(handle은 벗기지 않는다).
+	# api 라우트에 /api prefix가 없으므로(/auth/login·/documents/... 등) handle_path여야 한다.
+	handle_path /api/* {
+		reverse_proxy {$API_UPSTREAM:api:8000} {
+			# SSE(text/event-stream) 버퍼링 해제 — 없으면 AI 질의 스트리밍이 고인다(docs/01 §14).
+			flush_interval -1
+		}
+	}
+
+	# 나머지는 Next 앱. 요청 본문 크기는 Caddy 기본이 무제한이라 별도 상한을 두지 않는다
+	# (문서·엑셀 업로드 — 크기 검증은 api가 담당).
+	reverse_proxy {$RESIDENT_UPSTREAM:web-resident:3000}
+}
+
+# ── 관리 웹 ──────────────────────────────────────────────────────
+{$ADMIN_SITE:http://admin.localhost} {
+	import liviq_common
+
+	handle_path /api/* {
+		reverse_proxy {$API_UPSTREAM:api:8000} {
+			flush_interval -1
+		}
+	}
+
+	reverse_proxy {$ADMIN_UPSTREAM:web-admin:3001}
+}

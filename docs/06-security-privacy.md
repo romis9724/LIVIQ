@@ -32,6 +32,12 @@
 
 1. **애플리케이션**: 모든 쿼리에 `tenant_id` 필터 + 요청 컨텍스트 검증.
 2. **DB(RLS)**: 트랜잭션마다 `SET LOCAL app.tenant_id` → 정책으로 강제([03 §5]).
+
+> **현재 2번이 런타임에서 비활성이다**(2026-07-26 실측, [09 §8.3](09-implementation-harness.md) 백로그 "런타임 RLS 우회 롤").
+> 앱이 `DATABASE_URL`의 owner 롤(superuser·BYPASSRLS)로 접속하고 `SET ROLE`을 하지 않아, RLS 정책이
+> `ENABLE`+`FORCE`로 걸려 있어도 무조건 통과한다(tenant 컨텍스트 없이 `households` 322행 반환). 정책 자체는
+> 정상이며 `packages/db` 테스트가 `SET LOCAL ROLE liviq_app`으로 검증한다 — 즉 **1번만으로 격리가 유지되는
+> 상태**다. 전용 접속 롤(`liviq_app`) 전환은 별도 작업 단위이며 **실배포 전 필수**다.
 - 벡터 검색도 tenant 선필터(문서 혼입 차단).
 - **Neo4j(시설 그래프)**: row RLS 없음 → 모든 노드에 `tenant_id` 프로퍼티 + **typed query 레이어 강제**(tenant predicate를 구조적으로 주입, raw Cypher 금지 — 코드 리뷰가 아니라 구조로 차단). 관계 생성 시 **양 끝 노드 tenant 일치 검증**([11 §4](11-data-architecture.md)). PG가 SoR이므로 파기·정정은 PG 기준으로 먼저 반영 후 그래프 재동기화.
 - **`SYS_ADMIN` 허용 목록**(단지 콘텐츠 비열람 원칙의 구체화):
@@ -121,11 +127,11 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 
 > **왜 보안 문서에 있는가**: 절대 규칙 3(단지 격리)의 `tenant_id` 필터·RLS는 **앱·DB 층** 방어다. 데이터 서비스 포트가 퍼블릭에 열려 있으면 그 두 층을 **네트워크에서 우회**할 수 있으므로, tier 분리와 인바운드 제한이 **세 번째 방어선**이다.
 
-배포 형상은 컨테이너 이미지 + `infra/compose.prod.yml`(H10-1에서 추가) profiles로 구성된 **3-tier VM**([ADR-0020](adr/0020-container-deploy-3tier-vm.md), [02 §9](02-directory-structure.md)).
+배포 형상은 컨테이너 이미지 + [`infra/compose.prod.yml`](../infra/compose.prod.yml) profiles로 구성된 **3-tier VM**([ADR-0020](adr/0020-container-deploy-3tier-vm.md), [02 §9](02-directory-structure.md)).
 
 | tier | 퍼블릭 노출 | 인바운드 허용 출처 | 담당 서비스 |
 |------|------------|------------------|------------|
-| web | **443만** | 인터넷 | 리버스 프록시(TLS 종단·`Caddyfile`), `web-resident`·`web-admin` |
+| web | **443만** | 인터넷 | 리버스 프록시(TLS 종단·[`infra/Caddyfile`](../infra/Caddyfile)), `web-resident`·`web-admin` |
 | app | 없음 | **web tier에서만** | `api`, `ai-worker`, one-shot `migrate` |
 | data | 없음 | **app tier에서만** | postgres+pgvector, redis, minio, neo4j |
 
@@ -133,6 +139,8 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - **api는 퍼블릭 미노출**. 브라우저→api는 web tier 프록시의 **same-origin `/api` 프록시**(prefix strip) 경유. 부수 효과: ① 교차 출처 credentials 요청이 사라져 **CORS 허용 오리진(`WEB_ORIGINS`) 관리 표면이 줄고**, ② 세션 쿠키(`SameSite=lax` — `apps/api/app/deps.py`)가 same-site 조건을 자연히 만족한다.
 - **보안 헤더·TLS 종단 소유권은 web tier 프록시**: 위 §6 상단 헤더 세트는 프록시가 **일괄 적용**한다(앱별 중복 설정 금지 — 헤더 드리프트·중복 헤더 방지). VWorld CSP 예외(§6)는 그대로 유효하며 프록시 CSP에 반영한다.
 - **SSE 주의**: `text/event-stream` 응답(AI 스트리밍)은 프록시 **버퍼링을 끈다** — 안 끄면 응답이 고여 스트리밍이 죽는다(가용성 문제이나 보안 헤더와 **같은 지점**에서 설정하므로 함께 관리).
+- **H10-1 실측 확인(노출면 1개)**: 1호스트 3프로필 스모크에서 api(`127.0.0.1:18000`)·postgres·redis·minio·neo4j는 전부 **`127.0.0.1` 바인드**, 웹 2종은 **호스트 퍼블리시 0**, `0.0.0.0`은 caddy(8080/8443)만 — 브라우저→api는 same-origin `/api` 프록시로만 도달했다([09 §8.13](09-implementation-harness.md)). 운영에서는 `DATA_BIND`·`APP_BIND`를 tier 프라이빗 IP로 지정한다.
+- **CSP는 H10-1 시점 의도적 미적용**([`infra/Caddyfile`](../infra/Caddyfile) 주석에 근거) — VWorld Cesium 예외(§6) 정리 후 별도 작업. 현재 프록시가 일괄 적용하는 것은 HSTS·`X-Content-Type-Options: nosniff`·`X-Frame-Options: DENY`·`Referrer-Policy`·`Permissions-Policy` + `Server` 헤더 제거다.
 
 ## 7. 시크릿 관리
 
@@ -143,6 +151,7 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - **백업·복구**: PostgreSQL **PITR** + S3 **버저닝**으로 원문·파생 복구, **분기별 복구 리허설**(개인정보 포함 → 접근통제·암호화 백업). 리허설 운영은 [09 §7](09-implementation-harness.md).
 - **컨테이너 배포 시 시크릿(H10, [ADR-0020](adr/0020-container-deploy-3tier-vm.md))**:
   - **이미지에 굽지 않는다** — 런타임 주입만. compose `env_file`은 **레포 밖 경로**에 두고 퍼미션 `0600`, VCS 미추적.
+  - 레포에는 placeholder만 있는 [`infra/env.prod.example`](../infra/env.prod.example)를 두고, 로컬 스모크용 실값 파일 `infra/env.prod`는 **`.gitignore`가 차단**한다(H10-1 — 점 없는 이름이라 기존 `.env.*` 패턴에 걸리지 않던 갭을 메움).
   - **tier 최소 배치**: `PII_MASTER_KEY`·`DATABASE_URL`·SMTP 자격증명은 **app tier에만** 존재한다(web tier에 두지 않음 — 퍼블릭 노출 tier의 유출 반경 축소).
   - `NEXT_PUBLIC_*`은 **브라우저 번들에 노출**되므로 시크릿을 담을 수 없다(빌드타임 인라인 — [02 §9](02-directory-structure.md)). VWorld 프론트 키(§6)는 **도메인 잠금 키**라 예외.
   - CI 시크릿 스캐너는 **이미지 레이어도 대상**(빌드 산출물에 `.env`·키 파일이 섞여 들어가는 경로 차단 — 배선은 H10-2).
@@ -159,7 +168,7 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - [ ] LLM 전송 페이로드 개인정보 0건(자동 검사)
 - [ ] 개인정보 저장 암호화 + 마스킹 뷰 사용
 - [ ] 입력 검증(api=Pydantic · 웹=Zod) + 파라미터 쿼리
-- [ ] 보안 헤더·CSP·HSTS 적용
+- [ ] 보안 헤더·HSTS 적용 (프록시 일괄 — §6.1). **CSP는 아직 미적용**(VWorld Cesium 예외 정리 후 도입 — §6.1) 이므로 이 항목의 통과 기준에서 제외한다
 - [ ] 시크릿 하드코딩 0, 스캐너 통과
 - [ ] 파일 업로드 검증·격리
 - [ ] 감사 로그 누락 없음, 개인정보 비저장

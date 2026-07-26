@@ -11,7 +11,8 @@ from collections.abc import Awaitable
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from app import auth_tokens
+import pytest
+from app import auth_tokens, rate_limit
 from app.deps import get_auth_lookup_session, get_queue, get_storage, get_tenant_session
 from app.mail import get_mailer
 from app.main import create_app
@@ -312,7 +313,15 @@ async def test_login_wrong_and_unknown_return_same_401(
     assert wrong.json()["detail"] == unknown.json()["detail"]  # 존재 노출 금지
 
 
-async def test_login_rate_limited_after_5(db_session: AsyncSession, fake_redis: FakeRedis) -> None:
+async def test_login_rate_limited_after_5(
+    db_session: AsyncSession, fake_redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 레이트 리밋은 벽시계 **분 단위 고정 창**(rate_limit._window)이다. 로그인 6회는 매번
+    # Argon2id 검증(의도적으로 느림)을 거치므로 느린 러너에서 분 경계를 넘을 수 있고, 그러면
+    # 6번째가 새 창의 1번째가 되어 429가 아니라 401이 된다(CI 실측 플레이크).
+    # 창을 고정해 결정론을 확보한다 — 검사 대상은 "6번째가 상한을 넘는가"이지 시계가 아니다.
+    monkeypatch.setattr(rate_limit, "_window", lambda _now: "test-fixed-window")
+
     async with _build_client(db_session, fake_redis, FakeMailer()) as c:
         for _ in range(5):
             r = await c.post("/auth/login", json={"email": EMAIL, "password": PASSWORD})

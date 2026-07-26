@@ -58,11 +58,25 @@ pnpm e2e       # Playwright 여정 (tests/e2e, H2-7) — infra 기동 필요, CI
 pnpm db:seed   # 시드 데이터 정식화 시 (현재는 tests/e2e 시드·검증용 임시 스크립트만)
 ```
 
-H10-1 도입 후 — 프로덕션 이미지 스모크(**현재 없는 명령**, `infra/compose.prod.yml`은 H10-1에서 추가):
+프로덕션 이미지 스모크(H10-1 — [`infra/compose.prod.yml`](../infra/compose.prod.yml)):
 
 ```bash
-# 1호스트에서 3프로필 동시 기동 = 배포 형상 그대로 (명령 형태는 H10-1에서 확정)
-docker compose -f infra/compose.prod.yml --profile data --profile app --profile web up -d
+# 1. env 준비 — 값 채우기(API_ENV=local 필수. 호스트 포트 충돌 시 POSTGRES_PORT 등 조정)
+cp infra/env.prod.example infra/env.prod
+
+# 2. 1호스트에서 3프로필 동시 기동 = 배포 형상 그대로
+docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
+  --profile data --profile app --profile web up -d --build
+
+# 3. 접속: http://resident.localhost:8080 · http://admin.localhost:8080 (Caddy 경유)
+
+# 4. 최초 SYS_ADMIN 부트스트랩 (api 이미지에 포함된 유일한 시드 스크립트)
+docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
+  run --rm --workdir /app api python scripts/bootstrap_sys_admin.py --email <이메일>
+
+# 5. 정리 (볼륨까지 — 개발 인프라 볼륨과 별개다)
+docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
+  --profile data --profile app --profile web down -v
 ```
 
 - 평소 개발 루프는 **네이티브 유지**(HMR·reload 속도) — 컨테이너는 배포 전 스모크·운영 배포용([ADR-0020](adr/0020-container-deploy-3tier-vm.md)).
@@ -84,12 +98,13 @@ docker compose -f infra/compose.prod.yml --profile data --profile app --profile 
 | Alembic | 최신 stable | 스키마·마이그레이션 |
 | arq | 최신 stable | 큐·워커 (ai-worker, cron 내장) |
 | PostgreSQL | 16 (pgvector) | compose 이미지와 일치 |
-| 컨테이너 베이스(Python) | uv 공식 이미지 `python3.12` slim 계열 | api·ai-worker 공용 — 정확한 태그는 H10-1에서 확정 |
-| 컨테이너 베이스(웹) | `node:20-alpine` | Next standalone 런타임(web-resident·web-admin) |
-| 리버스 프록시 | Caddy 2 | TLS 종단 · `/api` 프록시(web tier) |
+| 컨테이너 베이스(Python) | 빌더 `ghcr.io/astral-sh/uv:0.11.14-python3.12-trixie-slim` → 런타임 `python:3.12-slim-trixie` | api·ai-worker 공용. **Python 마이너뿐 아니라 Debian 릴리스도 빌더·런타임 일치** 필요 — 복사한 `.venv`의 컴파일 wheel(glibc) 때문 |
+| 컨테이너 베이스(웹) | `node:20.20.1-alpine3.22` (builder·runner 동일) | Next standalone 런타임(web-resident·web-admin) |
+| 리버스 프록시 | `caddy:2.11.4-alpine` | TLS 종단 · `/api` 프록시(web tier) |
 
 - **RLS 정책 SQL은 Alembic custom migration(`op.execute`)으로 버전 관리**한다 — 스키마 자동생성(autogenerate)이 만들지 못하는 정책·role을 마이그레이션 파일로 고정(코드 리뷰가 아니라 마이그레이션 이력으로 추적).
-- **운영 이미지 태그는 고정 태그 핀**이다(재기동 시 실체가 바뀌는 `latest` 금지). 로컬 [`infra/docker-compose.yml`](../infra/docker-compose.yml)이 `latest`로 쓰는 3개 — `minio/minio`·`minio/mc`·`neo4j:5-community` — 가 핀 대상(H10-1에서 고정 태그 지정). 앱 4종 자체 이미지의 태그 규칙은 §4.3.
+- **운영 이미지 태그는 고정 태그 핀**이다(재기동 시 실체가 바뀌는 `latest` 금지). 로컬 [`infra/docker-compose.yml`](../infra/docker-compose.yml)이 `latest`로 쓰던 3개는 H10-1에서 [`infra/compose.prod.yml`](../infra/compose.prod.yml)에 **고정 태그로 해소**했다 — `minio/minio:RELEASE.2025-09-07T16-13-09Z` · `minio/mc:RELEASE.2025-08-13T08-35-41Z` · `neo4j:5.26.28-community`(5.26 LTS). 함께 핀한 나머지: postgres `pgvector/pgvector:0.8.5-pg16` · redis `redis:7.4.10-alpine`. 앱 4종 자체 이미지의 태그 규칙은 §4.3.
+- **uv 공식 이미지의 `bookworm` 변형은 0.9.30에서 단절**됐다(현행 태그는 trixie/alpine 계열만) — H10-1에서 설계상 bookworm 계획을 **trixie로 전환**하고 런타임도 `python:3.12-slim-trixie`로 맞췄다.
 
 ## 3. 코드 게이트 (로컬·CI 공통, 순서 고정)
 
@@ -171,15 +186,17 @@ merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-
 | 항목 | 값 |
 |------|----|
 | 트리거 | push(main) · 릴리스 태그 push |
-| 대상 이미지 | `api`(`apps/api/Dockerfile`) · `ai-worker`(`apps/ai-worker/Dockerfile`) · `web-resident`(`apps/web-resident/Dockerfile`) · `web-admin`(`apps/web-admin/Dockerfile`) — 4개 모두 H10-1에서 추가 |
-| 빌드 컨텍스트 | **레포 루트**(uv workspace 단일 lock · pnpm workspace 때문에 앱 디렉토리 컨텍스트로는 빌드 불가). 제외는 루트 `.dockerignore`(H10-1에서 추가) |
-| 빌드 방식 | docker buildx(멀티 스테이지) — Python은 `uv sync --frozen --no-dev --package <멤버명>` 후 런타임 스테이지에 `.venv`만 복사(non-root), 웹은 pnpm 빌드 후 Next standalone 산출물만 복사 |
+| 대상 이미지 | [`api`](../apps/api/Dockerfile) · [`ai-worker`](../apps/ai-worker/Dockerfile) · [`web-resident`](../apps/web-resident/Dockerfile) · [`web-admin`](../apps/web-admin/Dockerfile) — 4개 모두 H10-1에서 실존 |
+| 빌드 컨텍스트 | **레포 루트**(uv workspace 단일 lock · pnpm workspace 때문에 앱 디렉토리 컨텍스트로는 빌드 불가). 제외는 루트 [`.dockerignore`](../.dockerignore) |
+| 빌드 방식 | docker buildx(멀티 스테이지) — Python은 `uv sync --frozen --no-dev --no-editable --package <멤버명>` 후 런타임 스테이지에 `.venv`만 복사(non-root uid/gid 10001). **`--no-editable` 필수**: 기본값(editable)이면 `.venv`가 빌더의 소스 경로를 가리켜 `.venv`만 복사한 런타임에서 import가 깨진다 — 멤버가 실제 wheel로 site-packages에 들어가므로 **런타임에 앱 소스를 따로 복사하지 않는다**(중복 shadowing 방지). 레이어 캐시는 2단계(`--no-install-workspace`로 외부 의존만 먼저 → 소스 복사 후 멤버 설치). 웹은 pnpm 빌드 후 Next standalone 산출물만 복사(`node` 사용자) |
+| 웹 standalone 경로 | `distDir`이 `.next-build`라 진입점은 `.next-build/standalone/apps/<앱>/server.js`, static은 `standalone/apps/<앱>/.next-build/static`에 배치. 런타임 `HOSTNAME=0.0.0.0` 필수(미설정이면 localhost만 바인드). `public/`은 두 앱 모두 없음 |
 | 레지스트리 | **GHCR**(`ghcr.io/<owner>/liviq-<앱>`) — 이미지 이름 확정은 H10-2 |
 | 태그 규칙 | **git sha + `latest`** 동시 push. **배포는 sha 태그 핀 고정**(§4.3 하단) |
 | 캐시 | buildx `cache-from`/`cache-to: type=gha`(앱별 스코프) |
 | 웹 빌드 인자 | `NEXT_PUBLIC_API_BASE_URL=/api` — `NEXT_PUBLIC_*`은 빌드타임 인라인이라 **런타임 env로 못 바꾼다**. 브라우저→api는 Caddy `/api/*` `strip_prefix` 프록시로 same-origin |
 | 시크릿 취급 | **이미지에 미포함**(빌드 인자·레이어에 시크릿 금지) — DB·세션·`PII_MASTER_KEY`·SMTP·LLM 엔드포인트는 전부 **런타임 주입**(`env_file`, 레포 밖 0600). LLM은 컨테이너 밖 외부 엔드포인트를 env로만 가리킨다([ADR-0005](adr/0005-single-llm-openai-compat.md) 유지) |
-| 마이그레이션 | api 이미지를 재사용하는 one-shot `migrate` 서비스(`alembic upgrade head`). Alembic 자산은 wheel 밖(`packages/db/alembic`·`packages/db/alembic.ini`)이라 이미지에 **명시 복사** |
+| 마이그레이션 | api 이미지를 재사용하는 one-shot `migrate` 서비스(`working_dir: /app/packages/db` · `alembic upgrade head`). Alembic 자산은 wheel 밖(`packages/db/alembic`·`packages/db/alembic.ini`)이라 이미지에 **명시 복사** |
+| api 이미지 3역할 | ① api 서버(기본 CMD `uvicorn app.main:app --proxy-headers`) ② 마이그레이션 러너 ③ **최초 SYS_ADMIN 부트스트랩**(`/app/scripts/bootstrap_sys_admin.py` — 신규 배포에서 첫 관리자를 만드는 유일한 경로라 이미지에 포함). `scripts/`의 나머지(seed_demo·seed_parking·seed_households·backfill)는 **의도적 제외** — seed_demo가 공개된 고정 비밀번호로 MANAGER를 만들어 운영 이미지에 두면 위험 |
 
 - **기동 순서**: data(postgres·redis·minio·neo4j) → `migrate`(완료 대기) → app(api·ai-worker) → web(Caddy·web-resident·web-admin). compose `profiles`(`data`/`app`/`web`) + `healthcheck`·`depends_on`으로 강제한다.
 - **롤백**: 이전 sha 태그로 재기동(코드만 되돌림 — 파괴적 스키마 변경은 [03 §8](03-database-design.md) 2단계 규칙으로 앞뒤 호환 유지).
@@ -236,7 +253,7 @@ merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-
 | H7. 온보딩·인증 재설계 | 자체 이메일+비밀번호 인증(Argon2id·검증 메일·`auth_tokens`)·역할 축소(FACILITY·COUNCIL 제거)·단지/소장/직원 초대·단지·계정 수명주기·명부 운영 도구·주민 관리 목록 | 역할·수명주기 인가 테스트(CRITICAL) + 설치~가입~AI 전 여정 E2E 그린 | ✅ 완료 (2026-07-22, §8.8) — Google OAuth 전면 제거([ADR-0014](adr/0014-local-email-auth.md)), E2E 15/15 |
 | H8. 게시판 전환·운영 개편 | 공지·문서 AI 초안 폐기 후 게시판화(첨부·버전·예약 발행·공지 벡터화)·공통 코드 레지스트리·동/호수 관리·관리비 고지서(총액 트리 분배)·AI 검수 큐 제거·민원 수동 워크플로·관리자 콘솔(메뉴 그룹·액션 큐) | 첨부·코드·민원 인가/격리 테스트(CRITICAL) + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-24, §8.10) — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)·[0016](adr/0016-document-board-versioned-attachment.md)·[0017](adr/0017-tenant-code-registry.md)·[0018](adr/0018-inquiry-manual-handling.md) |
 | H9. 단지 트윈·주차장 | `household_geometries` + deck.gl 3D·오버레이 4종(입주·민원·관리비·설비)·세대 상세·VWorld 실사 3D 토글·트윈 대시보드·주차장 배치도(442면·차량 348대 `plate_enc`) | tenant 격리·MANAGER 인가(CRITICAL)·plate 암호화 왕복 + 게이트 그린 + 라이브 시각 실측 | ✅ 완료 (2026-07-25, §8.11) — [ADR-0019](adr/0019-complex-twin-3d.md), 프로토타입 수치 완전 일치 |
-| H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | 🚧 진행 (§8.13) |
+| H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | 🚧 진행 (§8.13 — H10-1까지 완료, H10-2 대기) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -289,6 +306,7 @@ merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-
 | ~~OAuth 콜백 앱별 복귀~~ | H6-1 | **H7-1에서 대체**(§8.8) — 자체 이메일 인증 전환으로 OAuth 콜백 자체 제거 |
 | 한글 NFD/NFC 정규화 불일치 — 제목 검색 무력화 | [03 §4.2](03-database-design.md) documents·[04 §3](04-menu-structure.md) | **재현되는 사용자 영향 버그**(H8-10 후속 검증 중 발견, 2026-07-25). macOS 파일명은 NFD(분해형) → `DocumentForm.tsx:57`이 제목을 파일명에서 자동 채움 → title이 NFD로 저장(실측 `title = normalize(title, nfc)` → false) → 사용자는 키보드로 NFC 입력 → 부분일치 실패로 **0건**. 영향 4곳: `documents/data.ts:57`·`inquiry-admin/InquiryAdmin.tsx:133`(클라이언트 부분일치)·`documents.py:135`·`fees.py:227`(서버 `ilike` — Postgres도 NFD/NFC 구분, 동 이름은 숫자라 영향 낮음). 수정 방향은 **경계에서 NFC 정규화**(서버 저장 시 — 그러면 검색 4곳은 미변경으로 일치) + 기존 데이터 `normalize(title, nfc)` 마이그레이션 + 파일명 자동 채움 지점 `.normalize("NFC")` 보강. 별도 작업 단위로 착수 |
 | 기존 벡터 일괄 재색인 — 마스킹 기준 소급 적용 | [ADR-0015 개정 노트](adr/0015-notice-board-replaces-ai-draft.md)·[06 §4.2](06-security-privacy.md) | **임베딩 마스킹 수정(PR #73, 2026-07-25)은 소급되지 않는다** — 그 전에 색인된 `content_chunks.embedding`은 원문 임베딩이고, 프로바이더에 원문이 전송된 사실도 취소 불가. 파일럿까지 로컬 Ollama만 썼다면 실질 외부 노출은 없으나, 외부 엔드포인트를 붙인 이력이 있으면 별도 판단 필요. 착수 조건: 재색인 ops 스크립트(문서·공지 전량 재인제스트 큐잉 — 문서는 `index_status` 리셋, 공지는 published 전량) + 벡터 교체 전후 검색 회귀 확인. 재업로드 시엔 개별 자동 해소되므로 **운영 데이터가 쌓이기 전에 실행**하는 편이 싸다 |
+| **런타임이 RLS 우회 롤로 접속 — 이중 방어 2층 비활성** | [06 §3](06-security-privacy.md)·§4.2·[03 §5](03-database-design.md) | **실배포 전 필수 (CRITICAL)**. 실측(2026-07-26, H10-1 스모크 중 발견): `DATABASE_URL`의 `liviq`는 postgres 이미지가 만드는 **superuser + BYPASSRLS**(`pg_roles` 확인) → tenant 컨텍스트 없이 `households` **322행 반환**. 런타임 롤 `liviq_app`으로는 같은 조회가 **0행**(컨텍스트 설정 후 322행). 런타임은 `set_config('app.tenant_id', …)`만 하고 **`SET ROLE`을 하지 않는다**(`apps/api/app/deps.py`·`ai-worker/worker.py`). `pg_stat_activity` 실측으로 **개발·배포 스모크 모두 `liviq`로 접속** 확인 → H10-1이 만든 문제가 아니라 **기존 갭**이며 배포 env 계약이 그대로 옮긴 것. 영향: 절대 규칙 3의 1층(쿼리 `tenant_id` 필터)은 유지되므로 알려진 유출은 없고 RLS 정책도 정상(`packages/db` 테스트가 `SET LOCAL ROLE liviq_app`으로 검증) — 그러나 **코드가 필터를 빠뜨리면 막을 층이 없다**. **결정된 방향(사용자 확인 2026-07-26): 전용 접속 롤** — `liviq_app`·`liviq_worker`는 현재 `rolcanlogin=f`·비밀번호 없음이라 env 값 교체만으로는 기동 실패한다. 필요 작업: 롤에 LOGIN+비밀번호 부여 마이그레이션 · owner(migrate)/런타임(api·ai-worker) `DATABASE_URL` 분리 · 테이블별 GRANT 전수 점검(누락 시 런타임 권한 오류) · 격리 테스트를 실접속 롤로 재확인(**CRITICAL 게이트**) · [`infra/env.prod.example`](../infra/env.prod.example)·[`infra/compose.prod.yml`](../infra/compose.prod.yml) 갱신 |
 
 ### 8.4 H3 체크리스트 (시설 — Neo4j 그래프·AI 도우미)
 
@@ -459,11 +477,11 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
-| H10-0 | 설계 갱신 | [ADR-0020](adr/0020-container-deploy-3tier-vm.md) 신설 + [01 §14](01-architecture.md) 배포 토폴로지 + [02 §2·§9](02-directory-structure.md) + [06 §6.1·§7·§9](06-security-privacy.md) + 본 문서 §2·§2.1·§4·§4.3·§8 단계 표·§8.13 | 설계 문서 PR 머지(구현 착수 전) | 🚧 진행 |
-| H10-1 | 이미지 + 로컬 전체 스택 스모크 | `apps/api/Dockerfile`·`apps/ai-worker/Dockerfile`(uv multi-stage — `uv sync --frozen --no-dev --package <멤버명>`·런타임은 `.venv`만·non-root·Alembic 자산(`packages/db/alembic`·`alembic.ini`) 명시 복사) · `apps/web-resident/Dockerfile`·`apps/web-admin/Dockerfile`(node:20-alpine + pnpm, Next standalone 산출물만) · 두 `next.config.mjs`에 `output: 'standalone'` 추가 · 루트 `.dockerignore` · `infra/compose.prod.yml`(profiles `data`/`app`/`web` + one-shot `migrate`(`alembic upgrade head`) + `healthcheck`·`depends_on`) · `infra/Caddyfile`(2사이트 · `/api` `strip_prefix` 프록시 · SSE(`text/event-stream`) 버퍼링 해제 · 보안 헤더 일괄) · `NEXT_PUBLIC_API_BASE_URL=/api` 전환(빌드 인자) · `.env.example` 운영 env 계약 추가 | 로컬 1호스트 3프로필 전체 기동 → 전 여정 스모크(로그인 → 단지 → AI 질의 **SSE 스트리밍 실확인** → 트윈 → 주차장) · 브라우저 콘솔 에러 0 · 기존 게이트 그린(typecheck·lint·test·build) · **api 컨테이너가 퍼블릭 바인드 아님 확인** | 대기 |
+| H10-0 | 설계 갱신 | [ADR-0020](adr/0020-container-deploy-3tier-vm.md) 신설 + [01 §14](01-architecture.md) 배포 토폴로지 + [02 §2·§9](02-directory-structure.md) + [06 §6.1·§7·§9](06-security-privacy.md) + 본 문서 §2·§2.1·§4·§4.3·§8 단계 표·§8.13 | 설계 문서 PR 머지(구현 착수 전) | ✅ 완료 (PR #78) |
+| H10-1 | 이미지 + 로컬 전체 스택 스모크 | [`apps/api/Dockerfile`](../apps/api/Dockerfile)·[`apps/ai-worker/Dockerfile`](../apps/ai-worker/Dockerfile)(uv multi-stage — 빌더 `ghcr.io/astral-sh/uv:0.11.14-python3.12-trixie-slim` → 런타임 `python:3.12-slim-trixie` · `uv sync --frozen --no-dev --no-editable --package <멤버명>` 2단계(`--no-install-workspace` 선행) · 런타임은 `.venv`만 · non-root uid/gid 10001 · **런타임 apt 패키지 0개**(asyncpg·cryptography·argon2-cffi·uvicorn[standard] 전부 manylinux wheel) · Alembic 자산(`packages/db/alembic`·`alembic.ini`)·`bootstrap_sys_admin.py` 명시 복사 · api만 HEALTHCHECK(`/health` — slim에 curl 없어 venv python `urllib`)) · [`apps/web-resident/Dockerfile`](../apps/web-resident/Dockerfile)·[`apps/web-admin/Dockerfile`](../apps/web-admin/Dockerfile)(`node:20.20.1-alpine3.22` + pnpm, Next standalone 산출물만·`node` 사용자·`HOSTNAME=0.0.0.0`) · 두 `next.config.mjs`에 `output: 'standalone'` 추가 · 루트 [`.dockerignore`](../.dockerignore) · [`infra/compose.prod.yml`](../infra/compose.prod.yml)(profiles `data`/`app`/`web` + one-shot `migrate` + `healthcheck`·`depends_on` · 인프라 5종 고정 태그 핀(§2.1) · 호스트 포트 env화 · tier 간 `depends_on: required: false`) · [`infra/Caddyfile`](../infra/Caddyfile)(2사이트 · `/api` `strip_prefix` 프록시 · SSE `flush_interval -1` · 보안 헤더 일괄) · [`infra/env.prod.example`](../infra/env.prod.example) 운영 env 계약 · `NEXT_PUBLIC_API_BASE_URL=/api` 전환(빌드 인자) · `.gitignore`에 `infra/env.prod` | 로컬 1호스트 3프로필 전체 기동 → 전 여정 스모크(로그인 → 단지 → AI 질의 **SSE 스트리밍 실확인** → 트윈 → 주차장) · 브라우저 콘솔 에러 0 · 기존 게이트 그린(typecheck·lint·test·build) · **api 컨테이너가 퍼블릭 바인드 아님 확인** | ✅ 완료 — 게이트: `ruff format --check` 166 files·lint 7/7·typecheck 8/8(mypy 포함)·test 7/7(api **345 passed, cov 95.70%**)·build 2/2 그린(TS prettier는 프로젝트 미설정 — `ci.yml` format 단계 TODO대로 format 게이트는 ruff만). 이미지 크기 api 417MB·ai-worker 353MB·web-resident 301MB·web-admin 303MB. **1호스트 3프로필 동시 기동 실측**: 9/9 up, data 4종 healthy, `minio-init` exit 0(버킷 생성), `migrate`(head `d3e4f5a6b7c8`) 완료 후 api·ai-worker → caddy 순서 강제 동작. **퍼블릭 노출면 1개 확인**: api `127.0.0.1:18000`·postgres `127.0.0.1:15433`·redis `127.0.0.1:16379`·minio `127.0.0.1:19000/19001`·neo4j `127.0.0.1:17687`, 웹 2종 호스트 퍼블리시 0, caddy만 `0.0.0.0:8080/8443`. **온보딩 전 여정**(프록시 경유 `/api`): 이미지 내 스크립트로 SYS_ADMIN 부트스트랩 → 임시 비밀번호 변경 204 → 단지 생성 201 → 소장 초대 202(**초대 메일 링크가 프록시 경유 퍼블릭 URL** `http://admin.localhost:8080/invite?token=…`) → 수락 204 → MANAGER 로그인 200 → `/api/me` `roles:["MANAGER"]`·`tenant_name:"스모크 단지"`. 세션 쿠키 `liviq_session; HttpOnly; SameSite=lax; Path=/`(Secure 없음 — `API_ENV=local` HTTP 스모크 의도), same-origin 프록시라 CORS 0. **문서 업로드→인제스트**: 업로드 201 → ai-worker `ingest_document_task` → `{'status':'indexed','chunks':3}` → `content_chunks` 3행 embedding 전부 채움(bge-m3, 외부 엔드포인트 `host.docker.internal`) → 화면 "색인 완료 v1". **AI 질의 SSE(핵심)**: `status(searching)`→`status(generating)`→**token 30개가 4.47~5.36s에 20~50ms 간격 점진 도착**→`status(verifying)`→`citation`→`done{status:"answered"}` — 버퍼링이면 30개가 `done` 시점에 몰렸을 것이므로 `flush_interval -1` **확증**. 근거 없는 질의는 `done{status:"fallback",fallback_reason:"no_evidence"}`로 규칙 1 폴백 정상. **브라우저 실측**(Caddy 경유): admin 로그인·대시보드(실데이터 — AI 질의 4건·답변률 25%·폴백률 75%가 위 SSE와 일치)·문서 관리·주차장 대시보드, resident 로그인. 콘솔 에러 0·전 `/api` 요청 same-origin 200·`has_twin=false`로 트윈 메뉴 정상 숨김·375px body 오버플로 0. 정리: `down -v`로 컨테이너·볼륨 0, 개발 인프라 볼륨(`infra_*`) 무손상. **설계와 달라진 것**: ①uv 공식 이미지 bookworm 변형이 0.9.30에서 단절 → **trixie 전환**(빌더·런타임 Debian 릴리스 일치 필요 — `.venv`의 glibc wheel) ②`uv sync --no-editable` 필수(editable이면 `.venv`가 빌더 소스 경로를 가리켜 런타임 import 붕괴 → 런타임에 앱 소스 미복사) ③**호스트 포트 env화**(`POSTGRES_PORT`·`REDIS_PORT`·`MINIO_PORT`·`MINIO_CONSOLE_PORT`·`NEO4J_BOLT_PORT`·`API_PORT`) — 스모크 호스트의 네이티브 postgres가 5432를 선점해 실제로 충돌 ④tier 간 `depends_on: required: false`(없으면 `--profile app up`이 다른 VM의 postgres를 기다리거나 app VM에 로컬 postgres를 띄운다. 같은 tier 내 `migrate → api`·`minio → minio-init`은 `required: true` 유지) ⑤neo4j 힙 상한 env 추가(`NEO4J_server_memory_heap_max__size` 등, 기본 512m — Neo4j 5 규약 `.`→`_`, `_`→`__`) ⑥`.gitignore`에 `infra/env.prod` 추가(점 없는 이름이라 기존 `.env.*` 패턴에 안 걸려 시크릿 커밋 위험). **의도적 제외**: 운영 이미지에 seed 스크립트 미포함(bootstrap_sys_admin.py만 — §4.3) · **CSP 미적용**(VWorld Cesium 예외 정리 후 별도 작업 — [`infra/Caddyfile`](../infra/Caddyfile) 주석에 근거. 적용 헤더는 HSTS·nosniff·X-Frame-Options DENY·Referrer-Policy·Permissions-Policy + `Server` 제거) · ai-worker·웹 2종 HEALTHCHECK 없음(찍을 엔드포인트 없음). **데이터 기반 화면 추가 검증(2026-07-26, 미검증 ① 해소)**: 프로토타입 레포의 `units.json`·`첫마을4단지_호수별_페르소나반영_322세대_정리.xlsx`(둘 다 VCS 밖 — 경로는 [ADR-0019](adr/0019-complex-twin-3d.md) 참조 프로토타입)를 **배포 이미지 스택에 적재**해 실측. 적재는 시드 스크립트를 `run --rm`에 bind mount(이미지 미오염): 동 5개·세대 322 · geometry `matched 322/unmatched 0` · 주차 442면(일반 406·전기차 21·장애인 15)·차량 348 전량 매칭 — 전부 §8.11 H9-1·H9-5 기록과 일치. 화면: `/me` `has_twin:true`로 트윈 메뉴 노출, 트윈 3D 5개 동 렌더(375px에서도 canvas 정상), 세대 클릭 → 상세 `403동 1202호 · 12층 · 59C(공공임대)`(H9-6 평면도 타입 라벨 포함), 주차 현황 카드 **442/264/256/8/178** + 동별 401동 53·402동 45·403동 48·404동 59·405동 51 + 외부 8 — **H9-5 실측 수치와 완전 동일**. 면 클릭 → `002면 — 401동 1603호 · 투싼(142구2049) · 5시간 21분 경과`(번호판 복호가 관리자 세션에서만). DB 실측: `plate_enc` 348행 전부 38B 유니크 암호문·평문 번호판 0건 → **배포 이미지에서도 규칙 2 암호화 왕복 정상**. 콘솔 에러 0·1280·375px 오버플로 0. **부분 검증**: 입주 오버레이는 세대원 명부를 시드하지 않아 전부 공실(입주율 0%) — 범례·토글은 동작하나 **색 구분 자체는 미검증**. **미검증(잔여)**: ①`X-Frame-Options: DENY`와 web-admin 트윈 VWorld **iframe srcdoc 공존** — **스모크에서 구조적으로 검증 불가**: VWorld 프론트 키는 서비스 URL 도메인 잠금(§8.12)이라 `admin.localhost:8080` 오리진에서 거부되고, 키도 `apps/web-admin/.env.local`에 있어 이미지 빌드 인자로 넣을 수 없다 → **실배포 도메인을 VWorld에 등록한 뒤** 확인(H10-2) ②**GHCR 게시·sha 태그 롤백 실연** — 레지스트리 미연결(H10-2). **함께 발견한 CRITICAL(별도 작업 단위)**: 런타임이 RLS 우회 롤로 접속 — §8.3 백로그 참조. 실배포 전 필수 |
 | H10-2 | CI 릴리스 + 배포 절차 | `.github/workflows/release.yml`(buildx · GHCR push · git sha + `latest` 태그 · `cache-from/to: gha` — 스펙 §4.3) · 배포 운영 절차 문서(VM 3대 프로비저닝 · 방화벽 규칙 · 시크릿 주입(`env_file` 0600·레포 밖) · 마이그레이션 순서 · 백업(§7.1 연계) · 롤백) · 운영 이미지 고정 태그 핀(§2.1) | main push로 4개 이미지 GHCR 게시 확인 · 스테이징 tier 배포 후 스모크 그린 · **롤백 1회 실연**(이전 sha 태그 재기동) | 대기 |
 
-> **백로그/의도적 제외**: 무중단 배포(blue-green)·Kubernetes·중앙 로그 수집·모니터링 스택은 **H10 범위 밖**(부하·운영 요구 실증 후 — YAGNI) · [`.env.example`](../.env.example)의 운영 env 계약 추가는 H10-1에서 처리(본 설계 커밋은 문서만).
+> **백로그/의도적 제외**: 무중단 배포(blue-green)·Kubernetes·중앙 로그 수집·모니터링 스택은 **H10 범위 밖**(부하·운영 요구 실증 후 — YAGNI) · 운영 env 계약은 H10-1에서 [`.env.example`](../.env.example)이 아니라 **별도 파일** [`infra/env.prod.example`](../infra/env.prod.example)로 분리했다(compose `--env-file` 치환 소스 겸 컨테이너 `env_file`이고, tier별로 나눠 배치(app tier 파일에만 `PII_MASTER_KEY`·`DATABASE_URL`·SMTP — [06 §7](06-security-privacy.md))하므로 로컬 `.env` 계약과 한 파일에 섞지 않는다).
 
 ## 9. 정의: "완료(Done)"
 

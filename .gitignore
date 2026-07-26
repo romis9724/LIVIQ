@@ -23,6 +23,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+# 배포 env 파일 — 점 없는 이름이라 위 .env.* 패턴에 걸리지 않는다(infra/env.prod.example만 커밋)
+infra/env.prod
+infra/env.prod.*
+!infra/env.prod.example
 
 # logs
 *.log

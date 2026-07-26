@@ -26,12 +26,13 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실): **H9-6까지 완료.** 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
+현재 구현된 것(현실): **H10-1까지 완료.** 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
 워크스페이스 구성은 `ls`·[docs/02](docs/02-directory-structure.md)·[ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
 인증: Redis 세션+**자체 이메일+비밀번호**(Argon2id·검증 메일·auth_tokens — H7-1, [ADR-0014](docs/adr/0014-local-email-auth.md))+역할 가드 — 웹은 세션 쿠키 1차(credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 시드 계정 API 로그인 + 전 여정(설치→단지→초대→명부→가입→승인→AI, H7-4). 다음 단계·백로그: [docs/09 §8.8·§8.3](docs/09-implementation-harness.md).
 로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
+배포 형상은 컨테이너 이미지 4종(api·ai-worker·web 2종) + `infra/compose.prod.yml` profiles(data/app/web) 3-tier VM, env 계약은 `infra/env.prod.example`([ADR-0020](docs/adr/0020-container-deploy-3tier-vm.md)).
 
 ## 자주 쓰는 명령
 
@@ -42,6 +43,8 @@ uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도
 pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
 pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
 pnpm e2e                  # Playwright 여정 (infra 기동 필요 — CI는 @llm 자동 제외)
+# 배포 이미지 스모크(1호스트 3프로필 = 배포 형상, 절차 전체는 docs/09 §2)
+docker compose --env-file infra/env.prod -f infra/compose.prod.yml --profile data --profile app --profile web up -d --build
 ```
 
 > 없는 명령을 문서에 적지 말 것 — stale 참조는 없는 것보다 나쁘다.

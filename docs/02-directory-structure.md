@@ -35,8 +35,9 @@ LIVIQ/
 │   └── ai-eval/           # 골든셋·AI 평가 하네스
 ├── infra/
 │   ├── docker-compose.yml # 로컬 개발 인프라 (현존 — pg16+pgvector·redis·minio·neo4j)
-│   ├── compose.prod.yml   # 운영 배포 (profiles: data/app/web) — H10-1에서 추가
-│   └── Caddyfile          # web tier 리버스 프록시·TLS 종단 — H10-1에서 추가
+│   ├── compose.prod.yml   # 운영 배포 (현존 — profiles: data/app/web)
+│   ├── Caddyfile          # web tier 리버스 프록시·TLS 종단 (현존)
+│   └── env.prod.example   # 배포 env 계약 placeholder (실값 infra/env.prod는 gitignore)
 ├── .github/workflows/     # CI/CD
 ├── turbo.json
 ├── pnpm-workspace.yaml
@@ -46,7 +47,7 @@ LIVIQ/
 └── README.md             # 기획/계획서
 ```
 
-> 앱 4종의 `Dockerfile`은 **H10-1에서 각 앱 디렉토리**(`apps/api/Dockerfile`·`apps/ai-worker/Dockerfile`·`apps/web-resident/Dockerfile`·`apps/web-admin/Dockerfile`)에 추가된다. uv workspace(단일 lock) + pnpm workspace 구조상 앱 디렉토리만으로는 빌드 불가 — **빌드 컨텍스트는 레포 루트**, Dockerfile은 앱 디렉토리에 둔다.
+> 앱 4종의 `Dockerfile`은 **각 앱 디렉토리에 현존**한다([api](../apps/api/Dockerfile)·[ai-worker](../apps/ai-worker/Dockerfile)·[web-resident](../apps/web-resident/Dockerfile)·[web-admin](../apps/web-admin/Dockerfile), 제외 규칙은 루트 [`.dockerignore`](../.dockerignore)). uv workspace(단일 lock) + pnpm workspace 구조상 앱 디렉토리만으로는 빌드 불가 — **빌드 컨텍스트는 레포 루트**, Dockerfile은 앱 디렉토리에 둔다.
 
 > `mcp/`(레포 실존): Python 프로토타입 **동결** — 신규 AI 기능은 `packages/ai-core`([ADR-0008](adr/0008-freeze-mcp-prototype.md)). 백엔드가 Python으로 통일되어 mcp 코드는 **참고·복사·개작** 대상으로 승격([ADR-0013](adr/0013-python-backend.md)).
 
@@ -168,6 +169,6 @@ api-types/
 - env는 부팅 시 검증(누락 시 즉시 실패) — 서버는 Pydantic Settings(`apps/api/app/config.py`), 웹은 Zod(`apps/web-*/src/config`). 검증 소유는 패키지별([09 §2](09-implementation-harness.md)).
 - 패키징: Python은 **uv workspace**(루트 `pyproject.toml`의 members로 단일 lock), 각 Python 패키지의 얇은 `package.json`이 turbo 태스크(lint=ruff·typecheck=mypy·test=pytest)를 루트 pnpm 명령에 연결. 웹/TS는 pnpm workspace 그대로.
 - 로컬: [`infra/docker-compose.yml`](../infra/docker-compose.yml) — postgres+pgvector, redis, minio, neo4j([ADR-0009](adr/0009-neo4j-in-mvp.md)).
-- **운영 배포**: 앱 4종(`api`·`ai-worker`·`web-resident`·`web-admin`)을 컨테이너 이미지로 빌드해 GHCR에 게시하고, `infra/compose.prod.yml`(H10-1에서 추가) **단일 파일 + profiles(`data`/`app`/`web`)** 로 3-tier VM에 배포([ADR-0020](adr/0020-container-deploy-3tier-vm.md)). 로컬 스모크는 같은 파일을 1호스트에서 3프로필 동시 기동으로 검증하고, 개발 루프 자체는 네이티브 유지.
+- **운영 배포**: 앱 4종(`api`·`ai-worker`·`web-resident`·`web-admin`)을 컨테이너 이미지로 빌드해 GHCR에 게시하고, [`infra/compose.prod.yml`](../infra/compose.prod.yml) **단일 파일 + profiles(`data`/`app`/`web`)** 로 3-tier VM에 배포([ADR-0020](adr/0020-container-deploy-3tier-vm.md)). 배포 env 계약은 [`infra/env.prod.example`](../infra/env.prod.example)(compose `--env-file` 치환 소스 겸 컨테이너 `env_file` — 실값 `infra/env.prod`는 gitignore). 로컬 스모크는 같은 파일을 1호스트에서 3프로필 동시 기동으로 검증했고([09 §2·§8.13](09-implementation-harness.md)), 개발 루프 자체는 네이티브 유지.
 - **웹 env는 빌드타임 인라인**: `NEXT_PUBLIC_*`은 Next 빌드 시 번들에 박히므로 **이미지 빌드 인자로 주입**된다(런타임 교체 불가). 따라서 API 주소는 환경별 절대 URL이 아니라 **상대경로 `NEXT_PUBLIC_API_BASE_URL=/api`** 로 고정하고, 오리진 차이는 web tier 리버스 프록시가 흡수한다(same-origin `/api` 프록시 — [06 §6.1](06-security-privacy.md)).
 - **런타임 env는 이미지에 굽지 않음**: `DATABASE_URL`·`REDIS_URL`·`PII_MASTER_KEY`·S3·SMTP·LLM 설정은 컨테이너 기동 시 **런타임 주입**(시크릿 취급은 [06 §7](06-security-privacy.md)).
