@@ -33,7 +33,7 @@ Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turb
 인증: Redis 세션+**자체 이메일+비밀번호**(Argon2id·검증 메일·auth_tokens — H7-1, [ADR-0014](docs/adr/0014-local-email-auth.md))+역할 가드 — 웹은 세션 쿠키 1차(credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 시드 계정 API 로그인 + 전 여정(설치→단지→초대→명부→가입→승인→AI, H7-4). 다음 단계·백로그: [docs/09 §8.8·§8.3](docs/09-implementation-harness.md).
 DB 접속 롤은 프로세스마다 다르다 — 마이그레이션만 owner, api는 `liviq_app`, ai-worker는 `liviq_worker`(RLS 이중 방어 2층의 성립 조건 — H10-2, [docs/03 §5.1](docs/03-database-design.md)). 운영 스크립트는 owner 접속이 필요해 compose에서 `migrate` 서비스로 실행한다.
 로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
-배포 형상은 컨테이너 이미지 4종(api·ai-worker·web 2종) + `infra/compose.prod.yml` profiles(data/app/web) 3-tier VM, env 계약은 `infra/env.prod.example`([ADR-0020](docs/adr/0020-container-deploy-3tier-vm.md)).
+배포 형상은 **둘** — 컨테이너 이미지 4종(api·ai-worker·web 2종) + `infra/compose.prod.yml` profiles 공용. ①3-tier VM + GHCR + GitHub Actions([ADR-0020](docs/adr/0020-container-deploy-3tier-vm.md)) ②사내 단일 호스트(Windows Server WSL2 Docker) + GitLab 레지스트리·CI([ADR-0021](docs/adr/0021-gitlab-ci-single-host-wsl.md) — 러너가 대상 호스트 안, 인바운드 개방 0). env 계약은 `infra/env.prod.example`, 절차는 [docs/12](docs/12-deployment-runbook.md).
 
 ## 자주 쓰는 명령
 

@@ -443,7 +443,16 @@ flowchart LR
 | `web-resident` | `apps/web-resident` | `node:20.20.1-alpine3.22` | 루트 컨텍스트 · pnpm 빌드 → Next `output: 'standalone'` 산출물만 런타임 복사(진입점 `.next-build/standalone/apps/web-resident/server.js` · static은 `standalone/apps/web-resident/.next-build/static` — `distDir`이 `.next-build`이기 때문 · `HOSTNAME=0.0.0.0` 필수) |
 | `web-admin` | `apps/web-admin` | 동일 | 동일 방식 |
 
-모두 multi-stage · 런타임 **non-root**(Python uid/gid 10001 · 웹 `node`) · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동. 게시·롤백 배선은 H10-3).
+모두 multi-stage · 런타임 **non-root**(Python uid/gid 10001 · 웹 `node`) · 게시 태그는 커밋 sha — 롤백 = 이전 sha 재기동(H10-3에서 1회 실연). 이미지는 `linux/amd64` 단일 아키텍처다([12 §1](12-deployment-runbook.md)).
+
+**배포 형상은 둘이다** — 같은 compose 파일·env 계약·이미지를 공유하고, 프로필 선택과 레지스트리만 다르다.
+
+| 형상 | 대상 | 프로필 | 레지스트리 · CI | 결정 |
+|------|------|--------|-----------------|------|
+| **3-tier VM** | VM 3대(web/app/data) | VM마다 하나 | GHCR · GitHub Actions `release.yml` | [ADR-0020](adr/0020-container-deploy-3tier-vm.md) |
+| **사내 단일 호스트** | Windows Server + WSL2 Docker 1대 | `data`+`app`+`web` 동시 | GitLab 레지스트리 · GitLab CI(러너가 대상 호스트 안) | [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) |
+
+단일 호스트 형상에서는 위 tier 표의 **네트워크 방어선이 성립하지 않는다**(같은 호스트 — `DATA_BIND`·`APP_BIND`가 `127.0.0.1`). 퍼블릭 노출면은 Caddy 하나로 유지되고, 절대 규칙 3의 방어는 앱 필터 + DB RLS 2층에 의존한다. 그래서 이 형상은 **사내망 파일럿·스테이징 용도**이고 외부 공개 운영은 3-tier로 간다.
 
 **요청 경로 규약**
 

@@ -208,6 +208,29 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 - **롤백**: 이전 sha 태그로 재기동(코드만 되돌림 — 파괴적 스키마 변경은 [03 §8](03-database-design.md) 2단계 규칙으로 앞뒤 호환 유지).
 - **`latest` 배포 금지**: 같은 태그의 실체가 push마다 바뀌어 "직전으로 되돌리기"가 성립하지 않는다. `latest`는 편의 포인터로만 유지하고 배포·롤백은 sha 핀만 쓴다.
 
+### 4.4 사내 GitLab 파이프라인 (`.gitlab-ci.yml` 스펙 — H12)
+
+두 번째 배포 형상용이다([ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md)) — 사내 단일 호스트
+(Windows Server + WSL2 Docker)에 GitLab CI가 배포한다. GitHub Actions [`release.yml`](../.github/workflows/release.yml)(§4.3)는
+**유지**되고, 두 파이프라인이 각자의 레지스트리에 같은 커밋의 이미지를 게시한다.
+
+| 항목 | 값 |
+|------|----|
+| 트리거 | push(main) — 빌드+push+배포 · MR — 빌드만(push·배포 없음) |
+| 러너 | **대상 호스트 WSL 안**의 `shell` executor(태그 `wsl-140`). 아웃바운드 폴링만 — 대상 호스트 인바운드 개방 0 |
+| 레지스트리 | **GitLab Container Registry** — `$CI_REGISTRY_IMAGE/<앱>`(하위 저장소는 슬래시. `$CI_REGISTRY_IMAGE`가 `<registry>/dhkim/liviq`) |
+| 태그 | `$CI_COMMIT_SHA` 핀 + `latest`(편의 포인터, 배포 금지) |
+| 빌드 컨텍스트 | **레포 루트**(§4.3과 동일 — 단일 `uv.lock`·pnpm workspace) |
+| 빌드 주체 | 배포와 **같은 러너**. 호스트에 docker가 있어 dind(privileged) 불요 |
+| 이미지 좌표 | `IMAGE_PREFIX`가 **구분자까지 포함**한다(ADR-0021 결정 5) — `$CI_REGISTRY_IMAGE/` |
+| 배포 명령 | `--profile data --profile app --profile web up -d` = **1호스트 3프로필**(H10-1 스모크와 같은 형상) |
+| env | `/etc/liviq/env.prod`(레포 밖·0600). 단일 호스트라 `DATA_BIND`·`APP_BIND`는 `127.0.0.1` |
+| 불변 계약 | 3-URL 접속 롤(H10-2) · `migrate` 2단계 · Caddy same-origin `/api`·SSE `flush_interval -1` |
+| 롤백 | `IMAGE_TAG`를 이전 sha로 → `pull` → `up -d`(§4.3과 동일 조작) |
+
+- **`rules:changes` 주의**: 브랜치 파이프라인에서는 직전 커밋 기준으로 평가되므로 첫 파이프라인·force push 뒤에는 전량 빌드로 떨어지는 fallback을 둔다.
+- **러너 URL은 GitLab 정본 주소**(`http://192.168.10.153`)를 쓴다. 레지스트리 포트(`:5050`)로 등록해도 리버스 프록시가 API를 흘려줘 동작하지만, 레지스트리 vhost 설정이 바뀌면 조용히 깨진다.
+
 ## 5. 권장 훅 (PostToolUse / Pre / Stop)
 
 > 사용자 web hooks 규칙 기반. **레포 소유 도구만** 사용(원격 1회성 실행 금지).
@@ -261,6 +284,7 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 | H9. 단지 트윈·주차장 | `household_geometries` + deck.gl 3D·오버레이 4종(입주·민원·관리비·설비)·세대 상세·VWorld 실사 3D 토글·트윈 대시보드·주차장 배치도(442면·차량 348대 `plate_enc`) | tenant 격리·MANAGER 인가(CRITICAL)·plate 암호화 왕복 + 게이트 그린 + 라이브 시각 실측 | ✅ 완료 (2026-07-25, §8.11) — [ADR-0019](adr/0019-complex-twin-3d.md), 프로토타입 수치 완전 일치 |
 | H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | ✅ 완료 (2026-07-26, §8.13) |
 | H11. 운영 정합 | 감사 로그 실배선(보안 핵심 행위)·문서·스키마 드리프트 정정 | 감사 행위별 기록 테스트(CRITICAL — 개인정보 비저장 포함) + 문서와 실제 스키마 일치 | ✅ 완료 (2026-07-26, §8.14) |
+| H12. 사내 GitLab 배포 | GitLab CI 파이프라인(빌드·레지스트리·배포)·단일 호스트(WSL Docker) 형상·이미지 좌표 규약 변경 | main push로 GitLab 레지스트리 게시 + 대상 호스트 배포 그린 + 롤백 실연 | 🚧 진행 (§8.15) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -508,6 +532,22 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 > **테이블 수 오탐 정정(2026-07-26 실측)**: "dev DB 40개 vs 문서 38개"는 오탐이었다. dev·배포 스모크 모두
 > `relkind='r'` **39개로 집합까지 동일**(diff 0)이고, 그중 `alembic_version`을 빼면 **업무 테이블 38개** —
 > 문서가 맞다. 40은 `alembic_version` + 뷰 `v_users_safe`를 함께 센 값이다.
+
+### 8.15 H12 체크리스트 (사내 GitLab 배포 — 단일 호스트 WSL)
+
+> 근거: [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md)(2026-07-26 사용자 결정) — 사내 Windows Server
+> (192.168.10.140) WSL2 Docker에 사내 GitLab(`dhkim/liviq`, [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md))
+> 파이프라인으로 배포한다. **GitHub 정본 유지** — GitLab은 배포용 복제이고 `release.yml`은 그대로 둔다.
+> 스펙은 §4.4. 형상 차이·불변 계약은 ADR-0021 결정 1~7.
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H12-0 | 설계 갱신 | [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) 신설 + [ADR-0020](adr/0020-container-deploy-3tier-vm.md) 개정 노트(결정 2는 단일 호스트에서 미성립·좌표 규약 변경) + 본 문서 §4.4 스펙·§8 단계 표·§8.15 + [01 §14](01-architecture.md) 두 번째 형상 + [12 §9](12-deployment-runbook.md) 단일 호스트 절 | 설계 문서 PR 머지(구현 착수 전) | 🚧 진행 |
+| H12-1 | 파이프라인 + 이미지 좌표 | `.gitlab-ci.yml` 신설(build matrix 4종 → GitLab 레지스트리 sha 태그 · deploy 잡은 `tags: [wsl-140]` 러너에서 `--profile data/app/web up -d` · MR은 빌드만) · [`infra/compose.prod.yml`](../infra/compose.prod.yml) 이미지 참조를 `${IMAGE_PREFIX:-liviq-}<앱>`으로(구분자를 env로 이동 — GitLab 레지스트리는 슬래시 하위 저장소) · [`infra/env.prod.example`](../infra/env.prod.example) 좌표 예시 3종 | 기존 게이트 그린 + 로컬 1호스트 스모크가 **바뀐 좌표로도** 기동(회귀 없음) + `.gitlab-ci.yml` 문법 검증 | 대기 |
+| H12-2 | 러너·호스트 준비 + 실배포 | 러너 재등록(URL을 GitLab 정본 `http://192.168.10.153`로 · `shell` executor · 태그 `wsl-140` · `gitlab-runner` 사용자 docker 그룹) · WSL 운영 설정(`systemd=true`·부팅 자동 시작·`networkingMode=mirrored` 또는 portproxy·메모리 상한) · `/etc/liviq/env.prod` 배치 · SYS_ADMIN 부트스트랩 | main push로 4개 이미지 GitLab 레지스트리 게시 + 대상 호스트에서 전 여정 스모크(로그인→AI SSE→트윈·주차장) + **롤백 1회 실연** | 대기 |
+
+> **의도적 제외**: 무중단 배포·다중 호스트·중앙 로그 수집은 H12 범위 밖(ADR-0021 재검토 신호에 조건 명시).
+> 멀티아치 이미지도 제외 — 러너·대상 모두 amd64(§8.13 H10-3 실측).
 
 ## 9. 정의: "완료(Done)"
 
