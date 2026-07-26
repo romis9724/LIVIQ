@@ -95,7 +95,18 @@ sudo vi /etc/liviq/env.prod
 |---|---|---|
 | `main` push | build → deploy → smoke → publish | 이미지 4종 빌드 후 3프로필 기동, Caddy 경유 검증, 레지스트리 게시 |
 | MR | build 만 | Dockerfile·lock·compose 파손을 머지 전에 잡는다. **기동하지 않는다** |
-| 수동(web) | 전체 + `rollback`·`prune` | 파이프라인 변수로 `ROLLBACK_TAG` 지정 |
+| 수동(web·api) | 전체 + `rollback`·`prune` | 파이프라인 변수로 `ROLLBACK_TAG` 지정 |
+
+`web`(UI 의 "Run pipeline" 버튼)과 `api`(REST 트리거)를 **둘 다** 허용한다 — 같은 의도인데 GitLab 이
+진입점으로만 구분하기 때문이다. 실행 조건은 `.gitlab-ci.yml` 상단 앵커(`.on_deploy`·`.on_build`)
+한 곳에서만 관리한다(잡마다 복붙하면 드리프트가 난다).
+
+API 로 특정 브랜치를 돌리는 예 — main 을 건드리지 않고 파이프라인 전체를 검증할 때 쓴다:
+
+```bash
+curl -X POST -H "PRIVATE-TOKEN: <PAT>" \
+  "http://192.168.10.153:5050/api/v4/projects/8/pipeline?ref=<branch>"
+```
 
 **이미지가 가는 곳이 두 군데이고 목적이 다르다** — 이걸 섞으면 설계가 안 읽힌다:
 

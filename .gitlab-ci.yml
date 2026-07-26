@@ -55,6 +55,22 @@ default:
       - runner_system_failure
       - stuck_or_timeout_failure
 
+# ── 실행 조건 (앵커로 한 곳에서만 관리 — 잡마다 복붙하면 드리프트가 난다) ──
+# `web` = GitLab UI 의 "Run pipeline" 버튼 · `api` = REST 로 트리거.
+# 둘은 **같은 의도**("사람이 필요할 때 돌린다")인데 GitLab 이 진입점으로만 구분한다 →
+# UI 에서 돌릴 수 있는 파이프라인은 API 로도 돌 수 있어야 한다.
+.on_deploy: &on_deploy
+  - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  - if: '$CI_PIPELINE_SOURCE == "web"'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
+
+# 빌드만 MR 에서도 돈다 — Dockerfile·lock·compose 파손을 머지 전에 잡는다.
+.on_build: &on_build
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  - if: '$CI_PIPELINE_SOURCE == "web"'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
+
 # ── 빌드 ────────────────────────────────────────────────────────────
 # 4종을 **한 잡에서 순차로** 빌드한다. 호스트가 4코어라 병렬 빌드(특히 Next 2종)는
 # 메모리·CPU를 다투어 오히려 느리고, 같은 daemon 이라 레이어 캐시는 순차에서도 공유된다.
@@ -63,10 +79,7 @@ build:
   timeout: 60m
   script:
     - bash infra/deploy-wsl.sh build
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  rules: *on_build
 
 # ── 기동 ────────────────────────────────────────────────────────────
 deploy:
@@ -83,10 +96,8 @@ deploy:
     url: http://resident.localhost:8080
   script:
     - bash infra/deploy-wsl.sh deploy
-  rules:
-    # MR 에서는 기동하지 않는다 — 빌드로 형상 검증만 한다.
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  # MR 에서는 기동하지 않는다(*on_deploy 에 merge_request_event 가 없다) — 빌드로 형상 검증만.
+  rules: *on_deploy
 
 # ── 스모크 ──────────────────────────────────────────────────────────
 # 기동 성공(=api healthy)과 "실제로 응답한다"는 다르다. Caddy 라우팅·프록시 헤더까지
@@ -99,9 +110,7 @@ smoke:
   script:
     - bash infra/deploy-wsl.sh smoke
     - bash infra/deploy-wsl.sh status
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  rules: *on_deploy
 
 # ── 레지스트리 게시 ─────────────────────────────────────────────────
 # 스모크 통과 후에만 돈다(needs: smoke) — 레지스트리에 검증된 이미지만 남긴다.
@@ -125,9 +134,7 @@ publish:
     # 먼저 돌아야 진단 메시지가 docker 의 중첩 에러에 가려지지 않는다.
     # CI_REGISTRY_* 는 GitLab 이 자동 주입한다(잡 토큰) — 관리할 자격증명이 없다.
     - bash infra/deploy-wsl.sh publish
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  rules: *on_deploy
 
 # ── 롤백 (수동) ─────────────────────────────────────────────────────
 # 파이프라인 실행 시 변수 ROLLBACK_TAG 에 되돌릴 커밋 sha(8자)를 넣고 이 잡을 돌린다.
@@ -154,9 +161,7 @@ rollback:
         exit 1
       fi
     - bash infra/deploy-wsl.sh rollback
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  rules: *on_deploy
 
 # ── 이미지 정리 (수동) ──────────────────────────────────────────────
 # 배포마다 태그가 쌓여 디스크를 먹는다. 자동으로 돌리지 않는 이유: 지운 태그는 롤백 대상에서
@@ -170,6 +175,4 @@ prune:
     - bash infra/deploy-wsl.sh tags
     - bash infra/deploy-wsl.sh prune
     - bash infra/deploy-wsl.sh tags
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+  rules: *on_deploy
