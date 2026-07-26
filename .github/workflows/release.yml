@@ -1,0 +1,110 @@
+name: Release
+
+# 컨테이너 이미지 릴리스 (docs/09 §4·§4.3, ADR-0020).
+#   push(main) → 앱 4종 빌드 + GHCR push(sha + latest)
+#   PR        → 빌드만(push 없음). Dockerfile·lock·compose·이 파일이 바뀔 때만 —
+#               워크플로·Dockerfile 버그를 머지 전에 잡는다(main에서 처음 터지지 않게).
+#   수동      → workflow_dispatch
+#
+# **VM 배포는 이 워크플로가 하지 않는다** — 배포 자격증명을 CI에 두지 않는다는 선택이다.
+# 배포·롤백 절차는 docs/12-deployment-runbook.md (수동, sha 태그 핀).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/*/Dockerfile"
+      - ".dockerignore"
+      - "infra/compose.prod.yml"
+      - ".github/workflows/release.yml"
+      - "pnpm-lock.yaml"
+      - "uv.lock"
+      - "apps/web-*/next.config.mjs"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  # PR에선 이전 실행을 취소한다(연속 푸시 시 낭비). **main에선 취소하지 않는다** —
+  # 취소된 실행의 sha는 이미지가 없고, 그 sha가 롤백 대상이면 되돌아갈 곳이 사라진다.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  images:
+    name: ${{ matrix.image }} image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # GHCR push (main·dispatch 한정 — PR은 push하지 않는다)
+    strategy:
+      fail-fast: false # 한 이미지 실패가 나머지 결과를 가리지 않게
+      matrix:
+        include:
+          # build_args 는 이미지마다 다르다 — Python 이미지엔 NEXT_PUBLIC_* ARG가 없어
+          # 넘기면 "unused build arg" 경고만 쌓인다(빌드는 통과하지만 노이즈).
+          - image: api
+            dockerfile: apps/api/Dockerfile
+            build_args: ""
+          - image: ai-worker
+            dockerfile: apps/ai-worker/Dockerfile
+            build_args: ""
+          - image: web-resident
+            dockerfile: apps/web-resident/Dockerfile
+            build_args: NEXT_PUBLIC_API_BASE_URL=/api
+          - image: web-admin
+            dockerfile: apps/web-admin/Dockerfile
+            build_args: NEXT_PUBLIC_API_BASE_URL=/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # PR에선 로그인하지 않는다(push 없음 → 자격증명 불필요).
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 태그: sha(배포·롤백의 유일한 핀) + latest(편의 포인터 — 배포 금지, docs/09 §4.3).
+      # 이미지 이름은 소문자만 허용되므로 owner를 소문자로 정규화한다.
+      - name: Compute image ref
+        id: meta
+        run: |
+          owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "repo=ghcr.io/${owner}/liviq-${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build${{ github.event_name != 'pull_request' && ' and push' || ' only (PR)' }}
+        uses: docker/build-push-action@v6
+        with:
+          # 빌드 컨텍스트는 **레포 루트** — uv workspace 단일 lock·pnpm workspace 때문에
+          # 앱 디렉토리 컨텍스트로는 빌드가 성립하지 않는다(docs/09 §4.3).
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ steps.meta.outputs.repo }}:${{ github.sha }}
+            ${{ steps.meta.outputs.repo }}:latest
+          # NEXT_PUBLIC_* 은 빌드타임 인라인 — /api 상대경로 고정이라 환경별 재빌드가 필요 없다.
+          # NEXT_PUBLIC_VWORLD_API_KEY 는 **여기서 넣지 않는다**: 도메인 잠금 키이므로 운영
+          # 도메인이 확정된 뒤 그 값으로 web-admin만 재빌드한다(런북 §6). 미주입 시 Dockerfile
+          # 기본값(빈 값) → 트윈 '실사 3D' 토글만 비활성, 나머지 화면은 정상.
+          build-args: ${{ matrix.build_args }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ matrix.image }}"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "- 빌드만 수행(PR — GHCR push 없음)"
+            else
+              echo '- `${{ steps.meta.outputs.repo }}:${{ github.sha }}`'
+              echo '- `${{ steps.meta.outputs.repo }}:latest`'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
