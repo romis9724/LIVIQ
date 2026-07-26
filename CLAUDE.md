@@ -26,7 +26,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실): **H11까지 완료**(H10 컨테이너 배포 포함 — 이미지 GHCR 게시·롤백 실연 완료). 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
+현재 구현된 것(현실): **H12-1까지 완료** — H10 컨테이너 배포(GHCR 게시·롤백 실연) · H11 감사 로그·문서 정합 · H12 사내 GitLab 배포는 파이프라인·좌표까지(러너·호스트 준비와 실배포는 H12-2 대기). 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
 워크스페이스 구성은 `ls`·[docs/02](docs/02-directory-structure.md)·[ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
