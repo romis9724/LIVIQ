@@ -32,6 +32,12 @@
 
 1. **애플리케이션**: 모든 쿼리에 `tenant_id` 필터 + 요청 컨텍스트 검증.
 2. **DB(RLS)**: 트랜잭션마다 `SET LOCAL app.tenant_id` → 정책으로 강제([03 §5]).
+
+> **현재 2번이 런타임에서 비활성이다**(2026-07-26 실측, [09 §8.3](09-implementation-harness.md) 백로그 "런타임 RLS 우회 롤").
+> 앱이 `DATABASE_URL`의 owner 롤(superuser·BYPASSRLS)로 접속하고 `SET ROLE`을 하지 않아, RLS 정책이
+> `ENABLE`+`FORCE`로 걸려 있어도 무조건 통과한다(tenant 컨텍스트 없이 `households` 322행 반환). 정책 자체는
+> 정상이며 `packages/db` 테스트가 `SET LOCAL ROLE liviq_app`으로 검증한다 — 즉 **1번만으로 격리가 유지되는
+> 상태**다. 전용 접속 롤(`liviq_app`) 전환은 별도 작업 단위이며 **실배포 전 필수**다.
 - 벡터 검색도 tenant 선필터(문서 혼입 차단).
 - **Neo4j(시설 그래프)**: row RLS 없음 → 모든 노드에 `tenant_id` 프로퍼티 + **typed query 레이어 강제**(tenant predicate를 구조적으로 주입, raw Cypher 금지 — 코드 리뷰가 아니라 구조로 차단). 관계 생성 시 **양 끝 노드 tenant 일치 검증**([11 §4](11-data-architecture.md)). PG가 SoR이므로 파기·정정은 PG 기준으로 먼저 반영 후 그래프 재동기화.
 - **`SYS_ADMIN` 허용 목록**(단지 콘텐츠 비열람 원칙의 구체화):
