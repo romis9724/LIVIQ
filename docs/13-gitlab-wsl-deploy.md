@@ -365,60 +365,91 @@ sudo systemctl restart docker   # 컨테이너는 restart: unless-stopped 로 �
 > (사용자 결정 2026-07-26). 실제 입주민 개인정보가 들어가는 시점에 도메인 + Caddy 자동 HTTPS 로
 > 올린다([ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) 재검토 신호).
 
-### 9.1 경로 (실측 2026-07-26)
+### 9.1 경로 (실측 2026-07-27)
+
+포워딩이 **3단**이고, 각 단의 포트가 다르다. 마지막 단의 포트가 3000/3001 로 **고정돼 있어서**
+Caddy 가 그 포트를 들어야 한다 — 이 숫자를 바꾸면 portproxy 도 같이 바꿔야 한다.
 
 ```
-브라우저 → 공유기 59.29.231.14:17000 → Windows 0.0.0.0:17000 (portproxy)
-        → Windows 127.0.0.1:17000 (WSL 자동 중계) → WSL Caddy :17000 → web-resident:3000
+브라우저 → bastion 59.29.231.14:17000 → Windows 192.168.10.140:3000 (portproxy)
+        → WSL 172.17.40.17:3000 → Caddy :3000 → web-resident:3000
+관리자     :17001              → 140:3001                → WSL:3001 → Caddy :3001 → web-admin:3001
 ```
 
-| 사이트 | 외부 | 내부(변경 없음) |
-|---|---|---|
-| 입주민 | `http://59.29.231.14:17000` | Caddy `:17000` |
-| 관리자 | `http://59.29.231.14:17001` | Caddy `:17001` |
-| 파이프라인 스모크 | — | Caddy `:8080` + Host `*.localhost` (그대로 유지) |
+| 사이트 | 외부 | Windows | WSL/Caddy |
+|---|---|---|---|
+| 입주민 | `http://59.29.231.14:17000` | `0.0.0.0:3000` | `:3000` |
+| 관리자 | `http://59.29.231.14:17001` | `0.0.0.0:3001` | `:3001` |
+| 파이프라인 스모크 | — | — | `:8080` + Host `*.localhost` (그대로 유지) |
+
+컨테이너 내부의 `web-resident:3000`·`web-admin:3001` 과 숫자가 겹치지만 **다른 네트워크
+이름공간**이라 충돌하지 않는다(두 웹 컨테이너는 호스트 포트를 publish 하지 않는다).
 
 ### 9.2 왜 포워딩만으로는 안 됐나
 
 Caddy 는 사이트를 **Host 헤더**로 가른다(`resident.localhost` / `admin.localhost`). IP:포트로 들어오면
-Host 가 `59.29.231.14:17000` 이라 매칭되는 사이트가 없어 **응답하지 않는다** — 공유기가 TCP 핸드셰이크를
-완료하므로 포트는 열린 것처럼 보이고 HTTP 만 0바이트로 끊긴다(이 증상으로 진단했다).
+Host 가 `59.29.231.14:17000` 이라 매칭되는 사이트가 없어 **응답하지 않는다** — bastion 이 TCP
+핸드셰이크를 완료하므로 포트는 열린 것처럼 보이고 HTTP 만 0바이트로 끊긴다(이 증상으로 진단했다).
 
-해법은 **포트 기반 사이트 주소**를 하나 더 붙이는 것이다. `:17000` 은 포트만 맞으면 Host 와 무관하게
+해법은 **포트 기반 사이트 주소**를 하나 더 붙이는 것이다. `:3000` 은 포트만 맞으면 Host 와 무관하게
 매칭된다. [`infra/Caddyfile`](../infra/Caddyfile) 의 `{$RESIDENT_ALT_SITE:}`(기본 빈 값)가 그 자리이고,
 값은 [`infra/compose.wsl.yml`](../infra/compose.wsl.yml) 오버레이가 넣는다 — 3-tier 운영은 이 오버레이를
 쓰지 않으므로 주소가 하나로 남는다(형상 오염 없음).
 
-### 9.3 Windows portproxy (관리자 PowerShell, 1회)
+### 9.3 Windows portproxy — 함정 하나 (실측)
 
 `networkingMode=mirrored` 는 Windows 11 22H2 / Server 2025 이상만 지원한다. 이 호스트는
 **Windows 10 22H2**(10.0.19045)라 쓸 수 없어 portproxy 로 간다.
 
+**`listenaddress=0.0.0.0` 은 루프백까지 점유한다.** 그래서 아래는 **작동하지 않는다**:
+
 ```powershell
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=17000 connectaddress=127.0.0.1 connectport=17000
-netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=17001 connectaddress=127.0.0.1 connectport=17001
-New-NetFirewallRule -DisplayName "LIVIQ resident 17000" -Direction Inbound -Protocol TCP -LocalPort 17000 -Action Allow
-New-NetFirewallRule -DisplayName "LIVIQ admin 17001"    -Direction Inbound -Protocol TCP -LocalPort 17001 -Action Allow
+# ✗ 자기 자신을 가리키는 루프 — Empty reply from server
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=P connectaddress=127.0.0.1 connectport=P
+```
+
+WSL 이 publish 한 포트는 Windows 루프백으로 자동 중계되는데, 위 규칙이 `127.0.0.1:P` 를 먼저
+점유해 중계가 IPv4 루프백에 붙지 못한다(`[::1]:P` 만 남는다 — netstat 로 확인됨). portproxy 는
+자기 리스너로 연결해 즉시 끊는다.
+
+성립하는 형태는 둘이다.
+
+```powershell
+# ① WSL IP 직접 — 지금 이 호스트의 형태. 단순하지만 WSL IP 가 재부팅마다 바뀐다.
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=3000 connectaddress=172.17.40.17 connectport=3000
+
+# ② IPv6 루프백 — WSL 자동 중계의 [::1] 리스너를 쓴다. IP 에 의존하지 않아 재부팅에 안전하다.
+netsh interface portproxy add v4tov6 listenaddress=0.0.0.0 listenport=3000 connectaddress=::1 connectport=3000
+```
+
+②의 `[::1]:P` 중계가 실제로 응답하는 것은 Windows 에서 `curl.exe http://[::1]:3000/` 로 확인했다(200).
+WSL IP 가 바뀌어 ①이 깨졌을 때 ②로 바꾸면 부팅 스크립트가 불필요해진다.
+
+방화벽은 인바운드 허용이 필요하다(비관리자 세션에서는 조회조차 `Access denied` 라 확인 불가 —
+외부 curl 로 판정한다):
+
+```powershell
+New-NetFirewallRule -DisplayName "LIVIQ resident 3000" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+New-NetFirewallRule -DisplayName "LIVIQ admin 3001"    -Direction Inbound -Protocol TCP -LocalPort 3001 -Action Allow
 netsh interface portproxy show all
 ```
 
-**`connectaddress` 가 `127.0.0.1` 인 것이 요점이다.** WSL 이 publish 한 포트는 Windows 루프백으로
-자동 중계되므로, 재부팅마다 바뀌는 WSL eth0 IP(예: `172.17.40.17`)를 쫓아다닐 필요가 없다 —
-부팅마다 portproxy 를 다시 만드는 스크립트가 불필요해진다. WSL IP 를 직접 적으면 그 스크립트가 필요하다.
+제거는 `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=3000`.
 
-제거는 `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=17000`.
-
-### 9.4 확인
+### 9.4 확인 (아래에서 위로)
 
 ```bash
-# WSL 안 (Caddy 가 실제로 그 포트를 듣는지)
-ss -tlnp | grep -E ':17000|:17001'
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:17000/       # 200
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:17000/api/health   # 200
+# ① WSL 안 — Caddy 가 그 포트를 듣는지
+ss -tln | grep -E ':3000|:3001'
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/            # 200
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/api/health  # 200
 
-# 외부에서
+# ② Windows 에서 — portproxy 앞단
+/mnt/c/Windows/System32/curl.exe -sS -o NUL -w '%{http_code}\n' http://127.0.0.1:3000/
+
+# ③ 외부에서
 curl -sS -o /dev/null -w '%{http_code}\n' http://59.29.231.14:17000/
 ```
 
-`ss` 에 포트가 보이는데 외부에서 안 되면 portproxy·방화벽(§9.3), 포트가 안 보이면 배포·오버레이
-(`-f infra/compose.wsl.yml` 를 빠뜨렸는지) 쪽이다.
+증상별 지목: ①이 안 되면 배포·오버레이(`-f infra/compose.wsl.yml` 누락) · ①은 되고 ③이
+`Empty reply` 면 portproxy 루프(§9.3) · ③이 타임아웃이면 방화벽 또는 bastion 포워딩.
