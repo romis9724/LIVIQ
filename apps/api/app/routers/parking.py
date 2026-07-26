@@ -11,10 +11,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import PII_PLATES_VIEWED, client_ip, record_audit
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
 from app.schemas.parking import ParkingLayoutOut, ParkingVehicleItem, ParkingVehicleListOut
@@ -40,6 +41,7 @@ async def get_layout(
 
 @router.get("/vehicles", response_model=ParkingVehicleListOut)
 async def list_vehicles(
+    request: Request,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
@@ -85,4 +87,14 @@ async def list_vehicles(
         )
         for vid, hid, plate_enc, model, is_ev, dong, unit_no in rows
     ]
+    # 개인정보 열람 감사(docs/06 §8) — 차량번호를 **복호해 평문으로 내보내는** 유일한 경로다.
+    # 번호판 자체는 기록하지 않는다(감사 로그에 개인정보 비저장 — §4.3). 건수만 남긴다.
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=PII_PLATES_VIEWED,
+        actor_user_id=ctx.user_id,
+        meta={"count": len(vehicles)},
+        ip=client_ip(request),
+    )
     return ParkingVehicleListOut(vehicles=vehicles, total=len(vehicles))

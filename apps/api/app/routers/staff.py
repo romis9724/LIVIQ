@@ -10,11 +10,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts import soft_delete_user
+from app.audit import TARGET_USER, USER_DEACTIVATED, client_ip, record_audit
 from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session, require_roles
 from app.invites import create_invite
 from app.mail import Mailer, get_mailer
@@ -34,6 +35,7 @@ _STAFF_LIST_ROLES = ("MANAGER", "STAFF")
 @router.post("/invite", status_code=202)
 async def invite_staff(
     body: InviteStaffIn,
+    request: Request,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
@@ -51,6 +53,9 @@ async def invite_staff(
         email=body.email,
         role="STAFF",
         name=body.name,
+        actor_user_id=ctx.user_id,  # 권한변경 감사는 create_invite가 기록(docs/06 §8)
+        actor_tenant_id=ctx.tenant_id,  # 소장→직원은 같은 단지(행위자 컬럼 그대로 기록)
+        ip=client_ip(request),
     )
     return Response(status_code=202)
 
@@ -124,6 +129,7 @@ async def list_staff(
 @router.post("/{user_id}/deactivate", status_code=204)
 async def deactivate_staff(
     user_id: uuid.UUID,
+    request: Request,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     session_store: Annotated[SessionStore, Depends(get_session_store)],
@@ -151,6 +157,16 @@ async def deactivate_staff(
         raise HTTPException(status_code=400, detail="직원이 아닙니다")
 
     user.status = "inactive"
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=USER_DEACTIVATED,
+        actor_user_id=ctx.user_id,
+        target_type=TARGET_USER,
+        target_id=user_id,
+        meta={"roles": sorted(roles)},
+        ip=client_ip(request),
+    )
     await session.flush()
     # 재로그인 시 inactive가 반영되도록 기존 세션 폐기(ADR-0011).
     await session_store.revoke_all_for_user(str(ctx.tenant_id), str(user_id))

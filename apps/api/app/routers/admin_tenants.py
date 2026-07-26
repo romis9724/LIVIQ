@@ -11,11 +11,12 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.accounts import soft_delete_user
+from app.audit import client_ip
 from app.codes_seed import seed_default_codes
 from app.config import SYSTEM_TENANT_ID
 from app.deps import RequestContext, get_auth_lookup_session, get_tenant_session, require_roles
@@ -139,7 +140,8 @@ async def list_tenants(
 async def invite_manager(
     tenant_id: uuid.UUID,
     body: InviteIn,
-    _ctx: Annotated[RequestContext, Depends(_SYS_ADMIN)],
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(_SYS_ADMIN)],
     session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
     mailer: Annotated[Mailer, Depends(get_mailer)],
@@ -160,6 +162,12 @@ async def invite_manager(
         tenant_id=tenant_id,
         email=body.email,
         role="MANAGER",
+        actor_user_id=ctx.user_id,  # 권한변경 감사는 create_invite가 기록(docs/06 §8)
+        # SYS_ADMIN 계정은 **정의상 시스템 테넌트 소속**이다(docs/06 §2 계정 생성 위계) —
+        # 요청 컨텍스트의 tenant_id가 아니라 그 사실을 넘긴다. 그래야 감사 행이 대상 단지에
+        # 남으면서도 행위자 컬럼이 composite FK를 위반하지 않는다(create_invite 주석 참조).
+        actor_tenant_id=SYSTEM_TENANT_ID,
+        ip=client_ip(request),
     )
     return Response(status_code=202)
 

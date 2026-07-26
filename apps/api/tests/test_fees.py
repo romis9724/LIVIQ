@@ -32,7 +32,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Fee, User
+from liviq_db.models import AuditLog, Fee, User
 
 _XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _TREE_HEADER = ("분류", "우리단지총액")
@@ -219,6 +219,31 @@ async def test_apply_inserts_all_households_with_divided_tree(
     assert fee.breakdown[0] == {"name": "공용관리비", "level": 0, "amount": 81468}
     neg = next(r for r in fee.breakdown if r["name"] == "수도 공용")
     assert neg["amount"] == -273  # 음수 유지
+
+
+async def test_apply_records_audit(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    """관리비 확정은 감사 대상이다(H11-1, docs/06 §8) — 대상 월·세대 수만, 금액은 미기록.
+
+    금액을 감사에 넣지 않는 이유: 세대별 금액은 개인정보성 데이터이고 정본은 `fees`다.
+    """
+    from app import audit
+
+    storage = FakeStorage()
+    async with _client(db_session, storage) as c:
+        up = await _upload(c, _tree_xlsx(), "2026-09")
+        upload_id = up.json()["upload_id"]
+        assert (await c.post(f"/admin/fees/uploads/{upload_id}/apply")).status_code == 200
+
+    rows = list(
+        await db_session.scalars(select(AuditLog).where(AuditLog.action == audit.FEES_CONFIRMED))
+    )
+    assert len(rows) == 1
+    assert rows[0].actor_user_id == MANAGER_USER_ID
+    assert rows[0].target_type == audit.TARGET_UPLOAD
+    assert str(rows[0].target_id) == upload_id
+    assert rows[0].meta == {"period": "2026-09", "households": len(households)}
 
 
 async def test_apply_zero_households_applies_none(db_session: AsyncSession) -> None:

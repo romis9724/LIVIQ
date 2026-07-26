@@ -13,12 +13,19 @@ import io
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from openpyxl import Workbook, load_workbook
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import (
+    PII_ROSTER_VIEWED,
+    ROSTER_UPLOADED,
+    TARGET_UPLOAD,
+    client_ip,
+    record_audit,
+)
 from app.deps import RequestContext, Storage, get_storage, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
 from app.routers.approvals import mask_name
@@ -121,6 +128,7 @@ async def _load_household_vehicles(
 
 @router.get("", response_model=RosterListOut)
 async def list_roster(
+    request: Request,
     ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
@@ -211,6 +219,17 @@ async def list_roster(
             .limit(1)
         )
     ).first()
+
+    # 개인정보 열람 감사(docs/06 §8) — 성함(마스킹)·차량번호가 응답에 실리는 화면이다.
+    # 검색어 q는 기록하지 않는다(동·호 입력이 곧 대상 특정 정보라 감사에 남길 값이 아니다).
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=PII_ROSTER_VIEWED,
+        actor_user_id=ctx.user_id,
+        meta={"count": len(page_rows), "page": page, "size": size},
+        ip=client_ip(request),
+    )
 
     return RosterListOut(
         items=[
@@ -305,6 +324,7 @@ class RosterRowIn(BaseModel):
 
 @router.post("/upload", response_model=RosterUploadOut)
 async def upload_roster(
+    request: Request,
     ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     storage: Annotated[Storage, Depends(get_storage)],
@@ -355,6 +375,22 @@ async def upload_roster(
             error_report={"errors": [e.model_dump() for e in errors]} if errors else None,
             uploaded_by=ctx.user_id,
         )
+    )
+    # 성함·생년월일은 감사에 넣지 않는다(PII) — 규모만 기록(docs/06 §8).
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=ROSTER_UPLOADED,
+        actor_user_id=ctx.user_id,
+        target_type=TARGET_UPLOAD,
+        target_id=upload_id,
+        meta={
+            "rows": len(parsed),
+            "applied": applied,
+            "marked_inactive": marked_inactive,
+            "errors": len(errors),
+        },
+        ip=client_ip(request),
     )
     await session.flush()
     return RosterUploadOut(

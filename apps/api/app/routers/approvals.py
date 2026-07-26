@@ -10,10 +10,17 @@ import datetime
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.audit import (
+    TARGET_USER,
+    USER_APPROVED,
+    USER_REJECTED,
+    client_ip,
+    record_audit,
+)
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
 from app.schemas.approvals import ApprovalListOut, ApprovalOut, RejectIn
@@ -124,6 +131,7 @@ async def _mismatch_reason(
 @router.post("/{user_id}/approve", status_code=204)
 async def approve(
     user_id: uuid.UUID,
+    request: Request,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     session_store: Annotated[SessionStore, Depends(get_session_store)],
@@ -141,6 +149,15 @@ async def approve(
             title="가입이 승인되었습니다",
         )
     )
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=USER_APPROVED,
+        actor_user_id=ctx.user_id,
+        target_type=TARGET_USER,
+        target_id=user_id,
+        ip=client_ip(request),
+    )
     await session.flush()
     # 재로그인 시 active·역할이 세션에 반영되도록 기존 세션 폐기(docs/06 §2, ADR-0011).
     await session_store.revoke_all_for_user(str(ctx.tenant_id), str(user_id))
@@ -150,6 +167,7 @@ async def approve(
 async def reject(
     user_id: uuid.UUID,
     body: RejectIn,
+    request: Request,
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     session_store: Annotated[SessionStore, Depends(get_session_store)],
@@ -165,6 +183,17 @@ async def reject(
             title="가입이 거절되었습니다",
             body=body.reason,
         )
+    )
+    # 거절 사유 **원문은 감사에 넣지 않는다**(자유 텍스트 = 개인정보 유입 경로, docs/06 §4.3).
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=USER_REJECTED,
+        actor_user_id=ctx.user_id,
+        target_type=TARGET_USER,
+        target_id=user_id,
+        meta={"has_reason": bool(body.reason)},
+        ip=client_ip(request),
     )
     await session.flush()
     await session_store.revoke_all_for_user(str(ctx.tenant_id), str(user_id))
