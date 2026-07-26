@@ -136,6 +136,67 @@ infra/deploy-wsl.sh down        # 정지 (볼륨 보존)
 
 ---
 
+## 3.1 외부에서 main 에 push 하는 시나리오
+
+**push 하는 위치는 상관없다.** Runner 는 **폴링(pull) 방식**이라 GitLab 이 이 호스트로 들어오지
+않는다 — Runner 가 GitLab 에 "일 있나요"를 주기적으로 묻는다(`check_interval = 3`). 그래서
+이 PC 에 인바운드 포트를 열 필요도, 고정 IP 도, 방화벽 예외도 필요 없다. 외부 기기에서 main 에
+push 하면 이 호스트의 Runner 가 그 잡을 집어 **여기 WSL Docker 에** 배포한다.
+
+성립 조건은 딱 두 가지다:
+
+1. **`.gitlab-ci.yml` 이 main 에 있어야 한다.** 없으면 push 해도 파이프라인이 생기지 않는다.
+2. **push 시점에 WSL 이 떠 있어야 한다.** Runner 는 WSL 안의 systemd 서비스다 → WSL 이 죽어
+   있으면 잡을 집을 사람이 없다. 잡은 `pending` 으로 남고, 오래 방치되면 GitLab 이 stuck 으로
+   판정해 실패시킨다. (WSL 이 나중에 뜨면 그 사이의 pending 잡은 그때 집어간다.)
+
+### WSL 이 죽는 경우와 대응
+
+| 상황 | 결과 | 대응 |
+|---|---|---|
+| Windows 재부팅 | WSL 자동 시작 안 됨 → Runner 없음 | 부팅 시 WSL 을 띄우는 예약 작업 (아래) |
+| `wsl --shutdown` 수동 실행 | 같음 | 다시 띄운다 |
+| WSL 유휴 | **문제 없음** — systemd 로 docker·gitlab-runner 프로세스가 상주해 VM 이 유지된다 | — |
+
+Docker·Runner 자체는 부팅 시 자동 기동으로 이미 설정돼 있다(`systemctl enable docker gitlab-runner`) —
+**WSL 이 뜨기만 하면** 그 안에서 둘은 알아서 올라온다. 즉 남은 문제는 "WSL 을 누가 띄우나" 하나다.
+
+### 이 호스트의 현재 상태 (2026-07-26 실측)
+
+`wsl_start` 예약 작업이 **부팅 트리거로 존재하지만 비활성**이고, 활성화해도 이 시나리오에는 부족하다:
+
+```
+State      : Disabled                    ← 꺼져 있음
+LogonType  : Interactive                 ← abworks 가 로그인해야만 실행됨(무인 부팅 시 안 돎)
+Arguments  : -Command "start-process wsl.exe" -WindowStyle Hidden"   ← 따옴표 깨짐
+```
+
+무인 상태에서도 동작하게 하려면 **로그온 여부와 무관하게 실행**되도록 바꿔야 한다. 관리자
+PowerShell 에서:
+
+```powershell
+# 로그온 없이도 부팅 시 WSL distro 를 띄운다. -e /bin/true = 부팅만 하고 셸을 남기지 않는다.
+$a = New-ScheduledTaskAction -Execute 'C:\Windows\System32\wsl.exe' -Argument '-d Ubuntu -e /bin/true'
+$t = New-ScheduledTaskTrigger -AtStartup
+$p = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName 'wsl_autostart_liviq' -Action $a -Trigger $t -Principal $p -Settings $s -Force
+```
+
+> SYSTEM 계정으로 WSL 을 띄우는 방식은 Windows 빌드에 따라 동작이 다르다. 등록 후 **실제로
+> 재부팅해서 확인**할 것 — `wsl -l --running` 에 Ubuntu 가 보이고
+> `wsl -d Ubuntu -u root systemctl is-active gitlab-runner` 가 `active` 여야 한다.
+> SYSTEM 으로 안 되면 `-UserId '<사용자>' -LogonType Password`(자격증명 저장) 로 바꾼다.
+
+검증이 끝날 때까지는 **push 전에 이 PC 에서 WSL 이 떠 있는지 확인**하는 편이 안전하다:
+
+```powershell
+wsl -l --running
+wsl -d Ubuntu -u root systemctl is-active docker gitlab-runner
+```
+
+---
+
 ## 4. 첫 배포 이후 — 로그인 계정 만들기
 
 빈 DB 에는 로그인할 계정이 없다. 최초 SYS_ADMIN 은 이미지에 포함된 부트스트랩으로 만든다
