@@ -27,6 +27,13 @@
 
 각 VM 준비물: Docker Engine + compose v2, 레포 체크아웃(compose 파일·Caddyfile 때문에 필요), `/etc/liviq/env.prod`.
 
+> **★ 아키텍처: 이미지는 `linux/amd64` 단일 아키텍처다**(H10-3 실측 — `release.yml`이 `platforms`를
+> 지정하지 않아 GitHub 러너 아키텍처로 빌드된다). **VM도 amd64여야 한다** — arm64 VM(Graviton·Ampere 등)
+> 에서는 실행되지 않는다. arm64로 가려면 `release.yml`에 `platforms: linux/amd64,linux/arm64`를 주고
+> 멀티아치로 빌드해야 하는데, QEMU 크로스 빌드로 CI 시간이 크게 늘어나므로 **실제 arm64 요구가 생길 때**
+> 도입한다(YAGNI). Apple Silicon 워크스테이션에서 검증할 때는 `docker pull --platform linux/amd64`로
+> 받아 에뮬레이션으로 돌린다(느리지만 동작 — H10-3 검증이 그렇게 수행됐다).
+
 ---
 
 ## 2. env 파일 (tier별 최소 배치)
@@ -63,7 +70,8 @@ WORKER_DATABASE_URL=postgresql+asyncpg://liviq_worker:<worker-pw>@10.0.0.20:5432
 
 ## 3. GHCR 로그인 (세 대 모두)
 
-GHCR 패키지는 기본 **private**이다. 각 VM에서 `read:packages` 스코프만 가진 PAT로 로그인한다:
+GHCR 패키지는 기본 **private**이다. 각 VM에서 PAT로 로그인한다(`read:packages` 최소 권한 권장 —
+실측에선 `repo` 스코프 classic 토큰으로도 pull이 됐다):
 
 ```bash
 echo "$GHCR_PAT" | docker login ghcr.io -u <github-user> --password-stdin
@@ -171,7 +179,8 @@ docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profil
 # web VM 동일
 ```
 
-- 롤백 후에도 `migrate`는 **최신 head**를 적용한 상태로 남는다. 이전 코드가 최신 스키마에서 동작하는지가 롤백 성립 조건이고, 그것을 보장하는 장치가 §5의 **2단계 규칙**이다.
+- 롤백 후에도 `migrate`는 **최신 head**를 적용한 상태로 남는다. 이전 코드가 최신 스키마에서 동작하는지가 롤백 성립 조건이고, 그것을 보장하는 장치가 §5의 **2단계 규칙**이다. H10-3에서 1회 실연했다: 이전 sha 이미지 4종이 최신 head(`f1a9c3e5b7d2`)에서 정상 기동·로그인·조회했고, 그 버전에 없는 기능(감사 로그 기록)만 멈췄다 — **코드만 되돌아간다**는 성질이 그대로 관측됐다.
+- 롤백 대상 sha의 이미지가 **레지스트리에 존재해야** 한다. `release.yml`이 main에서 concurrency 취소를 하지 않는 이유가 이것이다(취소된 실행의 sha는 이미지가 없다 — [09 §4.3](09-implementation-harness.md)).
 - 롤백이 실패하면(이전 코드가 새 스키마에서 못 뜨면) **앞으로 고쳐 나가는 것**이 유일한 경로다 — 백업 복구는 마지막 수단이고 그 절차는 [09 §7.1](09-implementation-harness.md).
 
 ---
@@ -189,3 +198,4 @@ docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profil
 | AI 응답이 한 번에 몰려 온다 | 프록시 버퍼링 | Caddy `reverse_proxy … { flush_interval -1 }` 확인([`infra/Caddyfile`](../infra/Caddyfile)) |
 | 이메일 검증·초대 링크가 내부 주소로 간다 | `API_BASE_URL`·`WEB_*_BASE_URL`이 내부 값 | 퍼블릭 도메인으로 수정 후 api 재기동 |
 | 감사 로그 `ip`가 전부 같은 사설 IP | `FORWARDED_ALLOW_IPS` 미지정 → 프록시 XFF 무신뢰 | app tier env에 지정 후 api 재기동(§2) |
+| `no matching manifest for linux/arm64` | 이미지가 amd64 단일 아키텍처 | amd64 VM을 쓰거나, 검증 목적이면 `docker pull --platform linux/amd64`(§1) |
