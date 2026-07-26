@@ -95,8 +95,13 @@
   font-weight: 600;
   color: var(--color-text-muted);
 }
-.tn-manager__email {
+/* 이름이 1차 식별자다 — 이메일보다 강조하고, 이메일은 보조로 낮춘다. */
+.tn-manager__name {
   font-weight: 700;
+}
+.tn-manager__email {
+  font-weight: 500;
+  color: var(--color-text-muted);
   overflow-wrap: anywhere;
   flex: 1;
   min-width: 0;

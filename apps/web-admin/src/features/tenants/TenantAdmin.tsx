@@ -281,21 +281,25 @@ function TenantRow({
 }: TenantRowProps) {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [inviting, setInviting] = useState(false);
   const inactive = tenant.status !== "active";
 
   async function invite() {
-    const trimmed = email.trim();
-    if (!EMAIL_RE.test(trimmed)) {
-      setEmailError("이메일 형식이 올바르지 않습니다.");
-      return;
-    }
-    setEmailError(undefined);
+    const trimmedEmail = email.trim();
+    const trimmedName = name.trim();
+    const emailOk = EMAIL_RE.test(trimmedEmail);
+    const nameOk = trimmedName.length > 0;
+    setEmailError(emailOk ? undefined : "이메일 형식이 올바르지 않습니다.");
+    setNameError(nameOk ? undefined : "이름을 입력해 주세요.");
+    if (!emailOk || !nameOk) return;
     setInviting(true);
     try {
-      await inviteManager(tenant.id, trimmed);
+      await inviteManager(tenant.id, { email: trimmedEmail, name: trimmedName });
       setEmail("");
-      onInvited(`${trimmed} 앞으로 소장 초대 메일을 발송했습니다.`);
+      setName("");
+      onInvited(`${trimmedName}(${trimmedEmail}) 앞으로 소장 초대 메일을 발송했습니다.`);
     } catch (err) {
       onError(err instanceof ApiError || err instanceof Error ? err.message : "초대에 실패했습니다.");
     } finally {
@@ -330,6 +334,9 @@ function TenantRow({
       {tenant.manager ? (
         <div className="tn-manager">
           <span className="tn-manager__label">소장</span>
+          {tenant.manager.name ? (
+            <span className="tn-manager__name">{tenant.manager.name}</span>
+          ) : null}
           <span className="tn-manager__email">{tenant.manager.email ?? "이메일 미기록"}</span>
           <span
             className={`tn-manager__status tn-manager__status--${tenant.manager.status}`}
@@ -349,6 +356,15 @@ function TenantRow({
           }}
           noValidate
         >
+          <FormField
+            label="소장 이름"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            error={nameError}
+            autoComplete="off"
+            placeholder="김소장"
+            wrapperClassName="tn-invite__field"
+          />
           <FormField
             label="소장 초대 이메일"
             type="email"

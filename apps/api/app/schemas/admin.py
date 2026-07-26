@@ -34,10 +34,11 @@ class TenantOut(BaseModel):
 
 
 class TenantManagerItem(BaseModel):
-    """단지의 현재 소장(H7-6) — 이메일은 복호 실패·PII 부재 시 None."""
+    """단지의 현재 소장(H7-6) — 이메일·성명은 복호 실패·PII 부재 시 None."""
 
     user_id: uuid.UUID
     email: str | None = None
+    name: str | None = None  # pii_vault.name_enc 복호 — 이메일만으로는 누구인지 알 수 없다
     status: str  # invited=수락 대기 · active=활동 중
 
 
@@ -54,7 +55,14 @@ class TenantListOut(BaseModel):
 
 
 class InviteIn(BaseModel):
+    """소장 초대 — 직원 초대(InviteStaffIn)와 같은 계약으로 name 필수.
+
+    이름이 없으면 SYS_ADMIN 단지 목록에서 소장을 이메일로만 식별해야 한다. 직원 목록에
+    성명을 넣은 근거(ADR-0018)가 소장에도 그대로 적용된다.
+    """
+
     email: EmailStr  # 초대 대상 — login_id는 HMAC 해시, 평문은 pii_vault.email_enc
+    name: str = Field(min_length=1, max_length=100)  # pii_vault.name_enc 암호화 저장
 
 
 class InviteStaffIn(BaseModel):

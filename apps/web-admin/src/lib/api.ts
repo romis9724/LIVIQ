@@ -1277,6 +1277,7 @@ export async function getMe(): Promise<Me> {
 export interface TenantManager {
   userId: string;
   email: string | null;
+  name: string | null; // 이름 필수화 이전 계정은 null
   status: string; // invited=수락 대기 · active=활동 중
 }
 
@@ -1293,7 +1294,12 @@ interface TenantRaw {
   name: string;
   created_at: string;
   status?: string;
-  manager?: { user_id: string; email?: string | null; status: string } | null;
+  manager?: {
+    user_id: string;
+    email?: string | null;
+    name?: string | null;
+    status: string;
+  } | null;
 }
 
 function toTenant(raw: TenantRaw): Tenant {
@@ -1303,7 +1309,12 @@ function toTenant(raw: TenantRaw): Tenant {
     createdAt: raw.created_at,
     status: raw.status ?? "active",
     manager: raw.manager
-      ? { userId: raw.manager.user_id, email: raw.manager.email ?? null, status: raw.manager.status }
+      ? {
+          userId: raw.manager.user_id,
+          email: raw.manager.email ?? null,
+          name: raw.manager.name ?? null,
+          status: raw.manager.status,
+        }
       : null,
   };
 }
@@ -1356,12 +1367,18 @@ export async function createTenant(name: string): Promise<{ id: string; name: st
   return { id: body.id, name: body.name };
 }
 
-/** 대상 단지에 소장(MANAGER) 초대 메일 발송. 202. 409=이미 등록된 이메일. */
-export async function inviteManager(tenantId: string, email: string): Promise<void> {
+/**
+ * 대상 단지에 소장(MANAGER) 초대 메일 발송. 202. 409=이미 등록된 이메일·소장 정원(1명).
+ * name은 직원 초대와 동일하게 필수 — pii_vault 암호화 저장 후 목록에서 실명 식별.
+ */
+export async function inviteManager(
+  tenantId: string,
+  input: { email: string; name: string },
+): Promise<void> {
   const response = await apiFetch(`${API_BASE_URL}/admin/tenants/${tenantId}/invite-manager`, {
     method: "POST",
     headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email: input.email, name: input.name }),
   });
   await ensureOk(response);
 }

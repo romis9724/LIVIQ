@@ -181,11 +181,14 @@ async def test_sys_admin_create_list_and_invite_manager(
         # 시스템 테넌트는 목록 제외·초대 불가(소장 초대 대상 아님).
         assert all(t["id"] != str(SYSTEM_TENANT_ID) for t in listed.json()["items"])
         sys_invite = await c.post(
-            f"/admin/tenants/{SYSTEM_TENANT_ID}/invite-manager", json={"email": email}
+            f"/admin/tenants/{SYSTEM_TENANT_ID}/invite-manager",
+            json={"email": email, "name": "김소장"},
         )
         assert sys_invite.status_code == 404
 
-        invited = await c.post(f"/admin/tenants/{tid}/invite-manager", json={"email": email})
+        invited = await c.post(
+            f"/admin/tenants/{tid}/invite-manager", json={"email": email, "name": "김소장"}
+        )
         assert invited.status_code == 202
 
     # 초대 계정: status='invited' + MANAGER 역할 + 메일 토큰.
@@ -198,6 +201,61 @@ async def test_sys_admin_create_list_and_invite_manager(
     assert "token=" in mailer.sent[-1][2]
 
 
+async def test_invite_manager_requires_name(
+    db_session: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """소장 초대도 이름 필수 — 직원 초대와 같은 계약(목록 식별용). 누락·공백은 422."""
+    async with _make_app(
+        db_session, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as c:
+        created = await c.post("/admin/tenants", json={"name": "이름검증단지"})
+        tid = created.json()["id"]
+
+        missing = await c.post(
+            f"/admin/tenants/{tid}/invite-manager", json={"email": "no-name@example.com"}
+        )
+        assert missing.status_code == 422, missing.text
+
+        blank = await c.post(
+            f"/admin/tenants/{tid}/invite-manager",
+            json={"email": "no-name@example.com", "name": ""},
+        )
+        assert blank.status_code == 422, blank.text
+
+
+async def test_invite_manager_stores_name_and_list_returns_it(
+    db_session: AsyncSession, fake_redis: FakeRedis
+) -> None:
+    """초대 시 받은 이름을 pii_vault.name_enc로 저장하고 단지 목록이 복호해 반환한다.
+
+    이메일만으로는 SYS_ADMIN 화면에서 누가 소장인지 알 수 없다 — 직원 목록과 같은 이유로
+    이름이 필요하다(ADR-0018 성명 표시 근거).
+    """
+    email = "named-mgr@example.com"
+    async with _make_app(
+        db_session, fake_redis, FakeMailer(), ctx=_ctx(("SYS_ADMIN",), user_id=SYS_ADMIN_ID)
+    ) as c:
+        created = await c.post("/admin/tenants", json={"name": "이름표시단지"})
+        tid = created.json()["id"]
+        invited = await c.post(
+            f"/admin/tenants/{tid}/invite-manager", json={"email": email, "name": "이소장"}
+        )
+        assert invited.status_code == 202, invited.text
+
+        listed = await c.get("/admin/tenants")
+        row = next(t for t in listed.json()["items"] if t["id"] == tid)
+        assert row["manager"]["name"] == "이소장"
+        assert row["manager"]["email"] == email
+        assert row["manager"]["status"] == "invited"
+
+    # 평문이 아니라 암호문으로 들어갔는지 확인 — 저장 계층까지 본다(절대 규칙 2).
+    await db_session.execute(text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=tid))
+    user = await db_session.scalar(select(User).where(User.login_id == _crypto().hmac_hash(email)))
+    assert user is not None and user.pii_ref is not None
+    name_enc = await db_session.scalar(select(PiiVault.name_enc).where(PiiVault.id == user.pii_ref))
+    assert name_enc is not None and b"\xec\x9d\xb4" not in name_enc  # '이'의 UTF-8 바이트 미노출
+
+
 async def test_invite_manager_unknown_tenant_404(
     db_session: AsyncSession, fake_redis: FakeRedis
 ) -> None:
@@ -206,7 +264,7 @@ async def test_invite_manager_unknown_tenant_404(
     ) as c:
         resp = await c.post(
             "/admin/tenants/99999999-9999-9999-9999-999999999999/invite-manager",
-            json={"email": "x@example.com"},
+            json={"email": "x@example.com", "name": "김소장"},
         )
     assert resp.status_code == 404
 
@@ -582,7 +640,8 @@ async def test_invite_manager_capacity_one(
     ) as c:
         # seed_tenant이 MANAGER를 이미 심었다 → 초대 차단.
         blocked = await c.post(
-            f"/admin/tenants/{TENANT_ID}/invite-manager", json={"email": "new@example.com"}
+            f"/admin/tenants/{TENANT_ID}/invite-manager",
+            json={"email": "new@example.com", "name": "박소장"},
         )
         assert blocked.status_code == 409
 
@@ -594,7 +653,8 @@ async def test_invite_manager_capacity_one(
         # 소장 제거(소프트 삭제) → 재초대 202.
         assert (await c.delete(f"/admin/tenants/{TENANT_ID}/manager")).status_code == 204
         retry = await c.post(
-            f"/admin/tenants/{TENANT_ID}/invite-manager", json={"email": "new@example.com"}
+            f"/admin/tenants/{TENANT_ID}/invite-manager",
+            json={"email": "new@example.com", "name": "박소장"},
         )
         assert retry.status_code == 202
 
