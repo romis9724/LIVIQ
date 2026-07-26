@@ -716,7 +716,7 @@ CREATE POLICY tenant_isolation ON documents
   WITH CHECK (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);
 ```
 - API는 트랜잭션 시작 시 `SET LOCAL app.tenant_id = $`, `app.user_id`, `app.role` 설정.
-- **마이그레이션 owner와 런타임 role 분리**: 런타임 role에 `BYPASSRLS` 부여 금지(테이블 owner는 기본 RLS를 우회하므로 `FORCE`로 차단). 정책·role은 스키마 자동생성 대상이 아니므로 **Alembic custom migration(`op.execute`)으로 버전관리**([09 §2.1](09-implementation-harness.md)).
+- **마이그레이션 owner와 런타임 role 분리**: 런타임 role에 `BYPASSRLS` 부여 금지(테이블 owner는 기본 RLS를 우회하므로 `FORCE`로 차단). 정책·role은 스키마 자동생성 대상이 아니므로 **Alembic custom migration(`op.execute`)으로 버전관리**([09 §2.1](09-implementation-harness.md)). 접속 계약은 아래 §5.1.
 - **트랜잭션 래퍼 강제**: 모든 쿼리는 tenant 컨텍스트가 설정된 트랜잭션 래퍼 안에서만 실행 — 래퍼 밖 쿼리는 구조적으로 금지.
 - **composite FK로 cross-tenant 참조 차단**: 부모 `UNIQUE(tenant_id, id)` + 자식 `FK(tenant_id, parent_id) → 부모(tenant_id, id)`로 다른 단지 행 참조를 DB가 거부.
 - **컨텍스트 미설정 시 fail-closed**: `app.tenant_id` 미설정이면 `nullif(...)`가 NULL → 정책이 거짓 → 읽기·쓰기 **모두 실패**.
@@ -734,6 +734,32 @@ CREATE POLICY tenant_isolation ON documents
 | `notices` (예약 발행 스캔 한정) | 워커 role만 `worker_scheduled_scan` **SELECT**(scheduled·미삭제 행만 — H8-1, 위) — 그 외 role·연산은 표준 tenant 격리 |
 | `users` (auth 조회 한정) | **`auth_lookup` permissive 정책(H2-1)** — 로그인·이메일 중복체크의 `login_id`(email HMAC) 전역 조회는 tenant 확정 전이라 표준 격리를 못 통과. `SET LOCAL app.auth_lookup='on'` 플래그가 켜진 트랜잭션에서 **SELECT만** 허용(`USING (current_setting('app.auth_lookup', true) = 'on')`). 로그인·가입 조회 경로만 사용, 쓰기는 불가 — 행을 찾으면 그 `tenant_id`로 정상 컨텍스트 재설정 후 진행 |
 | `auth_tokens` (검증 한정) | 초대·검증·재설정 링크는 tenant 확정 전 `token_hash`로 전역 조회 — `users` auth 조회와 동일하게 `auth_lookup` 플래그 트랜잭션에서 **SELECT만** 허용, 소진(`used_at`) 쓰기는 정상 tenant 컨텍스트에서 |
+
+### 5.1 접속 롤 계약 (H10-2)
+
+**정책이 걸려 있는 것과 런타임이 그 정책을 받는 것은 별개다.** `ENABLE`+`FORCE`가 적용돼 있어도 접속 롤이
+`BYPASSRLS`(또는 superuser)면 정책은 무조건 통과한다 — H10-1 스모크에서 실제로 그 상태였다([09 §8.13](09-implementation-harness.md)).
+따라서 **어떤 롤로 접속하는지가 이중 방어 2층의 성립 조건**이다.
+
+| 프로세스 | 접속 롤 | 왜 |
+|---|---|---|
+| Alembic 마이그레이션 (`migrate`) | **owner**(`liviq` — DDL·정책·GRANT 소유) | 스키마 변경 권한이 필요. 런타임 롤엔 DDL 권한 없음 |
+| `apps/api` | **`liviq_app`** | 표준 tenant 격리 정책 대상. `tenants` 외 업무 테이블 DML |
+| `apps/ai-worker` | **`liviq_worker`** | `worker_queue_access`·`worker_scheduled_scan` 정책의 `TO` 대상 — 큐만 cross-tenant |
+| 시드·일회성 운영 스크립트 | **owner** | 공용 골든셋(`tenant_id IS NULL`)·코드 시드 등 컨텍스트 밖 쓰기가 목적. 워크스테이션에서 수동 실행 |
+| 테스트(`packages/db`·`apps/api`) | owner 접속 + `SET LOCAL ROLE` | 한 커넥션으로 두 런타임 롤을 모두 검증(픽스처 단순화). **실접속 롤 세션 테스트를 별도로 둔다** — `SET ROLE` 경로만 검증하면 배선 회귀를 못 잡는다 |
+
+- **`liviq_app`·`liviq_worker`는 LOGIN 롤이 된다.** 생성 시엔 `NOLOGIN`(마이그레이션 `eaf86de665b0`)이고,
+  비밀번호는 **마이그레이션에 두지 않는다**(VCS 시크릿 금지). env(`APP_DATABASE_URL`·`WORKER_DATABASE_URL`)가
+  비밀번호의 **단일 출처**이고, 배포의 `migrate` 스텝이 그 URL에서 파싱해 `ALTER ROLE … LOGIN PASSWORD`로
+  **수렴**시킨다(멱등 — 매 배포 재실행 = 비밀번호 회전 자동 반영).
+- **fail-closed 검증**: 같은 스텝이 각 런타임 롤에 대해 ① `rolsuper`·`rolbypassrls`가 아님 ② tenant 컨텍스트
+  없이 업무 테이블 조회가 **0행**임을 확인하고, 어긋나면 **배포를 중단**한다. env를 owner URL로 되돌리는
+  회귀(= H10-1에서 발견된 그 상태)를 배포 시점에 잡는 유일한 지점이다.
+- **GRANT 누락은 런타임 500이다.** owner 접속에선 드러나지 않으므로, 새 테이블을 만드는 마이그레이션은
+  **같은 리비전에서 `liviq_app`(필요 시 `liviq_worker`) GRANT를 함께** 준다. 테이블별 권한 폭은 업무 규율을
+  권한으로 굳히는 수단이다 — `audit_logs`·`inquiry_events`·`tenant_keys`는 append-only(SELECT·INSERT만),
+  `ai_eval_golden`은 읽기만, `tenants`는 SELECT·INSERT·UPDATE(단지 생성·상태 전환은 SYS_ADMIN 업무 — 삭제는 없음).
 
 ## 6. 개인정보 처리
 
