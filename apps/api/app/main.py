@@ -17,11 +17,15 @@ H9-5: parking(주차장 대시보드 — 지하주차장 배치도·입주민 �
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.deps import verify_db_role
 from app.routers import (
     admin_tenants,
     approvals,
@@ -48,9 +52,19 @@ class HealthResponse(BaseModel):
     status: str
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """기동 시 DB 접속 롤 검증 — RLS 이중 방어 2층의 성립 조건(H10-2, docs/03 §5.1).
+
+    local은 경고만, 그 외 환경은 예외를 그대로 올려 기동을 중단시킨다(fail-closed).
+    """
+    await verify_db_role()
+    yield
+
+
 def create_app() -> FastAPI:
     settings = get_settings()  # 부팅 시 env 검증 트리거(fail-closed)
-    app = FastAPI(title="LIVIQ API", version="0.1.0")
+    app = FastAPI(title="LIVIQ API", version="0.1.0", lifespan=_lifespan)
 
     # 웹 앱은 별도 출처(3000·3001)라 세션 쿠키 전송에 credentials CORS 필수(ADR-0011).
     # allow_credentials=True는 와일드카드 오리진과 양립 불가 — WEB_ORIGINS로 명시.

@@ -12,15 +12,17 @@
 #        install -m 0600 infra/env.prod.example /etc/liviq/env.prod
 #      그리고 그 파일 안에서 `ENV_FILE=/etc/liviq/env.prod` 를 함께 지정한다
 #      (`--env-file`은 `${...}` 치환용, `env_file:`은 컨테이너 주입용 — 둘 다 필요).
-#   3) tier별로 필요한 값만 넣는다: PII_MASTER_KEY·DATABASE_URL·SMTP 자격증명은
+#   3) tier별로 필요한 값만 넣는다: PII_MASTER_KEY·DB 접속 URL 3종·SMTP 자격증명은
 #      **app tier 파일에만** 둔다(docs/06 §7 tier 최소 배치).
+#      DB 접속 URL은 프로세스마다 다르다(docs/03 §5.1): DATABASE_URL=owner(migrate 전용) ·
+#      APP_DATABASE_URL=liviq_app(api) · WORKER_DATABASE_URL=liviq_worker(ai-worker).
 #
 # ── 기동 (tier별) ───────────────────────────────────────────────
 #   data VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile data up -d
 #   app  VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile app  up -d
 #   web  VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile web  up -d
 #   (tier 간 depends_on 은 `required: false` — 다른 VM에 있는 의존을 기다리지 않고 무시한다.
-#    기동 순서(data → migrate → api·ai-worker → web)는 운영 절차로 보장한다. H10-2 문서화 대상.)
+#    기동 순서(data → migrate → api·ai-worker → web)는 운영 절차로 보장한다. H10-3 문서화 대상.)
 #
 # ── 로컬 1호스트 전체 스모크 (배포 형상 그대로) ──────────────────
 #   cp infra/env.prod.example infra/env.prod   # 로컬용 값으로 수정 (API_ENV=local 필수)
@@ -151,7 +153,11 @@ services:
       context: ..
       dockerfile: apps/api/Dockerfile
     working_dir: /app/packages/db
-    command: ["alembic", "upgrade", "head"]
+    # 2단계: 스키마 마이그레이션 → **런타임 접속 롤 수렴·검증**(H10-2, docs/03 §5.1).
+    # 두 번째 단계가 실패하면 exit != 0 → `service_completed_successfully` 가 막혀 api·ai-worker가
+    # 아예 뜨지 않는다(fail-closed). RLS 우회 롤로 접속하는 회귀를 배포 시점에 차단하는 지점이다.
+    command:
+      ["sh", "-c", "alembic upgrade head && python -m liviq_db.runtime_roles"]
     env_file:
       - "${ENV_FILE:-./env.prod}"
     depends_on:
@@ -168,6 +174,11 @@ services:
       dockerfile: apps/api/Dockerfile
     env_file:
       - "${ENV_FILE:-./env.prod}"
+    environment:
+      # env_file 의 DATABASE_URL(owner — 마이그레이션 전용)을 **런타임 롤로 덮는다**.
+      # `environment:` 가 `env_file:` 보다 우선한다. 이 오버라이드가 없으면 api가 owner(superuser)로
+      # 붙어 RLS 이중 방어 2층이 죽는다(H10-1 실측) → 기동 시 verify_db_role 이 막는다.
+      DATABASE_URL: ${APP_DATABASE_URL:?APP_DATABASE_URL 필요 — liviq_app 접속 URL(docs/03 §5.1)}
     ports:
       - "${APP_BIND:-127.0.0.1}:${API_PORT:-8000}:8000" # 퍼블릭 미노출 — 인바운드는 web tier(Caddy)만
     depends_on:
@@ -189,6 +200,9 @@ services:
       dockerfile: apps/ai-worker/Dockerfile
     env_file:
       - "${ENV_FILE:-./env.prod}"
+    environment:
+      # api와 같은 이유 — 워커는 큐 cross-tenant 정책(`TO liviq_worker`)의 대상 롤로 붙어야 한다.
+      DATABASE_URL: ${WORKER_DATABASE_URL:?WORKER_DATABASE_URL 필요 — liviq_worker 접속 URL}
     depends_on:
       migrate:
         condition: service_completed_successfully

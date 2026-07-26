@@ -65,14 +65,18 @@ pnpm db:seed   # 시드 데이터 정식화 시 (현재는 tests/e2e 시드·검
 cp infra/env.prod.example infra/env.prod
 
 # 2. 1호스트에서 3프로필 동시 기동 = 배포 형상 그대로
+#    migrate 는 `alembic upgrade head` 뒤에 `python -m liviq_db.runtime_roles`(접속 롤 수렴·검증)까지
+#    돌린다 — 실패하면 api·ai-worker가 아예 뜨지 않는다(H10-2, docs/03 §5.1).
 docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
   --profile data --profile app --profile web up -d --build
 
 # 3. 접속: http://resident.localhost:8080 · http://admin.localhost:8080 (Caddy 경유)
 
 # 4. 최초 SYS_ADMIN 부트스트랩 (api 이미지에 포함된 유일한 시드 스크립트)
+#    ★ `api`가 아니라 `migrate` 서비스로 실행한다 — api 서비스는 DATABASE_URL이 런타임 롤
+#      (liviq_app)로 오버라이드돼 있어 시드가 권한 오류로 깨진다. migrate는 owner 접속이다(H10-2).
 docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
-  run --rm --workdir /app api python scripts/bootstrap_sys_admin.py --email <이메일>
+  run --rm --workdir /app migrate python scripts/bootstrap_sys_admin.py --email <이메일>
 
 # 5. 정리 (볼륨까지 — 개발 인프라 볼륨과 별개다)
 docker compose --env-file infra/env.prod -f infra/compose.prod.yml \

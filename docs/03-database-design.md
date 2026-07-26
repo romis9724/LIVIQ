@@ -759,7 +759,7 @@ CREATE POLICY tenant_isolation ON documents
 - **GRANT 누락은 런타임 500이다.** owner 접속에선 드러나지 않으므로, 새 테이블을 만드는 마이그레이션은
   **같은 리비전에서 `liviq_app`(필요 시 `liviq_worker`) GRANT를 함께** 준다. 테이블별 권한 폭은 업무 규율을
   권한으로 굳히는 수단이다 — `audit_logs`·`inquiry_events`·`tenant_keys`는 append-only(SELECT·INSERT만),
-  `ai_eval_golden`은 읽기만, `tenants`는 SELECT·INSERT·UPDATE(단지 생성·상태 전환은 SYS_ADMIN 업무 — 삭제는 없음).
+  `ai_eval_golden`은 읽기만, `tenants`는 SELECT·INSERT·UPDATE·DELETE(단지 생성·상태 전환·빈 단지 삭제 — SYS_ADMIN 업무. 계정이 있는 단지 삭제는 라우터가 409로 막는다).
 
 ## 6. 개인정보 처리
 
