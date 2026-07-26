@@ -381,7 +381,7 @@
 ## 14. 배포 토폴로지 (H10 — [ADR-0020](adr/0020-container-deploy-3tier-vm.md))
 
 §3은 **논리** 컨테이너(무엇이 있나), 이 절은 그 컨테이너의 **물리 배치**(어느 호스트에서 어떻게 뜨나)다.
-산출물 `infra/compose.prod.yml`·`infra/Caddyfile`·`apps/*/Dockerfile`은 **H10-1에서 추가**한다(현재 레포에 없음).
+산출물은 H10-1에서 레포에 들어왔다 — [`infra/compose.prod.yml`](../infra/compose.prod.yml)·[`infra/Caddyfile`](../infra/Caddyfile)·[`infra/env.prod.example`](../infra/env.prod.example)·앱 4종 Dockerfile([api](../apps/api/Dockerfile)·[ai-worker](../apps/ai-worker/Dockerfile)·[web-resident](../apps/web-resident/Dockerfile)·[web-admin](../apps/web-admin/Dockerfile))·루트 [`.dockerignore`](../.dockerignore).
 
 ```mermaid
 flowchart LR
@@ -438,15 +438,17 @@ flowchart LR
 
 | 이미지 | 소스 경로 | 베이스 | 빌드 방식 |
 |--------|-----------|--------|-----------|
-| `api` | `apps/api` | uv 베이스 → slim 런타임 | 루트 컨텍스트 · `uv sync --frozen --no-dev --package liviq-api` → 런타임에 `.venv`만 복사 + `packages/db/alembic`·`alembic.ini` 명시 복사 |
-| `ai-worker` | `apps/ai-worker` | uv 베이스 → slim 런타임 | 동일 방식, `--package liviq-ai-worker` |
-| `web-resident` | `apps/web-resident` | node:20-alpine | 루트 컨텍스트 · pnpm 빌드 → Next `output: 'standalone'` 산출물만 런타임 복사 |
-| `web-admin` | `apps/web-admin` | node:20-alpine | 동일 방식 |
+| `api` | `apps/api` | `ghcr.io/astral-sh/uv:0.11.14-python3.12-trixie-slim` → `python:3.12-slim-trixie` | 루트 컨텍스트 · `uv sync --frozen --no-dev --no-editable --package liviq-api` → 런타임에 `.venv`만 복사(`--no-editable`이라 앱 소스는 wheel로 그 안에 있다) + `packages/db/alembic`·`alembic.ini`·`bootstrap_sys_admin.py` 명시 복사 |
+| `ai-worker` | `apps/ai-worker` | 동일 | 동일 방식, `--package liviq-ai-worker` |
+| `web-resident` | `apps/web-resident` | `node:20.20.1-alpine3.22` | 루트 컨텍스트 · pnpm 빌드 → Next `output: 'standalone'` 산출물만 런타임 복사(진입점 `.next-build/standalone/apps/web-resident/server.js` · static은 `standalone/apps/web-resident/.next-build/static` — `distDir`이 `.next-build`이기 때문 · `HOSTNAME=0.0.0.0` 필수) |
+| `web-admin` | `apps/web-admin` | 동일 | 동일 방식 |
 
-모두 multi-stage · 런타임 **non-root** · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동).
+모두 multi-stage · 런타임 **non-root**(Python uid/gid 10001 · 웹 `node`) · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동. 게시·롤백 배선은 H10-2).
 
 **요청 경로 규약**
 
 1. Caddy가 `/api/*`를 app tier api로 `strip_prefix` 프록시한다(브라우저는 same-origin만 호출).
-2. SSE(`text/event-stream`)는 프록시 버퍼링을 끈다 — H10-1에서 `flush_interval -1`. 버퍼링되면 §13 SSE 계약이 깨진다.
+2. SSE(`text/event-stream`)는 프록시 버퍼링을 끈다 — [`infra/Caddyfile`](../infra/Caddyfile)의 `flush_interval -1`. 버퍼링되면 §13 SSE 계약이 깨진다.
 3. 웹 빌드는 `NEXT_PUBLIC_API_BASE_URL=/api`(상대경로) — 환경별 절대 URL·`WEB_ORIGINS` CORS 관리가 사라진다.
+
+> H10-1 실측 확증: 프록시 경유 AI 질의에서 `token` 30개가 4.47~5.36s 구간에 **20~50ms 간격으로 점진 도착**(버퍼링이면 `done` 시점에 몰림) — `flush_interval -1` 동작 확인([09 §8.13](09-implementation-harness.md)).
