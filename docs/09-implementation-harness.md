@@ -258,6 +258,7 @@ merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-
 | H8. 게시판 전환·운영 개편 | 공지·문서 AI 초안 폐기 후 게시판화(첨부·버전·예약 발행·공지 벡터화)·공통 코드 레지스트리·동/호수 관리·관리비 고지서(총액 트리 분배)·AI 검수 큐 제거·민원 수동 워크플로·관리자 콘솔(메뉴 그룹·액션 큐) | 첨부·코드·민원 인가/격리 테스트(CRITICAL) + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-24, §8.10) — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)·[0016](adr/0016-document-board-versioned-attachment.md)·[0017](adr/0017-tenant-code-registry.md)·[0018](adr/0018-inquiry-manual-handling.md) |
 | H9. 단지 트윈·주차장 | `household_geometries` + deck.gl 3D·오버레이 4종(입주·민원·관리비·설비)·세대 상세·VWorld 실사 3D 토글·트윈 대시보드·주차장 배치도(442면·차량 348대 `plate_enc`) | tenant 격리·MANAGER 인가(CRITICAL)·plate 암호화 왕복 + 게이트 그린 + 라이브 시각 실측 | ✅ 완료 (2026-07-25, §8.11) — [ADR-0019](adr/0019-complex-twin-3d.md), 프로토타입 수치 완전 일치 |
 | H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | 🚧 진행 (§8.13 — H10-2까지 완료, H10-3 대기) |
+| H11. 운영 정합 | 감사 로그 실배선(보안 핵심 행위)·문서·스키마 드리프트 정정 | 감사 행위별 기록 테스트(CRITICAL — 개인정보 비저장 포함) + 문서와 실제 스키마 일치 | 🚧 진행 (§8.14) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -310,6 +311,8 @@ merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-
 | ~~OAuth 콜백 앱별 복귀~~ | H6-1 | **H7-1에서 대체**(§8.8) — 자체 이메일 인증 전환으로 OAuth 콜백 자체 제거 |
 | 한글 NFD/NFC 정규화 불일치 — 제목 검색 무력화 | [03 §4.2](03-database-design.md) documents·[04 §3](04-menu-structure.md) | **재현되는 사용자 영향 버그**(H8-10 후속 검증 중 발견, 2026-07-25). macOS 파일명은 NFD(분해형) → `DocumentForm.tsx:57`이 제목을 파일명에서 자동 채움 → title이 NFD로 저장(실측 `title = normalize(title, nfc)` → false) → 사용자는 키보드로 NFC 입력 → 부분일치 실패로 **0건**. 영향 4곳: `documents/data.ts:57`·`inquiry-admin/InquiryAdmin.tsx:133`(클라이언트 부분일치)·`documents.py:135`·`fees.py:227`(서버 `ilike` — Postgres도 NFD/NFC 구분, 동 이름은 숫자라 영향 낮음). 수정 방향은 **경계에서 NFC 정규화**(서버 저장 시 — 그러면 검색 4곳은 미변경으로 일치) + 기존 데이터 `normalize(title, nfc)` 마이그레이션 + 파일명 자동 채움 지점 `.normalize("NFC")` 보강. 별도 작업 단위로 착수 |
 | 기존 벡터 일괄 재색인 — 마스킹 기준 소급 적용 | [ADR-0015 개정 노트](adr/0015-notice-board-replaces-ai-draft.md)·[06 §4.2](06-security-privacy.md) | **임베딩 마스킹 수정(PR #73, 2026-07-25)은 소급되지 않는다** — 그 전에 색인된 `content_chunks.embedding`은 원문 임베딩이고, 프로바이더에 원문이 전송된 사실도 취소 불가. 파일럿까지 로컬 Ollama만 썼다면 실질 외부 노출은 없으나, 외부 엔드포인트를 붙인 이력이 있으면 별도 판단 필요. 착수 조건: 재색인 ops 스크립트(문서·공지 전량 재인제스트 큐잉 — 문서는 `index_status` 리셋, 공지는 published 전량) + 벡터 교체 전후 검색 회귀 확인. 재업로드 시엔 개별 자동 해소되므로 **운영 데이터가 쌓이기 전에 실행**하는 편이 싸다 |
+| **감사 로그 잔여 행위 + 이상 징후 알림** | [06 §8](06-security-privacy.md) | 낮음 — H11-1이 보안 핵심 11종을 배선했고, 나머지 3종은 문서 공개범위 변경·공지 발행·ERP 동기화(ERP 자체가 미구현)다. 이상 징후 알림(대량 조회·비정상 시간대·마스킹 우회)은 **감사 행이 실제로 쌓인 뒤** 룰을 정한다 — 지금 정하면 임계값이 추측이 된다 |
+| **존재하지 않는 이메일의 로그인 실패 미기록** | [06 §8](06-security-privacy.md) | 낮음 — tenant를 특정할 수 없어 RLS가 INSERT를 거부한다(fail-closed). 이 표면은 레이트 리밋이 방어하고, 기록하려면 시스템 테넌트에 쓰는 별도 경로가 필요하다(크리덴셜 스터핑 탐지가 실제 요구로 올라올 때) |
 
 ### 8.4 H3 체크리스트 (시설 — Neo4j 그래프·AI 도우미)
 
@@ -486,6 +489,23 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H10-3 | CI 릴리스 + 배포 절차 | `.github/workflows/release.yml`(buildx · GHCR push · git sha + `latest` 태그 · `cache-from/to: gha` — 스펙 §4.3) · 배포 운영 절차 문서(VM 3대 프로비저닝 · 방화벽 규칙 · 시크릿 주입(`env_file` 0600·레포 밖) · 마이그레이션 순서 · 백업(§7.1 연계) · 롤백) · 운영 이미지 고정 태그 핀(§2.1) | main push로 4개 이미지 GHCR 게시 확인 · 스테이징 tier 배포 후 스모크 그린 · **롤백 1회 실연**(이전 sha 태그 재기동) | 대기 |
 
 > **백로그/의도적 제외**: 무중단 배포(blue-green)·Kubernetes·중앙 로그 수집·모니터링 스택은 **H10 범위 밖**(부하·운영 요구 실증 후 — YAGNI) · 운영 env 계약은 H10-1에서 [`.env.example`](../.env.example)이 아니라 **별도 파일** [`infra/env.prod.example`](../infra/env.prod.example)로 분리했다(compose `--env-file` 치환 소스 겸 컨테이너 `env_file`이고, tier별로 나눠 배치(app tier 파일에만 `PII_MASTER_KEY`·`DATABASE_URL`·SMTP — [06 §7](06-security-privacy.md))하므로 로컬 `.env` 계약과 한 파일에 섞지 않는다).
+
+### 8.14 H11 체크리스트 (운영 정합 — 감사 로그·문서 드리프트)
+
+> 근거: H10-2 스모크 중 발견(2026-07-26) — `audit_logs`는 모델·RLS·append-only 권한 테스트까지 있는데
+> **애플리케이션이 단 한 곳도 쓰지 않아 dev·배포 스모크 모두 0행**이었다. [06 §9](06-security-privacy.md)
+> 배포 전 게이트에 "감사 로그 누락 없음" 항목이 있으므로 **실배포 차단 항목**이다.
+> 범위는 사용자 결정(2026-07-26): **보안 핵심 subset**(전량 11종 구현이 아니라, 보안상 의미 있는 행위만
+> 배선하고 나머지는 §8.3 백로그로 명시).
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H11-1 | 감사 로그 실배선 (보안 핵심) | `apps/api/app/audit.py`(행위 상수 + `record_audit`(업무 트랜잭션 공유) + `record_audit_standalone`(로그인 실패 전용 별도 트랜잭션)) · 11개 지점 배선(로그인 성공·실패 · 가입 승인·거절 · 계정 비활성화 · 직원·소장 초대 · 명부 업로드 · 관리비 확정 · 차량번호 복호 열람 · 명부 조회) · [06 §8](06-security-privacy.md) 기록 대상 표를 단일 출처로 재작성(구현/백로그 구분) | 행위별 기록 테스트 + **개인정보 비저장 테스트**(`meta`에 이메일·이름·번호판·거절 사유 원문 0건 — **CRITICAL**) + 업무 롤백 시 감사도 롤백(거짓 기록 없음) + 로그인 실패는 401에도 기록 남음 + 게이트 그린 | 🚧 진행 |
+| H11-2 | 문서·스키마 드리프트 정정 | [03 §4.8](03-database-design.md) 평면도 설계를 **미구현·대체됨**으로 정정(`unit_types`·`floor_plans`·`plan_devices`는 0행·코드 참조 사실상 0 — H9가 `household_geometries`로 대체, H9-6이 `unit_types` 마스터를 과설계로 폐기). **테이블은 남긴다**(사용자 결정 2026-07-26 — 스키마 변경 0이라 위험이 없고, 입주민 평면도 기능을 살릴 때 재사용) · 조사 기록(테이블 수 오탐 정정) | 문서가 실제 스키마·코드와 일치 · `pnpm check:paths` 그린 | 대기 |
+
+> **테이블 수 오탐 정정(2026-07-26 실측)**: "dev DB 40개 vs 문서 38개"는 오탐이었다. dev·배포 스모크 모두
+> `relkind='r'` **39개로 집합까지 동일**(diff 0)이고, 그중 `alembic_version`을 빼면 **업무 테이블 38개** —
+> 문서가 맞다. 40은 `alembic_version` + 뷰 `v_users_safe`를 함께 센 값이다.
 
 ## 9. 정의: "완료(Done)"
 
