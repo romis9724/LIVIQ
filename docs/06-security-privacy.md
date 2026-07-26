@@ -164,8 +164,33 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 
 ## 8. 감사 / 모니터링
 
-- `audit_logs`(append-only): 로그인, 명부 업로드, 가입 승인·거절·계정 비활성화, 권한변경, 문서 공개범위 변경, 공지 발송, 관리비 엑셀 업로드·확정, AI 검수 승인, 개인정보 열람, ERP 동기화.
-- 이상 징후: 대량 조회, 비정상 시간대 접근, 마스킹 우회 시도 알림.
+`audit_logs`는 **append-only**다(권한으로 강제 — [03 §4.7](03-database-design.md)). 기록 대상은 아래가 단일 출처다.
+행위명은 `app/audit.py`의 상수로만 쓴다(문자열 직접 타이핑 금지 — 오타가 감사 누락이 된다).
+
+| 행위 | `action` | 상태 |
+|---|---|---|
+| 로그인 성공 | `auth.login` | ✅ H11-1 |
+| 로그인 실패(비밀번호 불일치) | `auth.login_failed` | ✅ H11-1 |
+| 가입 승인 | `user.approved` | ✅ H11-1 |
+| 가입 거절 | `user.rejected` | ✅ H11-1 |
+| 계정 비활성화 | `user.deactivated` | ✅ H11-1 |
+| 권한변경 — 직원 초대 | `staff.invited` | ✅ H11-1 |
+| 권한변경 — 소장 초대 | `manager.invited` | ✅ H11-1 |
+| 명부 업로드 | `roster.uploaded` | ✅ H11-1 |
+| 관리비 확정 적재 | `fees.confirmed` | ✅ H11-1 |
+| 개인정보 열람 — 차량번호 복호 | `pii.plates_viewed` | ✅ H11-1 |
+| 개인정보 열람 — 명부 조회 | `pii.roster_viewed` | ✅ H11-1 |
+| 문서 공개범위 변경 | — | 백로그([09 §8.3](09-implementation-harness.md)) |
+| 공지 발행 | — | 백로그 |
+| ERP 동기화 | — | 백로그(ERP 연동 자체가 미구현) |
+
+- **개인정보 비저장(§4.3)**: `meta`에는 **식별정보를 넣지 않는다** — 이메일·이름·연락처·차량번호·거절 사유 원문 금지. 대상은 `target_type`+`target_id`(UUID)로, 규모는 건수로만 기록한다.
+- **트랜잭션 규율**: 성공 기록은 업무 변경과 **같은 트랜잭션**(업무가 롤백되면 감사도 롤백 — 거짓 기록 방지). **로그인 실패만 별도 트랜잭션**이다 — 401이 트랜잭션을 롤백시키므로 같은 트랜잭션에 쓰면 기록이 사라진다.
+- **쓰기 실패 취급이 경로마다 다르다**: 성공 기록은 업무와 한 트랜잭션이라 실패 시 업무도 롤백된다(엄격). **로그인 실패 기록만 best-effort**다 — 예외를 올리면 401이 500으로 바뀌어 인증 계약이 감사 저장소 장애에 묶이므로, 실패는 `ERROR` 로그로 남기고 요청은 계속한다(레이트 리밋·답변 캐시의 fail-open과 같은 취급).
+- **행위자가 다른 단지 소속일 때**(SYS_ADMIN의 소장 초대): `fk_audit_logs_actor`가 composite `(tenant_id, actor_user_id)`이므로 대상 단지에 행위자의 `users` 행이 없어 컬럼을 채울 수 없다. 감사 행은 **대상 단지에 남기고**(그 단지에서 조회되어야 하므로) 행위자는 `meta.actor_user_id`·`meta.actor_tenant_id`(UUID — PII 아님)로 기록한다. SYS_ADMIN은 정의상 시스템 테넌트 소속이다(§2).
+- **클라이언트 IP**: `audit_logs.ip`는 프록시 뒤에서 신뢰 설정이 없으면 **프록시 IP로 찍힌다**(H11-1 실측). uvicorn은 `FORWARDED_ALLOW_IPS`(기본 `127.0.0.1`)에 속한 peer의 `X-Forwarded-For`만 신뢰하므로 배포에서 이 값을 프록시에 맞춰 지정한다([`infra/env.prod.example`](../infra/env.prod.example) — 배포 절차 문서에도 반영). Caddy가 XFF 끝에 실제 peer를 덧붙이고 uvicorn이 마지막 항목을 쓰므로 **프록시를 경유한 위조는 성립하지 않는다**(실측) — 위조 가능 조건은 api 직결이며, 그것은 §6.1 네트워크 경계가 막는다.
+- **알려진 공백**: 존재하지 않는 이메일로의 로그인 실패는 기록하지 않는다 — tenant를 특정할 수 없어 RLS가 INSERT를 거부한다(fail-closed). 이 표면은 **레이트 리밋**(§2·로그인 분당 상한)이 방어한다.
+- 이상 징후 알림(대량 조회·비정상 시간대·마스킹 우회 시도)은 **미구현** — 감사 행이 쌓인 뒤 룰을 정한다([09 §8.3](09-implementation-harness.md) 백로그).
 
 ## 9. 보안 점검 체크리스트 (배포 전 게이트)
 

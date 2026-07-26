@@ -84,4 +84,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
 
 # --proxy-headers: web tier 리버스 프록시(Caddy) 뒤에서 스킴·클라이언트 IP 정합(ADR-0020 결정 4).
+# ★ 그것만으로는 부족하다: uvicorn은 `--forwarded-allow-ips`(기본 127.0.0.1)에 있는 peer의
+#   X-Forwarded-For만 신뢰한다. Caddy는 **다른 컨테이너/호스트**라 기본값에서는 무시되고,
+#   `request.client.host`가 프록시 IP가 된다(감사 로그 ip가 전부 Caddy IP로 찍힌 실측 결함).
+#   신뢰 범위는 배포 형상에 달렸으므로 이미지에 굽지 않고 env `FORWARDED_ALLOW_IPS`로 준다
+#   (uvicorn이 직접 읽는 표준 env — infra/env.prod.example 참조).
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

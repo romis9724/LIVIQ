@@ -12,7 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
@@ -20,6 +20,14 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import auth_tokens
+from app.audit import (
+    AUTH_LOGIN,
+    AUTH_LOGIN_FAILED,
+    TARGET_USER,
+    client_ip,
+    record_audit,
+    record_audit_standalone,
+)
 from app.config import SYSTEM_TENANT_ID, get_settings
 from app.deps import (
     clear_session_cookie,
@@ -147,6 +155,7 @@ async def signup(
 @router.post("/auth/login", response_model=LoginOut)
 async def login(
     body: LoginIn,
+    request: Request,
     response: Response,
     session: Annotated[AsyncSession, Depends(get_auth_lookup_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
@@ -167,6 +176,18 @@ async def login(
         dummy_verify()
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
     if not verify_password(user.password_hash, body.password):
+        # 실패 기록은 **별도 트랜잭션**이다 — 아래 401이 요청 트랜잭션을 롤백시키므로
+        # 같은 세션에 쓰면 기록이 사라진다(docs/06 §8). 계정이 없는 경우는 tenant를
+        # 특정할 수 없어 기록하지 않는다(RLS fail-closed — 그 표면은 레이트 리밋이 방어).
+        await record_audit_standalone(
+            tenant_id=user.tenant_id,
+            action=AUTH_LOGIN_FAILED,
+            actor_user_id=user.id,
+            target_type=TARGET_USER,
+            target_id=user.id,
+            meta={"reason": "bad_password"},
+            ip=client_ip(request),
+        )
         raise HTTPException(status_code=401, detail=_INVALID_CREDENTIALS)
     # 비활성화된 단지 소속은 로그인 차단(H7-6) — 비밀번호 검증 뒤에만 노출.
     tenant_status = await session.scalar(select(Tenant.status).where(Tenant.id == user.tenant_id))
@@ -184,6 +205,16 @@ async def login(
                 UserRole.tenant_id == user.tenant_id, UserRole.user_id == user.id
             )
         )
+    )
+    await record_audit(
+        session,
+        tenant_id=user.tenant_id,
+        action=AUTH_LOGIN,
+        actor_user_id=user.id,
+        target_type=TARGET_USER,
+        target_id=user.id,
+        meta={"roles": sorted(roles)},  # 이메일·이름 금지(docs/06 §4.3) — 역할은 PII 아님
+        ip=client_ip(request),
     )
     sid = await session_store.create(
         str(user.tenant_id),

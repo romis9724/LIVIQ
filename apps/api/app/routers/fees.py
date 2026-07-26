@@ -11,7 +11,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, cast
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -24,6 +24,7 @@ from ai_core.fee_explain import (
     explain_fee,
 )
 from ai_core.llm.client import LlmClient
+from app.audit import FEES_CONFIRMED, TARGET_UPLOAD, client_ip, record_audit
 from app.deps import (
     RequestContext,
     Storage,
@@ -131,6 +132,7 @@ async def get_upload(
 
 @admin_router.post("/uploads/{upload_id}/apply", response_model=FeeApplyOut)
 async def apply_fees(
+    request: Request,
     ctx: Annotated[RequestContext, Depends(require_roles("MANAGER"))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     storage: Annotated[Storage, Depends(get_storage)],
@@ -172,6 +174,18 @@ async def apply_fees(
         ]
     )
     upload.status = "applied"
+    # 관리비 확정은 되돌리기 어려운 부과 행위다 — 대상 월·적용 세대 수를 남긴다(금액은 미기록:
+    # 세대별 금액은 개인정보성 데이터이고, 정본은 fees 테이블이다).
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=FEES_CONFIRMED,
+        actor_user_id=ctx.user_id,
+        target_type=TARGET_UPLOAD,
+        target_id=upload.id,
+        meta={"period": upload.period, "households": len(household_ids)},
+        ip=client_ip(request),
+    )
     await session.flush()
     return FeeApplyOut(
         upload_id=upload.id, status="applied", period=upload.period, applied=len(household_ids)
