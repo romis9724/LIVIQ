@@ -43,7 +43,7 @@ tier마다 **필요한 값만** 둔다([06 §7](06-security-privacy.md) tier 최
 | tier | 반드시 있어야 하는 것 | **두지 말아야 하는 것** |
 |---|---|---|
 | data | `POSTGRES_*` · `MINIO_ROOT_*` · `NEO4J_PASSWORD` · `NEO4J_HEAP`/`PAGECACHE` · `DATA_BIND` | `PII_MASTER_KEY` · DB 접속 URL · SMTP |
-| app | DB URL 3개 · `PII_MASTER_KEY` · `REDIS_URL` · `S3_*` · SMTP · `LLM_*`/`EMBEDDING_*` · `NEO4J_*` · `API_ENV=production` · `*_BASE_URL` | — |
+| app | DB URL 3개 · `PII_MASTER_KEY` · `REDIS_URL` · `S3_*` · SMTP · `LLM_*`/`EMBEDDING_*` · `NEO4J_*` · `API_ENV=production` · `FORWARDED_ALLOW_IPS` · `*_BASE_URL` | — |
 | web | `CADDY_HTTP`/`HTTPS` · `*_SITE` · `*_UPSTREAM` · `IMAGE_*` | 시크릿 일체(퍼블릭 노출 tier) |
 
 **DB 접속 URL 3개**([03 §5.1](03-database-design.md)):
@@ -56,6 +56,7 @@ WORKER_DATABASE_URL=postgresql+asyncpg://liviq_worker:<worker-pw>@10.0.0.20:5432
 
 - 런타임 롤 비밀번호의 **단일 출처가 이 파일**이다. `migrate` 스텝이 여기서 읽어 `ALTER ROLE … LOGIN PASSWORD`로 수렴시킨다 → **값을 바꾸고 재배포하면 그게 곧 비밀번호 회전**이다.
 - 런타임 URL에 owner를 적으면 `migrate`가 비영점 종료하고 api·ai-worker가 뜨지 않는다(의도된 fail-closed).
+- `FORWARDED_ALLOW_IPS`가 **감사 로그의 클라이언트 IP 정확도**를 결정한다(H11-1). uvicorn은 이 목록에 속한 peer의 `X-Forwarded-For`만 신뢰하고 기본값이 `127.0.0.1`이라, Caddy가 별 호스트/컨테이너인 이 형상에서는 미지정 시 `audit_logs.ip`가 **전부 프록시 IP로 찍힌다**(실측). api 인바운드를 web tier로만 제한했다면 `*`, 아니면 프록시 IP/CIDR로 지정한다([06 §8](06-security-privacy.md)).
 - `PII_MASTER_KEY` **유실 = `pii_vault` 복호 불능**. 시크릿 매니저 + 오프라인 봉인 백업 이중화([06 §7](06-security-privacy.md)).
 
 ---
@@ -187,3 +188,4 @@ docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profil
 | 브라우저에서 `/api` 요청이 CORS로 막힌다 | Caddy를 우회해 api를 직접 부르고 있다 | `NEXT_PUBLIC_API_BASE_URL=/api`로 빌드된 이미지인지 확인 |
 | AI 응답이 한 번에 몰려 온다 | 프록시 버퍼링 | Caddy `reverse_proxy … { flush_interval -1 }` 확인([`infra/Caddyfile`](../infra/Caddyfile)) |
 | 이메일 검증·초대 링크가 내부 주소로 간다 | `API_BASE_URL`·`WEB_*_BASE_URL`이 내부 값 | 퍼블릭 도메인으로 수정 후 api 재기동 |
+| 감사 로그 `ip`가 전부 같은 사설 IP | `FORWARDED_ALLOW_IPS` 미지정 → 프록시 XFF 무신뢰 | app tier env에 지정 후 api 재기동(§2) |
