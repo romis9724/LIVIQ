@@ -377,3 +377,76 @@
 2. 관리비 쓰기는 엑셀 업로드 confirm 플로우가 유일하다. `/fees/explain`은 읽기+설명 전용(규칙 5).
 3. 입주민 리소스는 소유권 필터가 쿼리에 박힌다(`author_user_id`·`household_id`·승인 시점) — 파라미터로 우회 불가.
 4. SSE 계약(4이벤트)은 assistant·explain 등 모든 AI 스트리밍이 공유하며 변경 금지([09 §1.1](09-implementation-harness.md)).
+
+## 14. 배포 토폴로지 (H10 — [ADR-0020](adr/0020-container-deploy-3tier-vm.md))
+
+§3은 **논리** 컨테이너(무엇이 있나), 이 절은 그 컨테이너의 **물리 배치**(어느 호스트에서 어떻게 뜨나)다.
+산출물 `infra/compose.prod.yml`·`infra/Caddyfile`·`apps/*/Dockerfile`은 **H10-1에서 추가**한다(현재 레포에 없음).
+
+```mermaid
+flowchart LR
+  B["브라우저 · 입주민 · 관리자"]
+
+  subgraph WEB["web tier VM — profile web"]
+    CADDY["Caddy 443 TLS"]
+    WR["web-resident 3000"]
+    WA["web-admin 3001"]
+  end
+
+  subgraph APP["app tier VM — profile app"]
+    API["api 8000 FastAPI"]
+    AIW["ai-worker arq"]
+    MIG["migrate one-shot · alembic upgrade head"]
+  end
+
+  subgraph DATA["data tier VM — profile data · 프라이빗 IP 바인드"]
+    PG[("postgres 5432 pgvector")]
+    RD[("redis 6379")]
+    MO[("minio 9000")]
+    NEO[("neo4j 7687")]
+  end
+
+  LLM["외부 LLM 엔드포인트 · OpenAI-호환"]
+  SMTP["SMTP 발신"]
+
+  B -->|HTTPS 443| CADDY
+  CADDY --> WR
+  CADDY --> WA
+  CADDY -->|"/api/* strip_prefix"| API
+  API --> PG
+  API --> RD
+  API --> MO
+  API --> NEO
+  AIW --> PG
+  AIW --> RD
+  AIW --> MO
+  AIW --> NEO
+  MIG --> PG
+  API --> LLM
+  AIW --> LLM
+  API --> SMTP
+```
+
+| tier | 프로필 | 서비스 | 퍼블릭 노출 | 인바운드 허용 출처 |
+|------|--------|--------|-------------|--------------------|
+| web | `web` | Caddy(443) · web-resident(3000) · web-admin(3001) | **443만** | 인터넷(443) |
+| app | `app` | api(8000) · ai-worker · migrate(one-shot) | 없음 | web tier |
+| data | `data` | postgres(5432) · redis(6379) · minio(9000) · neo4j(7687) | 없음 | app tier |
+
+> 외부 LLM 엔드포인트·SMTP는 컨테이너 밖이다 — env로만 가리킨다([ADR-0005](adr/0005-single-llm-openai-compat.md)).
+> `migrate`는 data tier 기동 후 api·ai-worker보다 먼저 1회 실행된다.
+
+| 이미지 | 소스 경로 | 베이스 | 빌드 방식 |
+|--------|-----------|--------|-----------|
+| `api` | `apps/api` | uv 베이스 → slim 런타임 | 루트 컨텍스트 · `uv sync --frozen --no-dev --package liviq-api` → 런타임에 `.venv`만 복사 + `packages/db/alembic`·`alembic.ini` 명시 복사 |
+| `ai-worker` | `apps/ai-worker` | uv 베이스 → slim 런타임 | 동일 방식, `--package liviq-ai-worker` |
+| `web-resident` | `apps/web-resident` | node:20-alpine | 루트 컨텍스트 · pnpm 빌드 → Next `output: 'standalone'` 산출물만 런타임 복사 |
+| `web-admin` | `apps/web-admin` | node:20-alpine | 동일 방식 |
+
+모두 multi-stage · 런타임 **non-root** · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동).
+
+**요청 경로 규약**
+
+1. Caddy가 `/api/*`를 app tier api로 `strip_prefix` 프록시한다(브라우저는 same-origin만 호출).
+2. SSE(`text/event-stream`)는 프록시 버퍼링을 끈다 — H10-1에서 `flush_interval -1`. 버퍼링되면 §13 SSE 계약이 깨진다.
+3. 웹 빌드는 `NEXT_PUBLIC_API_BASE_URL=/api`(상대경로) — 환경별 절대 URL·`WEB_ORIGINS` CORS 관리가 사라진다.
