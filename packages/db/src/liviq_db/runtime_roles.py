@@ -35,7 +35,8 @@ RUNTIME_ROLE_ENV: dict[str, str] = {
 }
 # 격리 프로브 대상. 조건 3개를 만족해야 한다 —
 #  ① 표준 tenant 격리 정책이 걸린 업무 테이블(예외 정책 없음)
-#  ② **두 런타임 롤 모두 SELECT 권한**이 있다(`households`는 liviq_worker에 권한이 없어 실패했다 — 실측)
+#  ② **두 런타임 롤 모두 SELECT 권한**이 있다
+#     (`households`로 뒀다가 liviq_worker에 권한이 없어 실패했다 — 실측)
 #  ③ 실배포라면 비어 있지 않다(부트스트랩 SYS_ADMIN 행) → 프로브가 공허하게 통과하지 않는다
 PROBE_TABLE = "users"
 
