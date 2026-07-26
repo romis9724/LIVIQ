@@ -1,114 +1,182 @@
-# 사내 GitLab 파이프라인 — 이미지 빌드·게시 + 단일 호스트 배포 (ADR-0021, docs/09 §4.4).
+# LIVIQ GitLab CI/CD — WSL Docker 1호스트 배포 (ADR-0020 형상 그대로, 3프로필 단일 호스트)
 #
-#   main push : 이미지 4종 빌드 → GitLab 레지스트리 push($CI_COMMIT_SHA + latest) → 배포
-#   MR        : 빌드만(push·배포 없음) — Dockerfile·lock·compose·이 파일이 바뀔 때
+#   main push  → 이미지 4종 빌드 → 기동 → 스모크 → 레지스트리 게시
+#   MR         → 빌드까지만(기동 없음) — Dockerfile·lock·compose 가 깨졌는지 머지 전에 잡는다
+#   수동       → rollback(IMAGE_TAG 지정) · prune
 #
-# 배포는 **대상 호스트 WSL 안의 러너**(태그 wsl-140)가 수행한다. 러너가 안에 있으므로
-# 대상 호스트 인바운드를 열지 않고, 배포 자격증명을 CI로 내보내지 않는다.
+# ── 이미지가 어디로 가는가 (두 경로, 목적이 다르다) ─────────────────
+#   ① 배포: build 가 만든 **로컬 이미지**를 그대로 기동한다. Runner 가 배포 대상 호스트 안에서
+#      돌기 때문에 push→pull 왕복(4종 약 1.3GB)이 순수 낭비다.
+#   ② 게시: 스모크를 통과한 뒤 GitLab Container Registry 로 push 한다. 이력·백업·타 호스트
+#      배포 경로용이다. **배포가 이걸 기다리지 않는다** — 게시가 실패해도 이미 기동된 배포는
+#      영향받지 않는다(순서상 배포·검증이 먼저 끝나 있다).
+#   순서가 이런 이유: 레지스트리에는 검증을 통과한 이미지만 올린다.
 #
-# GitHub Actions .github/workflows/release.yml 은 그대로 유지된다 — 3-tier VM 형상용
-# GHCR 게시 담당(ADR-0020). 두 파이프라인이 같은 커밋의 이미지를 각자 레지스트리에 올린다.
+# ── 이 파이프라인이 배포까지 하는 근거 ──────────────────────────────
+# docs/12 런북 전제 1은 "CI는 이미지만 만든다"이고, 그 이유는 **배포 자격증명을 CI에 두지 않는다**다.
+# 이 경로에는 그 자격증명이 존재하지 않는다:
+#   · Runner 가 shell executor 로 **배포 대상 호스트(WSL) 안에서** 돈다 → SSH 키 불필요
+#   · 이미지를 같은 호스트의 Docker 이미지 저장소에 빌드한다 → 레지스트리 로그인·push 불필요
+# 즉 전제의 취지를 위반하지 않는다. 대신 이 경로는 **개발·검증 호스트 전용**이다 —
+# 운영 3-tier VM 배포는 GHCR + docs/12 수동 절차가 그대로 단일 출처다.
+#
+# ── 러너 전제 (호스트 1회 준비) ─────────────────────────────────────
+#   · gitlab-runner 가 docker 그룹에 속해야 한다:  sudo usermod -aG docker gitlab-runner
+#   · executor = shell / shell = bash
+#   · env 파일이 레포 밖에 있어야 한다(docs/06 §7):
+#       sudo install -m 0640 -o root -g gitlab-runner infra/env.prod.example /etc/liviq/env.prod
+#   준비 절차 전체는 docs/13-gitlab-wsl-deploy.md.
 
-stages: [build, deploy]
+stages:
+  - build
+  - deploy
+  - verify
+  - publish
 
 variables:
-  # 이미지 좌표. IMAGE_PREFIX 는 **구분자까지 포함**한다(ADR-0021 결정 5) —
-  # GitLab 레지스트리는 하위 저장소를 슬래시로만 표현하므로 대시 하드코딩이 불가하다.
-  #   $CI_REGISTRY_IMAGE = <registry>/dhkim/liviq  →  .../liviq/api
-  IMAGE_PREFIX: "$CI_REGISTRY_IMAGE/"
-  DOCKER_BUILDKIT: "1"
+  # 얕은 클론. shell executor 는 빌드 디렉토리를 재사용(GIT_STRATEGY=fetch 기본)하므로
+  # 매 파이프라인이 전량을 다시 받지 않는다.
+  GIT_DEPTH: "20"
+  # 배포·롤백의 유일한 핀은 커밋 sha 다(docs/12 전제 2 — `latest` 로 배포 금지).
+  # CI_COMMIT_SHORT_SHA 는 8자 = deploy-wsl.sh 의 `git rev-parse --short=8` 과 같은 폭.
+  IMAGE_TAG: "$CI_COMMIT_SHORT_SHA"
+  # **구분자를 포함한다**(ADR-0021 결정 5) — compose.prod.yml 이 `${IMAGE_PREFIX:-liviq-}api` 로
+  # 참조하므로 대시가 값 안에 있어야 한다. 여기서 `liviq` 로 두면 compose 는 `liviqapi` 를 찾고
+  # 스크립트는 `liviq-api` 를 빌드해 서로 어긋난다(정합 시 실제로 잡은 결함).
+  # 이 값은 **로컬 이미지 이름**이다. 레지스트리 좌표는 게시에서만 쓰고 $CI_REGISTRY_IMAGE 로 온다.
+  IMAGE_PREFIX: "liviq-"
+  # 시크릿의 단일 출처. 레포에 없고, 러너가 읽기만 한다.
+  ENV_FILE: "/etc/liviq/env.prod"
 
-# ── 빌드 ────────────────────────────────────────────────────────────────────
-# 러너가 shell executor 이고 호스트에 docker 가 있으므로 dind(privileged)가 필요 없다.
-# 빌드 컨텍스트는 **레포 루트** — 단일 uv.lock·pnpm workspace 때문에 앱 디렉토리로는 빌드 불가.
-.build:
+default:
+  tags:
+    - wsl
+    - docker
+  # 실패가 인프라 흔들림(이미지 pull 등)일 때만 재시도한다. 스크립트 실패는 재시도하지 않는다.
+  retry:
+    max: 1
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+
+# ── 실행 조건 (앵커로 한 곳에서만 관리 — 잡마다 복붙하면 드리프트가 난다) ──
+# `web` = GitLab UI 의 "Run pipeline" 버튼 · `api` = REST 로 트리거.
+# 둘은 **같은 의도**("사람이 필요할 때 돌린다")인데 GitLab 이 진입점으로만 구분한다 →
+# UI 에서 돌릴 수 있는 파이프라인은 API 로도 돌 수 있어야 한다.
+.on_deploy: &on_deploy
+  - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  - if: '$CI_PIPELINE_SOURCE == "web"'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
+
+# 빌드만 MR 에서도 돈다 — Dockerfile·lock·compose 파손을 머지 전에 잡는다.
+.on_build: &on_build
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  - if: '$CI_PIPELINE_SOURCE == "web"'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
+
+# ── 빌드 ────────────────────────────────────────────────────────────
+# 4종을 **한 잡에서 순차로** 빌드한다. 호스트가 4코어라 병렬 빌드(특히 Next 2종)는
+# 메모리·CPU를 다투어 오히려 느리고, 같은 daemon 이라 레이어 캐시는 순차에서도 공유된다.
+build:
   stage: build
-  tags: [wsl-140]
+  timeout: 60m
   script:
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    - IMAGE="${IMAGE_PREFIX}${APP}"
-    - |
-      # NEXT_PUBLIC_* 은 빌드타임 인라인이다. /api 상대경로 고정이라 환경별 재빌드가 필요 없다.
-      # Python 이미지엔 이 ARG 가 없어 전달하면 unused 경고만 쌓이므로 앱별로 나눈다.
-      case "$APP" in
-        web-*) BUILD_ARGS="--build-arg NEXT_PUBLIC_API_BASE_URL=/api" ;;
-        *)     BUILD_ARGS="" ;;
-      esac
-    - docker build $BUILD_ARGS -f "apps/${APP}/Dockerfile" -t "${IMAGE}:${CI_COMMIT_SHA}" -t "${IMAGE}:latest" .
-    - |
-      # MR 에서는 push 하지 않는다 — Dockerfile·워크플로 버그를 머지 전에 잡는 것이 목적이다.
-      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
-        echo "MR 파이프라인 — 빌드만 수행(push 없음)"
-      else
-        docker push "${IMAGE}:${CI_COMMIT_SHA}"
-        docker push "${IMAGE}:latest"
-        echo "게시: ${IMAGE}:${CI_COMMIT_SHA}"
-      fi
+    - bash infra/deploy-wsl.sh build
+  rules: *on_build
 
-build:api:
-  extends: .build
-  variables: { APP: api }
-  rules: &build_rules
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-    # MR 은 이미지 산출물에 영향을 주는 경로만 — 매 MR 마다 4개를 빌드하면 비용이 크다.
-    # 주의: 브랜치 파이프라인의 changes 는 직전 커밋 기준이라 첫 파이프라인·force push 뒤에는
-    # 전량 빌드로 떨어진다(의도된 fallback — 누락보다 낫다).
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - apps/*/Dockerfile
-        - apps/web-*/next.config.mjs
-        - .dockerignore
-        - infra/compose.prod.yml
-        - .gitlab-ci.yml
-        - pnpm-lock.yaml
-        - uv.lock
-
-build:ai-worker:
-  extends: .build
-  variables: { APP: ai-worker }
-  rules: *build_rules
-
-build:web-resident:
-  extends: .build
-  variables: { APP: web-resident }
-  rules: *build_rules
-
-build:web-admin:
-  extends: .build
-  variables: { APP: web-admin }
-  rules: *build_rules
-
-# ── 배포 ────────────────────────────────────────────────────────────────────
-# 단일 호스트 = 3프로필 동시 기동(H10-1 스모크와 같은 형상). 기동 순서는 compose 의
-# depends_on + healthcheck 가 강제한다(같은 호스트라 tier 간 required:false 가 실제로 기다린다).
-#
-# migrate 가 2단계다: alembic upgrade head → python -m liviq_db.runtime_roles.
-# 두 번째가 실패하면 exit != 0 이라 service_completed_successfully 가 막혀 api·ai-worker 가
-# 아예 뜨지 않는다(fail-closed — 런타임이 RLS 우회 롤로 붙는 회귀를 배포 시점에 차단).
+# ── 기동 ────────────────────────────────────────────────────────────
 deploy:
   stage: deploy
-  tags: [wsl-140]
+  needs: [build]
+  timeout: 20m
+  # 동시 배포 차단. concurrent=2 라 다른 파이프라인의 deploy 가 겹칠 수 있고,
+  # 같은 compose 프로젝트(liviq-prod)를 두 잡이 동시에 만지면 상태가 꼬인다.
+  resource_group: liviq-prod
+  # 배포는 중간에 끊으면 안 된다(컨테이너가 반만 교체된 상태로 남는다).
+  interruptible: false
   environment:
-    name: production
-  variables:
-    ENV_FILE: /etc/liviq/env.prod
-    COMPOSE: infra/compose.prod.yml
-    PROFILES: "--profile data --profile app --profile web"
+    name: wsl-docker
+    url: http://resident.localhost:8080
   script:
-    # 블록 스칼라로 둔다 — 평문 스칼라에 ": "(콜론+공백)이 들어가면 YAML이 매핑으로 파싱한다.
+    - bash infra/deploy-wsl.sh deploy
+  # MR 에서는 기동하지 않는다(*on_deploy 에 merge_request_event 가 없다) — 빌드로 형상 검증만.
+  rules: *on_deploy
+
+# ── 스모크 ──────────────────────────────────────────────────────────
+# 기동 성공(=api healthy)과 "실제로 응답한다"는 다르다. Caddy 라우팅·프록시 헤더까지
+# 사람이 쓰는 경로로 확인한다. 실패하면 파이프라인이 빨개진다(자동 롤백은 하지 않는다 —
+# 되돌릴지는 운영 판단이고, rollback 잡이 수동으로 준비돼 있다).
+smoke:
+  stage: verify
+  needs: [deploy]
+  timeout: 10m
+  script:
+    - bash infra/deploy-wsl.sh smoke
+    - bash infra/deploy-wsl.sh status
+  rules: *on_deploy
+
+# ── 레지스트리 게시 ─────────────────────────────────────────────────
+# 스모크 통과 후에만 돈다(needs: smoke) — 레지스트리에 검증된 이미지만 남긴다.
+# 배포는 이 잡을 기다리지 않으므로, 여기서 실패해도 기동 중인 배포는 그대로다.
+#
+# ★ allow_failure: true 인 이유 (2026-07-26 실측) — 지금 이 GitLab 에서는 push 가 **실패한다**:
+#   레지스트리는 :5050 으로 서비스되는데 토큰 realm 을 `http://192.168.10.153/jwt/auth`(포트 없음)
+#   로 알려주고, 그 호스트의 80 은 닿지 않는다("no route to host"). external_url 에 포트가
+#   빠진 탓이며 CI 클론 URL 문제와 같은 뿌리다(docs/13 §5 ③).
+#   고치는 곳은 GitLab 호스트의 /etc/gitlab/gitlab.rb 다(docs/13 §8) — 이 레포가 아니다.
+#   그래서 "배포는 초록, 게시는 경고"로 두어 배포를 막지 않는다.
+#   **서버가 고쳐지면 이 allow_failure 를 지운다** — 게시 실패는 롤백 백업이 없다는 뜻이므로
+#   그때는 빨개져서 눈에 보여야 한다.
+publish:
+  stage: publish
+  needs: [smoke]
+  allow_failure: true
+  timeout: 30m
+  script:
+    # login·logout 은 스크립트가 직접 한다 — 프리플라이트(realm 도달성 확인)가 login 보다
+    # 먼저 돌아야 진단 메시지가 docker 의 중첩 에러에 가려지지 않는다.
+    # CI_REGISTRY_* 는 GitLab 이 자동 주입한다(잡 토큰) — 관리할 자격증명이 없다.
+    - bash infra/deploy-wsl.sh publish
+  rules: *on_deploy
+
+# ── 롤백 (수동) ─────────────────────────────────────────────────────
+# 파이프라인 실행 시 변수 ROLLBACK_TAG 에 되돌릴 커밋 sha(8자)를 넣고 이 잡을 돌린다.
+# 그 태그의 이미지 4종이 **이 호스트에 남아 있어야** 한다 — 남은 태그는 `tags` 로 확인한다
+# (prune 잡이 최근 KEEP_TAGS 개만 보존하므로 오래된 지점은 없을 수 있다).
+rollback:
+  stage: deploy
+  when: manual
+  allow_failure: true
+  resource_group: liviq-prod
+  interruptible: false
+  timeout: 20m
+  environment:
+    name: wsl-docker
+    url: http://resident.localhost:8080
+  variables:
+    IMAGE_TAG: "$ROLLBACK_TAG"
+  script:
     - |
-      test -r "$ENV_FILE" || { echo "env 파일이 없다 -> $ENV_FILE (docs/12 §9.2)"; exit 1; }
-    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-    # 배포 태그는 커밋 sha 핀이다. latest 는 편의 포인터일 뿐 배포에 쓰지 않는다 —
-    # 같은 태그의 실체가 push 마다 바뀌면 "직전으로 되돌리기"가 성립하지 않는다.
-    - export IMAGE_PREFIX="$IMAGE_PREFIX" IMAGE_TAG="$CI_COMMIT_SHA"
-    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" $PROFILES pull
-    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" $PROFILES up -d
-    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" logs migrate | tail -20
-    - |
-      # migrate 2단계가 실제로 끝났는지 로그로 확인한다(compose 가 gating 하지만 원인 추적용).
-      docker compose --env-file "$ENV_FILE" -f "$COMPOSE" logs migrate \
-        | grep -q "접속 롤 수렴·검증 완료" || { echo "migrate 2단계 미완료 — docs/12 §9.3"; exit 1; }
-    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" ps
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+      if [ -z "${ROLLBACK_TAG:-}" ]; then
+        echo "ROLLBACK_TAG 가 비어 있다. 되돌릴 커밋 sha(8자)를 파이프라인 변수로 넣고 재실행할 것."
+        echo "이 호스트에 남아 있는 태그:"
+        bash infra/deploy-wsl.sh tags
+        exit 1
+      fi
+    - bash infra/deploy-wsl.sh rollback
+  rules: *on_deploy
+
+# ── 이미지 정리 (수동) ──────────────────────────────────────────────
+# 배포마다 태그가 쌓여 디스크를 먹는다. 자동으로 돌리지 않는 이유: 지운 태그는 롤백 대상에서
+# 사라진다 — 언제 무엇을 버릴지는 사람이 정한다.
+prune:
+  stage: verify
+  when: manual
+  allow_failure: true
+  timeout: 10m
+  script:
+    - bash infra/deploy-wsl.sh tags
+    - bash infra/deploy-wsl.sh prune
+    - bash infra/deploy-wsl.sh tags
+  rules: *on_deploy

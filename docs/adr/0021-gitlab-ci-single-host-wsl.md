@@ -2,7 +2,7 @@
 
 - 상태: Accepted
 - 날짜: 2026-07-26
-- 관련: [ADR-0020](0020-container-deploy-3tier-vm.md)(3-tier VM 형상 — 유지) · [docs/09 §4.4](../09-implementation-harness.md) · [docs/12 §9](../12-deployment-runbook.md) · [docs/03 §5.1](../03-database-design.md)
+- 관련: [ADR-0020](0020-container-deploy-3tier-vm.md)(3-tier VM 형상 — 유지) · [docs/09 §4.4](../09-implementation-harness.md) · **절차: [docs/13](../13-gitlab-wsl-deploy.md)** · 형상 비교: [docs/12 §9](../12-deployment-runbook.md) · [docs/03 §5.1](../03-database-design.md)
 
 ## 맥락
 
@@ -35,6 +35,19 @@
 6. **DB 접속 롤·마이그레이션·프록시는 불변.** H10-2의 3-URL 접속 롤 계약, `migrate` 2단계(`alembic upgrade head` → `python -m liviq_db.runtime_roles`), Caddy same-origin `/api`·SSE `flush_interval -1`이 그대로 적용된다. 형상이 달라도 이 계약들은 compose·이미지에 들어 있다.
 7. **GitHub Actions(`release.yml`)는 유지한다.** 두 파이프라인이 각자의 레지스트리에 게시한다 — GitHub=GHCR(3-tier VM용), GitLab=GitLab 레지스트리(사내 호스트용). 같은 커밋에서 나온 이미지이므로 내용은 동일하고, 좌표만 다르다.
 
+## 개정 노트 (2026-07-26, H12-2 실측)
+
+실호스트에서 파이프라인을 그린으로 만든 뒤 **결정 4가 두 갈래로 쪼개졌다**. 결정 1·2·3·5·6·7은 그대로다.
+
+- **결정 4 개정 — 배포와 게시는 다른 경로다.** 원문은 "레지스트리에 push한 이미지를 배포"를 함축했으나, 러너가 배포 대상 호스트 **안**에 있으므로(결정 1) push→pull 왕복(4종 ≈1.3GB)이 순수 낭비다. 확정 형상:
+  - **기동은 `build`가 만든 로컬 이미지**로 한다. 좌표는 로컬 이름 `liviq-`(결정 5의 구분자 규약 유지).
+  - **게시는 스모크 통과 뒤**(`needs: [smoke]`)에 이력·백업·타 호스트 경로용으로만 한다. 레지스트리에는 검증된 이미지만 남는다.
+  - 태그 폭은 `$CI_COMMIT_SHORT_SHA`(8자)로 확정 — `deploy-wsl.sh`의 `git rev-parse --short=8`과 같아야 수동/CI가 같은 태그를 가리킨다. sha 핀 원칙은 불변.
+- **게시가 현재 실패한다(서버 설정, 미해결).** 레지스트리는 `:5050`인데 GitLab `external_url`에 포트가 없어 토큰 realm을 80으로 안내하고 그 포트는 닿지 않는다. `publish`를 `allow_failure: true`로 두어 배포를 막지 않는다 — 배포는 로컬 이미지로 이미 끝나 있다. 고치는 곳은 GitLab 호스트의 `/etc/gitlab/gitlab.rb`(`external_url`·`registry_external_url`에 포트 포함)이고, **고쳐지면 `allow_failure`를 지운다**(게시 실패 = 롤백 백업 없음이므로 그때는 빨개져야 한다). 같은 뿌리가 CI 클론 URL도 깨뜨려 러너 `config.toml`에 `clone_url` 오버라이드가 들어가 있다.
+- **러너 태그는 `wsl`,`docker`다.** H12-1 초안의 `wsl-140`은 존재하지 않는 태그였다 — 그대로 두면 잡이 영구 `pending`으로 남는다(`glrt-` 등록 방식은 CLI `--tag-list`를 무시하고 UI 지정값을 쓴다).
+- **추가 부품 2개.** ①[`infra/deploy-wsl.sh`](../../infra/deploy-wsl.sh) — CI와 수동 운영의 공용 진입점(잡은 한 줄). ②[`infra/compose.wsl.yml`](../../infra/compose.wsl.yml) 오버레이 — `compose.prod.yml`은 3-tier 형상의 단일 출처라 오염시키지 않고, WSL 차이 **하나**(`host.docker.internal:host-gateway` — WSL Docker CE는 이 이름을 주입하지 않아 LLM 기본 엔드포인트가 DNS 실패)만 담는다.
+- **절차 문서는 [docs/13](../13-gitlab-wsl-deploy.md)이 단일 출처**가 됐다. `docs/12 §9`(H12-1 초안)는 실측 전에 쓰여 값이 여럿 틀렸으므로 형상 차이 요약만 남기고 접었다.
+
 ## 대안
 
 - **CI에서 SSH로 배포(러너는 GitLab 쪽)**: 대상 호스트 인바운드 22 개방 + WSL 안 sshd 상주 + Windows `netsh portproxy` + 방화벽 예외가 필요하고, WSL2 IP가 재시작마다 바뀌어 포워딩이 깨진다. 배포 키를 CI 변수로 내보내야 한다. **러너를 안에 두면 이 전부가 사라진다** — 채택하지 않았다.
@@ -51,7 +64,7 @@
 - **비용**:
   - 배포 형상이 **둘**이 되어 문서·env 파일이 두 벌이다(런북에 형상별 절 분리).
   - **3-tier의 네트워크 방어선이 없다** — 단일 호스트라 tier 격리가 성립하지 않는다. 이 형상은 사내망 파일럿·스테이징 용도로만 쓰고, 외부 공개 운영은 ADR-0020 형상으로 간다.
-  - **WSL 운영 부담**: 부팅 시 자동 시작이 기본이 아니고, WSL2 IP가 재시작마다 바뀌며, DB 볼륨을 `/mnt/c`에 두면 성능이 무너진다([docs/12 §9](../12-deployment-runbook.md)).
+  - **WSL 운영 부담**: 부팅 시 자동 시작이 기본이 아니고(러너가 없으면 잡이 `pending`으로 쌓인다), WSL2 IP가 재시작마다 바뀌며, DB 볼륨을 `/mnt/c`에 두면 성능이 무너진다([docs/13 §3.1](../13-gitlab-wsl-deploy.md)).
   - 빌드가 배포 호스트 자원을 점유한다.
   - `IMAGE_PREFIX` 의미 변경은 **기존 env 파일을 깨는 변경**이다(`liviq` → `liviq-`). `env.prod.example`·런북·H10-3 기록을 함께 고친다.
 - **재검토 신호**:

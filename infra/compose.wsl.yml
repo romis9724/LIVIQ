@@ -1,0 +1,37 @@
+# LIVIQ WSL 1호스트 오버레이 — compose.prod.yml 위에 겹쳐 쓴다.
+#
+#   docker compose --env-file /etc/liviq/env.prod \
+#     -f infra/compose.prod.yml -f infra/compose.wsl.yml \
+#     --profile data --profile app --profile web up -d
+#
+# 왜 별 파일인가: compose.prod.yml 은 **3-tier VM 배포 형상의 단일 출처**다(ADR-0020).
+# WSL 개발 호스트 사정으로 그 파일을 오염시키지 않고, 차이만 여기 모은다.
+# 이 파일은 프로필·이미지·포트를 건드리지 않는다 — 배포 형상은 그대로다.
+#
+# 담는 차이는 하나뿐이다: **host.docker.internal 이 WSL Docker CE 에는 없다.**
+#   Docker Desktop 은 이 이름을 자동 주입하지만, WSL 안에 apt 로 넣은 Docker Engine 은
+#   주입하지 않는다 → LLM·임베딩 기본값(http://host.docker.internal:11434/v1, ADR-0005)이
+#   DNS 해석에 실패한다. `host-gateway` 는 compose 가 호스트 게이트웨이 IP(WSL eth0 의
+#   default via — 예: 172.17.32.1)로 치환해 주는 예약값이라, IP를 env에 박지 않아도 된다.
+#
+# 대상은 app tier 3종뿐이다 — 컨테이너 밖 LLM 엔드포인트로 나가는 건 이 셋이다.
+# web tier(Next·Caddy)와 data tier 는 호스트로 나가지 않으므로 건드리지 않는다.
+#
+# 주의: Ollama 가 **Windows 호스트**에서 돌 때만 닿는다. WSL 안에서 돌린다면 그 주소는
+#       host.docker.internal 이 아니라 WSL eth0 IP 이므로, env 의 LLM_BASE_URL 을 바꾼다.
+#       LLM 미가동이어도 api·ai-worker 는 기동한다(호출 시점에야 필요 — 스모크는 통과).
+
+name: liviq-prod
+
+services:
+  migrate:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  ai-worker:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

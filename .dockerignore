@@ -6,6 +6,12 @@
 # ── 시크릿 (최우선 — 이미지 레이어 유출 차단) ────────────────────
 .env
 .env.*
+# 배포 env 파일 — **점 없는 이름이라 위 `.env.*` 패턴에 걸리지 않는다**(.gitignore 와 같은 함정).
+# 1호스트 스모크에서 `infra/env.prod` 를 레포 안에 두는 절차가 있으므로(compose.prod.yml 상단 주석)
+# 컨텍스트 단계에서 잘라낸다. 현행 Dockerfile 4종은 좁은 경로만 COPY 해 레이어에 닿지 않지만,
+# 컨텍스트에 실어 daemon 으로 보내는 것 자체를 막는 편이 맞다(이 파일의 목적).
+infra/env.prod
+infra/env.prod.*
 *.pem
 *.key
 **/service-credential.json
@@ -15,6 +21,7 @@ mcp/
 # ── VCS·에디터·OS ────────────────────────────────────────────
 .git
 .github
+.gitlab-ci.yml
 .githooks
 .gitignore
 .claude

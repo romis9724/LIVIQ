@@ -214,22 +214,34 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 (Windows Server + WSL2 Docker)에 GitLab CI가 배포한다. GitHub Actions [`release.yml`](../.github/workflows/release.yml)(§4.3)는
 **유지**되고, 두 파이프라인이 각자의 레지스트리에 같은 커밋의 이미지를 게시한다.
 
+> **실측 반영(H12-2)**: 아래 표는 실호스트에서 파이프라인이 그린이 된 뒤의 형상이다. H12-1 초안과
+> 다른 곳이 셋 있다 — ①배포는 **레지스트리 pull이 아니라 로컬 빌드 이미지**로 한다(러너가 같은
+> 호스트라 push→pull 왕복 ≈1.3GB가 순수 낭비) ②게시는 **스모크 통과 후**로 내려갔다(검증된 것만
+> 레지스트리에 남긴다) ③러너 태그는 `wsl`,`docker`다(`wsl-140`은 존재하지 않는 태그였다).
+> 절차·함정은 [13](13-gitlab-wsl-deploy.md)이 단일 출처.
+
 | 항목 | 값 |
 |------|----|
-| 트리거 | push(main) — 빌드+push+배포 · MR — 빌드만(push·배포 없음) |
-| 러너 | **대상 호스트 WSL 안**의 `shell` executor(태그 `wsl-140`). 아웃바운드 폴링만 — 대상 호스트 인바운드 개방 0 |
-| 레지스트리 | **GitLab Container Registry** — `$CI_REGISTRY_IMAGE/<앱>`(하위 저장소는 슬래시. `$CI_REGISTRY_IMAGE`가 `<registry>/dhkim/liviq`) |
-| 태그 | `$CI_COMMIT_SHA` 핀 + `latest`(편의 포인터, 배포 금지) |
-| 빌드 컨텍스트 | **레포 루트**(§4.3과 동일 — 단일 `uv.lock`·pnpm workspace) |
-| 빌드 주체 | 배포와 **같은 러너**. 호스트에 docker가 있어 dind(privileged) 불요 |
-| 이미지 좌표 | `IMAGE_PREFIX`가 **구분자까지 포함**한다(ADR-0021 결정 5) — `$CI_REGISTRY_IMAGE/` |
-| 배포 명령 | `--profile data --profile app --profile web up -d` = **1호스트 3프로필**(H10-1 스모크와 같은 형상) |
-| env | `/etc/liviq/env.prod`(레포 밖·0600). 단일 호스트라 `DATA_BIND`·`APP_BIND`는 `127.0.0.1` |
+| stage | `build → deploy → verify(smoke) → publish` + 수동 `rollback`·`prune` |
+| 진입점 | [`infra/deploy-wsl.sh`](../infra/deploy-wsl.sh) — CI와 수동 운영의 **공용**. 잡은 `bash infra/deploy-wsl.sh <cmd>` 한 줄 |
+| 트리거 | push(main) — 전 stage · MR — `build`만(기동 없음) · 수동(`web`·`api` source) — 전 stage + rollback·prune |
+| 러너 | **대상 호스트 WSL 안**의 `shell` executor(태그 `wsl`,`docker`). 아웃바운드 폴링만 — 대상 호스트 인바운드 개방 0 |
+| 배포 소스 | `build`가 만든 **로컬 이미지**. 레지스트리 왕복 없음 |
+| 이미지 좌표 | `IMAGE_PREFIX`가 **구분자까지 포함**한다(ADR-0021 결정 5). 이 형상에서는 로컬 이름 **`liviq-`** — 레지스트리 좌표는 게시에만 쓰고 `$CI_REGISTRY_IMAGE`로 온다 |
+| 태그 | `$CI_COMMIT_SHORT_SHA`(8자 — `deploy-wsl.sh`의 `git rev-parse --short=8`과 같은 폭) + 게시 시 `latest`(편의 포인터, 배포 금지) |
+| 게시 | `needs: [smoke]` — 검증 통과 후에만 GitLab 레지스트리로 push(`<registry>/dhkim/liviq/<앱>`. 하위 저장소는 슬래시). **현재 `allow_failure: true`** — GitLab `external_url`에 포트가 없어 토큰 realm이 80으로 안내되고 도달 불가(서버 설정 문제, 레포에서 못 고침 — [13 §8](13-gitlab-wsl-deploy.md)) |
+| 빌드 | 4종을 **한 잡에서 순차**(4코어 — 병렬은 메모리·CPU를 다퉈 더 느리고 레이어 캐시는 순차에서도 공유). 컨텍스트는 **레포 루트**(§4.3과 동일) |
+| 배포 명령 | `-f compose.prod.yml -f compose.wsl.yml --profile data --profile app --profile web up -d` = **1호스트 3프로필**(H10-1 스모크와 같은 형상) |
+| WSL 오버레이 | [`infra/compose.wsl.yml`](../infra/compose.wsl.yml) — 차이 **하나**: `host.docker.internal:host-gateway`(WSL Docker CE는 이 이름을 주입하지 않아 LLM 기본 엔드포인트가 DNS 실패). `compose.prod.yml`은 3-tier 형상의 단일 출처라 건드리지 않는다 |
+| 스모크 | Caddy 경유 4건 — api `/health` 200 · web 2종 200/307/308 · `X-Frame-Options: DENY`. `Host` 헤더 명시(`*.localhost`는 curl에서 해석 안 될 수 있다). 실패 시 **자동 롤백 없음**(운영 판단) |
+| env | `/etc/liviq/env.prod`(레포 밖·**0640 root:gitlab-runner**). 스크립트는 `source`하지 않고 필요한 비민감 키만 뽑는다(시크릿을 CI 로그·자식 프로세스로 흘리지 않기) |
+| 동시성 | `resource_group: liviq-prod` + `interruptible: false` — 같은 compose 프로젝트를 두 잡이 동시에 만지지 못하게, 배포를 중간에 끊지 못하게 |
 | 불변 계약 | 3-URL 접속 롤(H10-2) · `migrate` 2단계 · Caddy same-origin `/api`·SSE `flush_interval -1` |
-| 롤백 | `IMAGE_TAG`를 이전 sha로 → `pull` → `up -d`(§4.3과 동일 조작) |
+| 롤백 | 수동 `rollback` 잡 + 파이프라인 변수 `ROLLBACK_TAG=<sha 8자>`. **그 태그 이미지가 호스트에 남아 있어야** 한다(`tags`로 확인, `prune`이 최근 5개만 보존) |
 
-- **`rules:changes` 주의**: 브랜치 파이프라인에서는 직전 커밋 기준으로 평가되므로 첫 파이프라인·force push 뒤에는 전량 빌드로 떨어지는 fallback을 둔다.
-- **러너 URL은 GitLab 정본 주소**(`http://192.168.10.153`)를 쓴다. 레지스트리 포트(`:5050`)로 등록해도 리버스 프록시가 API를 흘려줘 동작하지만, 레지스트리 vhost 설정이 바뀌면 조용히 깨진다.
+- **`.gitlab-ci.yml`이 main에 있어야** push가 파이프라인을 만든다. 없으면 GitLab이 Auto DevOps 템플릿을 대신 돌려 `shell` executor에서 실패한다(실측 — 명시적 CI 설정이 우선하므로 머지하면 사라진다).
+- **push 시점에 WSL이 떠 있어야** 한다. 러너는 WSL 안 systemd 서비스이고 Windows 재부팅 후 WSL은 자동 시작되지 않는다 → 잡이 `pending`으로 쌓이고 방치되면 stuck으로 실패([13 §3.1](13-gitlab-wsl-deploy.md)).
+- **러너 URL은 GitLab 정본 주소**를 쓰고, `config.toml`에 `clone_url`을 명시한다 — `external_url`에 포트가 빠져 있어 CI가 받는 클론 URL이 80을 가리킨다(레지스트리 realm 문제와 같은 뿌리).
 
 ## 5. 권장 훅 (PostToolUse / Pre / Stop)
 
@@ -284,7 +296,7 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 | H9. 단지 트윈·주차장 | `household_geometries` + deck.gl 3D·오버레이 4종(입주·민원·관리비·설비)·세대 상세·VWorld 실사 3D 토글·트윈 대시보드·주차장 배치도(442면·차량 348대 `plate_enc`) | tenant 격리·MANAGER 인가(CRITICAL)·plate 암호화 왕복 + 게이트 그린 + 라이브 시각 실측 | ✅ 완료 (2026-07-25, §8.11) — [ADR-0019](adr/0019-complex-twin-3d.md), 프로토타입 수치 완전 일치 |
 | H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | ✅ 완료 (2026-07-26, §8.13) |
 | H11. 운영 정합 | 감사 로그 실배선(보안 핵심 행위)·문서·스키마 드리프트 정정 | 감사 행위별 기록 테스트(CRITICAL — 개인정보 비저장 포함) + 문서와 실제 스키마 일치 | ✅ 완료 (2026-07-26, §8.14) |
-| H12. 사내 GitLab 배포 | GitLab CI 파이프라인(빌드·레지스트리·배포)·단일 호스트(WSL Docker) 형상·이미지 좌표 규약 변경 | main push로 GitLab 레지스트리 게시 + 대상 호스트 배포 그린 + 롤백 실연 | 🚧 진행 (§8.15) |
+| H12. 사내 GitLab 배포 | GitLab CI 파이프라인(빌드·배포·스모크·게시)·단일 호스트(WSL Docker) 형상·이미지 좌표 규약 변경 | main push로 대상 호스트 배포 그린(Caddy 경유 스모크) + 롤백 실연. 레지스트리 게시는 서버 `external_url` 미해결로 `allow_failure` | 🚧 진행 (§8.15) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -543,8 +555,8 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
 | H12-0 | 설계 갱신 | [ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) 신설 + [ADR-0020](adr/0020-container-deploy-3tier-vm.md) 개정 노트(결정 2는 단일 호스트에서 미성립·좌표 규약 변경) + 본 문서 §4.4 스펙·§8 단계 표·§8.15 + [01 §14](01-architecture.md) 두 번째 형상 + [12 §9](12-deployment-runbook.md) 단일 호스트 절 | 설계 문서 PR 머지(구현 착수 전) | ✅ 완료 |
-| H12-1 | 파이프라인 + 이미지 좌표 | [`.gitlab-ci.yml`](../.gitlab-ci.yml) 신설(build matrix 4종 → GitLab 레지스트리 sha 태그 · deploy 잡은 `tags: [wsl-140]` 러너에서 `--profile data/app/web up -d` · MR은 빌드만) · [`infra/compose.prod.yml`](../infra/compose.prod.yml) 이미지 참조를 `${IMAGE_PREFIX:-liviq-}<앱>`으로(구분자를 env로 이동 — GitLab 레지스트리는 슬래시 하위 저장소) · [`infra/env.prod.example`](../infra/env.prod.example) 좌표 예시 3종 | 기존 게이트 그린 + 로컬 1호스트 스모크가 **바뀐 좌표로도** 기동(회귀 없음) + `.gitlab-ci.yml` 문법 검증 | ✅ 완료 — **GitLab lint API `valid: True`**(첫 시도 실패: 평문 YAML 스칼라의 `": "`가 매핑으로 파싱 → 블록 스칼라로 수정). 좌표 렌더 3종 확인(`liviq-api:local` / `ghcr.io/<owner>/liviq-api:<sha>` / `<registry>/dhkim/liviq/api:<sha>`). **로컬 1호스트 3프로필 재기동 회귀 0**: 4종 이미지 해석 정상 · `migrate` 2단계 그린(빈 DB에 전체 체인 → head `f1a9c3e5b7d2` → `[runtime_roles] 접속 롤 수렴·검증 완료`) · 부트스트랩 → 로그인 200 → 비밀번호 변경 204 → `/me` 200 → 단지 생성 201 · 감사 로그 `auth.login_failed`·`auth.login` 기록(H11-1 배선이 이 스택에서도 동작). `check:paths` 708건 그린 | ✅ 완료 |
-| H12-2 | 러너·호스트 준비 + 실배포 | 러너 재등록(URL을 GitLab 정본 `http://192.168.10.153`로 · `shell` executor · 태그 `wsl-140` · `gitlab-runner` 사용자 docker 그룹) · WSL 운영 설정(`systemd=true`·부팅 자동 시작·`networkingMode=mirrored` 또는 portproxy·메모리 상한) · `/etc/liviq/env.prod` 배치 · SYS_ADMIN 부트스트랩 | main push로 4개 이미지 GitLab 레지스트리 게시 + 대상 호스트에서 전 여정 스모크(로그인→AI SSE→트윈·주차장) + **롤백 1회 실연** | 대기 |
+| H12-1 | 파이프라인 + 이미지 좌표 | [`.gitlab-ci.yml`](../.gitlab-ci.yml) 신설(build matrix 4종 → GitLab 레지스트리 sha 태그 · deploy 잡은 `tags: [wsl-140]` 러너에서 `--profile data/app/web up -d` · MR은 빌드만) — **H12-2에서 실측판으로 대체됨**(러너 태그·배포 소스·게시 순서, 아래 행) · [`infra/compose.prod.yml`](../infra/compose.prod.yml) 이미지 참조를 `${IMAGE_PREFIX:-liviq-}<앱>`으로(구분자를 env로 이동 — GitLab 레지스트리는 슬래시 하위 저장소) · [`infra/env.prod.example`](../infra/env.prod.example) 좌표 예시 3종 | 기존 게이트 그린 + 로컬 1호스트 스모크가 **바뀐 좌표로도** 기동(회귀 없음) + `.gitlab-ci.yml` 문법 검증 | ✅ 완료 — **GitLab lint API `valid: True`**(첫 시도 실패: 평문 YAML 스칼라의 `": "`가 매핑으로 파싱 → 블록 스칼라로 수정). 좌표 렌더 3종 확인(`liviq-api:local` / `ghcr.io/<owner>/liviq-api:<sha>` / `<registry>/dhkim/liviq/api:<sha>`). **로컬 1호스트 3프로필 재기동 회귀 0**: 4종 이미지 해석 정상 · `migrate` 2단계 그린(빈 DB에 전체 체인 → head `f1a9c3e5b7d2` → `[runtime_roles] 접속 롤 수렴·검증 완료`) · 부트스트랩 → 로그인 200 → 비밀번호 변경 204 → `/me` 200 → 단지 생성 201 · 감사 로그 `auth.login_failed`·`auth.login` 기록(H11-1 배선이 이 스택에서도 동작). `check:paths` 708건 그린 | ✅ 완료 |
+| H12-2 | 러너·호스트 준비 + 실배포 | 러너 등록(`shell` executor · 태그 `wsl`,`docker` · `clone_url` 오버라이드 · `gitlab-runner` docker 그룹) · WSL 운영 설정 · `/etc/liviq/env.prod`(0640) 배치 · [`infra/deploy-wsl.sh`](../infra/deploy-wsl.sh) 공용 진입점 · [`infra/compose.wsl.yml`](../infra/compose.wsl.yml) 오버레이 · [`13`](13-gitlab-wsl-deploy.md) 런북 · H12-1 초안 정정(러너 태그·배포 소스·`IMAGE_PREFIX` 규약 정합) | main push로 대상 호스트 배포 그린 + 전 여정 스모크 + **롤백 1회 실연** | 🚧 진행 — **브랜치 파이프라인 #115 그린**(실측 2026-07-26): `build` 318.7s → `deploy` 13.8s → `smoke` 1.1s → `publish` ⚠️(`allow_failure` — 서버 `external_url` 문제로 realm 도달 불가, [13 §8](13-gitlab-wsl-deploy.md)). 컨테이너 9개가 `c288357b` 태그로 기동, Caddy 경유 `resident 200 · admin 200 · api /health 200 {"status":"ok"}`. **남은 것**: main 병합 후 main 파이프라인 1회 + SYS_ADMIN 부트스트랩(대상 호스트 1회) + 롤백 실연 + WSL 부팅 자동 시작(`wsl_autostart_liviq` 예약 작업 — 관리자 권한 필요, 미실행) |
 
 > **의도적 제외**: 무중단 배포·다중 호스트·중앙 로그 수집은 H12 범위 밖(ADR-0021 재검토 신호에 조건 명시).
 > 멀티아치 이미지도 제외 — 러너·대상 모두 amd64(§8.13 H10-3 실측).
