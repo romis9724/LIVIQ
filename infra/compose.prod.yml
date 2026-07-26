@@ -1,0 +1,263 @@
+# LIVIQ 배포 compose — 앱 이미지 4종 + 데이터 서비스 4종 + 리버스 프록시
+# (ADR-0020 / docs/01 §14 배포 토폴로지 / docs/06 §6.1 네트워크 경계)
+#
+# 파일 1개 + profiles 3개로 3-tier VM을 구성한다. VM마다 자기 프로필만 기동한다.
+#   data = postgres · redis · minio · minio-init · neo4j
+#   app  = migrate(one-shot) · api · ai-worker
+#   web  = caddy · web-resident · web-admin
+#
+# ── env 파일 준비 ────────────────────────────────────────────────
+#   1) infra/env.prod.example 를 복사해 값을 채운다.
+#   2) 운영은 **레포 밖 경로**에 두고 퍼미션 0600 (docs/06 §7 — VCS 미추적).
+#        install -m 0600 infra/env.prod.example /etc/liviq/env.prod
+#      그리고 그 파일 안에서 `ENV_FILE=/etc/liviq/env.prod` 를 함께 지정한다
+#      (`--env-file`은 `${...}` 치환용, `env_file:`은 컨테이너 주입용 — 둘 다 필요).
+#   3) tier별로 필요한 값만 넣는다: PII_MASTER_KEY·DATABASE_URL·SMTP 자격증명은
+#      **app tier 파일에만** 둔다(docs/06 §7 tier 최소 배치).
+#
+# ── 기동 (tier별) ───────────────────────────────────────────────
+#   data VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile data up -d
+#   app  VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile app  up -d
+#   web  VM: docker compose --env-file /etc/liviq/env.prod -f infra/compose.prod.yml --profile web  up -d
+#   (tier 간 depends_on 은 `required: false` — 다른 VM에 있는 의존을 기다리지 않고 무시한다.
+#    기동 순서(data → migrate → api·ai-worker → web)는 운영 절차로 보장한다. H10-2 문서화 대상.)
+#
+# ── 로컬 1호스트 전체 스모크 (배포 형상 그대로) ──────────────────
+#   cp infra/env.prod.example infra/env.prod   # 로컬용 값으로 수정 (API_ENV=local 필수)
+#   docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
+#     --profile data --profile app --profile web up -d --build
+#   → http://resident.localhost:8080 · http://admin.localhost:8080
+#   정리: docker compose --env-file infra/env.prod -f infra/compose.prod.yml \
+#           --profile data --profile app --profile web down -v
+#
+# ── 운영 전환 시 반드시 바꾸는 값 (env 파일) ─────────────────────
+#   IMAGE_PREFIX(→ ghcr.io/<owner>/liviq) · IMAGE_TAG(→ 커밋 sha 핀) ·
+#   API_ENV(비-local — 세션 쿠키 Secure) · DATA_BIND/APP_BIND(→ 프라이빗 IP) ·
+#   CADDY_HTTP=80 · CADDY_HTTPS=443 · RESIDENT_SITE/ADMIN_SITE(실도메인 → 자동 HTTPS) ·
+#   API_UPSTREAM/*_UPSTREAM(→ app tier 프라이빗 IP) · 전 자격증명·시크릿.
+#
+# 주의: 이 파일에 시크릿 리터럴을 넣지 않는다. 값은 전부 env 치환 / env_file 주입이다.
+#       로컬 **개발** 인프라는 infra/docker-compose.yml (프로젝트명 `infra`) — 이 파일은
+#       `name: liviq-prod` 로 분리돼 볼륨·네트워크가 섞이지 않는다(개발 DB 오염 방지).
+
+name: liviq-prod
+
+services:
+  # ══════════════ data tier ══════════════
+  # 포트는 ${DATA_BIND}(기본 127.0.0.1)에만 바인드한다 — 0.0.0.0 금지(docs/06 §6.1).
+  postgres:
+    profiles: ["data"]
+    image: pgvector/pgvector:0.8.5-pg16 # 고정 태그 핀(docs/09 §2.1) — 부동 `pg16` 대신 pgvector 버전까지
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD} # 미지정 시 postgres 이미지가 기동 실패(fail-closed)
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      # 호스트 포트를 env로 분리한 이유: 로컬 스모크 호스트에는 네이티브 postgres 나
+      # 개발 compose 가 이미 떠 있을 수 있다(infra/docker-compose.yml 주석 참조).
+      # 컨테이너 내부 포트는 고정 — api 는 compose 네트워크로 붙으므로 영향 없다.
+      - "${DATA_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck: # 자격증명 불요(로컬 소켓) — 헬스체크 커맨드에 비밀번호를 노출하지 않는다
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    profiles: ["data"]
+    image: redis:7.4.10-alpine # 고정 태그 핀 — 부동 `7-alpine` 대신 패치 버전까지
+    ports:
+      - "${DATA_BIND:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    profiles: ["data"]
+    # 고정 태그 핀 — 로컬 개발 compose의 `latest` 대체(docs/09 §2.1). 2025-09-07 릴리스.
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      # 미지정 시 MinIO가 기본 자격증명(minioadmin)으로 뜬다 — data tier env에 **반드시** 지정할 것.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${DATA_BIND:-127.0.0.1}:${MINIO_PORT:-9000}:9000"
+      - "${DATA_BIND:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001" # 콘솔 — 운영은 방화벽으로 닫거나 이 줄을 제거
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # 버킷 생성 one-shot(H2-2에서 NoSuchBucket으로 드러난 갭).
+  # MC_HOST_<alias>: mc 공식 alias 주입 방식 — `mc alias set`으로 비밀번호를 인자로 넘기지 않는다.
+  minio-init:
+    profiles: ["data"]
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z # 고정 태그 핀(`latest` 대체)
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER}:${MINIO_ROOT_PASSWORD}@minio:9000
+    entrypoint: ["/bin/sh", "-c", "mc mb --ignore-existing local/${S3_BUCKET:-liviq}"]
+    restart: "no"
+
+  neo4j:
+    profiles: ["data"]
+    image: neo4j:5.26.28-community # 고정 태그 핀(`5-community` 대체) — 5.26 LTS 라인
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD}
+      # JVM 힙·페이지캐시 상한. 미지정이면 호스트 메모리 비례로 과하게 잡아 한 VM에 공존하는
+      # postgres·redis·minio와 메모리를 다툰다. env 키 규약(Neo4j 5): 설정키의 `.`→`_`, `_`→`__`.
+      #   server.memory.heap.max_size → NEO4J_server_memory_heap_max__size
+      NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP:-512m}
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP:-512m}
+      NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-512m}
+    ports:
+      - "${DATA_BIND:-127.0.0.1}:${NEO4J_BOLT_PORT:-7687}:7687" # bolt만 노출(HTTP 7474는 미노출 — 아래 헬스체크는 컨테이너 내부)
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      # cypher-shell 대신 HTTP 준비 확인 — 비밀번호를 헬스체크 커맨드에 노출하지 않는다.
+      # 이 이미지에는 curl이 없고 wget이 있다.
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ══════════════ app tier ══════════════
+  # 이미지 참조는 ${IMAGE_PREFIX}-<앱>:${IMAGE_TAG} — GHCR 전환은 IMAGE_PREFIX 교체로 끝난다.
+  # build: 는 로컬 스모크(`up --build`)용. 컨텍스트는 레포 루트(uv/pnpm workspace 단일 lock).
+
+  # 마이그레이션 one-shot — api 이미지 재사용(ADR-0020 결정 5).
+  # working_dir·command 는 apps/api/Dockerfile 주석의 규약(alembic.ini의 상대 script_location).
+  migrate:
+    profiles: ["app"]
+    image: ${IMAGE_PREFIX:-liviq}-api:${IMAGE_TAG:-local}
+    build: # api와 동일 이미지 — `up --build` 시 레이어 캐시로 재빌드 비용 없음
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    working_dir: /app/packages/db
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - "${ENV_FILE:-./env.prod}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false # data tier가 다른 VM이면 무시(1호스트 스모크에서만 실제로 기다림)
+    restart: "no"
+
+  api:
+    profiles: ["app"]
+    image: ${IMAGE_PREFIX:-liviq}-api:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - "${ENV_FILE:-./env.prod}"
+    ports:
+      - "${APP_BIND:-127.0.0.1}:${API_PORT:-8000}:8000" # 퍼블릭 미노출 — 인바운드는 web tier(Caddy)만
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+        required: false
+      minio:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  ai-worker:
+    profiles: ["app"]
+    image: ${IMAGE_PREFIX:-liviq}-ai-worker:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/ai-worker/Dockerfile
+    env_file:
+      - "${ENV_FILE:-./env.prod}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  # ══════════════ web tier ══════════════
+  # NEXT_PUBLIC_* 는 **빌드타임 인라인**이라 런타임 env로 바꿀 수 없다 → build args로만 주입.
+  # 웹 2종은 호스트 포트를 퍼블리시하지 않는다(Caddy만 접근).
+  # env_file 도 주지 않는다 — 퍼블릭 노출 tier에 시크릿을 두지 않는다(docs/06 §7 tier 최소 배치).
+  web-resident:
+    profiles: ["web"]
+    image: ${IMAGE_PREFIX:-liviq}-web-resident:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/web-resident/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+    # 리스닝 설정(PORT=3000·HOSTNAME=0.0.0.0)은 이미지가 갖고 있다(apps/web-resident/Dockerfile).
+    restart: unless-stopped
+
+  web-admin:
+    profiles: ["web"]
+    image: ${IMAGE_PREFIX:-liviq}-web-admin:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: apps/web-admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-/api}
+        # VWorld 프론트 키는 서비스 URL 도메인 잠금이라 번들 노출이 유출이 아님(docs/06 §7 예외).
+        NEXT_PUBLIC_VWORLD_API_KEY: ${NEXT_PUBLIC_VWORLD_API_KEY:-}
+    # 리스닝 설정(PORT=3001·HOSTNAME=0.0.0.0)은 이미지가 갖고 있다(apps/web-admin/Dockerfile).
+    restart: unless-stopped
+
+  # TLS 종단 · same-origin /api 프록시 · 보안 헤더 일괄(docs/06 §6.1).
+  caddy:
+    profiles: ["web"]
+    image: caddy:2.11.4-alpine # 고정 태그 핀
+    ports:
+      # 로컬 스모크 기본은 8080/8443 — 80/443은 호스트 선점 충돌이 잦다. 운영은 80/443으로 설정.
+      - "${CADDY_HTTP:-8080}:80"
+      - "${CADDY_HTTPS:-8443}:443"
+    environment: # Caddyfile의 {$VAR} 치환 — 시크릿 아님(주소·업스트림만)
+      RESIDENT_SITE: ${RESIDENT_SITE:-http://resident.localhost}
+      ADMIN_SITE: ${ADMIN_SITE:-http://admin.localhost}
+      API_UPSTREAM: ${API_UPSTREAM:-api:8000}
+      RESIDENT_UPSTREAM: ${RESIDENT_UPSTREAM:-web-resident:3000}
+      ADMIN_UPSTREAM: ${ADMIN_UPSTREAM:-web-admin:3001}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # 자동 TLS 인증서·계정키 영속 — 없으면 재기동마다 재발급으로 Let's Encrypt rate limit에 걸린다.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web-resident:
+        condition: service_started
+      web-admin:
+        condition: service_started
+      api:
+        condition: service_healthy
+        required: false # app tier가 다른 VM이면 무시
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
+  neo4jdata:
+  caddy_data:
+  caddy_config:
