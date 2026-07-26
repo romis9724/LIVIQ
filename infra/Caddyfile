@@ -36,7 +36,10 @@
 }
 
 # ── 입주민 웹 ────────────────────────────────────────────────────
-{$RESIDENT_SITE:http://resident.localhost} {
+# 주소가 둘까지 붙는다. *_ALT_SITE 는 **기본 빈 값**이라 3-tier 운영에서는 주소가 하나다.
+# 도메인이 없는 파일럿 호스트에서만 `:17000` 처럼 포트 기반 주소를 넣어 IP 접속을 받는다
+# (Host 헤더와 무관하게 매칭된다 — infra/compose.wsl.yml ②, docs/13 §9).
+{$RESIDENT_SITE:http://resident.localhost} {$RESIDENT_ALT_SITE:} {
 	import liviq_common
 
 	# handle_path = 매칭된 prefix를 **벗겨서** 프록시한다(handle은 벗기지 않는다).
@@ -54,7 +57,7 @@
 }
 
 # ── 관리 웹 ──────────────────────────────────────────────────────
-{$ADMIN_SITE:http://admin.localhost} {
+{$ADMIN_SITE:http://admin.localhost} {$ADMIN_ALT_SITE:} {
 	import liviq_common
 
 	handle_path /api/* {
