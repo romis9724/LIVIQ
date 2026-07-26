@@ -588,6 +588,17 @@ jobs(id, tenant_id, type,                                   -- ingest|ocr|reembe
 
 ### 4.8 평면도·디지털트윈
 
+> **⚠ 세대 내부 2D 평면도(`unit_types`·`floor_plans`·`plan_devices`)는 미구현 설계다**(2026-07-26 실측 확인).
+> 테이블은 초기 스키마(`d5422d3f35d5`)에 실존하지만 **3개 모두 0행**이고, api·ai-worker 코드 참조는
+> `unit_types` 0 · `floor_plans` 0 · `plan_devices` 2(H8-5 세대 삭제 보호의 링크 체크뿐)다.
+> 경위: 단지 트윈은 H9에서 **`household_geometries` 기반 3D**로 갔고([ADR-0019](adr/0019-complex-twin-3d.md)),
+> H9-6은 `unit_types` 마스터+FK CRUD를 만들었다가 **과설계로 폐기**해 트윈 라벨 표시 전용으로 축소했다
+> ([09 §8.11](09-implementation-harness.md)).
+> **테이블은 남긴다**(사용자 결정 2026-07-26 — drop 마이그레이션은 스키마를 실제와 맞추는 이득보다
+> `plan_devices` 참조 코드까지 손대는 비용·되돌리기 비용이 크고, 입주민 평면도 기능을 살릴 때 재사용한다).
+> 아래 설계는 **그 기능을 구현할 때의 계약**으로 읽을 것 — 현행 동작 설명이 아니다. 구현된 트윈은
+> 이 절 뒤쪽의 `household_geometries`다.
+
 배경 이미지(스캔 원본) + 좌표 레이어 방식(CAD 벡터화 아님). 마커는 정적 데이터(IoT 미연동, 추후 확장 여지).
 
 ```sql
@@ -616,7 +627,8 @@ plan_devices(id, tenant_id, floor_plan_id,
 
 **접근 통제**: 입주민은 **본인 세대**의 `floor_plans`/`plan_devices`만 열람. 타 세대 평면도 접근 절대 불가 — **RLS는 tenant 경계까지만 보장**하고, 본인 세대 한정은 **앱 소유권 검증**(`household_id` 일치)으로 강제한다([06]). 단지 배치도·공용층은 인증 입주민 공통 열람.
 
-**단지 3D 트윈 geometry** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md)) — 위 세대 내부 2D 평면도와 별개 표면(단지 외형 3D):
+**단지 3D 트윈 geometry** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md)) — **여기부터가 구현된 부분이다**.
+위 세대 내부 2D 평면도와 별개 표면(단지 외형 3D):
 
 ```sql
 -- 세대 3D 폴리곤 (units.json 업로드 산물 — 렌더 전용, PostGIS 미도입)
