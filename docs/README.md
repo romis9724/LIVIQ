@@ -26,6 +26,7 @@
 | 10 | [사업 계획서(역사적 스냅샷)](10-project-plan.md) | 범위·제약·일정·리스크 (초기 실행 계획 — 일부 ADR로 대체됨) |
 | 11 | [데이터 아키텍처](11-data-architecture.md) | 스토어 맵, 데이터 배치·흐름, PG↔Neo4j 동기화, 정합성 원칙 |
 | 12 | [배포 런북](12-deployment-runbook.md) | 3-tier VM 배포·업그레이드·롤백 절차, 인바운드 규칙, 트러블슈팅 |
+| 13 | [GitLab→WSL 배포](13-gitlab-wsl-deploy.md) | 개발·검증 1호스트 CI/CD(빌드→기동→스모크), 러너 준비, 롤백 |
 
 ## 참고 자료
 

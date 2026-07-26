@@ -73,4 +73,5 @@ docker compose --env-file infra/env.prod -f infra/compose.prod.yml --profile dat
 요구사항 [00](docs/00-requirements.md) · 아키텍처 [01](docs/01-architecture.md) · 디렉토리 [02](docs/02-directory-structure.md) ·
 DB [03](docs/03-database-design.md) · 메뉴 [04](docs/04-menu-structure.md) · UI/UX [05](docs/05-ui-ux-design.md) ·
 보안 [06](docs/06-security-privacy.md) · 테스트 [07](docs/07-testing-strategy.md) · 토큰 [08](docs/08-llm-token-optimization.md) ·
-구현 [09](docs/09-implementation-harness.md) · 데이터 [11](docs/11-data-architecture.md) · 배포 런북 [12](docs/12-deployment-runbook.md) · ADR [docs/adr/](docs/adr/README.md)
+구현 [09](docs/09-implementation-harness.md) · 데이터 [11](docs/11-data-architecture.md) · 배포 런북 [12](docs/12-deployment-runbook.md) ·
+GitLab→WSL 배포 [13](docs/13-gitlab-wsl-deploy.md) · ADR [docs/adr/](docs/adr/README.md)
