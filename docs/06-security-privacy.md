@@ -117,6 +117,23 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - CSRF: 상태변경 요청 토큰/SameSite. 폼·발송 엔드포인트 레이트 리밋.
 - **클라이언트/PWA 캐시**: 민감 화면(관리비·민원·개인 대화) 응답은 `Cache-Control: no-store`, service worker 캐시는 `tenant-public`(공지 등)만. 로그아웃·계정 전환 시 캐시 purge([05 §7](05-ui-ux-design.md)).
 
+### 6.1 네트워크 경계 (배포 형상, H10)
+
+> **왜 보안 문서에 있는가**: 절대 규칙 3(단지 격리)의 `tenant_id` 필터·RLS는 **앱·DB 층** 방어다. 데이터 서비스 포트가 퍼블릭에 열려 있으면 그 두 층을 **네트워크에서 우회**할 수 있으므로, tier 분리와 인바운드 제한이 **세 번째 방어선**이다.
+
+배포 형상은 컨테이너 이미지 + `infra/compose.prod.yml`(H10-1에서 추가) profiles로 구성된 **3-tier VM**([ADR-0020](adr/0020-container-deploy-3tier-vm.md), [02 §9](02-directory-structure.md)).
+
+| tier | 퍼블릭 노출 | 인바운드 허용 출처 | 담당 서비스 |
+|------|------------|------------------|------------|
+| web | **443만** | 인터넷 | 리버스 프록시(TLS 종단·`Caddyfile`), `web-resident`·`web-admin` |
+| app | 없음 | **web tier에서만** | `api`, `ai-worker`, one-shot `migrate` |
+| data | 없음 | **app tier에서만** | postgres+pgvector, redis, minio, neo4j |
+
+- **data 서비스 포트는 프라이빗 IP에 바인드**한다(예: `10.0.0.x:5432:5432`) — 전 인터페이스(`0.0.0.0`) 바인드 금지. 로컬 dev compose([`infra/docker-compose.yml`](../infra/docker-compose.yml))의 `"15432:5432"` 형태는 전 인터페이스 바인드이므로 **운영 형상과 다르다**(로컬 편의용 — 운영에 복사 금지).
+- **api는 퍼블릭 미노출**. 브라우저→api는 web tier 프록시의 **same-origin `/api` 프록시**(prefix strip) 경유. 부수 효과: ① 교차 출처 credentials 요청이 사라져 **CORS 허용 오리진(`WEB_ORIGINS`) 관리 표면이 줄고**, ② 세션 쿠키(`SameSite=lax` — `apps/api/app/deps.py`)가 same-site 조건을 자연히 만족한다.
+- **보안 헤더·TLS 종단 소유권은 web tier 프록시**: 위 §6 상단 헤더 세트는 프록시가 **일괄 적용**한다(앱별 중복 설정 금지 — 헤더 드리프트·중복 헤더 방지). VWorld CSP 예외(§6)는 그대로 유효하며 프록시 CSP에 반영한다.
+- **SSE 주의**: `text/event-stream` 응답(AI 스트리밍)은 프록시 **버퍼링을 끈다** — 안 끄면 응답이 고여 스트리밍이 죽는다(가용성 문제이나 보안 헤더와 **같은 지점**에서 설정하므로 함께 관리).
+
 ## 7. 시크릿 관리
 
 - 코드·레포에 시크릿 금지. `.env`(로컬)·시크릿 매니저(운영).
@@ -124,6 +141,11 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - 노출 의심 시 즉시 회수·교체. CI에 시크릿 스캐너.
 - **마스터 키 백업·이중화**: 봉투 암호화 마스터 키(KEK)는 **안전한 이중 백업** 필수 — **키 유실 = `pii_vault` 전량 복구 불능**. 시크릿 매니저 + 오프라인 봉인 백업으로 이중화.
 - **백업·복구**: PostgreSQL **PITR** + S3 **버저닝**으로 원문·파생 복구, **분기별 복구 리허설**(개인정보 포함 → 접근통제·암호화 백업). 리허설 운영은 [09 §7](09-implementation-harness.md).
+- **컨테이너 배포 시 시크릿(H10, [ADR-0020](adr/0020-container-deploy-3tier-vm.md))**:
+  - **이미지에 굽지 않는다** — 런타임 주입만. compose `env_file`은 **레포 밖 경로**에 두고 퍼미션 `0600`, VCS 미추적.
+  - **tier 최소 배치**: `PII_MASTER_KEY`·`DATABASE_URL`·SMTP 자격증명은 **app tier에만** 존재한다(web tier에 두지 않음 — 퍼블릭 노출 tier의 유출 반경 축소).
+  - `NEXT_PUBLIC_*`은 **브라우저 번들에 노출**되므로 시크릿을 담을 수 없다(빌드타임 인라인 — [02 §9](02-directory-structure.md)). VWorld 프론트 키(§6)는 **도메인 잠금 키**라 예외.
+  - CI 시크릿 스캐너는 **이미지 레이어도 대상**(빌드 산출물에 `.env`·키 파일이 섞여 들어가는 경로 차단 — 배선은 H10-2).
 
 ## 8. 감사 / 모니터링
 
@@ -142,5 +164,8 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - [ ] 파일 업로드 검증·격리
 - [ ] 감사 로그 누락 없음, 개인정보 비저장
 - [ ] 레이트 리밋(로그인·발송·AI 질의)
+- [ ] 네트워크 경계 검증(§6.1) — data·app tier 포트가 퍼블릭에서 도달 불가(외부 스캔으로 확인)
+- [ ] 이미지에 시크릿 미포함(레이어 스캔) · `env_file` 퍼미션 `0600` · 레포 밖 경로
+- [ ] 보안 헤더·TLS가 web tier 프록시에서 일괄 적용(앱 직접 노출 경로 0건)
 
 > 보안 민감 변경(인증/인가/개인정보/결제연동)은 머지 전 보안 리뷰 필수. 테스트: [07 §보안](07-testing-strategy.md).

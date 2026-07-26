@@ -58,6 +58,15 @@ pnpm e2e       # Playwright 여정 (tests/e2e, H2-7) — infra 기동 필요, CI
 pnpm db:seed   # 시드 데이터 정식화 시 (현재는 tests/e2e 시드·검증용 임시 스크립트만)
 ```
 
+H10-1 도입 후 — 프로덕션 이미지 스모크(**현재 없는 명령**, `infra/compose.prod.yml`은 H10-1에서 추가):
+
+```bash
+# 1호스트에서 3프로필 동시 기동 = 배포 형상 그대로 (명령 형태는 H10-1에서 확정)
+docker compose -f infra/compose.prod.yml --profile data --profile app --profile web up -d
+```
+
+- 평소 개발 루프는 **네이티브 유지**(HMR·reload 속도) — 컨테이너는 배포 전 스모크·운영 배포용([ADR-0020](adr/0020-container-deploy-3tier-vm.md)).
+
 - 로컬 인프라: [`infra/docker-compose.yml`](../infra/docker-compose.yml) — postgres(pgvector), redis, minio(s3), neo4j. 기동: `docker compose -f infra/docker-compose.yml up -d`.
 - env는 `.env`(로컬), [`.env.example`](../.env.example)(레포 루트) 제공. 부팅 시 검증(누락=즉시 실패) — **Python 패키지는 Pydantic Settings, 웹은 Zod**. **검증 소유는 패키지별**(.env.example 주석) — `packages/db`가 `DATABASE_URL`, `apps/api`가 세션·S3·인증, `packages/ai-core`가 LLM·임베딩.
 - **생성 LLM과 임베딩은 env를 분리**한다(`LLM_*` vs `EMBEDDING_*`) — 임베딩 bge-m3는 고정, 생성 모델만 교체 가능([ADR-0005](adr/0005-single-llm-openai-compat.md) 보강).
@@ -75,8 +84,12 @@ pnpm db:seed   # 시드 데이터 정식화 시 (현재는 tests/e2e 시드·검
 | Alembic | 최신 stable | 스키마·마이그레이션 |
 | arq | 최신 stable | 큐·워커 (ai-worker, cron 내장) |
 | PostgreSQL | 16 (pgvector) | compose 이미지와 일치 |
+| 컨테이너 베이스(Python) | uv 공식 이미지 `python3.12` slim 계열 | api·ai-worker 공용 — 정확한 태그는 H10-1에서 확정 |
+| 컨테이너 베이스(웹) | `node:20-alpine` | Next standalone 런타임(web-resident·web-admin) |
+| 리버스 프록시 | Caddy 2 | TLS 종단 · `/api` 프록시(web tier) |
 
 - **RLS 정책 SQL은 Alembic custom migration(`op.execute`)으로 버전 관리**한다 — 스키마 자동생성(autogenerate)이 만들지 못하는 정책·role을 마이그레이션 파일로 고정(코드 리뷰가 아니라 마이그레이션 이력으로 추적).
+- **운영 이미지 태그는 고정 태그 핀**이다(재기동 시 실체가 바뀌는 `latest` 금지). 로컬 [`infra/docker-compose.yml`](../infra/docker-compose.yml)이 `latest`로 쓰는 3개 — `minio/minio`·`minio/mc`·`neo4j:5-community` — 가 핀 대상(H10-1에서 고정 태그 지정). 앱 4종 자체 이미지의 태그 규칙은 §4.3.
 
 ## 3. 코드 게이트 (로컬·CI 공통, 순서 고정)
 
@@ -123,8 +136,11 @@ pnpm db:seed   # 시드 데이터 정식화 시 (현재는 tests/e2e 시드·검
 PR:  install(turbo cache) → lint → typecheck → unit/integration(testcontainers-python)
      → 보안 스위트 → build → e2e(미리보기) → a11y → ai-eval(diff)
      → 시크릿 스캔 + 의존성 취약점 스캔
-merge(main): 마이그레이션 dry-run → 스테이징 배포 → 스모크 → (승인) 운영
+merge(main): 이미지 빌드·GHCR push(sha 태그) → 마이그레이션 dry-run
+     → 스테이징 tier 배포(data → migrate → app → web) → 스모크 → (승인) 운영
 ```
+> merge(main) 라인은 **H10-2에서 배선**한다(현재 CI는 PR 게이트까지 — §4.1). 릴리스 스펙은 §4.3.
+
 - Turbo 원격 캐시로 변경 영향 패키지만 빌드/테스트(시간·비용 절감).
 - 머지 차단 조건은 [07 §9](07-testing-strategy.md).
 
@@ -147,6 +163,27 @@ merge(main): 마이그레이션 dry-run → 스테이징 배포 → 스모크 �
 - 통합 테스트는 **testcontainers-python으로 PostgreSQL 기동**(pytest fixture) — 실제 Alembic 마이그레이션·RLS를 적용해 검증(모킹 아님).
 - **역할 2개**: 마이그레이션 owner role(DDL·정책 생성) + 런타임 role(**BYPASSRLS 없음** — RLS를 실제로 받는다). 워커도 런타임 role.
 - 격리는 **트랜잭션 롤백**(각 테스트를 트랜잭션으로 감싸 종료 시 롤백 — 컨테이너 재기동 없이 빠르게). pytest fixture가 트랜잭션 경계를 관리.
+
+### 4.3 릴리스 파이프라인 (`release.yml` 스펙 — H10-2에서 추가)
+
+앱 4종을 컨테이너 이미지로 만들어 3-tier VM(web/app/data)에 배포한다([ADR-0020](adr/0020-container-deploy-3tier-vm.md)). 아래는 `.github/workflows/release.yml`의 계약이며 **워크플로 파일 자체는 H10-2에서 추가**한다.
+
+| 항목 | 값 |
+|------|----|
+| 트리거 | push(main) · 릴리스 태그 push |
+| 대상 이미지 | `api`(`apps/api/Dockerfile`) · `ai-worker`(`apps/ai-worker/Dockerfile`) · `web-resident`(`apps/web-resident/Dockerfile`) · `web-admin`(`apps/web-admin/Dockerfile`) — 4개 모두 H10-1에서 추가 |
+| 빌드 컨텍스트 | **레포 루트**(uv workspace 단일 lock · pnpm workspace 때문에 앱 디렉토리 컨텍스트로는 빌드 불가). 제외는 루트 `.dockerignore`(H10-1에서 추가) |
+| 빌드 방식 | docker buildx(멀티 스테이지) — Python은 `uv sync --frozen --no-dev --package <멤버명>` 후 런타임 스테이지에 `.venv`만 복사(non-root), 웹은 pnpm 빌드 후 Next standalone 산출물만 복사 |
+| 레지스트리 | **GHCR**(`ghcr.io/<owner>/liviq-<앱>`) — 이미지 이름 확정은 H10-2 |
+| 태그 규칙 | **git sha + `latest`** 동시 push. **배포는 sha 태그 핀 고정**(§4.3 하단) |
+| 캐시 | buildx `cache-from`/`cache-to: type=gha`(앱별 스코프) |
+| 웹 빌드 인자 | `NEXT_PUBLIC_API_BASE_URL=/api` — `NEXT_PUBLIC_*`은 빌드타임 인라인이라 **런타임 env로 못 바꾼다**. 브라우저→api는 Caddy `/api/*` `strip_prefix` 프록시로 same-origin |
+| 시크릿 취급 | **이미지에 미포함**(빌드 인자·레이어에 시크릿 금지) — DB·세션·`PII_MASTER_KEY`·SMTP·LLM 엔드포인트는 전부 **런타임 주입**(`env_file`, 레포 밖 0600). LLM은 컨테이너 밖 외부 엔드포인트를 env로만 가리킨다([ADR-0005](adr/0005-single-llm-openai-compat.md) 유지) |
+| 마이그레이션 | api 이미지를 재사용하는 one-shot `migrate` 서비스(`alembic upgrade head`). Alembic 자산은 wheel 밖(`packages/db/alembic`·`packages/db/alembic.ini`)이라 이미지에 **명시 복사** |
+
+- **기동 순서**: data(postgres·redis·minio·neo4j) → `migrate`(완료 대기) → app(api·ai-worker) → web(Caddy·web-resident·web-admin). compose `profiles`(`data`/`app`/`web`) + `healthcheck`·`depends_on`으로 강제한다.
+- **롤백**: 이전 sha 태그로 재기동(코드만 되돌림 — 파괴적 스키마 변경은 [03 §8](03-database-design.md) 2단계 규칙으로 앞뒤 호환 유지).
+- **`latest` 배포 금지**: 같은 태그의 실체가 push마다 바뀌어 "직전으로 되돌리기"가 성립하지 않는다. `latest`는 편의 포인터로만 유지하고 배포·롤백은 sha 핀만 쓴다.
 
 ## 5. 권장 훅 (PostToolUse / Pre / Stop)
 
@@ -196,6 +233,10 @@ merge(main): 마이그레이션 dry-run → 스테이징 배포 → 스모크 �
 | H4. 운영/최적화 | 대시보드·캐시·라우팅·비용 상한 | 비용/품질 대시보드, 알림 | ✅ 완료 (2026-07-17, §8.5) — 모델 라우팅·의미 캐시는 보류([01 ADR-2]·[08 §10]), 실비용 상한은 파일럿 측정 후 |
 | H5. 파일럿 준비 | 모델 확정·evals 규칙 2·3·알림함/정정 알림 | 실측 6/8규칙·확정 모델 E2E 그린·검수 루프 폐합 | ✅ 완료 (2026-07-18, §8.6) — llama3.1:8b 확정·실측 6/8규칙·알림 루프 폐합 |
 | H6. 전 기능 실동작 | 실로그인(세션)·목업 해소·가입→AI 전 구간 E2E | 목업 렌더 0·회원가입~AI 통합테스트 그린 | ✅ 완료 (2026-07-18, §8.7) — 세션 인증·목업 0·가입~AI 여정 E2E 그린 |
+| H7. 온보딩·인증 재설계 | 자체 이메일+비밀번호 인증(Argon2id·검증 메일·`auth_tokens`)·역할 축소(FACILITY·COUNCIL 제거)·단지/소장/직원 초대·단지·계정 수명주기·명부 운영 도구·주민 관리 목록 | 역할·수명주기 인가 테스트(CRITICAL) + 설치~가입~AI 전 여정 E2E 그린 | ✅ 완료 (2026-07-22, §8.8) — Google OAuth 전면 제거([ADR-0014](adr/0014-local-email-auth.md)), E2E 15/15 |
+| H8. 게시판 전환·운영 개편 | 공지·문서 AI 초안 폐기 후 게시판화(첨부·버전·예약 발행·공지 벡터화)·공통 코드 레지스트리·동/호수 관리·관리비 고지서(총액 트리 분배)·AI 검수 큐 제거·민원 수동 워크플로·관리자 콘솔(메뉴 그룹·액션 큐) | 첨부·코드·민원 인가/격리 테스트(CRITICAL) + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-24, §8.10) — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)·[0016](adr/0016-document-board-versioned-attachment.md)·[0017](adr/0017-tenant-code-registry.md)·[0018](adr/0018-inquiry-manual-handling.md) |
+| H9. 단지 트윈·주차장 | `household_geometries` + deck.gl 3D·오버레이 4종(입주·민원·관리비·설비)·세대 상세·VWorld 실사 3D 토글·트윈 대시보드·주차장 배치도(442면·차량 348대 `plate_enc`) | tenant 격리·MANAGER 인가(CRITICAL)·plate 암호화 왕복 + 게이트 그린 + 라이브 시각 실측 | ✅ 완료 (2026-07-25, §8.11) — [ADR-0019](adr/0019-complex-twin-3d.md), 프로토타입 수치 완전 일치 |
+| H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | 🚧 진행 (§8.13) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -407,6 +448,22 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 2. **서비스 URL 등록**: dev = `http://localhost:3001`(web-admin 오리진 — 트윈 화면이 여기서 로드). 운영은 배포 도메인 추가 등록(또는 별도 키). VWorld가 포트 포함을 거부하면 `localhost`로 등록.
 3. 발급 키를 **`.env` 또는 `apps/web-admin/.env.local`**(gitignore)에 `NEXT_PUBLIC_VWORLD_API_KEY=<키>`. `.env.example`엔 **placeholder만**(도메인 잠금 반공개라도 실키 커밋 금지).
 4. 미설정이어도 기본 deck.gl 뷰는 정상 — 실사 뷰만 "키 미설정" 안내.
+
+### 8.13 H10 체크리스트 (컨테이너 배포 — 이미지·3-tier VM)
+
+> 근거: 사용자 결정(2026-07-26, [ADR-0020](adr/0020-container-deploy-3tier-vm.md)) — 앱 4종(`api`·`ai-worker`·`web-resident`·`web-admin`)을 컨테이너 이미지로 GHCR에 게시하고 **3-tier VM(web/app/data)** 에 `infra/compose.prod.yml` 단일 파일 + compose profiles(`data`/`app`/`web`)로 배포한다.
+> **로컬 개발 루프는 네이티브 유지**(HMR·reload 속도) — 컨테이너는 **배포 전 스모크**(1호스트 3프로필 동시 기동 = 배포 형상 그대로)와 운영 배포용(§2).
+> **LLM은 컨테이너 밖 외부 엔드포인트**를 env로만 가리킨다([ADR-0005](adr/0005-single-llm-openai-compat.md) 유지 — 모델 서빙은 배포 대상이 아님).
+> 근거 설계: [01 §14](01-architecture.md)(배포 토폴로지) · [02 §2·§9](02-directory-structure.md) · [06 §6.1·§7·§9](06-security-privacy.md) · 본 문서 §2·§2.1·§4·§4.3.
+> 각 작업 단위는 §3.1 사이클(설계 갱신 → 구현 → 현행화 → PR)을 따르고, 머지는 단위별 사용자 확인 후 진행.
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H10-0 | 설계 갱신 | [ADR-0020](adr/0020-container-deploy-3tier-vm.md) 신설 + [01 §14](01-architecture.md) 배포 토폴로지 + [02 §2·§9](02-directory-structure.md) + [06 §6.1·§7·§9](06-security-privacy.md) + 본 문서 §2·§2.1·§4·§4.3·§8 단계 표·§8.13 | 설계 문서 PR 머지(구현 착수 전) | 🚧 진행 |
+| H10-1 | 이미지 + 로컬 전체 스택 스모크 | `apps/api/Dockerfile`·`apps/ai-worker/Dockerfile`(uv multi-stage — `uv sync --frozen --no-dev --package <멤버명>`·런타임은 `.venv`만·non-root·Alembic 자산(`packages/db/alembic`·`alembic.ini`) 명시 복사) · `apps/web-resident/Dockerfile`·`apps/web-admin/Dockerfile`(node:20-alpine + pnpm, Next standalone 산출물만) · 두 `next.config.mjs`에 `output: 'standalone'` 추가 · 루트 `.dockerignore` · `infra/compose.prod.yml`(profiles `data`/`app`/`web` + one-shot `migrate`(`alembic upgrade head`) + `healthcheck`·`depends_on`) · `infra/Caddyfile`(2사이트 · `/api` `strip_prefix` 프록시 · SSE(`text/event-stream`) 버퍼링 해제 · 보안 헤더 일괄) · `NEXT_PUBLIC_API_BASE_URL=/api` 전환(빌드 인자) · `.env.example` 운영 env 계약 추가 | 로컬 1호스트 3프로필 전체 기동 → 전 여정 스모크(로그인 → 단지 → AI 질의 **SSE 스트리밍 실확인** → 트윈 → 주차장) · 브라우저 콘솔 에러 0 · 기존 게이트 그린(typecheck·lint·test·build) · **api 컨테이너가 퍼블릭 바인드 아님 확인** | 대기 |
+| H10-2 | CI 릴리스 + 배포 절차 | `.github/workflows/release.yml`(buildx · GHCR push · git sha + `latest` 태그 · `cache-from/to: gha` — 스펙 §4.3) · 배포 운영 절차 문서(VM 3대 프로비저닝 · 방화벽 규칙 · 시크릿 주입(`env_file` 0600·레포 밖) · 마이그레이션 순서 · 백업(§7.1 연계) · 롤백) · 운영 이미지 고정 태그 핀(§2.1) | main push로 4개 이미지 GHCR 게시 확인 · 스테이징 tier 배포 후 스모크 그린 · **롤백 1회 실연**(이전 sha 태그 재기동) | 대기 |
+
+> **백로그/의도적 제외**: 무중단 배포(blue-green)·Kubernetes·중앙 로그 수집·모니터링 스택은 **H10 범위 밖**(부하·운영 요구 실증 후 — YAGNI) · [`.env.example`](../.env.example)의 운영 env 계약 추가는 H10-1에서 처리(본 설계 커밋은 문서만).
 
 ## 9. 정의: "완료(Done)"
 
