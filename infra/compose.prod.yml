@@ -33,7 +33,7 @@
 #           --profile data --profile app --profile web down -v
 #
 # ── 운영 전환 시 반드시 바꾸는 값 (env 파일) ─────────────────────
-#   IMAGE_PREFIX(→ ghcr.io/<owner>/liviq) · IMAGE_TAG(→ 커밋 sha 핀) ·
+#   IMAGE_PREFIX(구분자 포함 — ghcr.io/<owner>/liviq- 또는 <registry>/dhkim/liviq/) · IMAGE_TAG(커밋 sha 핀) ·
 #   API_ENV(비-local — 세션 쿠키 Secure) · DATA_BIND/APP_BIND(→ 프라이빗 IP) ·
 #   CADDY_HTTP=80 · CADDY_HTTPS=443 · RESIDENT_SITE/ADMIN_SITE(실도메인 → 자동 HTTPS) ·
 #   API_UPSTREAM/*_UPSTREAM(→ app tier 프라이빗 IP) · 전 자격증명·시크릿.
@@ -141,14 +141,17 @@ services:
     restart: unless-stopped
 
   # ══════════════ app tier ══════════════
-  # 이미지 참조는 ${IMAGE_PREFIX}-<앱>:${IMAGE_TAG} — GHCR 전환은 IMAGE_PREFIX 교체로 끝난다.
+  # 이미지 참조는 ${IMAGE_PREFIX}<앱>:${IMAGE_TAG} — **IMAGE_PREFIX 가 구분자까지 포함**한다
+  # (ADR-0021 결정 5). GitLab 레지스트리는 하위 저장소를 슬래시로만 표현하므로 대시를 여기에
+  # 하드코딩하면 표현할 수 없다: 로컬 `liviq-` · GHCR `ghcr.io/<owner>/liviq-` ·
+  # GitLab `<registry>/dhkim/liviq/`. 레지스트리 전환은 IMAGE_PREFIX 교체로 끝난다.
   # build: 는 로컬 스모크(`up --build`)용. 컨텍스트는 레포 루트(uv/pnpm workspace 단일 lock).
 
   # 마이그레이션 one-shot — api 이미지 재사용(ADR-0020 결정 5).
   # working_dir·command 는 apps/api/Dockerfile 주석의 규약(alembic.ini의 상대 script_location).
   migrate:
     profiles: ["app"]
-    image: ${IMAGE_PREFIX:-liviq}-api:${IMAGE_TAG:-local}
+    image: ${IMAGE_PREFIX:-liviq-}api:${IMAGE_TAG:-local}
     build: # api와 동일 이미지 — `up --build` 시 레이어 캐시로 재빌드 비용 없음
       context: ..
       dockerfile: apps/api/Dockerfile
@@ -168,7 +171,7 @@ services:
 
   api:
     profiles: ["app"]
-    image: ${IMAGE_PREFIX:-liviq}-api:${IMAGE_TAG:-local}
+    image: ${IMAGE_PREFIX:-liviq-}api:${IMAGE_TAG:-local}
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
@@ -194,7 +197,7 @@ services:
 
   ai-worker:
     profiles: ["app"]
-    image: ${IMAGE_PREFIX:-liviq}-ai-worker:${IMAGE_TAG:-local}
+    image: ${IMAGE_PREFIX:-liviq-}ai-worker:${IMAGE_TAG:-local}
     build:
       context: ..
       dockerfile: apps/ai-worker/Dockerfile
@@ -217,7 +220,7 @@ services:
   # env_file 도 주지 않는다 — 퍼블릭 노출 tier에 시크릿을 두지 않는다(docs/06 §7 tier 최소 배치).
   web-resident:
     profiles: ["web"]
-    image: ${IMAGE_PREFIX:-liviq}-web-resident:${IMAGE_TAG:-local}
+    image: ${IMAGE_PREFIX:-liviq-}web-resident:${IMAGE_TAG:-local}
     build:
       context: ..
       dockerfile: apps/web-resident/Dockerfile
@@ -228,7 +231,7 @@ services:
 
   web-admin:
     profiles: ["web"]
-    image: ${IMAGE_PREFIX:-liviq}-web-admin:${IMAGE_TAG:-local}
+    image: ${IMAGE_PREFIX:-liviq-}web-admin:${IMAGE_TAG:-local}
     build:
       context: ..
       dockerfile: apps/web-admin/Dockerfile
