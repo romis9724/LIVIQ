@@ -25,6 +25,7 @@
 | 09 | [구현/하네스](09-implementation-harness.md) | 빌드 순서, CI/CD, 훅, 단계별 플랜, Done 정의 |
 | 10 | [사업 계획서(역사적 스냅샷)](10-project-plan.md) | 범위·제약·일정·리스크 (초기 실행 계획 — 일부 ADR로 대체됨) |
 | 11 | [데이터 아키텍처](11-data-architecture.md) | 스토어 맵, 데이터 배치·흐름, PG↔Neo4j 동기화, 정합성 원칙 |
+| 12 | [배포 런북](12-deployment-runbook.md) | 3-tier VM 배포·업그레이드·롤백 절차, 인바운드 규칙, 트러블슈팅 |
 
 ## 참고 자료
 
@@ -32,7 +33,7 @@
 
 ## 문서 규칙
 
-- **문서 우선순위**: ① Accepted ADR([adr/](adr/README.md)) ② SRS([00](00-requirements.md)) ③ 아키텍처·데이터·보안([01](01-architecture.md)·[03](03-database-design.md)·[06](06-security-privacy.md)·[11](11-data-architecture.md)) ④ 구현([09](09-implementation-harness.md)) ⑤ 참고([10](10-project-plan.md)·핸드오프). 충돌 시 상위가 이긴다.
+- **문서 우선순위**: ① Accepted ADR([adr/](adr/README.md)) ② SRS([00](00-requirements.md)) ③ 아키텍처·데이터·보안([01](01-architecture.md)·[03](03-database-design.md)·[06](06-security-privacy.md)·[11](11-data-architecture.md)) ④ 구현([09](09-implementation-harness.md)) ⑤ 운영 절차([12](12-deployment-runbook.md)) ⑥ 참고([10](10-project-plan.md)·핸드오프). 충돌 시 상위가 이긴다.
 - 수치는 별도 표기 없으면 **검증 전 가정값** — 파일럿으로 보정.
 - 결정 변경 시 [docs/adr/](adr/README.md)에 새 ADR로 기록.
 - 문서 간 중복 정의 금지 — 한 주제는 한 문서가 소유하고 나머지는 링크.
