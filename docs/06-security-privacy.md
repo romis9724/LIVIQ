@@ -37,9 +37,12 @@
 superuser)면 무조건 통과한다 — H10-1 스모크 실측(2026-07-26)에서 앱이 owner 롤(`liviq` = superuser)로
 접속해 tenant 컨텍스트 없이 `households` 322행을 읽던 상태가 그것이다. 정책 자체는 정상이었고 1번(쿼리
 `tenant_id` 필터)이 유지돼 알려진 유출은 없었으나, **코드가 필터를 빠뜨리면 막을 층이 없었다**.
-**H10-2에서 전용 접속 롤로 전환한다** — api는 `liviq_app`, ai-worker는 `liviq_worker`, 마이그레이션만 owner
+**H10-2에서 전용 접속 롤로 전환했다** — api는 `liviq_app`, ai-worker는 `liviq_worker`, 마이그레이션만 owner
 ([03 §5.1](03-database-design.md) 접속 롤 계약). 비밀번호는 env가 단일 출처이며 배포 스텝이 롤 속성
 (`rolsuper`·`rolbypassrls` 부재)과 컨텍스트 없는 조회 0행을 **검증하고 아니면 중단**한다(fail-closed).
+앱도 기동 시 자기 커넥션을 같은 기준으로 검사해 비-local에서는 기동을 거부한다. 실측·실연 기록은
+[09 §8.13](09-implementation-harness.md) H10-2. **로컬 개발(네이티브)은 owner 접속을 유지**하므로
+개발 환경에서는 2층이 비활성이다(경고 로그로 남는다) — 1층(쿼리 필터)과 `packages/db` 테스트가 방어선이다.
 - 벡터 검색도 tenant 선필터(문서 혼입 차단).
 - **Neo4j(시설 그래프)**: row RLS 없음 → 모든 노드에 `tenant_id` 프로퍼티 + **typed query 레이어 강제**(tenant predicate를 구조적으로 주입, raw Cypher 금지 — 코드 리뷰가 아니라 구조로 차단). 관계 생성 시 **양 끝 노드 tenant 일치 검증**([11 §4](11-data-architecture.md)). PG가 SoR이므로 파기·정정은 PG 기준으로 먼저 반영 후 그래프 재동기화.
 - **`SYS_ADMIN` 허용 목록**(단지 콘텐츠 비열람 원칙의 구체화):
