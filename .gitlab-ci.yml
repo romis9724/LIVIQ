@@ -1,0 +1,114 @@
+# 사내 GitLab 파이프라인 — 이미지 빌드·게시 + 단일 호스트 배포 (ADR-0021, docs/09 §4.4).
+#
+#   main push : 이미지 4종 빌드 → GitLab 레지스트리 push($CI_COMMIT_SHA + latest) → 배포
+#   MR        : 빌드만(push·배포 없음) — Dockerfile·lock·compose·이 파일이 바뀔 때
+#
+# 배포는 **대상 호스트 WSL 안의 러너**(태그 wsl-140)가 수행한다. 러너가 안에 있으므로
+# 대상 호스트 인바운드를 열지 않고, 배포 자격증명을 CI로 내보내지 않는다.
+#
+# GitHub Actions .github/workflows/release.yml 은 그대로 유지된다 — 3-tier VM 형상용
+# GHCR 게시 담당(ADR-0020). 두 파이프라인이 같은 커밋의 이미지를 각자 레지스트리에 올린다.
+
+stages: [build, deploy]
+
+variables:
+  # 이미지 좌표. IMAGE_PREFIX 는 **구분자까지 포함**한다(ADR-0021 결정 5) —
+  # GitLab 레지스트리는 하위 저장소를 슬래시로만 표현하므로 대시 하드코딩이 불가하다.
+  #   $CI_REGISTRY_IMAGE = <registry>/dhkim/liviq  →  .../liviq/api
+  IMAGE_PREFIX: "$CI_REGISTRY_IMAGE/"
+  DOCKER_BUILDKIT: "1"
+
+# ── 빌드 ────────────────────────────────────────────────────────────────────
+# 러너가 shell executor 이고 호스트에 docker 가 있으므로 dind(privileged)가 필요 없다.
+# 빌드 컨텍스트는 **레포 루트** — 단일 uv.lock·pnpm workspace 때문에 앱 디렉토리로는 빌드 불가.
+.build:
+  stage: build
+  tags: [wsl-140]
+  script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - IMAGE="${IMAGE_PREFIX}${APP}"
+    - |
+      # NEXT_PUBLIC_* 은 빌드타임 인라인이다. /api 상대경로 고정이라 환경별 재빌드가 필요 없다.
+      # Python 이미지엔 이 ARG 가 없어 전달하면 unused 경고만 쌓이므로 앱별로 나눈다.
+      case "$APP" in
+        web-*) BUILD_ARGS="--build-arg NEXT_PUBLIC_API_BASE_URL=/api" ;;
+        *)     BUILD_ARGS="" ;;
+      esac
+    - docker build $BUILD_ARGS -f "apps/${APP}/Dockerfile" -t "${IMAGE}:${CI_COMMIT_SHA}" -t "${IMAGE}:latest" .
+    - |
+      # MR 에서는 push 하지 않는다 — Dockerfile·워크플로 버그를 머지 전에 잡는 것이 목적이다.
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        echo "MR 파이프라인 — 빌드만 수행(push 없음)"
+      else
+        docker push "${IMAGE}:${CI_COMMIT_SHA}"
+        docker push "${IMAGE}:latest"
+        echo "게시: ${IMAGE}:${CI_COMMIT_SHA}"
+      fi
+
+build:api:
+  extends: .build
+  variables: { APP: api }
+  rules: &build_rules
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    # MR 은 이미지 산출물에 영향을 주는 경로만 — 매 MR 마다 4개를 빌드하면 비용이 크다.
+    # 주의: 브랜치 파이프라인의 changes 는 직전 커밋 기준이라 첫 파이프라인·force push 뒤에는
+    # 전량 빌드로 떨어진다(의도된 fallback — 누락보다 낫다).
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - apps/*/Dockerfile
+        - apps/web-*/next.config.mjs
+        - .dockerignore
+        - infra/compose.prod.yml
+        - .gitlab-ci.yml
+        - pnpm-lock.yaml
+        - uv.lock
+
+build:ai-worker:
+  extends: .build
+  variables: { APP: ai-worker }
+  rules: *build_rules
+
+build:web-resident:
+  extends: .build
+  variables: { APP: web-resident }
+  rules: *build_rules
+
+build:web-admin:
+  extends: .build
+  variables: { APP: web-admin }
+  rules: *build_rules
+
+# ── 배포 ────────────────────────────────────────────────────────────────────
+# 단일 호스트 = 3프로필 동시 기동(H10-1 스모크와 같은 형상). 기동 순서는 compose 의
+# depends_on + healthcheck 가 강제한다(같은 호스트라 tier 간 required:false 가 실제로 기다린다).
+#
+# migrate 가 2단계다: alembic upgrade head → python -m liviq_db.runtime_roles.
+# 두 번째가 실패하면 exit != 0 이라 service_completed_successfully 가 막혀 api·ai-worker 가
+# 아예 뜨지 않는다(fail-closed — 런타임이 RLS 우회 롤로 붙는 회귀를 배포 시점에 차단).
+deploy:
+  stage: deploy
+  tags: [wsl-140]
+  environment:
+    name: production
+  variables:
+    ENV_FILE: /etc/liviq/env.prod
+    COMPOSE: infra/compose.prod.yml
+    PROFILES: "--profile data --profile app --profile web"
+  script:
+    # 블록 스칼라로 둔다 — 평문 스칼라에 ": "(콜론+공백)이 들어가면 YAML이 매핑으로 파싱한다.
+    - |
+      test -r "$ENV_FILE" || { echo "env 파일이 없다 -> $ENV_FILE (docs/12 §9.2)"; exit 1; }
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    # 배포 태그는 커밋 sha 핀이다. latest 는 편의 포인터일 뿐 배포에 쓰지 않는다 —
+    # 같은 태그의 실체가 push 마다 바뀌면 "직전으로 되돌리기"가 성립하지 않는다.
+    - export IMAGE_PREFIX="$IMAGE_PREFIX" IMAGE_TAG="$CI_COMMIT_SHA"
+    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" $PROFILES pull
+    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" $PROFILES up -d
+    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" logs migrate | tail -20
+    - |
+      # migrate 2단계가 실제로 끝났는지 로그로 확인한다(compose 가 gating 하지만 원인 추적용).
+      docker compose --env-file "$ENV_FILE" -f "$COMPOSE" logs migrate \
+        | grep -q "접속 롤 수렴·검증 완료" || { echo "migrate 2단계 미완료 — docs/12 §9.3"; exit 1; }
+    - docker compose --env-file "$ENV_FILE" -f "$COMPOSE" ps
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
