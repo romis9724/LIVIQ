@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import uuid
 from typing import Any
 
@@ -26,6 +27,9 @@ from ai_worker.ingest import IngestResult, ingest_document
 from ai_worker.ingest_notice import NoticeIngestResult, ingest_notice
 from ai_worker.notices_publish import publish_due_notices
 from liviq_db.engine import create_engine, create_session_factory
+from liviq_db.runtime_roles import RuntimeRoleError, assert_no_rls_bypass
+
+logger = logging.getLogger("ai_worker.worker")
 
 
 def _download_factory() -> Any:  # pragma: no cover — boto3 I/O 배선(통합 환경에서 검증)
@@ -105,7 +109,21 @@ async def ingest_notice_task(ctx: dict[str, Any], notice_id: str, tenant_id: str
 
 
 async def startup(ctx: dict[str, Any]) -> None:  # pragma: no cover — 배선 전용
-    ctx["session_factory"] = create_session_factory(create_engine())
+    engine = create_engine()
+    # 접속 롤 검증 — RLS 이중 방어 2층은 접속 롤이 BYPASSRLS·superuser가 아닐 때만 성립한다
+    # (H10-2, docs/03 §5.1). 워커는 WORKER_DATABASE_URL(liviq_worker)로 접속해야 한다.
+    # local 개발 DB는 superuser 단일 롤이라 경고만 남기고 계속 진행한다.
+    async with engine.connect() as conn:
+        try:
+            await assert_no_rls_bypass(conn)
+        except RuntimeRoleError:
+            if get_settings().api_env == "local":
+                logger.warning(
+                    "접속 롤이 RLS를 우회한다(local이라 계속 진행) — 배포 환경에서는 기동 실패다."
+                )
+            else:
+                raise
+    ctx["session_factory"] = create_session_factory(engine)
     ctx["llm"] = LlmClient()
     ctx["download"] = _download_factory()
     graph = GraphClient.from_settings()

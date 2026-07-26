@@ -33,11 +33,16 @@
 1. **애플리케이션**: 모든 쿼리에 `tenant_id` 필터 + 요청 컨텍스트 검증.
 2. **DB(RLS)**: 트랜잭션마다 `SET LOCAL app.tenant_id` → 정책으로 강제([03 §5]).
 
-> **현재 2번이 런타임에서 비활성이다**(2026-07-26 실측, [09 §8.3](09-implementation-harness.md) 백로그 "런타임 RLS 우회 롤").
-> 앱이 `DATABASE_URL`의 owner 롤(superuser·BYPASSRLS)로 접속하고 `SET ROLE`을 하지 않아, RLS 정책이
-> `ENABLE`+`FORCE`로 걸려 있어도 무조건 통과한다(tenant 컨텍스트 없이 `households` 322행 반환). 정책 자체는
-> 정상이며 `packages/db` 테스트가 `SET LOCAL ROLE liviq_app`으로 검증한다 — 즉 **1번만으로 격리가 유지되는
-> 상태**다. 전용 접속 롤(`liviq_app`) 전환은 별도 작업 단위이며 **실배포 전 필수**다.
+**2번의 성립 조건은 접속 롤이다.** 정책이 `ENABLE`+`FORCE`로 걸려 있어도 접속 롤이 `BYPASSRLS`(또는
+superuser)면 무조건 통과한다 — H10-1 스모크 실측(2026-07-26)에서 앱이 owner 롤(`liviq` = superuser)로
+접속해 tenant 컨텍스트 없이 `households` 322행을 읽던 상태가 그것이다. 정책 자체는 정상이었고 1번(쿼리
+`tenant_id` 필터)이 유지돼 알려진 유출은 없었으나, **코드가 필터를 빠뜨리면 막을 층이 없었다**.
+**H10-2에서 전용 접속 롤로 전환했다** — api는 `liviq_app`, ai-worker는 `liviq_worker`, 마이그레이션만 owner
+([03 §5.1](03-database-design.md) 접속 롤 계약). 비밀번호는 env가 단일 출처이며 배포 스텝이 롤 속성
+(`rolsuper`·`rolbypassrls` 부재)과 컨텍스트 없는 조회 0행을 **검증하고 아니면 중단**한다(fail-closed).
+앱도 기동 시 자기 커넥션을 같은 기준으로 검사해 비-local에서는 기동을 거부한다. 실측·실연 기록은
+[09 §8.13](09-implementation-harness.md) H10-2. **로컬 개발(네이티브)은 owner 접속을 유지**하므로
+개발 환경에서는 2층이 비활성이다(경고 로그로 남는다) — 1층(쿼리 필터)과 `packages/db` 테스트가 방어선이다.
 - 벡터 검색도 tenant 선필터(문서 혼입 차단).
 - **Neo4j(시설 그래프)**: row RLS 없음 → 모든 노드에 `tenant_id` 프로퍼티 + **typed query 레이어 강제**(tenant predicate를 구조적으로 주입, raw Cypher 금지 — 코드 리뷰가 아니라 구조로 차단). 관계 생성 시 **양 끝 노드 tenant 일치 검증**([11 §4](11-data-architecture.md)). PG가 SoR이므로 파기·정정은 PG 기준으로 먼저 반영 후 그래프 재동기화.
 - **`SYS_ADMIN` 허용 목록**(단지 콘텐츠 비열람 원칙의 구체화):
@@ -152,9 +157,10 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 - **컨테이너 배포 시 시크릿(H10, [ADR-0020](adr/0020-container-deploy-3tier-vm.md))**:
   - **이미지에 굽지 않는다** — 런타임 주입만. compose `env_file`은 **레포 밖 경로**에 두고 퍼미션 `0600`, VCS 미추적.
   - 레포에는 placeholder만 있는 [`infra/env.prod.example`](../infra/env.prod.example)를 두고, 로컬 스모크용 실값 파일 `infra/env.prod`는 **`.gitignore`가 차단**한다(H10-1 — 점 없는 이름이라 기존 `.env.*` 패턴에 걸리지 않던 갭을 메움).
-  - **tier 최소 배치**: `PII_MASTER_KEY`·`DATABASE_URL`·SMTP 자격증명은 **app tier에만** 존재한다(web tier에 두지 않음 — 퍼블릭 노출 tier의 유출 반경 축소).
+  - **tier 최소 배치**: `PII_MASTER_KEY`·DB 접속 URL·SMTP 자격증명은 **app tier에만** 존재한다(web tier에 두지 않음 — 퍼블릭 노출 tier의 유출 반경 축소).
+  - **DB 접속 URL은 3개로 분리**(H10-2, [03 §5.1](03-database-design.md)): `DATABASE_URL`=owner(마이그레이션 전용) · `APP_DATABASE_URL`=`liviq_app`(api) · `WORKER_DATABASE_URL`=`liviq_worker`(ai-worker). 런타임 URL이 owner를 가리키면 RLS 이중 방어 2층이 죽으므로, 배포 스텝이 롤 속성을 **검증하고 아니면 중단**한다.
   - `NEXT_PUBLIC_*`은 **브라우저 번들에 노출**되므로 시크릿을 담을 수 없다(빌드타임 인라인 — [02 §9](02-directory-structure.md)). VWorld 프론트 키(§6)는 **도메인 잠금 키**라 예외.
-  - CI 시크릿 스캐너는 **이미지 레이어도 대상**(빌드 산출물에 `.env`·키 파일이 섞여 들어가는 경로 차단 — 배선은 H10-2).
+  - CI 시크릿 스캐너는 **이미지 레이어도 대상**(빌드 산출물에 `.env`·키 파일이 섞여 들어가는 경로 차단 — 배선은 H10-3).
 
 ## 8. 감사 / 모니터링
 
@@ -164,7 +170,7 @@ Content-Security-Policy: 기본 self, nonce 기반 script, 외부 origin 최소�
 ## 9. 보안 점검 체크리스트 (배포 전 게이트)
 
 - [ ] 모든 엔드포인트 역할·테넌트·소유권 인가
-- [ ] RLS 정책 전 업무 테이블 적용·테스트
+- [ ] RLS 정책 전 업무 테이블 적용·테스트 + **런타임 접속 롤이 owner·BYPASSRLS가 아님**(배포 스텝 검증 — [03 §5.1](03-database-design.md))
 - [ ] LLM 전송 페이로드 개인정보 0건(자동 검사)
 - [ ] 개인정보 저장 암호화 + 마스킹 뷰 사용
 - [ ] 입력 검증(api=Pydantic · 웹=Zod) + 파라미터 쿼리

@@ -434,7 +434,7 @@ flowchart LR
 | data | `data` | postgres(5432) · redis(6379) · minio(9000) · neo4j(7687) | 없음 | app tier |
 
 > 외부 LLM 엔드포인트·SMTP는 컨테이너 밖이다 — env로만 가리킨다([ADR-0005](adr/0005-single-llm-openai-compat.md)).
-> `migrate`는 data tier 기동 후 api·ai-worker보다 먼저 1회 실행된다.
+> `migrate`는 data tier 기동 후 api·ai-worker보다 먼저 1회 실행된다. **접속 롤이 프로세스마다 다르다** — `migrate`만 owner(DDL), api는 `liviq_app`, ai-worker는 `liviq_worker`(RLS 이중 방어 2층의 성립 조건 — [03 §5.1](03-database-design.md), H10-2).
 
 | 이미지 | 소스 경로 | 베이스 | 빌드 방식 |
 |--------|-----------|--------|-----------|
@@ -443,7 +443,7 @@ flowchart LR
 | `web-resident` | `apps/web-resident` | `node:20.20.1-alpine3.22` | 루트 컨텍스트 · pnpm 빌드 → Next `output: 'standalone'` 산출물만 런타임 복사(진입점 `.next-build/standalone/apps/web-resident/server.js` · static은 `standalone/apps/web-resident/.next-build/static` — `distDir`이 `.next-build`이기 때문 · `HOSTNAME=0.0.0.0` 필수) |
 | `web-admin` | `apps/web-admin` | 동일 | 동일 방식 |
 
-모두 multi-stage · 런타임 **non-root**(Python uid/gid 10001 · 웹 `node`) · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동. 게시·롤백 배선은 H10-2).
+모두 multi-stage · 런타임 **non-root**(Python uid/gid 10001 · 웹 `node`) · GHCR 게시(태그는 커밋 sha — 롤백 = 이전 sha 재기동. 게시·롤백 배선은 H10-3).
 
 **요청 경로 규약**
 

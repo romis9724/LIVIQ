@@ -17,6 +17,10 @@ class WorkerSettings(BaseSettings):
 
     redis_url: str = Field(..., validation_alias="REDIS_URL")
 
+    # 기동 시 DB 접속 롤 검증의 엄격도 스위치(H10-2, docs/03 §5.1) — api와 같은 키를 읽는다.
+    # local은 개발 DB가 superuser 단일 롤이라 경고만, 그 외는 기동 중단(fail-closed).
+    api_env: str = Field("local", validation_alias="API_ENV")
+
     # S3 호환(MinIO). 키 프리픽스는 `{tenant_id}/`(docs/11 §1).
     s3_endpoint_url: str = Field(..., validation_alias="S3_ENDPOINT_URL")
     s3_access_key_id: str = Field(..., validation_alias="S3_ACCESS_KEY_ID")

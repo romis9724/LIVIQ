@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
@@ -21,6 +22,9 @@ from ai_core.llm.client import LlmClient
 from app.config import get_settings
 from app.session import SESSION_ABSOLUTE_TTL, SessionData, SessionStore, get_session_store
 from liviq_db.engine import create_engine, create_session_factory
+from liviq_db.runtime_roles import RuntimeRoleError, assert_no_rls_bypass
+
+logger = logging.getLogger("app.deps")
 
 SESSION_COOKIE_NAME = "liviq_session"
 
@@ -160,6 +164,30 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     if _session_factory is None:
         _session_factory = create_session_factory(create_engine())
     return _session_factory
+
+
+async def verify_db_role() -> None:
+    """기동 시 접속 롤이 RLS를 우회하지 않는지 확인 — 배포에선 실패 시 기동 중단(H10-2).
+
+    RLS 이중 방어 2층은 접속 롤이 `BYPASSRLS`·superuser가 아닐 때만 성립한다([03 §5.1]).
+    env가 owner URL로 되돌아가는 회귀를 여기서 잡는다 — 배포 스텝의 검증은 env에 적힌 URL을
+    보지만, 이 검사는 **api가 실제로 쓰는 커넥션**을 본다.
+
+    local은 개발 DB가 superuser 단일 롤이라 정상이므로 경고만 남긴다(개발 루프 보호).
+    """
+    factory = _get_session_factory()
+    async with factory() as session:
+        connection = await session.connection()
+        try:
+            await assert_no_rls_bypass(connection)
+        except RuntimeRoleError:
+            if get_settings().api_env == "local":
+                logger.warning(
+                    "접속 롤이 RLS를 우회한다(local이라 계속 진행) — 배포 환경에서는 기동 실패다. "
+                    "APP_DATABASE_URL(liviq_app)로 접속해야 한다(docs/03 §5.1)."
+                )
+                return
+            raise
 
 
 async def get_tenant_session(
