@@ -7,6 +7,7 @@
 **범위를 먼저 못박는다.** 이 경로는 **개발·검증용**이다. GHCR 게시가 없고(이미지는 그 호스트의 로컬
 Docker 저장소에만 있다), TLS 종단이 없고(`API_ENV=local`), 시크릿이 호스트 파일 하나에 있다.
 운영 트래픽을 받는 배포는 12 런북의 3-tier VM 절차를 그대로 쓴다.
+외부 브라우저 접속(도메인 없이 포트로)은 **§9** — 평문 HTTP라 **가상 데이터 파일럿 전용**이다.
 
 ---
 
@@ -355,3 +356,69 @@ sudo systemctl restart docker   # 컨테이너는 restart: unless-stopped 로 �
 |---|---|
 | GHCR(`release.yml`) | `ghcr.io/<owner>/liviq-api:<sha>` — 하이픈 |
 | GitLab 프로젝트 | `192.168.10.153:5050/dhkim/liviq/api:<sha>` — 서브경로 |
+
+---
+
+## 9. 외부에서 브라우저로 접속 (도메인 없는 파일럿)
+
+> **★ TLS 가 없다.** 로그인 비밀번호·세션 쿠키가 평문으로 흐른다. **가상 데이터 파일럿 전용**이다
+> (사용자 결정 2026-07-26). 실제 입주민 개인정보가 들어가는 시점에 도메인 + Caddy 자동 HTTPS 로
+> 올린다([ADR-0021](adr/0021-gitlab-ci-single-host-wsl.md) 재검토 신호).
+
+### 9.1 경로 (실측 2026-07-26)
+
+```
+브라우저 → 공유기 59.29.231.14:17000 → Windows 0.0.0.0:17000 (portproxy)
+        → Windows 127.0.0.1:17000 (WSL 자동 중계) → WSL Caddy :17000 → web-resident:3000
+```
+
+| 사이트 | 외부 | 내부(변경 없음) |
+|---|---|---|
+| 입주민 | `http://59.29.231.14:17000` | Caddy `:17000` |
+| 관리자 | `http://59.29.231.14:17001` | Caddy `:17001` |
+| 파이프라인 스모크 | — | Caddy `:8080` + Host `*.localhost` (그대로 유지) |
+
+### 9.2 왜 포워딩만으로는 안 됐나
+
+Caddy 는 사이트를 **Host 헤더**로 가른다(`resident.localhost` / `admin.localhost`). IP:포트로 들어오면
+Host 가 `59.29.231.14:17000` 이라 매칭되는 사이트가 없어 **응답하지 않는다** — 공유기가 TCP 핸드셰이크를
+완료하므로 포트는 열린 것처럼 보이고 HTTP 만 0바이트로 끊긴다(이 증상으로 진단했다).
+
+해법은 **포트 기반 사이트 주소**를 하나 더 붙이는 것이다. `:17000` 은 포트만 맞으면 Host 와 무관하게
+매칭된다. [`infra/Caddyfile`](../infra/Caddyfile) 의 `{$RESIDENT_ALT_SITE:}`(기본 빈 값)가 그 자리이고,
+값은 [`infra/compose.wsl.yml`](../infra/compose.wsl.yml) 오버레이가 넣는다 — 3-tier 운영은 이 오버레이를
+쓰지 않으므로 주소가 하나로 남는다(형상 오염 없음).
+
+### 9.3 Windows portproxy (관리자 PowerShell, 1회)
+
+`networkingMode=mirrored` 는 Windows 11 22H2 / Server 2025 이상만 지원한다. 이 호스트는
+**Windows 10 22H2**(10.0.19045)라 쓸 수 없어 portproxy 로 간다.
+
+```powershell
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=17000 connectaddress=127.0.0.1 connectport=17000
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=17001 connectaddress=127.0.0.1 connectport=17001
+New-NetFirewallRule -DisplayName "LIVIQ resident 17000" -Direction Inbound -Protocol TCP -LocalPort 17000 -Action Allow
+New-NetFirewallRule -DisplayName "LIVIQ admin 17001"    -Direction Inbound -Protocol TCP -LocalPort 17001 -Action Allow
+netsh interface portproxy show all
+```
+
+**`connectaddress` 가 `127.0.0.1` 인 것이 요점이다.** WSL 이 publish 한 포트는 Windows 루프백으로
+자동 중계되므로, 재부팅마다 바뀌는 WSL eth0 IP(예: `172.17.40.17`)를 쫓아다닐 필요가 없다 —
+부팅마다 portproxy 를 다시 만드는 스크립트가 불필요해진다. WSL IP 를 직접 적으면 그 스크립트가 필요하다.
+
+제거는 `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=17000`.
+
+### 9.4 확인
+
+```bash
+# WSL 안 (Caddy 가 실제로 그 포트를 듣는지)
+ss -tlnp | grep -E ':17000|:17001'
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:17000/       # 200
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:17000/api/health   # 200
+
+# 외부에서
+curl -sS -o /dev/null -w '%{http_code}\n' http://59.29.231.14:17000/
+```
+
+`ss` 에 포트가 보이는데 외부에서 안 되면 portproxy·방화벽(§9.3), 포트가 안 보이면 배포·오버레이
+(`-f infra/compose.wsl.yml` 를 빠뜨렸는지) 쪽이다.
