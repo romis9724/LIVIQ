@@ -3,7 +3,7 @@
 .twin-stage {
   padding: 0;
   overflow: hidden;
-  position: relative; /* 평면도 오버레이(.twin-plan-overlay)의 좌표계 */
+  position: relative; /* 캔버스·상태 오버레이의 좌표계 */
 }
 
 /* deck.gl 캔버스 컨테이너 — 절대 배치 캔버스를 담을 상대 좌표계 + 고정 높이. */
@@ -414,9 +414,6 @@
   display: flex;
   justify-content: flex-end;
   z-index: 50;
-}
-/* 평면도 오버레이가 떠 있을 땐 어둡게 덮지 않는다(3D 건물이 오버레이 뒤로 비쳐야 함). */
-.twin-detail-scrim[data-dim] {
   background: oklch(0% 0 0 / 0.4);
 }
 .twin-detail {
@@ -583,74 +580,52 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 세대 평면도(H13-4 → H14-3) — 왼쪽 3D 무대를 통째로 덮는 반투명 오버레이(뒤 건물이 비친다). */
-.twin-plan-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 60; /* 세대 상세 스크림(50) 위 — 상세 패널은 오른쪽에 그대로 열려 있다. */
+/* 세대 평면도(H13-4 → H14-4) — 상세 스크림의 왼쪽(딤 영역) 전체. 상세가 열리면 함께 뜬다. */
+.twin-plan-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* 반투명 카드 — 뒤 3D 무대가 살짝 비친다. */
+.twin-plan-pane__card {
+  width: min(100%, 760px);
+  max-height: 100%;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: color-mix(in oklch, var(--color-surface) 78%, transparent);
-  backdrop-filter: blur(2px);
-  animation: twin-plan-overlay-in var(--duration-fast) var(--ease-out);
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(3px);
+  box-shadow: var(--shadow-card);
+  animation: twin-plan-pane-in var(--duration-fast) var(--ease-out);
 }
-@keyframes twin-plan-overlay-in {
+@keyframes twin-plan-pane-in {
   from {
     opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
+    transform: none;
   }
 }
-.twin-plan-overlay__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.twin-plan-overlay__title {
+.twin-plan-pane__title {
   font-size: var(--text-lg);
   font-weight: 700;
   color: var(--color-text);
 }
-.twin-plan-overlay__stage {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.twin-plan-overlay .twin-plan__canvas {
-  width: min(100%, 720px);
-}
-.twin-plan__canvas {
-  position: relative;
-  width: 100%;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  background: var(--color-surface-sunken);
-}
-.twin-plan__image {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-.twin-plan__marker {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  width: 14px;
-  height: 14px;
-  min-height: 0;
-  padding: 0;
-  border: 2px solid var(--color-surface);
-  border-radius: 50%;
-  background: var(--color-accent);
-  box-shadow: var(--shadow-card);
-  cursor: pointer;
+/* 좁은 화면에선 상세 패널만 남긴다(평면도가 눌려서 못 읽는 폭). */
+@media (max-width: 900px) {
+  .twin-plan-pane {
+    display: none;
+  }
 }
 
 /* 배지 — 역할·상태(중립 칩) / 민원 상태(accent pill). */

@@ -43,3 +43,10 @@ export type { SwitchProps } from "./components/switch/Switch";
 
 export { FileDropzone } from "./components/file-dropzone/FileDropzone";
 export type { FileDropzoneProps, FileDropzoneState } from "./components/file-dropzone/FileDropzone";
+
+export { FloorPlanViewer } from "./components/floor-plan-viewer/FloorPlanViewer";
+export type {
+  FloorPlanViewerProps,
+  FloorPlanViewerPlan,
+  FloorPlanViewerDevice,
+} from "./components/floor-plan-viewer/FloorPlanViewer";

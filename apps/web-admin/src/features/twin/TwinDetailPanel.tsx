@@ -9,6 +9,7 @@ import {
   type TwinOpenInquiry,
 } from "@/lib/api";
 import { formatWon } from "@/features/fee-upload/logic";
+import { TwinFloorPlanPane } from "./TwinFloorPlanPane";
 
 // 표시용 라벨 — 서버 코드값이 아니면 원문을 그대로 노출(폴백).
 const ROLE_LABELS: Record<string, string> = {
@@ -54,10 +55,6 @@ function shortDate(iso: string): string {
 interface TwinDetailPanelProps {
   householdId: string;
   onClose: () => void;
-  /** 평면도 보기 — 왼쪽 3D 무대 오버레이는 TwinView 가 띄운다(세대 타입을 올려보낸다). */
-  onOpenFloorPlan: (unitTypeLabel: string) => void;
-  /** 평면도 오버레이가 열려 있으면 Escape 는 평면도만 닫는다(상세는 유지). */
-  isFloorPlanOpen: boolean;
 }
 
 type DetailState =
@@ -65,13 +62,11 @@ type DetailState =
   | { kind: "error"; message: string }
   | { kind: "ready"; detail: TwinHouseholdDetail };
 
-/** 세대 상세 우측 슬라이드오버 — 세대원(마스킹)·미종결 민원·당월 관리비. 개인정보는 마스킹만. */
-export function TwinDetailPanel({
-  householdId,
-  onClose,
-  onOpenFloorPlan,
-  isFloorPlanOpen,
-}: TwinDetailPanelProps) {
+/**
+ * 세대 상세 — 오른쪽 슬라이드오버(세대원 마스킹·미종결 민원·당월 관리비) + 왼쪽 평면도 패널.
+ * 상세가 열리면 평면도도 함께 뜬다(별도 버튼 없음). 개인정보는 마스킹만.
+ */
+export function TwinDetailPanel({ householdId, onClose }: TwinDetailPanelProps) {
   const [state, setState] = useState<DetailState>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -87,33 +82,28 @@ export function TwinDetailPanel({
     void load();
   }, [load]);
 
-  // 열려 있는 동안 Escape 로 닫기(평면도 오버레이가 위에 있으면 그쪽이 먼저 닫힌다).
+  // 열려 있는 동안 Escape 로 닫기(뷰어 팝오버가 열려 있으면 그쪽이 캡처 단계에서 먼저 소비한다).
   useEffect(() => {
-    if (isFloorPlanOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, isFloorPlanOpen]);
+  }, [onClose]);
 
   return (
-    // 평면도가 열리면 스크림을 투명하게 — 왼쪽 3D 가 오버레이 뒤로 비쳐야 한다(닫기 클릭 영역은 유지).
-    <div className="twin-detail-scrim" data-dim={!isFloorPlanOpen || undefined} onClick={onClose}>
+    <div className="twin-detail-scrim" onClick={onClose}>
+      {/* 왼쪽 딤 영역 전체가 평면도 자리 — 상세를 열면 곧바로 함께 뜬다. */}
+      {state.kind === "ready" ? (
+        <TwinFloorPlanPane unitTypeLabel={state.detail.unitTypeLabel} />
+      ) : null}
       <aside
         className="twin-detail"
         role="dialog"
-        // 평면도 오버레이가 열리면 상세는 모달이 아니다(포커스가 상세 밖 오버레이로 간다).
-        aria-modal={!isFloorPlanOpen}
         aria-label="세대 상세"
         onClick={(e) => e.stopPropagation()}
       >
-        <TwinDetailContent
-          state={state}
-          onClose={onClose}
-          onRetry={() => void load()}
-          onOpenFloorPlan={onOpenFloorPlan}
-        />
+        <TwinDetailContent state={state} onClose={onClose} onRetry={() => void load()} />
       </aside>
     </div>
   );
@@ -123,10 +113,9 @@ interface TwinDetailContentProps {
   state: DetailState;
   onClose: () => void;
   onRetry: () => void;
-  onOpenFloorPlan: (unitTypeLabel: string) => void;
 }
 
-function TwinDetailContent({ state, onClose, onRetry, onOpenFloorPlan }: TwinDetailContentProps) {
+function TwinDetailContent({ state, onClose, onRetry }: TwinDetailContentProps) {
   const closeButton = (
     <button type="button" className="twin-detail__close" aria-label="닫기" onClick={onClose}>
       ✕
@@ -191,7 +180,6 @@ function TwinDetailContent({ state, onClose, onRetry, onOpenFloorPlan }: TwinDet
         <MembersSection members={detail.members} />
         <InquiriesSection inquiries={detail.openInquiries} />
         <FeeSection fee={detail.currentFee} />
-        <FloorPlanSection unitTypeLabel={detail.unitTypeLabel} onOpen={onOpenFloorPlan} />
       </div>
     </>
   );
@@ -259,31 +247,6 @@ function FeeSection({ fee }: { fee: TwinHouseholdDetail["currentFee"] }) {
         </div>
       ) : (
         <p className="twin-detail__empty">부과 내역 없음</p>
-      )}
-    </section>
-  );
-}
-
-/**
- * 세대 평면도 — 왼쪽 3D 무대를 덮는 오버레이로 연다(TwinFloorPlanOverlay 가 그때 불러온다).
- * 타입이 없는 세대는 매칭할 평면도가 없으므로 버튼을 내지 않는다.
- */
-function FloorPlanSection({
-  unitTypeLabel,
-  onOpen,
-}: {
-  unitTypeLabel: string | null;
-  onOpen: (unitTypeLabel: string) => void;
-}) {
-  return (
-    <section className="twin-detail__section">
-      <h3 className="twin-detail__section-title">평면도</h3>
-      {unitTypeLabel ? (
-        <Button variant="secondary" onClick={() => onOpen(unitTypeLabel)}>
-          평면도 보기
-        </Button>
-      ) : (
-        <p className="twin-detail__empty">세대 타입이 없어 평면도를 찾을 수 없습니다.</p>
       )}
     </section>
   );

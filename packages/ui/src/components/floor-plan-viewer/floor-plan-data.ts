@@ -1,6 +1,4 @@
-// 평면도 순수 로직 — 카테고리 매핑·좌표 변환·표 그룹핑. UI·네트워크 의존 없음(테스트 대상).
-
-import type { FloorPlanDevice } from "./api";
+// 평면도 뷰어 순수 로직 — 카테고리 매핑·좌표 변환·표 그룹핑. UI·네트워크 의존 없음(테스트 대상).
 
 export type DeviceCategory = "electric" | "network" | "water_heat" | "safety" | "other";
 /** 카테고리 칩 + '방 이름' 토글(room 은 마커가 아니라 별도 표기). */
@@ -80,7 +78,7 @@ export function dirRotation(dir: string | null): number | null {
 }
 
 /** 마커 button aria-label: "{room} {device_type}"(방 없으면 종류만). */
-export function ariaLabel(device: Pick<FloorPlanDevice, "room" | "deviceType">): string {
+export function ariaLabel(device: { room: string | null; deviceType: string }): string {
   return device.room ? `${device.room} ${device.deviceType}` : device.deviceType;
 }
 
@@ -90,8 +88,15 @@ export interface DeviceRow {
   note: string;
 }
 
+interface RowSource {
+  deviceType: string;
+  room: string | null;
+  label: string | null;
+  memo: string | null;
+}
+
 /** 접근성 대체 표(방·종류·비고). room 라벨 행은 마커가 아니므로 제외. */
-export function tableRows(devices: readonly FloorPlanDevice[]): DeviceRow[] {
+export function tableRows(devices: readonly RowSource[]): DeviceRow[] {
   return devices
     .filter((d) => d.deviceType !== "room")
     .map((d) => ({

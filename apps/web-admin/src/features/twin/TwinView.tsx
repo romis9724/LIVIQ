@@ -19,7 +19,6 @@ import {
   type RenderStyle,
 } from "./twin-data";
 import { TwinDetailPanel } from "./TwinDetailPanel";
-import { TwinFloorPlanOverlay } from "./TwinFloorPlanOverlay";
 import { TwinStatusPanel } from "./TwinStatusPanel";
 import "./twin.css";
 
@@ -75,19 +74,8 @@ export function TwinView() {
   const [overlays, setOverlays] = useState<OverlayCache>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
-  // 평면도 오버레이 — 열린 세대의 타입(닫힘=null). 무대(왼쪽 3D) 위에 겹치므로 상태는 여기가 소유한다.
-  const [planUnitType, setPlanUnitType] = useState<string | null>(null);
 
-  const closePlan = useCallback(() => setPlanUnitType(null), []);
-  // 세대가 바뀌거나 상세가 닫히면 평면도도 닫는다(다른 세대의 평면도가 남지 않게).
-  const selectHousehold = useCallback((householdId: string) => {
-    setSelectedId(householdId);
-    setPlanUnitType(null);
-  }, []);
-  const closeDetail = useCallback(() => {
-    setSelectedId(null);
-    setPlanUnitType(null);
-  }, []);
+  const closeDetail = useCallback(() => setSelectedId(null), []);
 
   // 실사 3D 컨트롤 — 렌더 스타일·시점·clip. 뷰 전환에도 유지(iframe 재마운트 시 ready 효과가 재동기화).
   const [renderStyle, setRenderStyle] = useState<RenderStyle>("shell");
@@ -212,19 +200,12 @@ export function TwinView() {
           viewMode={viewMode}
           controls={controls}
           onRetry={() => void load()}
-          onSelectHousehold={selectHousehold}
-          planUnitType={planUnitType}
-          onClosePlan={closePlan}
+          onSelectHousehold={setSelectedId}
         />
       </main>
 
       {selectedId ? (
-        <TwinDetailPanel
-          householdId={selectedId}
-          onClose={closeDetail}
-          onOpenFloorPlan={setPlanUnitType}
-          isFloorPlanOpen={planUnitType !== null}
-        />
+        <TwinDetailPanel householdId={selectedId} onClose={closeDetail} />
       ) : null}
     </>
   );
@@ -299,8 +280,6 @@ interface TwinBodyProps {
   controls: VWorldControls;
   onRetry: () => void;
   onSelectHousehold: (householdId: string) => void;
-  planUnitType: string | null;
-  onClosePlan: () => void;
 }
 
 function TwinBody({
@@ -312,8 +291,6 @@ function TwinBody({
   controls,
   onRetry,
   onSelectHousehold,
-  planUnitType,
-  onClosePlan,
 }: TwinBodyProps) {
   if (geo.kind === "loading") {
     return (
@@ -382,9 +359,6 @@ function TwinBody({
             onSelectHousehold={onSelectHousehold}
           />
         )}
-        {planUnitType ? (
-          <TwinFloorPlanOverlay unitTypeLabel={planUnitType} onClose={onClosePlan} />
-        ) : null}
       </section>
     </div>
   );

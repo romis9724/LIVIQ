@@ -6,7 +6,7 @@ import {
   tableRows,
   toPercent,
 } from "./floor-plan-data";
-import type { FloorPlanDevice } from "./api";
+import type { FloorPlanViewerDevice } from "./FloorPlanViewer";
 
 describe("deviceCategory", () => {
   it("알려진 device_type을 카테고리로 매핑한다", () => {
@@ -62,7 +62,7 @@ describe("ariaLabel", () => {
 });
 
 describe("tableRows", () => {
-  const device = (over: Partial<FloorPlanDevice>): FloorPlanDevice => ({
+  const device = (over: Partial<FloorPlanViewerDevice>): FloorPlanViewerDevice => ({
     id: "d1",
     deviceType: "콘센트",
     x: 0,
@@ -71,7 +71,6 @@ describe("tableRows", () => {
     dir: null,
     label: null,
     memo: null,
-    facilityId: null,
     ...over,
   });
 
