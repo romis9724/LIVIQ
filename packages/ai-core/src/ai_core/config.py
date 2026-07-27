@@ -23,6 +23,10 @@ class AiCoreSettings(BaseSettings):
     # 규칙 7(토큰=비용): 출력 상한은 설정으로 강제, 호출별 값도 이 상한과 min()
     llm_max_output_tokens: int = Field(1024, validation_alias="LLM_MAX_OUTPUT_TOKENS")
     llm_timeout_s: float = Field(60.0, validation_alias="LLM_TIMEOUT_S")
+    # 추론(thinking) 모델 대응 — qwen3 등은 추론 토큰이 출력 예산을 먹어 content가 빈 채
+    # 잘린다(파일럿 실측). "none"이면 Ollama OpenAI 호환이 추론을 끈다. 미지정 시 미전송
+    # (비추론 모델·타 프로바이더에 무해).
+    llm_reasoning_effort: str | None = Field(None, validation_alias="LLM_REASONING_EFFORT")
 
     # ── 임베딩 (생성 모델과 별개 고정) ──────────────────────────────────
     embedding_base_url: str = Field(..., validation_alias="EMBEDDING_BASE_URL")
