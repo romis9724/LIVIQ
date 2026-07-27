@@ -57,6 +57,8 @@ class PlanDevice(IdMixin, TenantMixin, TimestampMixin, Base):
     device_type: Mapped[str] = mapped_column(String, nullable=False)
     x: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
     y: Mapped[decimal.Decimal] = mapped_column(Numeric, nullable=False)
+    room: Mapped[str | None] = mapped_column(Text, nullable=True)  # 방 이름(H13-3)
+    dir: Mapped[str | None] = mapped_column(Text, nullable=True)  # up|down|left|right, NULL=원형
     label: Mapped[str | None] = mapped_column(String, nullable=True)
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_key: Mapped[str | None] = mapped_column(String, nullable=True)

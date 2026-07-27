@@ -158,6 +158,45 @@
   white-space: nowrap;
 }
 
+/* 우리집 평면도 카드 */
+.floor-plan-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: inherit;
+}
+.floor-plan-card__icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: 1.2rem;
+}
+.floor-plan-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.floor-plan-card__title {
+  font-weight: 700;
+}
+.floor-plan-card__sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.floor-plan-card__arrow {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+}
+
 /* 공지 */
 .notice-block__head {
   display: flex;

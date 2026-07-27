@@ -103,6 +103,20 @@ export function HomeView() {
         </Link>
 
         <FeeSection period={period} state={fee} />
+
+        <Link href="/floor-plan" className="surface-card floor-plan-card">
+          <span className="floor-plan-card__icon" aria-hidden="true">
+            📐
+          </span>
+          <span className="floor-plan-card__body">
+            <span className="floor-plan-card__title">우리집 평면도</span>
+            <span className="floor-plan-card__sub">전기·통신·급수·안전 시설 위치 확인</span>
+          </span>
+          <span className="floor-plan-card__arrow" aria-hidden="true">
+            →
+          </span>
+        </Link>
+
         <NoticeSection state={notices} />
         <InquirySection state={inquiry} />
 

@@ -1597,6 +1597,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/floor-plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Floor Plan */
+        get: operations["get_my_floor_plan_me_floor_plan_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notices": {
         parameters: {
             query?: never;
@@ -2461,6 +2478,25 @@ export interface components {
             upload_id: string;
         };
         /**
+         * FloorPlanOut
+         * @description 세대타입 평면도 배경 이미지 — image_url은 서명 URL(TTL 10분, docs/06 §5).
+         */
+        FloorPlanOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Height */
+            image_height: number | null;
+            /** Image Url */
+            image_url: string;
+            /** Image Width */
+            image_width: number | null;
+            /** Unit Type Name */
+            unit_type_name: string;
+        };
+        /**
          * GeometryItem
          * @description 세대 1건의 geometry + 명부 좌표(building/floor/unit).
          */
@@ -2938,6 +2974,12 @@ export interface components {
             /** User Id */
             user_id: string | null;
         };
+        /** MyFloorPlanOut */
+        MyFloorPlanOut: {
+            /** Devices */
+            devices: components["schemas"]["PlanDeviceOut"][];
+            plan: components["schemas"]["FloorPlanOut"];
+        };
         /** NoticeCreateIn */
         NoticeCreateIn: {
             /**
@@ -3175,6 +3217,33 @@ export interface components {
              * Format: email
              */
             email: string;
+        };
+        /**
+         * PlanDeviceOut
+         * @description 장치/방 마커 1건 — device_type='room'은 방 중심좌표(§4.8 방 중심좌표 문단).
+         */
+        PlanDeviceOut: {
+            /** Device Type */
+            device_type: string;
+            /** Dir */
+            dir: string | null;
+            /** Facility Id */
+            facility_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Label */
+            label: string | null;
+            /** Memo */
+            memo: string | null;
+            /** Room */
+            room: string | null;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
         };
         /** PriorityIn */
         PriorityIn: {
@@ -7034,6 +7103,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_floor_plan_me_floor_plan_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyFloorPlanOut"];
                 };
             };
             /** @description Validation Error */

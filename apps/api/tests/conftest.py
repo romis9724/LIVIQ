@@ -175,6 +175,9 @@ class FakeStorage:
     async def delete(self, key: str) -> None:
         self.objects.pop(key, None)
 
+    async def presigned_get_url(self, key: str) -> str:
+        return f"fake-signed://{key}"
+
 
 class FakeQueue:
     def __init__(self) -> None:
