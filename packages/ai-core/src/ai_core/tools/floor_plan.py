@@ -194,7 +194,15 @@ async def _find_in_floor_plan(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
         known_rooms = sorted({d.room for d in devices if d.room})
         spec = await _llm_assist_spec(deps, a.query, known_elements, known_rooms)
     if spec.is_empty:
-        return ToolResult(note="질의에서 평면도 위치를 특정하지 못했습니다.")
+        # 오선택 복구 힌트 — 소형 모델이 공용 설비 질문을 이 도구로 보내는 실측 사례
+        # (승강기 대수 등). 다음 스텝에서 문서 검색으로 넘어가도록 안내한다.
+        return ToolResult(
+            note=(
+                "질의에서 평면도 위치를 특정하지 못했습니다. 이 도구는 본인 세대 안 "
+                "위치 전용입니다 — 단지 공용 설비(승강기 등)는 search_documents로 "
+                "검색하십시오."
+            )
+        )
 
     matched = _match_devices(devices, spec)
     if not matched:
@@ -212,7 +220,12 @@ async def _find_in_floor_plan(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 def find_in_floor_plan_tool() -> Tool:
     return Tool(
         name="find_in_floor_plan",
-        description="본인 세대 평면도에서 콘센트·분전함 등 요소나 방의 위치를 조회한다.",
+        # "본인 세대 안" 한정을 명시 — 단지 공용 설비(승강기 등) 질문이 이 도구로
+        # 오선택되는 실측 사례가 있었다(2026-07-28).
+        description=(
+            "본인 세대 평면도 안에서 콘센트·분전함 등 요소나 방의 위치를 조회한다. "
+            "집 내부 위치 질문 전용 — 승강기 등 단지 공용 설비에는 쓰지 않는다."
+        ),
         args_model=FloorPlanQueryArgs,
         run=_find_in_floor_plan,
         allowed_roles=RESIDENT_ROLES,
