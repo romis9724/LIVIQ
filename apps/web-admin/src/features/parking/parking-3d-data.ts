@@ -156,3 +156,139 @@ export function rectCenter(rect: { x: number; y: number; w: number; h: number })
 /** 면 크기(미터) — 인스턴스 평면·주차선 지오메트리 공용. */
 export const SPOT_W_M = toMeters(SPOT_W);
 export const SPOT_H_M = toMeters(SPOT_H);
+
+// ── 앰비언트 주행 차량(원본 cruiser 확장 — 5대) ────────────────────────────────
+// 차로만 달린다: 주차열 띠(band) 사이의 통로 중앙을 가로 차선으로, 주차열 좌·우 바깥을
+// 세로 연결로 삼아 사각 순환 경로를 만든다. 좌표는 배치도에서 파생 — 하드코딩 없음.
+
+/** 순환 경로 1개 + 주행 파라미터(미터·m/s). */
+export interface CruiseRoute {
+  path: { x: number; z: number }[];
+  speedMps: number;
+  /** 출발 지점(경로 시작점부터의 거리) — 같은 경로의 차들이 뭉치지 않게 벌려 둔다. */
+  startOffsetM: number;
+}
+
+/** 주행 차량 대수 — 바깥 순환 3대 + 안쪽 순환 2대. */
+const OUTER_CRUISERS = 3;
+const INNER_CRUISERS = 2;
+const OUTER_SPEED_MPS = 6;
+const INNER_SPEED_MPS = 4.4;
+/** 안쪽 순환의 세로 연결선을 바깥과 겹치지 않게 들이는 양(통로 절반 기준 비율). */
+const INNER_LANE_SHIFT = 0.45;
+
+/** 같은 열에 붙은 주차면들을 하나의 띠로 묶는다(px) — 띠 사이 빈 곳이 통로다. */
+function spotBands(spots: readonly ParkingSpot[]): { top: number; bottom: number }[] {
+  const tops = [...new Set(spots.map((spot) => spot.y))].sort((a, b) => a - b);
+  const bands: { top: number; bottom: number }[] = [];
+  for (const top of tops) {
+    const last = bands[bands.length - 1];
+    if (last && top - last.bottom <= 0) {
+      last.bottom = Math.max(last.bottom, top + SPOT_H);
+      continue;
+    }
+    bands.push({ top, bottom: top + SPOT_H });
+  }
+  return bands;
+}
+
+/** 사각 순환 경로(미터) — 위·아래 가로 차선 + 좌·우 세로 연결. */
+function loopPath(
+  topPx: number,
+  bottomPx: number,
+  leftPx: number,
+  rightPx: number,
+): { x: number; z: number }[] {
+  return [
+    { x: toMeters(leftPx), z: toMeters(topPx) },
+    { x: toMeters(rightPx), z: toMeters(topPx) },
+    { x: toMeters(rightPx), z: toMeters(bottomPx) },
+    { x: toMeters(leftPx), z: toMeters(bottomPx) },
+  ];
+}
+
+/**
+ * 주행 차량 5대의 경로 — 바깥 순환(주차열 위·아래 통로) 3대, 안쪽 순환(가운데 통로) 2대.
+ * 두 순환은 세로 연결선 x 를 어긋나게 둬 교차 지점에서 겹치지 않는다.
+ */
+export function cruiseRoutes(spots: readonly ParkingSpot[]): CruiseRoute[] {
+  const bands = spotBands(spots);
+  if (bands.length < 2) return [];
+  const first = bands[0];
+  const last = bands[bands.length - 1];
+  if (!first || !last) return [];
+
+  // 통로 폭의 절반 — 바깥 차선·세로 연결선을 주차열에서 이만큼 띄운다.
+  const aisleHalf = ((bands[1]?.top ?? first.bottom) - first.bottom) / 2;
+  const left = Math.min(...spots.map((spot) => spot.x)) - aisleHalf;
+  const right = Math.max(...spots.map((spot) => spot.x)) + SPOT_W + aisleHalf;
+  const outer = loopPath(first.top - aisleHalf, last.bottom + aisleHalf, left, right);
+
+  // 안쪽 순환은 첫 띠 아래·마지막 띠 위 통로를 쓴다(띠가 3개 미만이면 바깥과 같아지므로 생략).
+  const shift = aisleHalf * INNER_LANE_SHIFT;
+  const innerTop = first.bottom + aisleHalf;
+  const innerBottom = last.top - aisleHalf;
+  const hasInner = bands.length >= 3 && innerBottom > innerTop;
+  const inner = hasInner
+    ? loopPath(innerTop, innerBottom, left + shift, right - shift)
+    : null;
+
+  const routes: CruiseRoute[] = [];
+  const outerCount = inner ? OUTER_CRUISERS : OUTER_CRUISERS + INNER_CRUISERS;
+  const outerLength = pathLength(outer);
+  for (let i = 0; i < outerCount; i += 1) {
+    routes.push({
+      path: outer,
+      speedMps: OUTER_SPEED_MPS,
+      startOffsetM: (outerLength * i) / outerCount,
+    });
+  }
+  if (!inner) return routes;
+  const innerLength = pathLength(inner);
+  for (let i = 0; i < INNER_CRUISERS; i += 1) {
+    routes.push({
+      path: inner,
+      speedMps: INNER_SPEED_MPS,
+      startOffsetM: (innerLength * i) / INNER_CRUISERS,
+    });
+  }
+  return routes;
+}
+
+/** 닫힌 경로의 총 길이(미터). */
+export function pathLength(path: readonly { x: number; z: number }[]): number {
+  let total = 0;
+  for (let i = 0; i < path.length; i += 1) {
+    const from = path[i];
+    const to = path[(i + 1) % path.length];
+    if (from && to) total += Math.hypot(to.x - from.x, to.z - from.z);
+  }
+  return total;
+}
+
+/** 경로 위 distance 지점의 좌표·진행 방향(rotY). 경로를 벗어난 거리는 순환으로 감싼다. */
+export function pointAlongPath(
+  path: readonly { x: number; z: number }[],
+  distance: number,
+): { x: number; z: number; rotY: number } {
+  const total = pathLength(path);
+  const start = path[0];
+  if (!start || total === 0) return { x: start?.x ?? 0, z: start?.z ?? 0, rotY: 0 };
+  let remain = ((distance % total) + total) % total;
+  for (let i = 0; i < path.length; i += 1) {
+    const from = path[i];
+    const to = path[(i + 1) % path.length];
+    if (!from || !to) break;
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const length = Math.hypot(dx, dz);
+    if (length === 0) continue;
+    if (remain <= length) {
+      const t = remain / length;
+      // 차 길이는 +z 축이라 atan2(dx, dz) 가 진행 방향을 향한 회전이다(주차 차량과 같은 규약).
+      return { x: from.x + dx * t, z: from.z + dz * t, rotY: Math.atan2(dx, dz) };
+    }
+    remain -= length;
+  }
+  return { x: start.x, z: start.z, rotY: 0 };
+}

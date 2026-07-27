@@ -72,6 +72,7 @@ export function ParkingView3D({
       container,
       layout,
       colors: resolveColors(),
+      driving: !prefersReducedMotion(),
       onSpotClick: (spotNo) => onSelectRef.current(spotNo),
     });
     sceneRef.current = scene;

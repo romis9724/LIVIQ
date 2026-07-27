@@ -10,20 +10,23 @@
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ParkingLayout } from "@/lib/api";
+import type { ParkingLayout, ParkingSpot } from "@/lib/api";
 import {
   SPOT_H_M,
   SPOT_W_M,
+  cruiseRoutes,
   entryShot,
   floorSize,
   outlineToShape,
   overviewShot,
+  pointAlongPath,
   rectCenter,
   spotPlacements,
   spotShot,
   toMeters,
   type CameraShot,
   type CarTone,
+  type CruiseRoute,
   type SceneState,
   type SpotPlacement,
   type SpotTone,
@@ -46,6 +49,8 @@ export const SCENE_COLOR_VARS = {
   core: "--pk3d-core",
   box: "--pk3d-box",
   label: "--pk3d-label",
+  cruiseA: "--pk3d-cruise-a",
+  cruiseB: "--pk3d-cruise-b",
 } as const;
 
 export type SceneColors = Record<keyof typeof SCENE_COLOR_VARS, string>;
@@ -54,6 +59,8 @@ export interface ParkingScene3DOptions {
   container: HTMLElement;
   layout: ParkingLayout;
   colors: SceneColors;
+  /** 주행 차량 애니메이션 — prefers-reduced-motion 이면 false(배치만 하고 멈춘다). */
+  driving: boolean;
   /** 면·차량 클릭(짧은 클릭만 — 드래그는 카메라 회전). */
   onSpotClick: (spotNo: string) => void;
 }
@@ -80,6 +87,7 @@ const ENTRY_FLY_MS = 2600;
 const MAX_PIXEL_RATIO = 2;
 const CLICK_MOVE_PX = 6;
 const CLICK_MS = 400;
+const MAX_FRAME_S = 0.1; // 프레임 간격 상한(탭 복귀 직후 큰 dt 로 차가 튀지 않게)
 
 const SPOT_TONE_COLOR: Record<SpotTone, keyof SceneColors> = {
   empty: "empty",
@@ -153,17 +161,23 @@ export class ParkingScene3D {
   private readonly cabinMesh: THREE.InstancedMesh;
   private readonly resizeObserver: ResizeObserver;
 
+  /** 주행 차량 5대 — 픽킹 대상이 아니고(raycast 목록 밖) 점유 데이터와도 무관한 연출이다. */
+  private readonly cruisers: { group: THREE.Group; route: CruiseRoute; distance: number }[] = [];
+  private readonly driving: boolean;
+
   /** 차량 인스턴스 index → 면 번호(픽킹). */
   private carSpotNos: string[] = [];
   private tween: Tween | null = null;
   private frameId: number | null = null;
+  private lastFrameMs = 0;
   private active = false;
   private disposed = false;
   private pointerStart = { x: 0, y: 0, at: 0 };
 
-  constructor({ container, layout, colors, onSpotClick }: ParkingScene3DOptions) {
+  constructor({ container, layout, colors, driving, onSpotClick }: ParkingScene3DOptions) {
     this.container = container;
     this.colors = colors;
+    this.driving = driving;
     this.onSpotClick = onSpotClick;
     this.placements = spotPlacements(layout.spots);
     this.size = floorSize(layout.viewBox);
@@ -185,6 +199,7 @@ export class ParkingScene3D {
     const [bodyMesh, cabinMesh] = this.buildCarMeshes();
     this.bodyMesh = bodyMesh;
     this.cabinMesh = cabinMesh;
+    this.buildCruisers(layout.spots);
 
     this.applyShot(entryShot(this.size));
     this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
@@ -334,6 +349,35 @@ export class ParkingScene3D {
     return [bodyMesh, cabinMesh];
   }
 
+  /**
+   * 앰비언트 주행 차량 — 차로(주차열 사이 통로)만 순환한다. 지오메트리는 주차 차량과 공유하고,
+   * 5대뿐이라 인스턴싱 없이 Group 으로 둔다. 픽킹 목록에 넣지 않아 클릭에는 반응하지 않는다.
+   */
+  private buildCruisers(spots: readonly ParkingSpot[]): void {
+    const materialA = new THREE.MeshLambertMaterial({ color: this.colors.cruiseA });
+    const materialB = new THREE.MeshLambertMaterial({ color: this.colors.cruiseB });
+    const cabinMaterial = new THREE.MeshLambertMaterial({ color: this.colors.glass });
+    cruiseRoutes(spots).forEach((route, index) => {
+      const group = new THREE.Group();
+      group.add(
+        new THREE.Mesh(this.bodyMesh.geometry, index % 2 === 0 ? materialA : materialB),
+        new THREE.Mesh(this.cabinMesh.geometry, cabinMaterial),
+      );
+      const cruiser = { group, route, distance: route.startOffsetM };
+      placeCruiser(cruiser);
+      this.scene.add(group);
+      this.cruisers.push(cruiser);
+    });
+  }
+
+  /** 주행 한 프레임. prefers-reduced-motion 이면 호출하지 않아 배치만 남는다. */
+  private stepCruisers(deltaSeconds: number): void {
+    for (const cruiser of this.cruisers) {
+      cruiser.distance += cruiser.route.speedMps * deltaSeconds;
+      placeCruiser(cruiser);
+    }
+  }
+
   // ── 갱신 ───────────────────────────────────────────────────────────────────
   /** 점유·선택·필터 반영. 면 색은 제자리 갱신, 차량은 인스턴스 배열을 다시 채운다. */
   update(state: SceneState): void {
@@ -421,12 +465,16 @@ export class ParkingScene3D {
       this.frameId = null;
       return;
     }
+    this.lastFrameMs = performance.now(); // 멈춰 있던 시간만큼 차가 순간이동하지 않게
     this.frameId = requestAnimationFrame(this.animate);
   }
 
   private readonly animate = (now: number): void => {
     if (!this.active || this.disposed) return;
     this.frameId = requestAnimationFrame(this.animate);
+    const deltaSeconds = Math.min(MAX_FRAME_S, (now - this.lastFrameMs) / 1000 || 0);
+    this.lastFrameMs = now;
+    if (this.driving) this.stepCruisers(deltaSeconds);
     this.stepTween(now);
     // 트윈 중에는 트윈이 카메라를 소유한다(controls.update 와 싸우면 카메라가 튄다).
     if (!this.tween) this.controls.update();
@@ -488,6 +536,13 @@ export class ParkingScene3D {
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
+}
+
+/** 주행 차량을 경로 위 현재 거리 지점에 놓는다(진행 방향으로 회전). */
+function placeCruiser(cruiser: { group: THREE.Group; route: CruiseRoute; distance: number }): void {
+  const at = pointAlongPath(cruiser.route.path, cruiser.distance);
+  cruiser.group.position.set(at.x, 0, at.z);
+  cruiser.group.rotation.y = at.rotY;
 }
 
 /** 지오메트리·머티리얼·텍스처 반납. 스프라이트 지오메트리는 three 가 전역 공유하므로 건드리지 않는다. */

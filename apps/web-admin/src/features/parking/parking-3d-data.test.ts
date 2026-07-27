@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ParkingSpot } from "@/lib/api";
 import { PX_TO_M, SPOT_H, SPOT_W, type ParkedCar } from "./parking-sim";
 import {
+  cruiseRoutes,
   entryShot,
   floorSize,
+  pathLength,
+  pointAlongPath,
   outlineToShape,
   overviewShot,
   rectCenter,
@@ -158,6 +161,79 @@ describe("camera shots", () => {
     expect(shot.position.z).toBeGreaterThan(placement.z);
     expect(shot.target.x).toBeCloseTo(placement.x, 6);
     expect(shot.target.z).toBeCloseTo(placement.z, 6);
+  });
+});
+
+describe("cruiseRoutes", () => {
+  // 시드 배치도와 같은 구조 — 4개의 주차열 띠(각 2줄) 사이에 통로가 있다.
+  const ROWS = [162, 226, 372, 436, 582, 646, 792, 856];
+  const LAYOUT_SPOTS: ParkingSpot[] = ROWS.flatMap((y, row) =>
+    [100, 2872].map((x, col) => ({
+      no: `${row}-${col}`,
+      kind: "일반" as const,
+      x,
+      y,
+      dir: "up" as const,
+    })),
+  );
+
+  it("puts five cars on the aisles, none on a parking row", () => {
+    const routes = cruiseRoutes(LAYOUT_SPOTS);
+
+    expect(routes).toHaveLength(5);
+    // 주차열 띠(row..row+SPOT_H)를 가로지르는 가로 차선이 없어야 한다.
+    const bands = [
+      [162, 290],
+      [372, 500],
+      [582, 710],
+      [792, 920],
+    ].map(([top, bottom]) => [toMeters(top ?? 0), toMeters(bottom ?? 0)] as const);
+    for (const route of routes) {
+      for (const point of route.path) {
+        for (const [top, bottom] of bands) {
+          expect(point.z > top && point.z < bottom).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("spreads the cars along their loop so they never bunch up", () => {
+    const routes = cruiseRoutes(LAYOUT_SPOTS);
+    const byPath = new Map<string, number[]>();
+    for (const route of routes) {
+      const key = JSON.stringify(route.path);
+      byPath.set(key, [...(byPath.get(key) ?? []), route.startOffsetM]);
+    }
+
+    expect(byPath.size).toBe(2); // 바깥 순환 + 안쪽 순환
+    for (const offsets of byPath.values()) {
+      expect(new Set(offsets).size).toBe(offsets.length);
+    }
+  });
+
+  it("returns nothing when the layout has no parking rows", () => {
+    expect(cruiseRoutes([])).toEqual([]);
+  });
+});
+
+describe("pointAlongPath", () => {
+  const SQUARE = [
+    { x: 0, z: 0 },
+    { x: 10, z: 0 },
+    { x: 10, z: 10 },
+    { x: 0, z: 10 },
+  ];
+
+  it("walks the segments and faces the direction of travel", () => {
+    const at = pointAlongPath(SQUARE, 4);
+
+    expect(at).toMatchObject({ x: 4, z: 0 });
+    expect(at.rotY).toBeCloseTo(Math.PI / 2, 6); // +x 방향
+  });
+
+  it("wraps around the closed loop", () => {
+    expect(pointAlongPath(SQUARE, pathLength(SQUARE) + 4)).toEqual(pointAlongPath(SQUARE, 4));
+    expect(pointAlongPath(SQUARE, -pathLength(SQUARE))).toEqual(pointAlongPath(SQUARE, 0));
   });
 });
 
