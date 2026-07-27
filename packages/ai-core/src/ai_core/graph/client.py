@@ -34,6 +34,37 @@ class IncidentHit:
 
 
 @dataclass(frozen=True)
+class GraphNode:
+    """화면용 그래프 노드(H13-1). 라벨별로 채워지는 필드가 다르다.
+
+    `embedding`은 절대 담지 않는다 — 반환 프로퍼티를 Cypher에서 열거해 구조적으로 차단
+    (수천 float 페이로드 + 규칙 7 토큰/전송 비용).
+    """
+
+    pg_id: str
+    label: str  # facility | incident | maintenance
+    name: str | None = None  # facility.name | incident.symptom | maintenance.work
+    type: str | None = None  # facility.type (계통 렌즈)
+    location: str | None = None  # facility.location (위치 렌즈, H13-2)
+    status: str | None = None  # facility.status
+    at: str | None = None  # incident.occurred_at | maintenance.performed_at
+    resolved: bool | None = None  # incident: resolution 유무
+
+
+@dataclass(frozen=True)
+class GraphLink:
+    source: str  # facility pg_id
+    target: str  # incident | maintenance pg_id
+    kind: str  # HAS_INCIDENT | HAS_MAINTENANCE
+
+
+@dataclass(frozen=True)
+class FacilityGraph:
+    nodes: tuple[GraphNode, ...]
+    links: tuple[GraphLink, ...]
+
+
+@dataclass(frozen=True)
 class IncidentContext:
     """장애 이웃 확장 결과 — 소속 시설·최근 정비(H3-3 search_facility_graph)."""
 
@@ -232,6 +263,70 @@ class GraphClient:
             )
             for r in records
         ]
+
+    # ── 화면 조회 (H13-1 — 시설 그래프 메인의 유일한 읽기 경로) ─────────────
+
+    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
+        """단지 시설 그래프 전체(노드 + 관계). 관계 0인 고아 시설도 노드로 포함.
+
+        tenant는 시설·이웃 양쪽에 강제한다. 반환 프로퍼티는 열거식 —
+        `embedding`은 결과에 들어갈 수 없다(페이로드 폭발 방지, ADR-0022).
+        """
+        records = await self._run(
+            "MATCH (f:Facility {tenant_id: $tenant}) "
+            "OPTIONAL MATCH (f)-[r:HAS_INCIDENT|HAS_MAINTENANCE]->(n) "
+            "WHERE n.tenant_id = $tenant "
+            "RETURN f.pg_id AS facility_id, f.name AS facility_name, f.type AS facility_type, "
+            "       f.location AS facility_location, f.status AS facility_status, "
+            "       type(r) AS kind, n.pg_id AS node_id, "
+            "       n.symptom AS symptom, n.occurred_at AS occurred_at, "
+            "       n.resolution IS NOT NULL AS resolved, "
+            "       n.work AS work, n.performed_at AS performed_at "
+            "ORDER BY facility_name, node_id",
+            {"tenant": tenant_id},
+        )
+        nodes: dict[str, GraphNode] = {}
+        links: list[GraphLink] = []
+        for r in records:
+            facility_id = r["facility_id"]
+            if facility_id not in nodes:
+                nodes[facility_id] = GraphNode(
+                    pg_id=facility_id,
+                    label="facility",
+                    name=r["facility_name"],
+                    type=r["facility_type"],
+                    location=r["facility_location"],
+                    status=r["facility_status"],
+                )
+            kind, node_id = r["kind"], r["node_id"]
+            if kind is None or node_id is None:  # 고아 시설(관계 0)
+                continue
+            if node_id not in nodes:
+                nodes[node_id] = _neighbor_node(kind, node_id, r)
+            links.append(GraphLink(source=facility_id, target=node_id, kind=kind))
+        return FacilityGraph(nodes=tuple(nodes.values()), links=tuple(links))
+
+
+def _neighbor_node(kind: str, node_id: str, record: Any) -> GraphNode:
+    if kind == "HAS_INCIDENT":
+        return GraphNode(
+            pg_id=node_id,
+            label="incident",
+            name=record["symptom"],
+            at=_as_text(record["occurred_at"]),
+            resolved=bool(record["resolved"]),
+        )
+    return GraphNode(
+        pg_id=node_id,
+        label="maintenance",
+        name=record["work"],
+        at=_as_text(record["performed_at"]),
+    )
+
+
+def _as_text(value: Any) -> str | None:
+    """시각 프로퍼티는 outbox JSON 스냅샷 유래(문자열)지만 방어적으로 문자열화."""
+    return None if value is None else str(value)
 
 
 def _normalize_parts(parts: Any) -> list[dict[str, Any]]:

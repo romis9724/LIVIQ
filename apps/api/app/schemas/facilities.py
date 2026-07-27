@@ -14,13 +14,21 @@ from pydantic import BaseModel, Field
 
 FacilityStatus = Literal["normal", "check", "fault", "risk"]
 
+GraphNodeLabel = Literal["facility", "incident", "maintenance"]
+GraphLinkKind = Literal["HAS_INCIDENT", "HAS_MAINTENANCE"]
+
 __all__ = [
     "FacilityCreateIn",
     "FacilityDetailOut",
+    "FacilityGraphOut",
     "FacilityListOut",
     "FacilityOut",
     "FacilityPatchIn",
     "FacilityStatus",
+    "GraphLinkKind",
+    "GraphLinkOut",
+    "GraphNodeLabel",
+    "GraphNodeOut",
     "IncidentCreateIn",
     "IncidentOut",
     "MaintenanceCreateIn",
@@ -97,3 +105,29 @@ class MaintenanceOut(BaseModel):
 class FacilityDetailOut(FacilityOut):
     incidents: list[IncidentOut]
     maintenance_logs: list[MaintenanceOut]
+
+
+class GraphNodeOut(BaseModel):
+    """그래프 노드(H13-1, ADR-0022). 라벨별로 채워지는 필드가 다르다 — embedding은 없음."""
+
+    pg_id: str
+    label: GraphNodeLabel
+    name: str | None = None  # 시설명 | 장애 증상 | 정비 작업
+    type: str | None = None  # 시설 계통(계통 렌즈)
+    location: str | None = None
+    # 파생 그래프 값이라 Literal로 좁히지 않는다(동기화 지연 값이 500이 되면 안 됨)
+    status: str | None = None
+    at: str | None = None  # 장애 발생/정비 수행 시각(그래프 스냅샷 문자열)
+    resolved: bool | None = None  # 장애: 조치 내역 유무
+
+
+class GraphLinkOut(BaseModel):
+    source: str
+    target: str
+    kind: GraphLinkKind
+
+
+class FacilityGraphOut(BaseModel):
+    nodes: list[GraphNodeOut]
+    links: list[GraphLinkOut]
+    degraded: bool = False  # Neo4j 미가용 → PG 축약 그래프(노드만)

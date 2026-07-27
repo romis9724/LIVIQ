@@ -145,6 +145,90 @@ async def test_expand_incidents_empty_ids_returns_empty(graph: GraphClient) -> N
     assert await graph.expand_incidents(tenant_id=str(uuid.uuid4()), pg_ids=[]) == []
 
 
+async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(
+    graph: GraphClient,
+) -> None:
+    tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
+    orphan = str(uuid.uuid4())
+    incident, log_id = str(uuid.uuid4()), str(uuid.uuid4())
+
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=facility,
+        props={"name": "지하펌프", "location": "지하1층", "type": "급배수", "status": "fault"},
+        version=1,
+    )
+    # 관계 0인 고아 시설도 노드로 나와야 한다(OPTIONAL MATCH)
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=orphan, props={"name": "옥상탱크", "status": "normal"}, version=1
+    )
+    await graph.merge_incident(
+        tenant_id=tenant,
+        pg_id=incident,
+        facility_id=facility,
+        props={"symptom": "누수", "resolution": "패킹 교체", "occurred_at": "2026-07-01T00:00:00Z"},
+        version=1,
+        embedding=_vec(1),
+    )
+    await graph.merge_maintenance(
+        tenant_id=tenant,
+        pg_id=log_id,
+        facility_id=facility,
+        props={"work": "패킹 교체", "performed_at": "2026-07-02T00:00:00Z"},
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    by_id = {n.pg_id: n for n in result.nodes}
+    assert set(by_id) == {facility, orphan, incident, log_id}
+    pump = by_id[facility]
+    assert (pump.label, pump.name, pump.type, pump.location, pump.status) == (
+        "facility",
+        "지하펌프",
+        "급배수",
+        "지하1층",
+        "fault",
+    )
+    assert by_id[orphan].label == "facility"
+    inc = by_id[incident]
+    assert (inc.label, inc.name, inc.resolved) == ("incident", "누수", True)
+    assert inc.at == "2026-07-01T00:00:00Z"
+    maint = by_id[log_id]
+    assert (maint.label, maint.name, maint.at) == (
+        "maintenance",
+        "패킹 교체",
+        "2026-07-02T00:00:00Z",
+    )
+    # embedding은 어떤 노드에도 실리지 않는다(필드 자체가 없음 — 페이로드 폭발 차단)
+    assert not any(hasattr(n, "embedding") for n in result.nodes)
+
+    assert {(link.source, link.target, link.kind) for link in result.links} == {
+        (facility, incident, "HAS_INCIDENT"),
+        (facility, log_id, "HAS_MAINTENANCE"),
+    }
+
+
+async def test_fetch_facility_graph_isolates_other_tenant(graph: GraphClient) -> None:
+    tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+    facility_b = str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant_b, pg_id=facility_b, props={"name": "B펌프"}, version=1
+    )
+    await graph.merge_incident(
+        tenant_id=tenant_b,
+        pg_id=str(uuid.uuid4()),
+        facility_id=facility_b,
+        props={"symptom": "누수"},
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant_a)
+
+    assert result.nodes == ()
+    assert result.links == ()
+
+
 async def test_maintenance_parts_create_replaced(graph: GraphClient) -> None:
     tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
     log_id = str(uuid.uuid4())
