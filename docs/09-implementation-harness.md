@@ -624,7 +624,8 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
 | H15-1 | 관리자 AI 설정 | `ai_backend_config` 전역 단일 행 테이블(마이그레이션·liviq_app grant·RLS 없음) · API `GET/PUT /system/ai-config`+`POST /system/ai-config/test`(SYS_ADMIN — GET은 api_key 끝 4자 마스킹, PUT은 api_key 생략 시 기존 유지, test는 1회 chat 스모크+지연 ms 반환) · `get_llm()`이 DB 설정 우선·env `LLM_*` 폴백(요청 단위 — 재시작 불필요) · answer_cache 키를 env 모델명 대신 활성 백엔드(`model@host`)로 분리 · web-admin `/system/ai` 페이지(§5A 패턴 — 폼+저장+연결 테스트, SYS_ADMIN 네비 추가) | 비 SYS_ADMIN 403·api_key 원문 미노출(CRITICAL) + env 폴백·백엔드 전환 캐시 분리 테스트 + 게이트 그린 + 시각 실측 | ✅ 완료 — 마이그레이션 `e9f0a1b2c3d4`. NULL 컬럼(api_key·reasoning_effort)은 env 폴백(키를 비워 저장해도 env 키 유지 — UI가 원문을 되돌릴 수 없어 조용한 401 방지, `app.ai_backend.merge_settings` 단일 지점). 테스트 api 432·db 160·ai-core 161·web 328 그린(cov 95.6/98.3/94.5%). 시각 실측: 연결 테스트 성공(로컬 ollama 230ms)·실패(미가용 요약)·저장→DB 우선 전환·375px·콘솔 0 |
-| H15-2 | 백엔드 성능 비교 | H15-1 UI로 3개 백엔드 교체하며 실측: ①evals 골든셋 pass-rate(백엔드별 전 케이스) ②지연 TTFT·총응답 ③동시 1·5·10 처리 · 결과 표+선정 근거 문서화(ADR) | 3개 백엔드 실측 표 + 운영 백엔드 확정 기록 | ⏳ 대기 |
+| H15-3 | AI 설정 확충(임베딩·튜닝 노브) | (사용자 인터뷰 2026-07-28 — 목적: 백엔드 비교·품질 튜닝) `ai_backend_config` 컬럼 확장([03 §4.7](03-database-design.md)): ①임베딩 백엔드(base URL·모델·API 키 — 차원 1024 고정, 연결 테스트가 실측 차원 검증·불일치 저장 거부) ②안전 노브 5종(top_k·LLM 출력 상한·timeout·도구 confidence·캐시 TTL — NULL=env/코드 기본값 폴백, 즉시 반영) ③위험 노브(임베딩·chunk_max_tokens)는 저장 시 경고 + **명시적 재색인 버튼**(전 문서·공지 재인제스트 enqueue, jobs 카운트로 진행 표시) · `liviq_worker` SELECT grant(인제스트가 활성 설정 소비) · UI 섹션 확장(§5A) | 비 SYS_ADMIN 403·키 마스킹(CRITICAL) + 차원 검증 거부 + 노브 폴백·즉시 반영 + 재색인 enqueue 테스트 + 게이트 그린 + 시각 실측 | 🚧 진행 (H15-2보다 선행 — 비교 때 임베딩 교체 가능하게) |
+| H15-2 | 백엔드 성능 비교 | H15-1·H15-3 UI로 3개 백엔드 교체하며 실측: ①evals 골든셋 pass-rate(백엔드별 전 케이스) ②지연 TTFT·총응답 ③동시 1·5·10 처리 · 결과 표+선정 근거 문서화(ADR) | 3개 백엔드 실측 표 + 운영 백엔드 확정 기록 | ⏳ 대기 |
 
 ## 9. 정의: "완료(Done)"
 
