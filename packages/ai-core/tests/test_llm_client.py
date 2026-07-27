@@ -59,6 +59,54 @@ async def test_chat_clamps_max_tokens_to_settings_limit(settings: AiCoreSettings
     assert captured["max_tokens"] == settings.llm_max_output_tokens
 
 
+async def test_chat_omits_reasoning_effort_by_default(settings: AiCoreSettings) -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_chat_body("ok"))
+
+    await _client(settings, handler).chat([{"role": "user", "content": "q"}])
+    assert "reasoning_effort" not in captured
+
+
+async def test_chat_sends_reasoning_effort_when_configured(settings: AiCoreSettings) -> None:
+    """추론(thinking) 모델 대응 — LLM_REASONING_EFFORT=none이면 페이로드에 실린다.
+
+    qwen3 등은 추론 토큰이 출력 예산을 먹어 content가 빈 채 잘린다(호스트 실측) —
+    Ollama OpenAI 호환의 reasoning_effort로 끈다.
+    """
+    tuned = settings.model_copy(update={"llm_reasoning_effort": "none"})
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(200, json=_chat_body("ok"))
+
+    await _client(tuned, handler).chat([{"role": "user", "content": "q"}])
+    assert captured["reasoning_effort"] == "none"
+
+
+async def test_chat_stream_sends_reasoning_effort_when_configured(
+    settings: AiCoreSettings,
+) -> None:
+    tuned = settings.model_copy(update={"llm_reasoning_effort": "none"})
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
+            headers={"content-type": "text/event-stream"},
+        )
+
+    stream = _client(tuned, handler).chat_stream([{"role": "user", "content": "q"}])
+    chunks = [t async for t in stream]
+    assert chunks == ["ok"]
+    assert captured["reasoning_effort"] == "none"
+
+
 async def test_chat_retries_5xx_then_succeeds(settings: AiCoreSettings) -> None:
     calls = {"n": 0}
 

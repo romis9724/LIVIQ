@@ -122,6 +122,8 @@ class LlmClient:
             "temperature": temperature,
             "stream": False,
         }
+        if self._settings.llm_reasoning_effort is not None:
+            payload["reasoning_effort"] = self._settings.llm_reasoning_effort
         if tools is not None:
             payload["tools"] = list(tools)
             if tool_choice is not None:
@@ -157,6 +159,8 @@ class LlmClient:
             "temperature": temperature,
             "stream": True,
         }
+        if self._settings.llm_reasoning_effort is not None:
+            payload["reasoning_effort"] = self._settings.llm_reasoning_effort
         async with self._client(self._settings.llm_base_url, self._settings.llm_api_key) as c:
             try:
                 async with c.stream("POST", "/chat/completions", json=payload) as response:
