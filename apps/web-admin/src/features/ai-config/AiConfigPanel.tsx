@@ -259,7 +259,7 @@ export function AiConfigPanel() {
                 <select
                   ref={effortRef}
                   id="ai-cfg-effort"
-                  className="form-field__input"
+                  className="form-field__input ai-cfg__select"
                   defaultValue={config.reasoningEffort ?? ""}
                   aria-describedby={describedBy("ai-cfg-effort", true)}
                 >

@@ -32,6 +32,16 @@
   gap: var(--space-4);
 }
 
+/* select — 네이티브 화살표 대신 공통 chevron 토큰(다른 메뉴의 select와 동일 문법). */
+.ai-cfg__select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--space-6);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+}
+
 .ai-cfg__actions {
   display: flex;
   gap: var(--space-2);
