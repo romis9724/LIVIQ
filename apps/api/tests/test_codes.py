@@ -23,6 +23,8 @@ from httpx import ASGITransport
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.tools.floor_plan_parser import ELEMENT_SYNONYMS, ROOM_SYNONYMS
+from liviq_db.codes_seed import DEFAULT_CODE_GROUPS
 from liviq_db.models import Code, CodeGroup, Notice, Tenant
 
 TENANT_B_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
@@ -296,3 +298,17 @@ async def test_cross_tenant_code_access_404(seeded: AsyncSession) -> None:
         assert (await c.patch(f"/admin/codes/{cid}", json={"label": "x"})).status_code == 404
         assert (await c.delete(f"/admin/codes/{cid}")).status_code == 404
         assert (await c.delete(f"/admin/code-groups/{gid}")).status_code == 404
+
+
+# ── 시드 그룹 드리프트 가드 (H14-2) ──────────────────────────────────────────
+
+
+def test_plan_code_groups_match_floor_plan_parser_dictionaries() -> None:
+    """PLAN_DEVICE_TYPE·PLAN_ROOM 시드는 규칙 파서 사전 키와 같아야 한다.
+
+    liviq_db는 ai_core에 의존하지 않아(패키지 방향) 값을 복사해 두었다 — 둘 다 임포트할 수
+    있는 여기서 드리프트를 잡는다.
+    """
+    groups = {g.group_key: [c.code for c in g.codes] for g in DEFAULT_CODE_GROUPS}
+    assert groups["PLAN_DEVICE_TYPE"] == list(ELEMENT_SYNONYMS)
+    assert groups["PLAN_ROOM"] == list(ROOM_SYNONYMS)

@@ -6,7 +6,7 @@ import datetime
 import uuid
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Priority = Literal["urgent", "normal", "low"]
 InquiryStatus = Literal["received", "assigned", "in_progress", "done", "reopened"]
@@ -98,9 +98,20 @@ class CommentIn(BaseModel):
 
 
 class FacilityLinkIn(BaseModel):
-    """정식 연결 승인 입력. null이면 연결 해제(FR-FAC-05 ①)."""
+    """정식 연결 승인 입력. facility_id 또는 code 중 하나 — 둘 다 없으면 연결 해제(FR-FAC-05 ①).
 
-    facility_id: uuid.UUID | None
+    code는 시설 코드번호(H14-2) — 민원 접수에서 코드로 바로 연결하는 경로. 코드는 단지 안에서만
+    유일하므로 resolve도 tenant 스코프다(타 단지 코드는 404).
+    """
+
+    facility_id: uuid.UUID | None = None
+    code: str | None = Field(default=None, min_length=1, max_length=40)
+
+    @model_validator(mode="after")
+    def _only_one_reference(self) -> FacilityLinkIn:
+        if self.facility_id is not None and self.code is not None:
+            raise ValueError("facility_id와 code는 함께 지정할 수 없습니다")
+        return self
 
 
 class FacilitySuggestCandidate(BaseModel):

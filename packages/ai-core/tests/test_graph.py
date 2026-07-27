@@ -360,6 +360,21 @@ async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(
     }
 
 
+async def test_facility_code_round_trips_to_graph_node(graph: GraphClient) -> None:
+    """시설 코드번호(H14-2)가 노드 프로퍼티로 저장되고 화면 조회에 실린다."""
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props={"name": "지하펌프", "code": "WT-1-01", "status": "normal"},
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    assert [n.code for n in result.nodes if n.label == "facility"] == ["WT-1-01"]
+
+
 async def test_fetch_facility_graph_includes_location_node_and_link(
     graph: GraphClient,
 ) -> None:

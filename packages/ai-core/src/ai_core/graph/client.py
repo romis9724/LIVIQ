@@ -50,6 +50,7 @@ class GraphNode:
     name: str | None = None  # facility.name | incident.symptom | maintenance.work |
     # floor_plan.unit_type_name | plan_device.device_type(+room) | location.name | complex.name |
     # plan_room.name(방) | plan_kind.name(마커 종류)
+    code: str | None = None  # facility.code — 시설 코드번호(H14-2)
     type: str | None = None  # facility.type (계통 렌즈)
     location: str | None = None  # facility.location (위치 렌즈, H13-2)
     status: str | None = None  # facility.status
@@ -172,7 +173,7 @@ class GraphClient:
             "MERGE (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET f.last_applied_version = -1 "
             "WITH f WHERE $version > f.last_applied_version "
-            "SET f.name = $name, f.location = $location, f.type = $type, "
+            "SET f.name = $name, f.code = $code, f.location = $location, f.type = $type, "
             "    f.status = $status, f.last_applied_version = $version "
             "WITH f "
             "OPTIONAL MATCH (f)-[old:LOCATED_IN]->(:Location) "
@@ -190,6 +191,7 @@ class GraphClient:
                 "tenant": tenant_id,
                 "version": version,
                 "name": props.get("name"),
+                "code": props.get("code"),
                 "location": location,
                 "type": props.get("type"),
                 "status": props.get("status"),
@@ -430,6 +432,7 @@ class GraphClient:
             "OPTIONAL MATCH (f)-[r:HAS_INCIDENT|HAS_MAINTENANCE]->(n) "
             "WHERE n.tenant_id = $tenant "
             "RETURN f.pg_id AS facility_id, f.name AS facility_name, f.type AS facility_type, "
+            "       f.code AS facility_code, "
             "       f.location AS facility_location, f.status AS facility_status, "
             "       type(r) AS kind, n.pg_id AS node_id, "
             "       n.symptom AS symptom, n.occurred_at AS occurred_at, "
@@ -447,6 +450,7 @@ class GraphClient:
                     pg_id=facility_id,
                     label="facility",
                     name=r["facility_name"],
+                    code=r["facility_code"],
                     type=r["facility_type"],
                     location=r["facility_location"],
                     status=r["facility_status"],

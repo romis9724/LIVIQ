@@ -141,6 +141,112 @@ async def test_list_filters_by_status_and_type(seeded: AsyncSession) -> None:
         assert by_type["total"] == 2  # 둘 다 type=elevator
 
 
+# ── 코드번호 (H14-2) ─────────────────────────────────────────────────────────
+
+
+async def test_create_assigns_code_and_increments_sequence(seeded: AsyncSession) -> None:
+    """`{계통약어}-{위치약어}-{연번}` 자동 부여 — 같은 계통·위치면 연번이 올라간다."""
+    async with _make_client(seeded) as c:
+        first = await _create_facility(c, name="1203동 승강기 1호기")
+        second = await _create_facility(c, name="1203동 승강기 2호기")
+        other_location = (
+            await c.post(
+                "/admin/facilities",
+                json={"name": "101동 승강기", "location": "101동", "type": "elevator"},
+            )
+        ).json()
+        other_system = (
+            await c.post(
+                "/admin/facilities",
+                json={"name": "1203동 소화전", "location": "1203동", "type": "fire"},
+            )
+        ).json()
+
+    assert first["code"] == "EL-1203-01"
+    assert second["code"] == "EL-1203-02"
+    assert other_location["code"] == "EL-101-01"
+    assert other_system["code"] == "FR-1203-01"
+
+
+async def test_create_falls_back_to_general_and_common(seeded: AsyncSession) -> None:
+    """type 미지정은 GN, 숫자 없는 위치는 CMN."""
+    async with _make_client(seeded) as c:
+        anonymous = (await c.post("/admin/facilities", json={"name": "잡설비"})).json()
+        office = (
+            await c.post(
+                "/admin/facilities",
+                json={"name": "정문 CCTV", "location": "관리사무소", "type": "security"},
+            )
+        ).json()
+
+    assert anonymous["code"] == "GN-CMN-01"
+    assert office["code"] == "SC-CMN-01"
+
+
+async def test_code_cannot_be_set_or_changed_by_client(seeded: AsyncSession) -> None:
+    """CRITICAL — 코드는 서버 전용. 생성·수정 요청의 code는 스키마에 없어 무시된다."""
+    async with _make_client(seeded) as c:
+        created = (
+            await c.post(
+                "/admin/facilities",
+                json={
+                    "name": "승강기",
+                    "location": "1203동",
+                    "type": "elevator",
+                    "code": "HACK-000-99",
+                },
+            )
+        ).json()
+        assert created["code"] == "EL-1203-01"
+
+        patched = await c.patch(
+            f"/admin/facilities/{created['id']}", json={"code": "HACK-000-99", "status": "check"}
+        )
+        assert patched.status_code == 200
+        assert patched.json()["code"] == "EL-1203-01"  # 위치·계통이 바뀌어도 코드는 불변
+        assert patched.json()["status"] == "check"
+
+        relocated = await c.patch(f"/admin/facilities/{created['id']}", json={"location": "999동"})
+        assert relocated.json()["code"] == "EL-1203-01"
+
+
+async def test_list_filters_by_exact_code(seeded: AsyncSession) -> None:
+    """민원 화면이 코드번호로 시설을 찾는 조회 경로."""
+    async with _make_client(seeded) as c:
+        target = await _create_facility(c, name="1203동 승강기")
+        await _create_facility(c, name="1203동 승강기 2호기")
+
+        hit = (await c.get("/admin/facilities", params={"code": target["code"]})).json()
+        assert [f["id"] for f in hit["items"]] == [target["id"]]
+        assert hit["total"] == 1
+
+        miss = (await c.get("/admin/facilities", params={"code": "EL-1203-99"})).json()
+        assert miss["items"] == [] and miss["total"] == 0
+
+
+async def test_code_is_unique_per_tenant_not_globally(seeded: AsyncSession) -> None:
+    """CRITICAL 격리 — 같은 코드가 단지별로 따로 부여되고, 남의 코드는 조회되지 않는다."""
+    seeded.add(Tenant(id=OTHER_TENANT_ID, name="단지B", status="active"))
+    await seeded.flush()
+    async with _make_client(seeded) as owner:
+        mine = await _create_facility(owner, name="1203동 승강기")
+    async with _make_client(seeded, tenant_id=OTHER_TENANT_ID) as other:
+        theirs = await _create_facility(other, name="1203동 승강기")
+        found = (await other.get("/admin/facilities", params={"code": mine["code"]})).json()
+
+    assert mine["code"] == theirs["code"] == "EL-1203-01"  # 단지 스코프 연번
+    assert mine["id"] != theirs["id"]
+    assert [f["id"] for f in found["items"]] == [theirs["id"]]  # 남의 시설이 아니라 자기 시설
+
+
+async def test_pg_fallback_graph_carries_code(seeded: AsyncSession) -> None:
+    async with _make_client(seeded) as c:
+        created = await _create_facility(c)
+        body = (await c.get("/admin/facilities/graph")).json()  # graph=None → PG 축약
+
+    assert [n["code"] for n in body["nodes"]] == [created["code"]]
+
+
 # ── 원자성 (outbox) ──────────────────────────────────────────────────────────
 
 
@@ -158,6 +264,7 @@ async def test_create_records_outbox_snapshot(seeded: AsyncSession) -> None:
     assert ev.dedupe_key == f"facility:{created['id']}:1"
     assert ev.payload == {
         "name": "1203동 승강기",
+        "code": "EL-1203-01",  # 그래프 노드 프로퍼티로 흘러간다(H14-2)
         "location": "1203동",
         "type": "elevator",
         "status": "fault",
@@ -266,6 +373,7 @@ async def test_graph_returns_nodes_and_links_without_extra_fields(seeded: AsyncS
         "pg_id",
         "label",
         "name",
+        "code",
         "type",
         "location",
         "status",

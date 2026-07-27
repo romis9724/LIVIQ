@@ -17,10 +17,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.graph import GraphClient
 from app.deps import RequestContext, get_graph, get_tenant_session, require_roles
+from app.facility_code import assign_facility_code
 from app.outbox import record_outbox
 from app.schemas.facilities import (
     FacilityCreateIn,
@@ -81,9 +83,11 @@ def _facility_snapshot(facility: Facility, complex_name: str | None) -> dict[str
     `deleted_at`은 소프트 삭제 시 tombstone 신호로 쓰인다(H13-6, GraphClient.merge_facility) —
     현재 이 라우터는 소프트 삭제 엔드포인트가 없어 항상 None이지만, 스냅샷 계약에 미리 싣는다.
     `complex_name`은 단지(tenants.name) — 그래프 중심 Complex 노드 실체화용(H13-7).
+    `code`는 시설 코드번호(H14-2) — 그래프 노드 프로퍼티로 흘러간다.
     """
     return {
         "name": facility.name,
+        "code": facility.code,
         "location": facility.location,
         "type": facility.type,
         "status": facility.status,
@@ -98,9 +102,11 @@ async def list_facilities(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     status: Annotated[FacilityStatus | None, Query()] = None,
     type: Annotated[str | None, Query()] = None,
+    code: Annotated[str | None, Query(max_length=40)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> FacilityListOut:
+    """목록 조회. `code`는 코드번호 정확 일치 — 민원 접수의 코드 조회 경로(H14-2)."""
     base = select(Facility).where(
         Facility.tenant_id == ctx.tenant_id, Facility.deleted_at.is_(None)
     )
@@ -108,6 +114,8 @@ async def list_facilities(
         base = base.where(Facility.status == status)
     if type is not None:
         base = base.where(Facility.type == type)
+    if code is not None:
+        base = base.where(Facility.code == code)
     total = await session.scalar(select(func.count()).select_from(base.order_by(None).subquery()))
     rows = await session.scalars(
         base.order_by(Facility.name).offset((page - 1) * limit).limit(limit)
@@ -121,16 +129,8 @@ async def create_facility(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     body: FacilityCreateIn,
 ) -> FacilityOut:
-    facility = Facility(
-        tenant_id=ctx.tenant_id,
-        name=body.name,
-        location=body.location,
-        type=body.type,
-        status=body.status,
-        next_check_at=body.next_check_at,
-    )
-    session.add(facility)
-    await session.flush()
+    """시설 등록. 코드번호는 서버가 부여한다(입력 없음 — H14-2)."""
+    facility = await _insert_with_code(session, ctx.tenant_id, body)
     await record_outbox(
         session,
         tenant_id=ctx.tenant_id,
@@ -140,6 +140,38 @@ async def create_facility(
         payload=_facility_snapshot(facility, await _tenant_name(session, ctx.tenant_id)),
     )
     return _facility_out(facility)
+
+
+async def _insert_with_code(
+    session: AsyncSession, tenant_id: uuid.UUID, body: FacilityCreateIn
+) -> Facility:
+    """코드 부여 + 삽입. 동시 생성으로 연번이 겹치면(UNIQUE 위반) 다시 뽑아 1회 재시도한다."""
+    try:
+        return await _try_insert(session, tenant_id, body)
+    except IntegrityError:
+        logger.warning("시설 코드 연번 충돌 — 1회 재시도", exc_info=True)
+        return await _try_insert(session, tenant_id, body)
+
+
+async def _try_insert(
+    session: AsyncSession, tenant_id: uuid.UUID, body: FacilityCreateIn
+) -> Facility:
+    """savepoint 안에서 삽입 — UNIQUE 위반이 나도 바깥 트랜잭션이 살아있어 재시도할 수 있다."""
+    facility = Facility(
+        tenant_id=tenant_id,
+        name=body.name,
+        code=await assign_facility_code(
+            session, tenant_id=tenant_id, type_=body.type, location=body.location
+        ),
+        location=body.location,
+        type=body.type,
+        status=body.status,
+        next_check_at=body.next_check_at,
+    )
+    async with session.begin_nested():
+        session.add(facility)
+        await session.flush()
+    return facility
 
 
 @router.get("/graph", response_model=FacilityGraphOut)
@@ -186,6 +218,7 @@ async def _pg_graph_nodes(session: AsyncSession, tenant_id: uuid.UUID) -> list[G
             pg_id=str(f.id),
             label="facility",
             name=f.name,
+            code=f.code,
             type=f.type,
             location=f.location,
             status=f.status,

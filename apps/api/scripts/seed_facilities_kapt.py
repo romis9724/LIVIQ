@@ -26,6 +26,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.facility_code import assign_facility_code
 from app.outbox import record_outbox
 from app.routers.facilities import _facility_snapshot
 from sqlalchemy import select, text
@@ -74,9 +75,13 @@ async def _upsert_facility(
         existing.location = row["location"]
         return existing, False
 
+    # 코드번호는 API와 같은 부여 함수로(H14-2) — 기존 행의 코드는 그대로 둔다(불변).
     facility = Facility(
         tenant_id=tenant_id,
         name=name,
+        code=await assign_facility_code(
+            session, tenant_id=tenant_id, type_=row["type"], location=row["location"]
+        ),
         location=row["location"],
         type=row["type"],
         status="normal",

@@ -9,7 +9,7 @@ import datetime
 import uuid
 from typing import Any
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -25,12 +25,21 @@ from .base import (
 
 
 class Facility(IdMixin, TenantMixin, TimestampMixin, Base):
-    """시설. soft delete 대상(§3)."""
+    """시설. soft delete 대상(§3).
+
+    `code`는 시설 코드번호(H14-2, `EL-401-01`) — 서버가 생성 시 부여하고 수정 경로가 없다.
+    단지 안에서만 유일하다(단지가 다르면 같은 코드가 공존 — 규칙 3 격리).
+    """
 
     __tablename__ = "facilities"
-    __table_args__ = (tenant_id_unique("facilities"),)
+    __table_args__ = (
+        tenant_id_unique("facilities"),
+        UniqueConstraint("tenant_id", "code", name="uq_facilities_tenant_code"),
+    )
 
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # nullable — 코드 도입 전 행이 있을 수 있고(백필 대상), NULL은 unique 제약에서 자유롭다.
+    code: Mapped[str | None] = mapped_column(String, nullable=True)
     location: Mapped[str | None] = mapped_column(String, nullable=True)
     type: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, nullable=False)  # normal|check|fault|risk

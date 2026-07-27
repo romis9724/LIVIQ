@@ -506,16 +506,18 @@ async def link_inquiry_facility(
     inquiry_id: uuid.UUID,
     body: FacilityLinkIn,
 ) -> InquiryOut:
-    """담당자 지정 = 정식 연결(FR-FAC-05 ①). null이면 해제.
+    """담당자 지정 = 정식 연결(FR-FAC-05 ①). facility_id·code 둘 다 없으면 해제.
 
-    facility_id를 쓰는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
+    시설을 지정하는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
     대상 설비는 같은 단지의 미삭제 설비여야 한다(아니면 404 — 타 단지 존재 노출 금지).
     """
     inquiry = await _get_inquiry(session, ctx.tenant_id, inquiry_id)
     facility = (
         None
-        if body.facility_id is None
-        else await _get_linkable_facility(session, ctx.tenant_id, body.facility_id)
+        if body.facility_id is None and body.code is None
+        else await _get_linkable_facility(
+            session, ctx.tenant_id, facility_id=body.facility_id, code=body.code
+        )
     )
 
     inquiry.facility_id = None if facility is None else facility.id
@@ -575,12 +577,17 @@ async def suggest_inquiry_facility(
 
 
 async def _get_linkable_facility(
-    session: AsyncSession, tenant_id: uuid.UUID, facility_id: uuid.UUID
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    facility_id: uuid.UUID | None = None,
+    code: str | None = None,
 ) -> Facility:
-    """같은 단지의 미삭제 설비 — 아니면 404(격리 위해 존재 여부 노출 안 함)."""
+    """같은 단지의 미삭제 설비를 id 또는 코드번호로 찾는다 — 아니면 404(존재 여부 노출 안 함)."""
+    match = Facility.id == facility_id if facility_id is not None else Facility.code == code
     facility = await session.scalar(
         select(Facility).where(
-            Facility.id == facility_id,
+            match,
             Facility.tenant_id == tenant_id,
             Facility.deleted_at.is_(None),
         )
