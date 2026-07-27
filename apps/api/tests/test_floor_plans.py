@@ -628,6 +628,7 @@ async def test_admin_upload_records_floor_plan_outbox_snapshot(
         "unit_type_name": "72A",
         "image_width": 800,
         "image_height": 600,
+        "complex_name": "단지A",
         "devices": [],
     }
 

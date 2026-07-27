@@ -37,7 +37,7 @@ from app.schemas.facilities import (
     MaintenanceCreateIn,
     MaintenanceOut,
 )
-from liviq_db.models import Facility, Incident, MaintenanceLog
+from liviq_db.models import Facility, Incident, MaintenanceLog, Tenant
 
 logger = logging.getLogger("app.facilities")
 
@@ -70,11 +70,17 @@ def _facility_out(facility: Facility) -> FacilityOut:
     return FacilityOut.model_validate(facility, from_attributes=True)
 
 
-def _facility_snapshot(facility: Facility) -> dict[str, object | None]:
+async def _tenant_name(session: AsyncSession, tenant_id: uuid.UUID) -> str | None:
+    """단지명 — Complex 그래프 노드용(사용자 요청: 그래프 중심에 단지 노드, H13-7)."""
+    return await session.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
+
+
+def _facility_snapshot(facility: Facility, complex_name: str | None) -> dict[str, object | None]:
     """graph-sync 워커가 payload만으로 Neo4j MERGE하도록 행 스냅샷 전부 담는다(docs/03 §5).
 
     `deleted_at`은 소프트 삭제 시 tombstone 신호로 쓰인다(H13-6, GraphClient.merge_facility) —
     현재 이 라우터는 소프트 삭제 엔드포인트가 없어 항상 None이지만, 스냅샷 계약에 미리 싣는다.
+    `complex_name`은 단지(tenants.name) — 그래프 중심 Complex 노드 실체화용(H13-7).
     """
     return {
         "name": facility.name,
@@ -82,6 +88,7 @@ def _facility_snapshot(facility: Facility) -> dict[str, object | None]:
         "type": facility.type,
         "status": facility.status,
         "deleted_at": facility.deleted_at,
+        "complex_name": complex_name,
     }
 
 
@@ -130,7 +137,7 @@ async def create_facility(
         aggregate_type="facility",
         aggregate_id=facility.id,
         event_type="created",
-        payload=_facility_snapshot(facility),
+        payload=_facility_snapshot(facility, await _tenant_name(session, ctx.tenant_id)),
     )
     return _facility_out(facility)
 
@@ -234,7 +241,7 @@ async def patch_facility(
         aggregate_type="facility",
         aggregate_id=facility.id,
         event_type="updated",
-        payload=_facility_snapshot(facility),
+        payload=_facility_snapshot(facility, await _tenant_name(session, ctx.tenant_id)),
     )
     return _facility_out(facility)
 

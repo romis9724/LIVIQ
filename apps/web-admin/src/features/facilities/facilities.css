@@ -17,6 +17,11 @@
   --fac-node-incident-resolved: #af8783; /* 조치된 장애 — danger 완화 */
   --fac-node-maintenance: #95a0ab; /* 정비 — 중립 */
   --fac-graph-link: #b9bec4;
+  /* H13-7 — 위치·평면도·평면도 마커(계통/위치 렌즈와 무관하거나 렌즈별로 별도 처리하는 고정색). */
+  --fac-node-location: #3d434a; /* 위치 — 여러 계통이 공유하는 중립 어두운 색(허브 느낌) */
+  --fac-node-floor-plan: #c2760f; /* 평면도 — 시설 계통색과 겹치지 않는 고유색 */
+  --fac-node-plan-device: #9aa3ab; /* 평면도 마커 — 도면당 수십개라 눈에 띄지 않는 옅은 색 */
+  --fac-node-complex: #23272b; /* 단지 — tenant당 1개뿐인 최상위 허브, 가장 어두운 중립색 */
 }
 
 .fac-head {
@@ -495,12 +500,40 @@
 
 /* ── 시설 그래프 (H13-1, ADR-0022) ─────────────────────────────────────────── */
 
+/* 렌즈 탭 + 평면도 토글을 한 줄에 둔다(H13-7) — 좁은 화면은 줄바꿈. */
+.fac-graph__toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-8) 0;
+}
+
 /* 뷰 토글 — 그래프(3D)의 접근성 대체 수단이 목록이므로 포커스 순서 맨 앞에 둔다. */
 .fac-viewtabs {
   flex: none;
   display: flex;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-8) 0;
+}
+
+/* 평면도 표시 토글 — 기본 꺼짐(마커 과밀 방지, H13-6). 렌즈 탭과 같은 칩 스타일. */
+.fac-plantoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+.fac-plantoggle input {
+  accent-color: var(--color-accent);
 }
 .fac-viewtab {
   display: inline-flex;

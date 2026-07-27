@@ -9,9 +9,21 @@ import {
   INCIDENT_OPEN_COLOR_VAR,
   INCIDENT_RESOLVED_COLOR_VAR,
   MAINTENANCE_COLOR_VAR,
+  LOCATION_COLOR_VAR,
+  FLOOR_PLAN_COLOR_VAR,
+  PLAN_DEVICE_COLOR_VAR,
+  COMPLEX_COLOR_VAR,
+  NODE_VAL_FACILITY,
+  NODE_VAL_EVENT,
+  NODE_VAL_LOCATION,
+  NODE_VAL_FLOOR_PLAN,
+  NODE_VAL_PLAN_DEVICE,
+  NODE_VAL_COMPLEX,
   buildingToken,
   centerByNodeId,
+  complexSummary,
   estimatedInquiries,
+  facilitiesAtLocation,
   findFacilityByName,
   groupCenters,
   lensColorVar,
@@ -20,6 +32,7 @@ import {
   lensNodeColorVar,
   locationOf,
   matchesBuilding,
+  nodeBaseVal,
   nodeColorVar,
   searchFacilities,
   systemByNodeId,
@@ -64,6 +77,58 @@ function maintenanceNode(pgId: string): GraphNode {
     location: null,
     status: null,
     at: "2026-07-02T00:00:00Z",
+    resolved: null,
+  };
+}
+
+function locationNode(pgId: string, name: string): GraphNode {
+  return {
+    pgId,
+    label: "location",
+    name,
+    type: null,
+    location: null,
+    status: null,
+    at: null,
+    resolved: null,
+  };
+}
+
+function floorPlanNode(pgId: string, name: string): GraphNode {
+  return {
+    pgId,
+    label: "floor_plan",
+    name,
+    type: null,
+    location: null,
+    status: null,
+    at: null,
+    resolved: null,
+  };
+}
+
+function complexNode(pgId: string, name: string): GraphNode {
+  return {
+    pgId,
+    label: "complex",
+    name,
+    type: null,
+    location: null,
+    status: null,
+    at: null,
+    resolved: null,
+  };
+}
+
+function planDeviceNode(pgId: string, name: string): GraphNode {
+  return {
+    pgId,
+    label: "plan_device",
+    name,
+    type: null,
+    location: null,
+    status: null,
+    at: null,
     resolved: null,
   };
 }
@@ -150,6 +215,31 @@ describe("systemByNodeId", () => {
     const byId = systemByNodeId([facilityNode("f1"), incidentNode("i1", false)], []);
 
     expect(byId.has("i1")).toBe(false);
+  });
+
+  it("location 노드는 LOCATED_IN 으로 연결돼도 계통을 물려받지 않는다(여러 계통 공유 — H13-7)", () => {
+    const nodes = [facilityNode("f1", { type: "승강기" }), locationNode("401동", "401동")];
+    const links: GraphLink[] = [{ source: "f1", target: "401동", kind: "LOCATED_IN" }];
+
+    const byId = systemByNodeId(nodes, links);
+
+    expect(byId.has("401동")).toBe(false);
+  });
+
+  it("complex 노드는 PART_OF 로 연결돼도 계통을 물려받지 않는다(tenant당 1개 허브 — H13-7 확장)", () => {
+    const nodes = [
+      facilityNode("f1", { type: "승강기" }),
+      locationNode("401동", "401동"),
+      complexNode("c1", "첫마을"),
+    ];
+    const links: GraphLink[] = [
+      { source: "f1", target: "401동", kind: "LOCATED_IN" },
+      { source: "401동", target: "c1", kind: "PART_OF" },
+    ];
+
+    const byId = systemByNodeId(nodes, links);
+
+    expect(byId.has("c1")).toBe(false);
   });
 });
 
@@ -322,6 +412,45 @@ describe("lensGroupByNodeId", () => {
     expect(byId.get("f1")).toBe("401동");
     expect(byId.get("i1")).toBe("401동");
   });
+
+  it("location 렌즈 — location 노드도 연결 시설의 동을 물려받는다(H13-7 결정 3)", () => {
+    const withLocation = [...nodes, locationNode("401동 기계실", "401동 기계실")];
+    const withLink: GraphLink[] = [
+      ...links,
+      { source: "f1", target: "401동 기계실", kind: "LOCATED_IN" },
+    ];
+
+    const byId = lensGroupByNodeId("location", withLocation, withLink);
+
+    expect(byId.get("401동 기계실")).toBe("401동");
+  });
+
+  it("location 렌즈 — floor_plan·plan_device 는 그룹을 물려받지 않는다(고유색 고정)", () => {
+    const withPlan = [...nodes, floorPlanNode("fp1", "84A"), planDeviceNode("d1", "감지기(안방)")];
+    const withLink: GraphLink[] = [
+      ...links,
+      { source: "f1", target: "fp1", kind: "LINKED_TO" },
+      { source: "fp1", target: "d1", kind: "HAS_DEVICE" },
+    ];
+
+    const byId = lensGroupByNodeId("location", withPlan, withLink);
+
+    expect(byId.has("fp1")).toBe(false);
+    expect(byId.has("d1")).toBe(false);
+  });
+
+  it("location 렌즈 — complex 는 PART_OF 로 연결돼도 그룹을 물려받지 않는다(고정색 — H13-7 확장)", () => {
+    const withComplex = [...nodes, locationNode("401동", "401동"), complexNode("c1", "첫마을")];
+    const withLink: GraphLink[] = [
+      ...links,
+      { source: "f1", target: "401동", kind: "LOCATED_IN" },
+      { source: "401동", target: "c1", kind: "PART_OF" },
+    ];
+
+    const byId = lensGroupByNodeId("location", withComplex, withLink);
+
+    expect(byId.has("c1")).toBe(false);
+  });
 });
 
 describe("lensColorVar / lensNodeColorVar", () => {
@@ -342,6 +471,105 @@ describe("lensColorVar / lensNodeColorVar", () => {
     expect(lensNodeColorVar("location", maintenanceNode("m1"), groupById, [])).toBe(
       MAINTENANCE_COLOR_VAR,
     );
+  });
+
+  it("floor_plan·plan_device 는 렌즈·그룹과 무관하게 고유색(H13-7)", () => {
+    const groupById = new Map<string, string>();
+    expect(lensNodeColorVar("system", floorPlanNode("fp1", "84A"), groupById, [])).toBe(
+      FLOOR_PLAN_COLOR_VAR,
+    );
+    expect(lensNodeColorVar("location", planDeviceNode("d1", "감지기"), groupById, [])).toBe(
+      PLAN_DEVICE_COLOR_VAR,
+    );
+  });
+
+  it("complex 는 렌즈·그룹과 무관하게 고유색(tenant당 1개 허브 — H13-7 확장)", () => {
+    const groupById = new Map([["c1", "401동"]]); // 그룹이 있어도 무시돼야 한다
+    expect(lensNodeColorVar("system", complexNode("c1", "첫마을"), groupById, [])).toBe(
+      COMPLEX_COLOR_VAR,
+    );
+    expect(lensNodeColorVar("location", complexNode("c1", "첫마을"), groupById, ["401동"])).toBe(
+      COMPLEX_COLOR_VAR,
+    );
+  });
+
+  it("location 노드 — 계통 렌즈에선 중립색(여러 계통이 공유하는 노드라 — H13-7 결정 3)", () => {
+    const groupById = new Map<string, string>();
+    expect(lensNodeColorVar("system", locationNode("401동", "401동"), groupById, ["전기"])).toBe(
+      LOCATION_COLOR_VAR,
+    );
+  });
+
+  it("location 노드 — 위치 렌즈에선 자기 그룹 중심색(H13-7 결정 3)", () => {
+    const groups = ["401동", "402동"];
+    const groupById = new Map([["401동", "401동"]]);
+    expect(lensNodeColorVar("location", locationNode("401동", "401동"), groupById, groups)).toBe(
+      SYSTEM_COLOR_VARS[0],
+    );
+  });
+});
+
+describe("nodeBaseVal", () => {
+  it("라벨별 기준 크기 — 위치는 시설보다, 평면도 마커는 아주 작게(H13-7)", () => {
+    expect(nodeBaseVal("facility")).toBe(NODE_VAL_FACILITY);
+    expect(nodeBaseVal("location")).toBeGreaterThan(NODE_VAL_FACILITY);
+    expect(nodeBaseVal("floor_plan")).toBeGreaterThan(0);
+    expect(nodeBaseVal("plan_device")).toBeLessThan(NODE_VAL_FACILITY);
+    expect(nodeBaseVal("incident")).toBe(NODE_VAL_EVENT);
+    expect(nodeBaseVal("plan_device")).toBe(NODE_VAL_PLAN_DEVICE);
+    expect(nodeBaseVal("floor_plan")).toBe(NODE_VAL_FLOOR_PLAN);
+    expect(nodeBaseVal("location")).toBe(NODE_VAL_LOCATION);
+  });
+
+  it("complex 는 가장 큰 크기다(tenant당 1개 최상위 허브 — H13-7 확장)", () => {
+    expect(nodeBaseVal("complex")).toBe(NODE_VAL_COMPLEX);
+    expect(nodeBaseVal("complex")).toBeGreaterThan(NODE_VAL_LOCATION);
+  });
+});
+
+describe("complexSummary", () => {
+  it("위치·설비 개수를 센다(장애·정비·평면도 노드는 제외)", () => {
+    const nodes = [
+      facilityNode("f1"),
+      facilityNode("f2"),
+      locationNode("401동", "401동"),
+      locationNode("402동", "402동"),
+      incidentNode("i1", false),
+      floorPlanNode("fp1", "84A"),
+      complexNode("c1", "첫마을"),
+    ];
+
+    expect(complexSummary(nodes)).toEqual({ locationCount: 2, facilityCount: 2 });
+  });
+
+  it("위치·설비가 없으면 0", () => {
+    expect(complexSummary([complexNode("c1", "첫마을")])).toEqual({
+      locationCount: 0,
+      facilityCount: 0,
+    });
+  });
+});
+
+describe("facilitiesAtLocation", () => {
+  it("LOCATED_IN 으로 연결된 시설만 모은다(그래프 데이터 파생, 신규 API 없음)", () => {
+    const nodes = [
+      facilityNode("f1", { name: "101동 승강기" }),
+      facilityNode("f2", { name: "101동 소방설비" }),
+      facilityNode("f3", { name: "102동 승강기" }),
+      locationNode("101동 지하", "101동 지하"),
+    ];
+    const links: GraphLink[] = [
+      { source: "f1", target: "101동 지하", kind: "LOCATED_IN" },
+      { source: "f2", target: "101동 지하", kind: "LOCATED_IN" },
+    ];
+
+    const result = facilitiesAtLocation(nodes, links, "101동 지하");
+
+    expect(result.map((n) => n.pgId)).toEqual(["f1", "f2"]);
+  });
+
+  it("연결이 없으면 빈 배열", () => {
+    expect(facilitiesAtLocation([facilityNode("f1")], [], "없는위치")).toEqual([]);
   });
 });
 

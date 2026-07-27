@@ -166,6 +166,7 @@ async def test_create_records_outbox_snapshot(seeded: AsyncSession) -> None:
         "type": "elevator",
         "status": "fault",
         "deleted_at": None,
+        "complex_name": "단지A",
     }
 
 
@@ -276,6 +277,50 @@ async def test_graph_returns_nodes_and_links_without_extra_fields(seeded: AsyncS
         "resolved",
     }
     assert body["nodes"][1]["resolved"] is True
+
+
+async def test_graph_accepts_location_node_and_link(seeded: AsyncSession) -> None:
+    """Location 노드·LOCATED_IN 관계가 응답 스키마를 통과한다(H13-7 회귀)."""
+    facility_id, location_id = str(uuid.uuid4()), "지하1층"
+    stub = StubGraph(
+        FacilityGraph(
+            nodes=(
+                GraphNode(pg_id=facility_id, label="facility", name="지하펌프", status="fault"),
+                GraphNode(pg_id=location_id, label="location", name=location_id),
+            ),
+            links=(GraphLink(source=facility_id, target=location_id, kind="LOCATED_IN"),),
+        )
+    )
+    async with _make_client(seeded, graph=stub) as c:
+        response = await c.get("/admin/facilities/graph")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [n["label"] for n in body["nodes"]] == ["facility", "location"]
+    assert body["links"] == [
+        {"source": facility_id, "target": location_id, "kind": "LOCATED_IN"}
+    ]
+
+
+async def test_graph_accepts_complex_node_and_link(seeded: AsyncSession) -> None:
+    """Complex(단지 루트) 노드·PART_OF 관계가 응답 스키마를 통과한다(H13-7 회귀)."""
+    facility_id, complex_id = str(uuid.uuid4()), "첫마을 4단지 푸르지오"
+    stub = StubGraph(
+        FacilityGraph(
+            nodes=(
+                GraphNode(pg_id=facility_id, label="facility", name="지하펌프", status="fault"),
+                GraphNode(pg_id=complex_id, label="complex", name=complex_id),
+            ),
+            links=(GraphLink(source=facility_id, target=complex_id, kind="PART_OF"),),
+        )
+    )
+    async with _make_client(seeded, graph=stub) as c:
+        response = await c.get("/admin/facilities/graph")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [n["label"] for n in body["nodes"]] == ["facility", "complex"]
+    assert body["links"] == [{"source": facility_id, "target": complex_id, "kind": "PART_OF"}]
 
 
 async def test_graph_include_plan_defaults_false_and_opts_in(seeded: AsyncSession) -> None:

@@ -42,7 +42,15 @@ from app.schemas.floor_plans import (
     MyFloorPlanOut,
     PlanDeviceOut,
 )
-from liviq_db.models import Facility, FloorPlan, HouseholdGeometry, PlanDevice, UnitType, User
+from liviq_db.models import (
+    Facility,
+    FloorPlan,
+    HouseholdGeometry,
+    PlanDevice,
+    Tenant,
+    UnitType,
+    User,
+)
 
 router = APIRouter(tags=["floor-plans"])
 
@@ -132,17 +140,27 @@ def _base_devices_stmt(tenant_id: uuid.UUID, floor_plan_id: uuid.UUID) -> Select
     )
 
 
+async def _tenant_name(session: AsyncSession, tenant_id: uuid.UUID) -> str | None:
+    """단지명 — Complex 그래프 노드용(사용자 요청: 그래프 중심에 단지 노드, H13-7)."""
+    return await session.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
+
+
 def _floor_plan_snapshot(
-    unit_type_name: str, plan: FloorPlan, devices: Sequence[PlanDevice]
+    unit_type_name: str,
+    plan: FloorPlan,
+    devices: Sequence[PlanDevice],
+    complex_name: str | None,
 ) -> dict[str, Any]:
     """graph-sync 워커가 payload만으로 Neo4j MERGE하도록 도면+마커 스냅샷 전부 담는다(§4.9).
 
     memo·photo_key는 표시용이라 싣지 않는다(그래프는 위치 렌즈 목적, 규칙 7).
+    `complex_name`은 단지(tenants.name) — 그래프 중심 Complex 노드 실체화용(H13-7).
     """
     return {
         "unit_type_name": unit_type_name,
         "image_width": plan.image_width,
         "image_height": plan.image_height,
+        "complex_name": complex_name,
         "devices": [
             {
                 "pg_id": d.id,
@@ -332,7 +350,9 @@ async def upsert_admin_floor_plan(
         aggregate_type="floor_plan",
         aggregate_id=plan.id,
         event_type="created" if is_new else "updated",
-        payload=_floor_plan_snapshot(unit_type.name, plan, devices),
+        payload=_floor_plan_snapshot(
+            unit_type.name, plan, devices, await _tenant_name(session, ctx.tenant_id)
+        ),
     )
 
     device_count = len(devices)
@@ -424,7 +444,9 @@ async def replace_admin_plan_devices(
         aggregate_type="floor_plan",
         aggregate_id=plan.id,
         event_type="updated",
-        payload=_floor_plan_snapshot(unit_type_name or "", plan, devices),
+        payload=_floor_plan_snapshot(
+            unit_type_name or "", plan, devices, await _tenant_name(session, ctx.tenant_id)
+        ),
     )
     return AdminFloorPlanDetailOut(
         plan=FloorPlanOut(

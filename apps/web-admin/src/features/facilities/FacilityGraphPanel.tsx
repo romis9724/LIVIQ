@@ -7,18 +7,34 @@ import {
   getFacility,
   listAdminInquiries,
   type FacilityDetail,
+  type GraphLink,
+  type GraphNode,
   type Inquiry,
 } from "@/lib/api";
 import { STATUS_META as INQUIRY_STATUS_META } from "@/features/inquiry-admin/data";
 import { STATUS_META, shortDate } from "./data";
 import { HistorySection } from "./FacilityHistory";
-import { estimatedInquiries, type EstimatedInquiries } from "./graph-data";
+import {
+  complexSummary,
+  estimatedInquiries,
+  facilitiesAtLocation,
+  type EstimatedInquiries,
+} from "./graph-data";
 
 // 그래프 노드 클릭 → 시설 상세. 데이터는 목록 뷰와 같은 GET /admin/facilities/{id} 를 재사용한다
 // (그래프는 읽기 전용 소비자 — ADR-0022 결정 1). 상태 변경·기록은 목록 뷰 다이얼로그가 담당.
+// location·floor_plan·complex 노드는 상세 엔드포인트가 없어 그래프 데이터에서 바로 파생한다(H13-7).
+
+export type GraphPanelSelection =
+  | { kind: "facility"; facilityId: string }
+  | { kind: "location"; node: GraphNode }
+  | { kind: "floor_plan"; node: GraphNode }
+  | { kind: "complex"; node: GraphNode };
 
 interface FacilityGraphPanelProps {
-  facilityId: string | null;
+  selection: GraphPanelSelection | null;
+  nodes: readonly GraphNode[];
+  links: readonly GraphLink[];
 }
 
 function errorMessage(err: unknown): string {
@@ -26,7 +42,8 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-export function FacilityGraphPanel({ facilityId }: FacilityGraphPanelProps) {
+export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPanelProps) {
+  const facilityId = selection?.kind === "facility" ? selection.facilityId : null;
   const [detail, setDetail] = useState<FacilityDetail | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,14 +85,47 @@ export function FacilityGraphPanel({ facilityId }: FacilityGraphPanelProps) {
     };
   }, []);
 
-  if (!facilityId) {
+  if (!selection) {
     return (
       <aside className="fac-graph__panel">
         <EmptyState
           icon="🕸"
           title="노드를 선택하세요"
-          description="그래프에서 설비·장애·정비 노드를 클릭하면 해당 설비의 현황과 이력이 표시됩니다."
+          description="그래프에서 설비·위치·장애·정비 노드를 클릭하면 해당 현황과 이력이 표시됩니다."
         />
+      </aside>
+    );
+  }
+
+  if (selection.kind === "location") {
+    return <LocationPanel node={selection.node} nodes={nodes} links={links} />;
+  }
+
+  if (selection.kind === "floor_plan") {
+    return (
+      <aside className="fac-graph__panel">
+        <EmptyState
+          icon="🗺"
+          title={selection.node.name ?? "평면도"}
+          description="이 평면도의 도면·마커는 ‘평면도’ 탭에서 확인·수정할 수 있습니다."
+        />
+      </aside>
+    );
+  }
+
+  if (selection.kind === "complex") {
+    const { locationCount, facilityCount } = complexSummary(nodes);
+    return (
+      <aside className="fac-graph__panel">
+        <div className="fac-detail__head">
+          <span className="fac-detail__icon" aria-hidden="true">
+            🏘
+          </span>
+          <div className="fac-detail__name">{selection.node.name ?? "단지"}</div>
+        </div>
+        <p className="fac-detail__desc">
+          위치 {locationCount}개 · 설비 {facilityCount}개
+        </p>
       </aside>
     );
   }
@@ -144,6 +194,43 @@ export function FacilityGraphPanel({ facilityId }: FacilityGraphPanelProps) {
       />
 
       <RelatedInquiries linked={linked} estimated={estimated} />
+    </aside>
+  );
+}
+
+/** location 노드 패널 — 이 위치에 LOCATED_IN 으로 연결된 설비 목록(그래프 데이터 파생, 신규
+ *  API 없음 — H13-7). 상세·이력은 목록에서 해당 설비 노드를 다시 클릭해 연다. */
+function LocationPanel({
+  node,
+  nodes,
+  links,
+}: {
+  node: GraphNode;
+  nodes: readonly GraphNode[];
+  links: readonly GraphLink[];
+}) {
+  const facilities = facilitiesAtLocation(nodes, links, node.pgId);
+  return (
+    <aside className="fac-graph__panel">
+      <div className="fac-detail__head">
+        <span className="fac-detail__icon" aria-hidden="true">
+          📍
+        </span>
+        <div className="fac-detail__name">{node.name ?? "위치"}</div>
+      </div>
+      <HistorySection
+        title="이 위치의 설비"
+        empty="이 위치에 연결된 설비가 없습니다."
+        items={facilities.map((f) => {
+          const meta = f.status ? STATUS_META[f.status as keyof typeof STATUS_META] : undefined;
+          return {
+            id: f.pgId,
+            date: meta?.label ?? f.status ?? "상태 미상",
+            primary: f.name ?? "(이름 없음)",
+            secondary: f.type ? `계통: ${f.type}` : null,
+          };
+        })}
+      />
     </aside>
   );
 }

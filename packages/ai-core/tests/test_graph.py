@@ -53,6 +53,155 @@ async def test_merge_facility_idempotent_and_version_reversal(graph: GraphClient
     assert rows[0]["name"] == "교체된펌프"
 
 
+async def test_merge_facility_creates_location_and_located_in(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props={"name": "펌프", "location": "101동", "status": "normal"},
+        version=1,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p, tenant_id:$t})-[:LOCATED_IN]->(loc:Location) "
+        "RETURN loc.name AS name, loc.tenant_id AS tenant_id",
+        p=pg_id,
+        t=tenant,
+    )
+    assert len(rows) == 1
+    assert rows[0]["name"] == "101동"
+    assert rows[0]["tenant_id"] == tenant
+
+
+async def test_merge_facility_relocation_rewires_located_in(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=pg_id, props={"name": "펌프", "location": "101동"}, version=1
+    )
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=pg_id, props={"name": "펌프", "location": "102동"}, version=2
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p})-[:LOCATED_IN]->(loc:Location) RETURN loc.name AS name",
+        p=pg_id,
+    )
+    assert [r["name"] for r in rows] == ["102동"]  # 옛 관계 소멸, 새 관계 1개만
+
+
+async def test_merge_facility_null_location_removes_located_in(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=pg_id, props={"name": "펌프", "location": "101동"}, version=1
+    )
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=pg_id, props={"name": "펌프", "location": None}, version=2
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p})-[:LOCATED_IN]->(loc:Location) RETURN count(*) AS c",
+        p=pg_id,
+    )
+    assert rows[0]["c"] == 0
+
+
+async def test_merge_facility_location_cross_tenant_isolation(graph: GraphClient) -> None:
+    tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+    pg_a, pg_b = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant_a, pg_id=pg_a, props={"name": "A펌프", "location": "101동"}, version=1
+    )
+    await graph.merge_facility(
+        tenant_id=tenant_b, pg_id=pg_b, props={"name": "B펌프", "location": "101동"}, version=1
+    )
+
+    rows = await _read(
+        graph, "MATCH (loc:Location {name:$n}) RETURN loc.tenant_id AS tenant_id", n="101동"
+    )
+    assert {r["tenant_id"] for r in rows} == {tenant_a, tenant_b}  # 같은 이름, 분리된 노드
+
+    leak = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p, tenant_id:$t})-[:LOCATED_IN]->(loc:Location) "
+        "RETURN loc.tenant_id AS tenant_id",
+        p=pg_a,
+        t=tenant_a,
+    )
+    assert leak[0]["tenant_id"] == tenant_a
+
+
+async def test_merge_facility_complex_via_location_chain(graph: GraphClient) -> None:
+    """facility→loc→complex 체인 — location이 있으면 loc이 PART_OF, facility는 직결 안 함."""
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props={"name": "펌프", "location": "101동", "complex_name": "첫마을 4단지 푸르지오"},
+        version=1,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p})-[:LOCATED_IN]->(loc:Location)-[:PART_OF]->"
+        "(c:Complex {tenant_id:$t}) RETURN c.name AS name",
+        p=pg_id,
+        t=tenant,
+    )
+    assert rows[0]["name"] == "첫마을 4단지 푸르지오"
+
+    direct = await _read(
+        graph, "MATCH (f:Facility {pg_id:$p})-[:PART_OF]->(:Complex) RETURN count(*) AS c", p=pg_id
+    )
+    assert direct[0]["c"] == 0  # location 경유라 직결 없음
+
+
+async def test_merge_facility_complex_direct_without_location(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props={"name": "펌프", "complex_name": "첫마을 4단지 푸르지오"},
+        version=1,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p})-[:PART_OF]->(c:Complex {tenant_id:$t}) "
+        "RETURN c.name AS name",
+        p=pg_id,
+        t=tenant,
+    )
+    assert rows[0]["name"] == "첫마을 4단지 푸르지오"
+
+
+async def test_merge_facility_complex_tenant_isolation(graph: GraphClient) -> None:
+    tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+    pg_a, pg_b = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant_a, pg_id=pg_a, props={"name": "A펌프", "complex_name": "단지A"}, version=1
+    )
+    await graph.merge_facility(
+        tenant_id=tenant_b, pg_id=pg_b, props={"name": "B펌프", "complex_name": "단지A"}, version=1
+    )
+
+    rows = await _read(
+        graph, "MATCH (c:Complex {name:$n}) RETURN c.tenant_id AS tenant_id", n="단지A"
+    )
+    assert {r["tenant_id"] for r in rows} == {tenant_a, tenant_b}  # 이름 같아도 tenant별 분리 노드
+
+    leak = await _read(
+        graph,
+        "MATCH (f:Facility {pg_id:$p, tenant_id:$t})-[:PART_OF]->(c:Complex) "
+        "RETURN c.tenant_id AS tenant_id",
+        p=pg_a,
+        t=tenant_a,
+    )
+    assert leak[0]["tenant_id"] == tenant_a
+
+
 async def test_cross_tenant_incident_isolation(graph: GraphClient) -> None:
     tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
     facility_b = str(uuid.uuid4())  # tenant B 소유 시설
@@ -181,7 +330,8 @@ async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(
     result = await graph.fetch_facility_graph(tenant_id=tenant)
 
     by_id = {n.pg_id: n for n in result.nodes}
-    assert set(by_id) == {facility, orphan, incident, log_id}
+    assert set(by_id) == {facility, orphan, incident, log_id, "지하1층"}
+    assert by_id["지하1층"].label == "location"
     pump = by_id[facility]
     assert (pump.label, pump.name, pump.type, pump.location, pump.status) == (
         "facility",
@@ -206,6 +356,61 @@ async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(
     assert {(link.source, link.target, link.kind) for link in result.links} == {
         (facility, incident, "HAS_INCIDENT"),
         (facility, log_id, "HAS_MAINTENANCE"),
+        (facility, "지하1층", "LOCATED_IN"),
+    }
+
+
+async def test_fetch_facility_graph_includes_location_node_and_link(
+    graph: GraphClient,
+) -> None:
+    """Location·LOCATED_IN은 include_plan과 무관하게 기본 그래프에 항상 실린다(H13-7)."""
+    tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=facility_id,
+        props={"name": "지하펌프", "location": "지하1층", "status": "normal"},
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    locations = [n for n in result.nodes if n.label == "location"]
+    assert len(locations) == 1
+    assert locations[0].name == "지하1층"
+    assert (facility_id, locations[0].pg_id, "LOCATED_IN") in {
+        (link.source, link.target, link.kind) for link in result.links
+    }
+
+
+async def test_fetch_facility_graph_includes_complex_node_and_link(
+    graph: GraphClient,
+) -> None:
+    """Complex(단지 루트)·PART_OF는 include_plan과 무관하게 기본 그래프에 항상 실린다(H13-7)."""
+    tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=facility_id,
+        props={
+            "name": "지하펌프",
+            "location": "지하1층",
+            "status": "normal",
+            "complex_name": "첫마을 4단지 푸르지오",
+        },
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    complexes = [n for n in result.nodes if n.label == "complex"]
+    assert len(complexes) == 1
+    assert complexes[0].name == "첫마을 4단지 푸르지오"
+    locations = [n for n in result.nodes if n.label == "location"]
+    # 체인: facility -[LOCATED_IN]-> location -[PART_OF]-> complex (직결 없음)
+    assert (locations[0].pg_id, complexes[0].pg_id, "PART_OF") in {
+        (link.source, link.target, link.kind) for link in result.links
+    }
+    assert (facility_id, complexes[0].pg_id, "PART_OF") not in {
+        (link.source, link.target, link.kind) for link in result.links
     }
 
 
@@ -332,6 +537,21 @@ async def test_replace_floor_plan_links_device_to_facility(graph: GraphClient) -
     assert rows[0]["c"] == 1
 
 
+async def test_replace_floor_plan_links_complex(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    props = {**_plan_props(), "complex_name": "첫마을 4단지 푸르지오"}
+    await graph.replace_floor_plan(tenant_id=tenant, pg_id=pg_id, props=props, version=1)
+
+    rows = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:PART_OF]->(c:Complex) "
+        "RETURN c.name AS name",
+        p=pg_id,
+        t=tenant,
+    )
+    assert rows[0]["name"] == "첫마을 4단지 푸르지오"
+
+
 async def test_replace_floor_plan_cross_tenant_isolation(graph: GraphClient) -> None:
     tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
     pg_id = str(uuid.uuid4())  # 우연히 동일 pg_id를 쓰더라도 tenant로 분리돼야 함
@@ -367,7 +587,10 @@ async def test_replace_floor_plan_cross_tenant_isolation(graph: GraphClient) -> 
 async def test_merge_facility_tombstone_deletes_node_and_relations(graph: GraphClient) -> None:
     tenant, facility_id, incident_id = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
     await graph.merge_facility(
-        tenant_id=tenant, pg_id=facility_id, props={"name": "펌프", "status": "fault"}, version=1
+        tenant_id=tenant,
+        pg_id=facility_id,
+        props={"name": "펌프", "location": "101동", "status": "fault"},
+        version=1,
     )
     await graph.merge_incident(
         tenant_id=tenant,
@@ -388,6 +611,13 @@ async def test_merge_facility_tombstone_deletes_node_and_relations(graph: GraphC
         graph, "MATCH (f:Facility {pg_id:$p, tenant_id:$t}) RETURN f", p=facility_id, t=tenant
     )
     assert rows == []  # 노드 자체가 사라짐(관계 포함 detach delete)
+
+    location_rel = await _read(
+        graph,
+        "MATCH (loc:Location {name:'101동', tenant_id:$t})<-[:LOCATED_IN]-() RETURN count(*) AS c",
+        t=tenant,
+    )
+    assert location_rel[0]["c"] == 0  # LOCATED_IN도 detach delete로 함께 소멸
 
 
 async def test_fetch_facility_graph_include_plan_adds_plan_nodes(graph: GraphClient) -> None:
