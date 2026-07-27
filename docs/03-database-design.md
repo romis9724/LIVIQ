@@ -668,7 +668,7 @@ household_geometries(id, tenant_id,
 ### 4.9 outbox (PG→Neo4j 동기화)
 
 ```sql
-outbox_events(id, tenant_id, aggregate_type,          -- facility|incident|maintenance_log|plan_device
+outbox_events(id, tenant_id, aggregate_type,          -- facility|incident|maintenance_log|floor_plan(H13-6 — 도면+마커 전체 스냅샷. 마커는 delete-then-insert 전체 교체(§4.8)라 개별 plan_device 이벤트 대신 도면 단위 스냅샷 1건으로 투영)
               aggregate_id, event_type,               -- created|updated|deleted
               sequence bigint,                        -- aggregate별 단조 증가(순서 보장)
               dedupe_key UNIQUE,                      -- 중복 이벤트 차단
