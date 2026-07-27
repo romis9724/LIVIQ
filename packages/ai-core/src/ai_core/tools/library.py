@@ -306,7 +306,13 @@ def default_registry() -> ToolRegistry:
             ),
             Tool(
                 name="get_facilities",
-                description="단지 설비 목록과 현재 상태를 조회한다.",
+                # 설비 현황 질문("승강기 몇 대", "어떤 설비", "상태")이 문서 검색으로 새지
+                # 않도록 용례를 명시한다 — 파일럿 실측에서 대수 질문이 라우팅되지 않았다.
+                description=(
+                    "단지 공용 설비(승강기·펌프·소방·CCTV·충전기 등)의 목록·대수·위치·"
+                    "현재 상태를 조회한다. 설비가 몇 대인지, 어떤 설비가 있는지, 상태가 "
+                    "어떤지 묻는 질문에 사용한다."
+                ),
                 args_model=GetFacilitiesArgs,
                 run=_get_facilities,
                 allowed_roles=FACILITY_ROLES,
