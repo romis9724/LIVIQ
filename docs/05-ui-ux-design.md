@@ -108,6 +108,24 @@
   무대에 렌더) + UI 오버레이(범례·세대 상세)는 토큰 기반 밝은 패널로 통일. **키 미설정 빈 상태**(§9): `NEXT_PUBLIC_VWORLD_API_KEY`
   없으면 실사 뷰 대신 "VWorld 키 미설정 — 발급·등록 안내" 안내(기본 deck.gl 뷰는 정상 동작). Cesium은 무거우므로
   dynamic import(deck.gl과 동일 격리, [performance] 번들 예산 예외는 트윈 라우트 한정).
+- **시설 그래프**(H13 · [ADR-0022](adr/0022-facility-graph-dashboard.md)): 시설관리 **메인이 3D force-directed
+  그래프**(react-force-graph-3d — 노드 `Facility`·`Incident`·`Maintenance`, 엣지 `HAS_INCIDENT`·`HAS_MAINTENANCE`).
+  - **렌즈 토글**: 계통별(기본 — `facilities.type`, 계통색) ↔ 위치별(동 단위, H13-2). 계통 클러스터는 포스
+    그룹핑으로 만들고 가상 허브 노드는 두지 않는다. 색은 semantic·계통 토큰만(하드코딩 금지),
+    **범례 상시 표시** + 색만으로 상태 전달 금지(노드 상태는 패널 텍스트로 병기 — §6).
+  - **검색 → 카메라 fly-to**: 3D는 노드가 겹쳐 눈으로 찾기 어렵다. 검색 결과 선택 시 카메라가 해당 노드로
+    이동·강조하는 경로가 **기본 탐색 수단**(선택 기능 아님). `prefers-reduced-motion`이면 이동 애니메이션 없이 즉시 이동.
+  - **상세 패널**: 노드 클릭 → 현황(normal/check/fault/risk) · 정비 이력 · 고장 이력 · 관련 민원.
+    데이터는 기존 `GET /admin/facilities/{id}` 재사용. 민원은 **정식 연결(담당자 지정·LLM 추천 승인)과
+    위치 추정을 배지로 구분**하고, 추정은 "추정" 배지 + 근거(동 매칭) 문구를 함께 보인다 — 확정처럼 보이지 않게.
+  - **접근성(WCAG 2.2 AA)**: WebGL canvas는 스크린리더·키보드로 탐색할 수 없다. 따라서 **목록 뷰가 그래프의
+    동등 기능 대체 수단**이다 — 같은 화면의 토글로 항상 도달 가능하고(키보드 포커스 순서 앞쪽), 같은 설비·이력·
+    민원을 표와 다이얼로그로 제공한다. 그래프는 **보조 표현**으로 취급하고 그래프에서만 가능한 조작을 만들지 않는다.
+  - **빈/오류 상태**(§9): WebGL 미지원·시설 0건은 명시적 빈 상태로 목록 뷰를 권한다. **Neo4j 미가용**은 오류가
+    아니라 PG 축약 그래프(노드만) + "관계 정보 일시 미표시" 안내 배너(`degraded` — [01 §10](01-architecture.md)).
+  - **성능**: three.js는 무거우므로 `dynamic import` `ssr:false`로 시설 라우트에 격리(deck.gl·Cesium과 동일
+    — §7 번들 예산 예외). 파일럿 규모(설비 수십)에서 상호작용 60fps 목표, **500+ 노드에서 저하되면 렌즈 필터
+    기본 적용·2D/클러스터 축약 재검토**([ADR-0022](adr/0022-facility-graph-dashboard.md) 재검토 신호).
 
 ## 6. 접근성 (WCAG 2.2 AA)
 
@@ -127,6 +145,7 @@
 - 이미지: 명시적 width/height, 본문 외 lazy, AVIF/WebP.
 - 번들 예산(랜딩<150KB/앱<300KB gz), 무거운 라이브러리 동적 import.
   **예외(H9)**: 관리자 `/twin` 라우트는 deck.gl(WebGL) 탑재로 예산 초과 허용 — 라우트 단위 dynamic import로 격리해 타 페이지 번들 무영향이 조건.
+  **예외(H13)**: 관리자 시설 라우트도 react-force-graph-3d(three.js) 탑재로 동일 예외 — 조건도 동일(`dynamic import` `ssr:false` 격리, [ADR-0022](adr/0022-facility-graph-dashboard.md)).
 - PWA: manifest·설치 가능. 오프라인 셸은 **공지 등 `tenant-public`만** 캐시. **관리비·민원·개인 대화는 service worker 캐시 금지**(`Cache-Control: no-store`). 오프라인 화면엔 데이터 기준 시점·stale 표시. 로그아웃·계정 전환 시 캐시 purge([06 §6](06-security-privacy.md)).
 
 ## 8. 콘텐츠/표현 가이드 (한국어)
