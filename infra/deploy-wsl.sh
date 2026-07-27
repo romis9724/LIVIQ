@@ -211,8 +211,22 @@ smoke() {
 publish() {
   local target="${REGISTRY_IMAGE:-${CI_REGISTRY_IMAGE:-}}"
   [ -n "$target" ] || die "REGISTRY_IMAGE(또는 CI_REGISTRY_IMAGE) 필요 — 예: 192.168.10.153:8082/liviq"
-  local user="${REGISTRY_USER:-${CI_REGISTRY_USER:-}}"
-  local pass="${REGISTRY_PASSWORD:-${CI_REGISTRY_PASSWORD:-}}"
+  # 자격증명은 **대상 레지스트리와 짝이 맞아야 한다.** GitLab 잡 토큰(CI_REGISTRY_*)은 GitLab
+  # 레지스트리 전용이므로, 대상이 CI_REGISTRY_IMAGE 가 아닐 때 그걸로 폴백하면 남의 레지스트리에
+  # 엉뚱한 자격증명을 들이민다 → 401. 실제로 밟았다(2026-07-27): protected 변수가 비보호
+  # 브랜치에 주입되지 않아 REGISTRY_USER 가 비었고, 폴백이 잡 토큰으로 Nexus 로그인을 시도했다.
+  # 그 401 은 "계정이 틀렸다"처럼 보여 원인을 가린다.
+  local user pass
+  if [ -n "${REGISTRY_USER:-}${REGISTRY_PASSWORD:-}" ]; then
+    user="${REGISTRY_USER:-}"; pass="${REGISTRY_PASSWORD:-}"
+  elif [ -n "${CI_REGISTRY_IMAGE:-}" ] && [ "$target" = "${CI_REGISTRY_IMAGE:-}" ]; then
+    user="${CI_REGISTRY_USER:-}"; pass="${CI_REGISTRY_PASSWORD:-}"  # GitLab 레지스트리 = 잡 토큰
+  else
+    die "REGISTRY_USER·REGISTRY_PASSWORD 가 없다 (대상: ${target}).
+  GitLab 잡 토큰은 GitLab 레지스트리 전용이라 폴백하지 않는다.
+  CI 라면 두 변수가 **protected** 인지 확인할 것 — 비보호 브랜치 파이프라인에는 주입되지 않는다
+  (보호 브랜치는 GitLab 프로젝트 Settings > Repository > Protected branches 에서 확인)."
+  fi
 
   # ── 프리플라이트: /v2/ 가 응답하는지, 토큰 realm 이 닿는지 ────────
   # 이걸 안 하면 docker 가 중첩된 메시지로 실패해 원인이 가려진다(실측):
