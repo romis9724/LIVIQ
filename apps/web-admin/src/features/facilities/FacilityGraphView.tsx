@@ -10,8 +10,9 @@ import {
   INCIDENT_RESOLVED_COLOR_VAR,
   MAINTENANCE_COLOR_VAR,
   findFacilityByName,
-  systemColorVar,
-  systemGroups,
+  lensColorVar,
+  lensGroups,
+  type GraphLens,
 } from "./graph-data";
 
 // three.js 는 무겁다 — 시설 라우트에서만 클라이언트로 로드해 타 페이지 번들에 새지 않게 한다
@@ -36,6 +37,16 @@ const NODE_KIND_LEGEND: readonly { label: string; colorVar: string }[] = [
   { label: "정비", colorVar: MAINTENANCE_COLOR_VAR },
 ];
 
+// 렌즈 — 계통별(기본)·위치별(동 단위, H13-2 ADR-0022 결정 2). 범례 제목도 렌즈에 따라 전환.
+const LENS_OPTIONS: readonly { id: GraphLens; label: string }[] = [
+  { id: "system", label: "계통별" },
+  { id: "location", label: "위치별" },
+];
+const LENS_LEGEND_TITLE: Record<GraphLens, string> = {
+  system: "계통(설비 노드)",
+  location: "위치(설비 노드)",
+};
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -52,6 +63,7 @@ interface FacilityGraphViewProps {
 
 export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
+  const [lens, setLens] = useState<GraphLens>("system");
   const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
   const [focus, setFocus] = useState<{ pgId: string; seq: number } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -75,7 +87,7 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
   const graph = state.kind === "ready" ? state.graph : null;
   const nodes = useMemo(() => graph?.nodes ?? [], [graph]);
   const links = useMemo(() => graph?.links ?? [], [graph]);
-  const groups = useMemo(() => systemGroups(nodes), [nodes]);
+  const groups = useMemo(() => lensGroups(lens, nodes), [lens, nodes]);
 
   // 장애·정비 노드 클릭은 부모 시설의 패널을 연다(이력 노드 자체엔 상세 엔드포인트가 없다).
   const facilityIdOf = useCallback(
@@ -186,6 +198,22 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
           </p>
         ) : null}
 
+        <div className="fac-viewtabs" role="tablist" aria-label="그래프 렌즈">
+          {LENS_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="tab"
+              aria-selected={lens === option.id}
+              className="fac-viewtab"
+              data-active={lens === option.id || undefined}
+              onClick={() => setLens(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
         <form className="fac-graph__search" role="search" onSubmit={handleSearch}>
           <label className="fac-graph__search-hint" htmlFor="fac-graph-search">
             설비 검색
@@ -219,16 +247,17 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
               nodes={nodes}
               links={links}
               groups={groups}
+              lens={lens}
               focus={focus}
               onSelectNode={handleSelectNode}
             />
             <ul className="fac-graph__legend" aria-label="그래프 범례">
-              <li className="fac-graph__legend-title">계통(설비 노드)</li>
+              <li className="fac-graph__legend-title">{LENS_LEGEND_TITLE[lens]}</li>
               {groups.map((group) => (
                 <li key={group} className="fac-graph__legend-item">
                   <span
                     className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
-                    style={{ backgroundColor: `var(${systemColorVar(group, groups)})` }}
+                    style={{ backgroundColor: `var(${lensColorVar(lens, group, groups)})` }}
                     aria-hidden="true"
                   />
                   {group}

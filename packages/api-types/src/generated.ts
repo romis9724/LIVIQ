@@ -566,6 +566,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/inquiries/{inquiry_id}/facility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Link Inquiry Facility
+         * @description 담당자 지정 = 정식 연결(FR-FAC-05 ①). null이면 해제.
+         *
+         *     facility_id를 쓰는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
+         *     대상 설비는 같은 단지의 미삭제 설비여야 한다(아니면 404 — 타 단지 존재 노출 금지).
+         */
+        put: operations["link_inquiry_facility_admin_inquiries__inquiry_id__facility_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/inquiries/{inquiry_id}/facility-suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suggest Inquiry Facility
+         * @description LLM 시설 후보 추천(FR-FAC-05 ②) — 읽기 전용. DB 쓰기·이벤트·알림 어느 것도 없다(규칙 8).
+         *
+         *     연결은 담당자가 PUT /admin/inquiries/{id}/facility로 승인해야 일어난다.
+         *     마스킹 실패·LLM 미가용은 폴백 없이 503 — 추천은 부가 기능이고, 규칙 2는 fail-closed다.
+         */
+        post: operations["suggest_inquiry_facility_admin_inquiries__inquiry_id__facility_suggest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/inquiries/{inquiry_id}/priority": {
         parameters: {
             query?: never;
@@ -2266,6 +2312,14 @@ export interface components {
             /** Nodes */
             nodes: components["schemas"]["GraphNodeOut"][];
         };
+        /**
+         * FacilityLinkIn
+         * @description 정식 연결 승인 입력. null이면 연결 해제(FR-FAC-05 ①).
+         */
+        FacilityLinkIn: {
+            /** Facility Id */
+            facility_id: string | null;
+        };
         /** FacilityListOut */
         FacilityListOut: {
             /** Items */
@@ -2316,6 +2370,31 @@ export interface components {
             status?: ("normal" | "check" | "fault" | "risk") | null;
             /** Type */
             type?: string | null;
+        };
+        /** FacilitySuggestCandidate */
+        FacilitySuggestCandidate: {
+            /**
+             * Facility Id
+             * Format: uuid
+             */
+            facility_id: string;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * FacilitySuggestOut
+         * @description LLM 추천 후보(FR-FAC-05 ②) — 제시일 뿐 연결이 아니다(규칙 8).
+         */
+        FacilitySuggestOut: {
+            /** Candidates */
+            candidates: components["schemas"]["FacilitySuggestCandidate"][];
+            /**
+             * Masked
+             * @default true
+             */
+            masked: boolean;
         };
         /** FeeApplyOut */
         FeeApplyOut: {
@@ -2689,7 +2768,7 @@ export interface components {
              * Type
              * @enum {string}
              */
-            type: "created" | "ai_classified" | "assigned" | "status_changed" | "comment";
+            type: "created" | "ai_classified" | "assigned" | "status_changed" | "comment" | "facility_linked";
         };
         /** InquiryListOut */
         InquiryListOut: {
@@ -2714,6 +2793,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Facility Id */
+            facility_id?: string | null;
+            /** Facility Name */
+            facility_name?: string | null;
             /**
              * Id
              * Format: uuid
@@ -4806,6 +4889,82 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_inquiry_facility_admin_inquiries__inquiry_id__facility_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FacilityLinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InquiryOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggest_inquiry_facility_admin_inquiries__inquiry_id__facility_suggest_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                inquiry_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilitySuggestOut"];
                 };
             };
             /** @description Validation Error */

@@ -9,6 +9,7 @@ import {
   ackInquiry,
   assignInquiry,
   completeInquiry,
+  getMe,
   listAdminInquiries,
   listCodeGroups,
   listInquiryEvents,
@@ -23,6 +24,7 @@ import {
   type StaffMember,
 } from "@/lib/api";
 import { INQUIRY_CATEGORY_GROUP, codeLabelMap, codeOptions, type CodeOption } from "@/lib/codes";
+import { InquiryFacilityLink } from "./InquiryFacilityLink";
 import {
   FILTERS,
   PRIORITY_META,
@@ -71,6 +73,8 @@ export function InquiryAdmin() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [codeGroups, setCodeGroups] = useState<CodeGroup[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 시설 연결 UI는 소장 전용(ADR-0022 결정 3) — 실패해도 목록은 막지 않는다. 서버가 최종 강제.
+  const [isManager, setIsManager] = useState(false);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -96,6 +100,9 @@ export function InquiryAdmin() {
       .catch(() => undefined);
     void listCodeGroups()
       .then(setCodeGroups)
+      .catch(() => undefined);
+    void getMe()
+      .then((me) => setIsManager(me.roles.includes("MANAGER")))
       .catch(() => undefined);
   }, [load]);
 
@@ -205,6 +212,7 @@ export function InquiryAdmin() {
           staffMap={staffMap}
           categoryMap={categoryMap}
           categoryOptions={categoryOptions}
+          isManager={isManager}
           onClose={() => setSelectedId(null)}
           onUpdated={patchLocal}
           showToast={showToast}
@@ -375,6 +383,7 @@ interface InquiryDetailProps {
   staffMap: Map<string, string>;
   categoryMap: Map<string, string>;
   categoryOptions: readonly CodeOption[];
+  isManager: boolean;
   onClose: () => void;
   onUpdated: (updated: Inquiry) => void;
   showToast: (message: string, tone?: ToastTone) => void;
@@ -386,6 +395,7 @@ function InquiryDetail({
   staffMap,
   categoryMap,
   categoryOptions,
+  isManager,
   onClose,
   onUpdated,
   showToast,
@@ -607,6 +617,10 @@ function InquiryDetail({
               </select>
             </label>
           </div>
+
+          {isManager ? (
+            <InquiryFacilityLink inquiry={inquiry} onUpdated={onUpdated} showToast={showToast} />
+          ) : null}
 
           {!isDone ? (
             <div className="ia-complete">

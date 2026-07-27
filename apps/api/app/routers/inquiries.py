@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated
 
@@ -15,12 +16,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.llm.client import LlmClient, LlmError
+from ai_core.masking import MaskingFailedError
 from app.code_refs import validate_category_code
-from app.deps import RequestContext, get_context, get_tenant_session, require_roles
+from app.deps import RequestContext, get_context, get_llm, get_tenant_session, require_roles
+from app.facility_suggest import suggest_facilities
 from app.schemas.inquiries import (
     AssignIn,
     CategoryIn,
     CommentIn,
+    FacilityLinkIn,
+    FacilitySuggestCandidate,
+    FacilitySuggestOut,
     InquiryCategoryListOut,
     InquiryCategoryOut,
     InquiryCreateIn,
@@ -31,18 +38,33 @@ from app.schemas.inquiries import (
     InquiryStatus,
     PriorityIn,
 )
-from liviq_db.models import Code, CodeGroup, Inquiry, InquiryEvent, Notification, User, UserRole
+from liviq_db.models import (
+    Code,
+    CodeGroup,
+    Facility,
+    Inquiry,
+    InquiryEvent,
+    Notification,
+    User,
+    UserRole,
+)
+
+logger = logging.getLogger("app.inquiries")
 
 router = APIRouter(prefix="/inquiries", tags=["inquiries"])
 admin_router = APIRouter(prefix="/admin/inquiries", tags=["inquiries"])
 
 _ADMIN_ROLES = ("MANAGER", "STAFF")
 _ASSIGNABLE_ROLES = ("MANAGER", "STAFF")  # H7-2에서 FACILITY 제거(docs/04 §4)
+# 시설 연결·추천은 시설 기능이라 소장 전용(docs/00 §3.5·docs/04 §4) — _ADMIN_ROLES와 다르다.
+_FACILITY_ROLES = ("MANAGER",)
 _INQUIRY_CATEGORY_GROUP = "INQUIRY_CATEGORY"
 
 
-def _out(inquiry: Inquiry) -> InquiryOut:
-    return InquiryOut.model_validate(inquiry, from_attributes=True)
+def _out(inquiry: Inquiry, *, facility_name: str | None = None) -> InquiryOut:
+    return InquiryOut.model_validate(inquiry, from_attributes=True).model_copy(
+        update={"facility_name": facility_name}
+    )
 
 
 def _add_event(
@@ -472,3 +494,97 @@ async def set_inquiry_category(
     inquiry.category_code_id = body.category_code_id
     await session.flush()
     return _out(inquiry)
+
+
+# ── 민원-시설 연결(FR-FAC-05, ADR-0022 결정 3) ─────────────────────────────
+
+
+@admin_router.put("/{inquiry_id}/facility", response_model=InquiryOut)
+async def link_inquiry_facility(
+    ctx: Annotated[RequestContext, Depends(require_roles(*_FACILITY_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    inquiry_id: uuid.UUID,
+    body: FacilityLinkIn,
+) -> InquiryOut:
+    """담당자 지정 = 정식 연결(FR-FAC-05 ①). null이면 해제.
+
+    facility_id를 쓰는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
+    대상 설비는 같은 단지의 미삭제 설비여야 한다(아니면 404 — 타 단지 존재 노출 금지).
+    """
+    inquiry = await _get_inquiry(session, ctx.tenant_id, inquiry_id)
+    facility = (
+        None
+        if body.facility_id is None
+        else await _get_linkable_facility(session, ctx.tenant_id, body.facility_id)
+    )
+
+    inquiry.facility_id = None if facility is None else facility.id
+    _add_event(
+        session,
+        inquiry,
+        "facility_linked",
+        actor_user_id=ctx.user_id,
+        payload={
+            "facility_id": None if facility is None else str(facility.id),
+            "facility_name": None if facility is None else facility.name,
+        },
+    )
+    await session.flush()
+    return _out(inquiry, facility_name=None if facility is None else facility.name)
+
+
+@admin_router.post("/{inquiry_id}/facility-suggest", response_model=FacilitySuggestOut)
+async def suggest_inquiry_facility(
+    ctx: Annotated[RequestContext, Depends(require_roles(*_FACILITY_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    llm: Annotated[LlmClient, Depends(get_llm)],
+    inquiry_id: uuid.UUID,
+) -> FacilitySuggestOut:
+    """LLM 시설 후보 추천(FR-FAC-05 ②) — 읽기 전용. DB 쓰기·이벤트·알림 어느 것도 없다(규칙 8).
+
+    연결은 담당자가 PUT /admin/inquiries/{id}/facility로 승인해야 일어난다.
+    마스킹 실패·LLM 미가용은 폴백 없이 503 — 추천은 부가 기능이고, 규칙 2는 fail-closed다.
+    """
+    inquiry = await _get_inquiry(session, ctx.tenant_id, inquiry_id)
+    facilities = list(
+        await session.scalars(
+            select(Facility)
+            .where(Facility.tenant_id == ctx.tenant_id, Facility.deleted_at.is_(None))
+            .order_by(Facility.name)
+        )
+    )
+    try:
+        suggested = await suggest_facilities(
+            llm=llm, title=inquiry.title, body=inquiry.body, facilities=facilities
+        )
+    except MaskingFailedError:
+        logger.warning("시설 추천 중단 — 마스킹 fail-closed", exc_info=True)
+        raise HTTPException(
+            status_code=503, detail="개인정보 마스킹에 실패해 추천을 중단했습니다"
+        ) from None
+    except LlmError:
+        logger.warning("시설 추천 중단 — LLM 미가용", exc_info=True)
+        raise HTTPException(status_code=503, detail="AI 추천을 사용할 수 없습니다") from None
+
+    return FacilitySuggestOut(
+        candidates=[
+            FacilitySuggestCandidate(facility_id=s.facility_id, name=s.name, reason=s.reason)
+            for s in suggested
+        ]
+    )
+
+
+async def _get_linkable_facility(
+    session: AsyncSession, tenant_id: uuid.UUID, facility_id: uuid.UUID
+) -> Facility:
+    """같은 단지의 미삭제 설비 — 아니면 404(격리 위해 존재 여부 노출 안 함)."""
+    facility = await session.scalar(
+        select(Facility).where(
+            Facility.id == facility_id,
+            Facility.tenant_id == tenant_id,
+            Facility.deleted_at.is_(None),
+        )
+    )
+    if facility is None:
+        raise HTTPException(status_code=404, detail="시설을 찾을 수 없음")
+    return facility

@@ -36,6 +36,9 @@ class Inquiry(IdMixin, TenantMixin, TimestampMixin, Base):
         tenant_fk("assignee_user_id", "users", name="fk_inquiries_assignee"),
         # 분류는 INQUIRY_CATEGORY 그룹 코드 참조(RESTRICT, 참조 중 삭제 거부 — ADR-0018).
         tenant_fk("category_code_id", "codes", name="fk_inquiries_category_code"),
+        # 담당자가 승인한 정식 연결만 채운다 — LLM 추천은 후보 제시까지(H13-2, ADR-0022).
+        Index("ix_inquiries_tenant_facility", "tenant_id", "facility_id"),
+        tenant_fk("facility_id", "facilities", name="fk_inquiries_facility"),
     )
 
     household_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
@@ -47,6 +50,7 @@ class Inquiry(IdMixin, TenantMixin, TimestampMixin, Base):
     # received|assigned|in_progress|done
     status: Mapped[str] = mapped_column(String, nullable=False)
     assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    facility_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     attachments: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     deleted_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

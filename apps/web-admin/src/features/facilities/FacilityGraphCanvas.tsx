@@ -13,9 +13,10 @@ import {
   NODE_VAL_FOCUS_SCALE,
   centerByNodeId,
   groupCenters,
-  nodeColorVar,
-  systemByNodeId,
+  lensGroupByNodeId,
+  lensNodeColorVar,
   type Coords,
+  type GraphLens,
 } from "./graph-data";
 
 // 이 파일만 three.js(WebGL)를 다룬다 — FacilityGraphView 가 next/dynamic ssr:false 로만 로드해
@@ -36,6 +37,7 @@ interface FacilityGraphCanvasProps {
   nodes: readonly GraphNode[];
   links: readonly GraphLink[];
   groups: readonly string[];
+  lens: GraphLens;
   focus: { pgId: string; seq: number } | null; // seq — 같은 노드 재검색도 다시 날아가게
   onSelectNode: (node: GraphNode) => void;
 }
@@ -99,6 +101,7 @@ export function FacilityGraphCanvas({
   nodes,
   links,
   groups,
+  lens,
   focus,
   onSelectNode,
 }: FacilityGraphCanvasProps) {
@@ -116,10 +119,10 @@ export function FacilityGraphCanvas({
     [nodes, links],
   );
 
-  const systemById = useMemo(() => systemByNodeId(nodes, links), [nodes, links]);
+  const groupById = useMemo(() => lensGroupByNodeId(lens, nodes, links), [lens, nodes, links]);
   const centers = useMemo(
-    () => centerByNodeId(systemById, groupCenters(groups)),
-    [systemById, groups],
+    () => centerByNodeId(groupById, groupCenters(groups)),
+    [groupById, groups],
   );
 
   // CSS 변수 → hex 캐시. 노드마다 getComputedStyle 을 부르지 않도록 한 번만 해석한다.
@@ -127,20 +130,23 @@ export function FacilityGraphCanvas({
     if (!supported) return new Map<string, string>();
     const cache = new Map<string, string>();
     for (const node of nodes) {
-      const name = nodeColorVar(node, systemById, groups);
+      const name = lensNodeColorVar(lens, node, groupById, groups);
       if (!cache.has(name)) cache.set(name, resolveColorVar(name));
     }
     cache.set(LINK_COLOR_VAR, resolveColorVar(LINK_COLOR_VAR));
     return cache;
-  }, [nodes, systemById, groups, supported]);
+  }, [nodes, lens, groupById, groups, supported]);
 
   const colorById = useMemo(() => {
     const byId = new Map<string, string>();
     for (const node of nodes) {
-      byId.set(node.pgId, colors.get(nodeColorVar(node, systemById, groups)) ?? FALLBACK_COLOR);
+      byId.set(
+        node.pgId,
+        colors.get(lensNodeColorVar(lens, node, groupById, groups)) ?? FALLBACK_COLOR,
+      );
     }
     return byId;
-  }, [nodes, colors, systemById, groups]);
+  }, [nodes, colors, lens, groupById, groups]);
 
   useEffect(() => {
     const fg = fgRef.current;
