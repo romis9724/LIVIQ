@@ -3,6 +3,7 @@
 .twin-stage {
   padding: 0;
   overflow: hidden;
+  position: relative; /* 평면도 오버레이(.twin-plan-overlay)의 좌표계 */
 }
 
 /* deck.gl 캔버스 컨테이너 — 절대 배치 캔버스를 담을 상대 좌표계 + 고정 높이. */
@@ -336,7 +337,7 @@
   overflow: hidden;
 }
 
-/* 설비 상태 목록 — 상태 점 + 이름 + 상태 라벨. */
+/* 설비 상태 목록 — 상태 점 + 이름 + 상태 라벨. 설비가 많아도(수십 건) 패널이 늘어나지 않게 내부 스크롤. */
 .twin-status__facilities {
   display: flex;
   flex-direction: column;
@@ -344,6 +345,9 @@
   margin: 0;
   padding: 0;
   list-style: none;
+  max-height: min(32vh, 22rem);
+  overflow-y: auto;
+  overscroll-behavior: contain; /* 끝까지 스크롤해도 페이지가 따라 움직이지 않게 */
 }
 .twin-status__facility {
   display: flex;
@@ -409,8 +413,11 @@
   inset: 0;
   display: flex;
   justify-content: flex-end;
-  background: oklch(0% 0 0 / 0.4);
   z-index: 50;
+}
+/* 평면도 오버레이가 떠 있을 땐 어둡게 덮지 않는다(3D 건물이 오버레이 뒤로 비쳐야 함). */
+.twin-detail-scrim[data-dim] {
+  background: oklch(0% 0 0 / 0.4);
 }
 .twin-detail {
   display: flex;
@@ -576,25 +583,48 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 세대 평면도(H13-4) — 읽기 전용 미니 뷰. 기본 접힘(details/summary)이라 패널이 커지지 않는다. */
-.twin-plan__summary {
-  cursor: pointer;
-  list-style: none;
+/* 세대 평면도(H13-4 → H14-3) — 왼쪽 3D 무대를 통째로 덮는 반투명 오버레이(뒤 건물이 비친다). */
+.twin-plan-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60; /* 세대 상세 스크림(50) 위 — 상세 패널은 오른쪽에 그대로 열려 있다. */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: color-mix(in oklch, var(--color-surface) 78%, transparent);
+  backdrop-filter: blur(2px);
+  animation: twin-plan-overlay-in var(--duration-fast) var(--ease-out);
 }
-.twin-plan__summary::-webkit-details-marker {
-  display: none;
+@keyframes twin-plan-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
-.twin-plan__summary::before {
-  content: "▸";
-  display: inline-block;
-  margin-right: var(--space-2);
-  transition: transform var(--duration-fast) var(--ease-out);
+.twin-plan-overlay__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
-details[open] > .twin-plan__summary::before {
-  transform: rotate(90deg);
+.twin-plan-overlay__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--color-text);
 }
-.twin-plan__body {
-  margin-top: var(--space-3);
+.twin-plan-overlay__stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.twin-plan-overlay .twin-plan__canvas {
+  width: min(100%, 720px);
 }
 .twin-plan__canvas {
   position: relative;

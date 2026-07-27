@@ -1,22 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
-  getFloorPlan,
-  listFloorPlans,
   getTwinHouseholdDetail,
-  type AdminFloorPlanDetail,
   type TwinHouseholdDetail,
   type TwinOpenInquiry,
 } from "@/lib/api";
 import { formatWon } from "@/features/fee-upload/logic";
-import {
-  markerLabel,
-  normalizeUnitType,
-  toPercent,
-} from "@/features/facilities/floor-plan-admin-data";
 
 // 표시용 라벨 — 서버 코드값이 아니면 원문을 그대로 노출(폴백).
 const ROLE_LABELS: Record<string, string> = {
@@ -62,6 +54,10 @@ function shortDate(iso: string): string {
 interface TwinDetailPanelProps {
   householdId: string;
   onClose: () => void;
+  /** 평면도 보기 — 왼쪽 3D 무대 오버레이는 TwinView 가 띄운다(세대 타입을 올려보낸다). */
+  onOpenFloorPlan: (unitTypeLabel: string) => void;
+  /** 평면도 오버레이가 열려 있으면 Escape 는 평면도만 닫는다(상세는 유지). */
+  isFloorPlanOpen: boolean;
 }
 
 type DetailState =
@@ -70,7 +66,12 @@ type DetailState =
   | { kind: "ready"; detail: TwinHouseholdDetail };
 
 /** 세대 상세 우측 슬라이드오버 — 세대원(마스킹)·미종결 민원·당월 관리비. 개인정보는 마스킹만. */
-export function TwinDetailPanel({ householdId, onClose }: TwinDetailPanelProps) {
+export function TwinDetailPanel({
+  householdId,
+  onClose,
+  onOpenFloorPlan,
+  isFloorPlanOpen,
+}: TwinDetailPanelProps) {
   const [state, setState] = useState<DetailState>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -86,25 +87,33 @@ export function TwinDetailPanel({ householdId, onClose }: TwinDetailPanelProps) 
     void load();
   }, [load]);
 
-  // 열려 있는 동안 Escape 로 닫기.
+  // 열려 있는 동안 Escape 로 닫기(평면도 오버레이가 위에 있으면 그쪽이 먼저 닫힌다).
   useEffect(() => {
+    if (isFloorPlanOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, isFloorPlanOpen]);
 
   return (
-    <div className="twin-detail-scrim" onClick={onClose}>
+    // 평면도가 열리면 스크림을 투명하게 — 왼쪽 3D 가 오버레이 뒤로 비쳐야 한다(닫기 클릭 영역은 유지).
+    <div className="twin-detail-scrim" data-dim={!isFloorPlanOpen || undefined} onClick={onClose}>
       <aside
         className="twin-detail"
         role="dialog"
-        aria-modal="true"
+        // 평면도 오버레이가 열리면 상세는 모달이 아니다(포커스가 상세 밖 오버레이로 간다).
+        aria-modal={!isFloorPlanOpen}
         aria-label="세대 상세"
         onClick={(e) => e.stopPropagation()}
       >
-        <TwinDetailContent state={state} onClose={onClose} onRetry={() => void load()} />
+        <TwinDetailContent
+          state={state}
+          onClose={onClose}
+          onRetry={() => void load()}
+          onOpenFloorPlan={onOpenFloorPlan}
+        />
       </aside>
     </div>
   );
@@ -114,9 +123,10 @@ interface TwinDetailContentProps {
   state: DetailState;
   onClose: () => void;
   onRetry: () => void;
+  onOpenFloorPlan: (unitTypeLabel: string) => void;
 }
 
-function TwinDetailContent({ state, onClose, onRetry }: TwinDetailContentProps) {
+function TwinDetailContent({ state, onClose, onRetry, onOpenFloorPlan }: TwinDetailContentProps) {
   const closeButton = (
     <button type="button" className="twin-detail__close" aria-label="닫기" onClick={onClose}>
       ✕
@@ -181,7 +191,7 @@ function TwinDetailContent({ state, onClose, onRetry }: TwinDetailContentProps) 
         <MembersSection members={detail.members} />
         <InquiriesSection inquiries={detail.openInquiries} />
         <FeeSection fee={detail.currentFee} />
-        <FloorPlanSection unitTypeLabel={detail.unitTypeLabel} />
+        <FloorPlanSection unitTypeLabel={detail.unitTypeLabel} onOpen={onOpenFloorPlan} />
       </div>
     </>
   );
@@ -254,86 +264,27 @@ function FeeSection({ fee }: { fee: TwinHouseholdDetail["currentFee"] }) {
   );
 }
 
-type PlanLoadState =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; detail: AdminFloorPlanDetail | null };
-
 /**
- * 세대 평면도 — 읽기 전용, 기본 접힘(패널이 커지지 않게). unitTypeLabel("84M(공공임대)")을
- * 정규화("84M")해 평면도 목록과 매칭한다. 처음 펼칠 때만 불러온다(닫힌 채면 호출 없음).
+ * 세대 평면도 — 왼쪽 3D 무대를 덮는 오버레이로 연다(TwinFloorPlanOverlay 가 그때 불러온다).
+ * 타입이 없는 세대는 매칭할 평면도가 없으므로 버튼을 내지 않는다.
  */
-function FloorPlanSection({ unitTypeLabel }: { unitTypeLabel: string | null }) {
-  const [state, setState] = useState<PlanLoadState>({ kind: "idle" });
-
-  const handleToggle = useCallback(
-    (event: SyntheticEvent<HTMLDetailsElement>) => {
-      if (!event.currentTarget.open || state.kind !== "idle") return;
-      const key = normalizeUnitType(unitTypeLabel);
-      if (!key) {
-        setState({ kind: "ready", detail: null });
-        return;
-      }
-      setState({ kind: "loading" });
-      (async () => {
-        const plans = await listFloorPlans();
-        const matched = plans.find((p) => normalizeUnitType(p.unitTypeName) === key);
-        if (!matched) return { kind: "ready" as const, detail: null };
-        return { kind: "ready" as const, detail: await getFloorPlan(matched.id) };
-      })()
-        .then(setState)
-        .catch((err) => setState({ kind: "error", message: errorMessage(err) }));
-    },
-    [state.kind, unitTypeLabel],
-  );
-
+function FloorPlanSection({
+  unitTypeLabel,
+  onOpen,
+}: {
+  unitTypeLabel: string | null;
+  onOpen: (unitTypeLabel: string) => void;
+}) {
   return (
-    <details className="twin-detail__section" onToggle={handleToggle}>
-      <summary className="twin-detail__section-title twin-plan__summary">평면도</summary>
-      <div className="twin-plan__body">
-        {state.kind === "idle" ? null : state.kind === "loading" ? (
-          <Skeleton height="10rem" />
-        ) : state.kind === "error" ? (
-          <p className="twin-detail__empty">평면도를 불러오지 못했습니다. {state.message}</p>
-        ) : !state.detail ? (
-          <p className="twin-detail__empty">평면도 없음</p>
-        ) : (
-          <ReadOnlyFloorPlan detail={state.detail} />
-        )}
-      </div>
-    </details>
-  );
-}
-
-function ReadOnlyFloorPlan({ detail }: { detail: AdminFloorPlanDetail }) {
-  const { plan, devices } = detail;
-  return (
-    <div className="twin-plan__canvas">
-      {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL(외부 오리진) — 읽기 전용 미니 뷰 */}
-      <img
-        src={plan.imageUrl}
-        alt={`${plan.unitTypeName} 평면도`}
-        className="twin-plan__image"
-        width={plan.imageWidth}
-        height={plan.imageHeight}
-      />
-      {devices.map((d) => {
-        const label = markerLabel({ room: d.room, deviceType: d.deviceType, label: d.label });
-        return (
-          <button
-            key={d.id}
-            type="button"
-            className="twin-plan__marker"
-            title={label}
-            aria-label={label}
-            style={{
-              left: `${toPercent(d.x, plan.imageWidth)}%`,
-              top: `${toPercent(d.y, plan.imageHeight)}%`,
-            }}
-          />
-        );
-      })}
-    </div>
+    <section className="twin-detail__section">
+      <h3 className="twin-detail__section-title">평면도</h3>
+      {unitTypeLabel ? (
+        <Button variant="secondary" onClick={() => onOpen(unitTypeLabel)}>
+          평면도 보기
+        </Button>
+      ) : (
+        <p className="twin-detail__empty">세대 타입이 없어 평면도를 찾을 수 없습니다.</p>
+      )}
+    </section>
   );
 }
