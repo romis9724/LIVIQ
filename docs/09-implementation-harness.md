@@ -609,6 +609,7 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H14-2 | 시설 코드 체계 | `facilities.code` 컬럼(**서버 자동 부여** `계통약어-위치약어-연번`, unique(tenant_id, code)·수정 불가) · 계통 약어는 공통코드([ADR-0017](adr/0017-tenant-code-registry.md) codes) 등록 · 기존 37건 backfill 마이그레이션 · 그래프 패널·목록에 코드 표시·코드 검색 · **민원 접수: 코드 직접 입력→즉시 설비 연결** · 평면도 **종류·방 공통코드** 등록(에디터는 select — `room` 종류 수정 불가 고정) | 코드 유일성·자동 부여·수정 거부 테스트(**CRITICAL** — tenant 격리 포함) + 코드로 민원 연결 왕복 + 게이트 그린 + 시각 실측 | ⬜ |
 | H14-3 | 트윈 UX 2건 | ①설비 상태 목록 길어지면 **스크롤**(고정 높이) ②세대 상세의 평면도를 상세 아래가 아니라 **왼쪽 영역 전체 오버레이**(뒤 건물 3D 반투명 노출) | 게이트 그린 + 시각 실측(설비 스크롤·세대 클릭→평면도 오버레이·닫기 왕복) | ⬜ |
 | H14-4 | 주차장 3D | 프로토타입 `parking_view3d.js`(AI_digitaltwin_apartment 커밋 700fd04·b77e154 — three.js InstancedMesh 442면·raycast 픽킹·카메라 플라이) 이식 — 주차장 대시보드 2D 배치도에 **3D 토글**(dynamic import ssr:false·2D 폴백 유지) | 게이트 그린 + 시각 실측(3D 렌더·픽킹→상세·2D 폴백·콘솔 0) | ⬜ |
+| H14-5 | 관리자 UI 일관화 | (사용자 피드백 2026-07-27 — "가이드 없이 마음대로 만든 느낌, 30점" · 헤더가 본문보다 작음) [05 §5A](05-ui-ux-design.md) **공통 패턴 가이드** 신설(타이포 위계 강제·StatCard·page-toolbar·목록 2형·radius/간격/색 규율) → ⓐ기반: admin-shell 타이포 h1>본문 복구 + `@liviq/ui` StatCard/StatGrid·공통 툴바/목록 CSS ⓑ메뉴별 적용(대시보드·공지·주민·관리비·민원·직원·문서 — 병렬) ⓒ접근성 패스(focus-visible 전수·대비·tablist·th scope) | 7개 메뉴가 §5A 패턴만 사용 + h1 위계 복구 + 게이트 그린 + 시각 실측(7개 메뉴 데스크톱·375px·콘솔 0) | ⬜ |
 
 ## 9. 정의: "완료(Done)"
 

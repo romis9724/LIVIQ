@@ -8,8 +8,8 @@ K-apt(공동주택관리정보시스템) A33982105 실측 시설물 + 표준 필
 도메인 행 변경과 outbox_events 기록은 한 트랜잭션(app/routers/facilities.py의
 _facility_snapshot·record_outbox 재사용 — 이중 쓰기 금지, docs/03 §4.9).
 
-facilities 테이블에는 memo/description 컬럼이 없어(모델 확인) memo는 name에
-" — " 구분자로 병기해 저장한다(data/facilities_kapt.py 모듈 docstring 참고).
+데이터 상수의 memo는 참고용 원천 기록일 뿐 저장하지 않는다 — name " — " 병기는
+H14에서 폐기(사용자 지시: 설비명은 짧게).
 
 실행(DATABASE_URL은 apps/api/.env에서 로드):
 
