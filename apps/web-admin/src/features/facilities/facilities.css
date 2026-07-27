@@ -1,4 +1,24 @@
-/* 관리자 시설 관리 — 시설 목록 + AI 원인 후보 패널. */
+/* 관리자 시설 관리 — 3D 시설 그래프(메인) + 시설 목록 + AI 원인 후보 패널. */
+
+/* 시설 그래프 팔레트 (H13-1, ADR-0022) — 계통색 6종 + 미분류/노드 유형색.
+   tokens.css 는 oklch 이고 WebGL(three)은 color-4 를 파싱하지 못한다. 그래서 그래프가 쓰는
+   색만 sRGB hex 로 여기 한 곳에 둔다(캔버스와 범례가 같은 변수를 읽어 드리프트가 없다).
+   값은 tokens.css 와 같은 축(L 0.58 · C 0.13)에서 색상만 돌린 것이고, 빨강 대역(danger)은
+   장애 노드 전용으로 비워 뒀다. */
+:root {
+  --fac-sys-1: #347ec4; /* 파랑 (h250 — accent 계열) */
+  --fac-sys-2: #009098; /* 청록 (h200) */
+  --fac-sys-3: #249057; /* 초록 (h155) */
+  --fac-sys-4: #8d7b00; /* 올리브 (h100) */
+  --fac-sys-5: #b3621e; /* 주황 (h55) */
+  --fac-sys-6: #9262b3; /* 보라 (h310) */
+  --fac-sys-other: #69737d; /* 미분류 — 중립 회색 */
+  --fac-node-incident-open: #d73337; /* 미해결 장애 — danger 대응 */
+  --fac-node-incident-resolved: #af8783; /* 조치된 장애 — danger 완화 */
+  --fac-node-maintenance: #95a0ab; /* 정비 — 중립 */
+  --fac-graph-link: #b9bec4;
+}
+
 .fac-head {
   display: flex;
   align-items: center;
@@ -471,4 +491,222 @@
   .fac-ai__caret {
     animation: none;
   }
+}
+
+/* ── 시설 그래프 (H13-1, ADR-0022) ─────────────────────────────────────────── */
+
+/* 뷰 토글 — 그래프(3D)의 접근성 대체 수단이 목록이므로 포커스 순서 맨 앞에 둔다. */
+.fac-viewtabs {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-8) 0;
+}
+.fac-viewtab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 6px 16px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.fac-viewtab:hover {
+  border-color: var(--color-accent);
+}
+.fac-viewtab[data-active] {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.fac-graph {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.fac-graph__banner {
+  flex: none;
+  margin: var(--space-3) var(--space-8) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  background: color-mix(in oklch, var(--color-warning) 14%, var(--color-surface));
+  border: 1px solid color-mix(in oklch, var(--color-warning) 40%, transparent);
+}
+
+/* 검색 → 카메라 fly-to. 3D 노드 겹침의 유일한 실질 완화책이라 상시 노출한다. */
+.fac-graph__search {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-3) var(--space-8);
+}
+.fac-graph__search-input {
+  flex: 1;
+  max-width: 22rem;
+  min-height: var(--tap-min);
+  padding: 0 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 16px;
+}
+.fac-graph__search-input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.fac-graph__search-hint {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+/* 모바일: 한 줄 유지가 불가능한 폭 — 인풋+버튼만 남기고 안내문은 아래로 감싼다. */
+@media (max-width: 640px) {
+  .fac-graph__search {
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+  }
+  .fac-graph__search-input {
+    max-width: none;
+    min-width: 0;
+    flex: 1 1 12rem;
+  }
+  .fac-graph__search-hint[role="status"] {
+    flex-basis: 100%;
+    white-space: normal;
+  }
+}
+
+.fac-graph__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  overflow: hidden;
+}
+@media (max-width: 920px) {
+  .fac-graph__body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+}
+
+.fac-graph__stage {
+  position: relative;
+  min-height: 24rem;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+.fac-graph__canvas {
+  position: absolute;
+  inset: 0;
+}
+/* 로딩·빈 상태는 스테이지 안(동적 로딩 폴백)과 화면 전체(조회 실패·시설 0건) 양쪽에서 쓴다. */
+.fac-graph__status,
+.fac-graph__empty {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+}
+.fac-graph__status {
+  color: var(--color-text-muted);
+}
+
+/* 범례 상시 표시 — 색만으로 상태를 전달하지 않기 위해 항상 라벨을 병기한다(docs/05 §6). */
+.fac-graph__legend {
+  position: absolute;
+  left: var(--space-4);
+  bottom: var(--space-4);
+  max-width: 16rem;
+  max-height: 60%;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-3);
+  list-style: none;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: color-mix(in oklch, var(--color-surface) 92%, transparent);
+  box-shadow: var(--shadow-card);
+  font-size: var(--text-sm);
+}
+.fac-graph__legend-title {
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  margin-bottom: 4px;
+}
+.fac-graph__legend-title + .fac-graph__legend-title {
+  margin-top: var(--space-3);
+}
+.fac-graph__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--color-text);
+}
+.fac-graph__legend-swatch {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.fac-graph__legend-swatch--lg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 그래프 상세 패널 — 목록 뷰의 .fac-detail 과 같은 자리·같은 구성. */
+.fac-graph__panel {
+  border-left: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: var(--space-6);
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+@media (max-width: 920px) {
+  .fac-graph__panel {
+    border-left: none;
+    border-top: 1px solid var(--color-border);
+    overflow: visible;
+  }
+}
+
+/* 위치 추정 민원 — 확정처럼 보이지 않도록 배지 + 근거 문구를 함께 둔다(ADR-0022 결정 3③). */
+.fac-estimate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-surface-sunken);
+  border: 1px dashed var(--color-border-strong);
+}
+.fac-estimate__note {
+  margin-top: 4px;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
