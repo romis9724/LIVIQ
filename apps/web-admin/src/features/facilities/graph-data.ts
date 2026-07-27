@@ -298,7 +298,10 @@ export function searchFacilities(
   return hits;
 }
 
-/** 이름 완전일치(검색창 입력·datalist 선택값 → 노드). 없으면 null. */
+/**
+ * 이름 완전일치(검색창 입력·datalist 선택값 → 노드). 이름이 안 맞으면 코드번호 완전일치도
+ * 본다(H14-2 — "EL-401-01" 로 바로 찾아가기). 그래도 없으면 이름 부분일치, 최종 실패는 null.
+ */
 export function findFacilityByName(nodes: readonly GraphNode[], name: string): GraphNode | null {
   const needle = normalize(name);
   if (!needle) return null;
@@ -306,6 +309,10 @@ export function findFacilityByName(nodes: readonly GraphNode[], name: string): G
     (node) => node.label === "facility" && node.name && normalize(node.name) === needle,
   );
   if (exact) return exact;
+  const byCode = nodes.find(
+    (node) => node.label === "facility" && node.code && normalize(node.code) === needle,
+  );
+  if (byCode) return byCode;
   return searchFacilities(nodes, name, 1)[0] ?? null;
 }
 

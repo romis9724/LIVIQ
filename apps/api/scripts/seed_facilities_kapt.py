@@ -43,8 +43,6 @@ from data.facilities_kapt import ALLOWED_TYPES, FACILITIES  # noqa: E402
 # 파일럿 단지(첫마을 4단지 푸르지오) — 다른 시드 스크립트와 동일 tenant.
 DEFAULT_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 
-_MEMO_SEP = " — "  # facilities에 memo 컬럼이 없어 name에 병기하는 구분자
-
 
 def _validate_types() -> None:
     """type 슬러그 오타 방지 — 허용 집합 밖 값이 있으면 즉시 중단."""
@@ -54,8 +52,8 @@ def _validate_types() -> None:
 
 
 def _full_name(row: dict[str, Any]) -> str:
-    memo = row.get("memo")
-    return f"{row['name']}{_MEMO_SEP}{memo}" if memo else row["name"]
+    # 이름은 짧게 유지 — memo를 " — "로 병기하던 방식은 화면을 어지럽혀 폐기(H14, 사용자 지시).
+    return str(row["name"])
 
 
 async def _upsert_facility(

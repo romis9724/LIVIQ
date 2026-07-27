@@ -164,7 +164,10 @@ export function FacilityGraphPanel({
             {meta.icon}
           </span>
           <div>
-            <div className="fac-detail__name">{detail.name}</div>
+            <div className="fac-detail__name">
+              {detail.name}
+              {detail.code ? <span className="fac-code">{detail.code}</span> : null}
+            </div>
             <span className={`fac-pill fac-pill--${meta.css}`}>
               <span className={`fac-dot fac-dot--${meta.css}`} aria-hidden="true" />
               {meta.label}
@@ -173,7 +176,7 @@ export function FacilityGraphPanel({
         </div>
         <p className="fac-detail__desc">
           {detail.type ? `${detail.type} · ` : "미분류 · "}
-          {detail.location ?? "위치 미지정"} · 다음 점검 {shortDate(detail.nextCheckAt)}
+          {detail.location ?? "위치 미지정"}
         </p>
       </div>
 

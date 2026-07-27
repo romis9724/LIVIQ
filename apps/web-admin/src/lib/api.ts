@@ -447,6 +447,20 @@ export async function linkInquiryFacility(id: string, facilityId: string | null)
   return toInquiry(await response.json());
 }
 
+/**
+ * 코드번호로 정식 연결(H14-2) — 민원 접수에서 설비를 목록에서 찾지 않고 바로 잇는 경로.
+ * facility_id 경로와 같은 액션이며 서버가 tenant 안에서 코드를 resolve 한다(없거나 타 단지면 404).
+ */
+export async function linkInquiryFacilityByCode(id: string, code: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/facility`, {
+    method: "PUT",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
 export interface FacilitySuggestCandidate {
   facilityId: string;
   name: string;
@@ -877,6 +891,8 @@ export type FacilityStatus = "normal" | "check" | "fault" | "risk";
 
 export interface Facility {
   id: string;
+  /** 설비 코드번호(예 EL-401-01) — 서버가 자동 부여, 사용자 수정 불가(H14-2). 구 데이터는 null. */
+  code: string | null;
   name: string;
   location: string | null;
   type: string | null;
@@ -938,11 +954,14 @@ export interface MaintenanceInput {
 export interface FacilityFilter {
   status?: FacilityStatus;
   type?: string;
+  /** 설비 코드번호 정확 일치(H14-2). */
+  code?: string;
   limit?: number;
 }
 
 interface RawFacility {
   id: string;
+  code?: string | null;
   name: string;
   location: string | null;
   type: string | null;
@@ -974,6 +993,7 @@ interface RawMaintenance {
 function toFacility(raw: RawFacility): Facility {
   return {
     id: raw.id,
+    code: raw.code ?? null,
     name: raw.name,
     location: raw.location,
     type: raw.type,
@@ -1012,6 +1032,7 @@ export function buildFacilityQuery(filter: FacilityFilter): string {
   const search = new URLSearchParams();
   if (filter.status) search.set("status", filter.status);
   if (filter.type && filter.type.trim()) search.set("type", filter.type.trim());
+  if (filter.code && filter.code.trim()) search.set("code", filter.code.trim());
   if (filter.limit) search.set("limit", String(filter.limit));
   const qs = search.toString();
   return qs ? `?${qs}` : "";
@@ -1121,6 +1142,8 @@ export type GraphLinkKind =
 export interface GraphNode {
   pgId: string;
   label: GraphNodeLabel;
+  /** 설비 노드의 코드번호(H14-2). 다른 라벨은 null. */
+  code: string | null;
   name: string | null;
   type: string | null;
   location: string | null;
@@ -1145,6 +1168,7 @@ export interface FacilityGraph {
 interface RawGraphNode {
   pg_id: string;
   label: GraphNodeLabel;
+  code?: string | null;
   name?: string | null;
   type?: string | null;
   location?: string | null;
@@ -1157,6 +1181,7 @@ function toGraphNode(raw: RawGraphNode): GraphNode {
   return {
     pgId: raw.pg_id,
     label: raw.label,
+    code: raw.code ?? null,
     name: raw.name ?? null,
     type: raw.type ?? null,
     location: raw.location ?? null,

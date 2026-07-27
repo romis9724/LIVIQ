@@ -48,6 +48,7 @@ function facilityNode(pgId: string, overrides: Partial<GraphNode> = {}): GraphNo
   return {
     pgId,
     label: "facility",
+    code: null,
     name: `설비 ${pgId}`,
     type: "승강기",
     location: null,
@@ -62,6 +63,7 @@ function incidentNode(pgId: string, resolved: boolean): GraphNode {
   return {
     pgId,
     label: "incident",
+    code: null,
     name: "이상 소음",
     type: null,
     location: null,
@@ -75,6 +77,7 @@ function maintenanceNode(pgId: string): GraphNode {
   return {
     pgId,
     label: "maintenance",
+    code: null,
     name: "정기 점검",
     type: null,
     location: null,
@@ -88,6 +91,7 @@ function locationNode(pgId: string, name: string): GraphNode {
   return {
     pgId,
     label: "location",
+    code: null,
     name,
     type: null,
     location: null,
@@ -101,6 +105,7 @@ function floorPlanNode(pgId: string, name: string): GraphNode {
   return {
     pgId,
     label: "floor_plan",
+    code: null,
     name,
     type: null,
     location: null,
@@ -114,6 +119,7 @@ function complexNode(pgId: string, name: string): GraphNode {
   return {
     pgId,
     label: "complex",
+    code: null,
     name,
     type: null,
     location: null,
@@ -128,6 +134,7 @@ function planNode(pgId: string, label: GraphNodeLabel, name: string): GraphNode 
   return {
     pgId,
     label,
+    code: null,
     name,
     type: null,
     location: null,
@@ -359,6 +366,28 @@ describe("searchFacilities / findFacilityByName", () => {
 
   it("일치가 없으면 null", () => {
     expect(findFacilityByName(nodes, "보일러")).toBeNull();
+  });
+
+  it("코드번호 완전일치로도 찾는다", () => {
+    const coded = [facilityNode("f8", { name: "지하 저수조", code: "WS-000-01" }), ...nodes];
+
+    expect(findFacilityByName(coded, "WS-000-01")?.pgId).toBe("f8");
+    expect(findFacilityByName(coded, "ws-000-01")?.pgId).toBe("f8"); // 대소문자 무시
+  });
+
+  it("이름 완전일치를 코드 일치보다 우선한다", () => {
+    const coded = [
+      facilityNode("f8", { name: "101동 승강기", code: "지하 저수조" }),
+      ...nodes,
+    ];
+
+    expect(findFacilityByName(coded, "지하 저수조")?.pgId).toBe("f3");
+  });
+
+  it("없는 코드는 null", () => {
+    const coded = [facilityNode("f8", { name: "지하 저수조", code: "WS-000-01" }), ...nodes];
+
+    expect(findFacilityByName(coded, "EL-999-99")).toBeNull();
   });
 });
 

@@ -3,9 +3,8 @@
 각 항목: name·type·location·memo(선택). type은 그래프 계통 렌즈 축(기존 데이터
 "elevator" 관례에 맞춘 슬러그) — ALLOWED_TYPES로 오타를 방지한다.
 
-facilities 테이블에 memo/description 컬럼이 없어(packages/db/src/liviq_db/models/
-facilities.py 확인) memo는 DB에 별도 저장하지 않고 name에 " — " 구분자로 병기한다
-(seed_facilities_kapt.py의 _full_name 참고).
+memo는 참고용 원천 기록일 뿐 화면·DB 어디에도 싣지 않는다 — name에 " — "로 병기하던
+방식은 H14에서 폐기(사용자 지시: 설비명은 짧게).
 
 출처 표기: 각 절 상단에 K-apt 실측 / 표준 보강을 주석으로 남긴다.
 """

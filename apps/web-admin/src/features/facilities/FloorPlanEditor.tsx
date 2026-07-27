@@ -6,6 +6,7 @@ import type { ToastTone } from "@liviq/ui";
 import {
   ApiError,
   getFloorPlan,
+  listCodeGroups,
   listFacilities,
   saveFloorPlanDevices,
   type AdminFloorPlanDevice,
@@ -13,6 +14,7 @@ import {
   type Facility,
   type FloorPlanDeviceInput,
 } from "@/lib/api";
+import { PLAN_DEVICE_TYPE_GROUP, PLAN_ROOM_GROUP, codeOptions } from "@/lib/codes";
 import {
   DIR_OPTIONS,
   categoryColorVar,
@@ -26,6 +28,10 @@ import "./facilities.css";
 import "./floor-plan.css";
 
 const TOAST_DURATION_MS = 3200;
+
+/** device_type 이 이 값이면 마커가 아니라 '방 자체'다(ai_core graph client 와 같은 약속).
+ *  방 마커의 종류는 바꿀 수 없다 — 바꾸면 도면 계층(방 허브)이 깨진다. */
+const ROOM_DEVICE_TYPE = "room";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -100,6 +106,9 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [facilities, setFacilities] = useState<Facility[]>([]);
+  // 공통 코드 선택지(H14-2). null 이면 코드 조회 실패·빈 그룹 — 자유 입력으로 폴백해 편집을 막지 않는다.
+  const [typeCodes, setTypeCodes] = useState<string[] | null>(null);
+  const [roomCodes, setRoomCodes] = useState<string[] | null>(null);
   const [confirmBack, setConfirmBack] = useState(false);
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -136,6 +145,26 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
     listFacilities()
       .then(setFacilities)
       .catch(() => setFacilities([]));
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    listCodeGroups()
+      .then((groups) => {
+        if (!alive) return;
+        const types = codeOptions(groups, PLAN_DEVICE_TYPE_GROUP).map((o) => o.label);
+        const rooms = codeOptions(groups, PLAN_ROOM_GROUP).map((o) => o.label);
+        setTypeCodes(types.length > 0 ? types : null);
+        setRoomCodes(rooms.length > 0 ? rooms : null);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setTypeCodes(null);
+        setRoomCodes(null);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(
@@ -302,6 +331,8 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
           device={selected}
           typeOptions={typeOptions}
           roomOptions={roomOptions}
+          typeCodes={typeCodes}
+          roomCodes={roomCodes}
           facilities={facilities}
           onChange={updateSelected}
           onDelete={handleDelete}
@@ -333,17 +364,34 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
 const TYPE_LIST_ID = "fp-device-type-options";
 const ROOM_LIST_ID = "fp-device-room-options";
 
+/** 현재 값이 코드 목록에 없으면 맨 앞에 끼워 넣는다 — 코드에서 빠진 옛 값을 select 가 삼켜
+ *  저장 시 조용히 지우는 것을 막는다. */
+function withCurrent(options: readonly string[], current: string): string[] {
+  return current && !options.includes(current) ? [current, ...options] : [...options];
+}
+
 interface DeviceFormProps {
   device: EditableDevice | null;
   typeOptions: readonly string[];
   roomOptions: readonly string[];
+  typeCodes: readonly string[] | null;
+  roomCodes: readonly string[] | null;
   facilities: readonly Facility[];
   onChange: (patch: Partial<EditableDevice>) => void;
   onDelete: () => void;
 }
 
 /** 우측 마커 편집 폼 — key={선택 id}로 부모가 리마운트해 defaultValue를 초기화한다(uncontrolled). */
-function DeviceForm({ device, typeOptions, roomOptions, facilities, onChange, onDelete }: DeviceFormProps) {
+function DeviceForm({
+  device,
+  typeOptions,
+  roomOptions,
+  typeCodes,
+  roomCodes,
+  facilities,
+  onChange,
+  onDelete,
+}: DeviceFormProps) {
   if (!device) {
     return (
       <aside className="fac-detail fp-form">
@@ -356,33 +404,83 @@ function DeviceForm({ device, typeOptions, roomOptions, facilities, onChange, on
     );
   }
 
+  const isRoomMarker = device.deviceType === ROOM_DEVICE_TYPE;
+
   return (
     <aside className="fac-detail fp-form">
-      <FormField
-        label="종류"
-        defaultValue={device.deviceType}
-        list={TYPE_LIST_ID}
-        placeholder="예: 콘센트"
-        onChange={(e) => onChange({ deviceType: e.target.value })}
-      />
-      <datalist id={TYPE_LIST_ID}>
-        {typeOptions.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
+      {isRoomMarker ? (
+        <label className="fac-field">
+          <span className="form-field__label">종류</span>
+          <select className="fac-select" value={ROOM_DEVICE_TYPE} disabled>
+            <option value={ROOM_DEVICE_TYPE}>방 영역</option>
+          </select>
+          <span className="fp-field-hint">방 영역 마커의 종류는 바꿀 수 없습니다.</span>
+        </label>
+      ) : typeCodes ? (
+        <label className="fac-field">
+          <span className="form-field__label">종류</span>
+          <select
+            className="fac-select"
+            defaultValue={device.deviceType}
+            onChange={(e) => onChange({ deviceType: e.target.value })}
+          >
+            <option value="">선택하세요</option>
+            {withCurrent(typeCodes, device.deviceType).map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <>
+          <FormField
+            label="종류"
+            defaultValue={device.deviceType}
+            list={TYPE_LIST_ID}
+            placeholder="예: 콘센트"
+            onChange={(e) => onChange({ deviceType: e.target.value })}
+          />
+          <datalist id={TYPE_LIST_ID}>
+            {typeOptions.map((t) => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
+        </>
+      )}
 
-      <FormField
-        label="방 (선택)"
-        defaultValue={device.room}
-        list={ROOM_LIST_ID}
-        placeholder="예: 거실"
-        onChange={(e) => onChange({ room: e.target.value })}
-      />
-      <datalist id={ROOM_LIST_ID}>
-        {roomOptions.map((r) => (
-          <option key={r} value={r} />
-        ))}
-      </datalist>
+      {roomCodes ? (
+        <label className="fac-field">
+          <span className="form-field__label">방 (선택)</span>
+          <select
+            className="fac-select"
+            defaultValue={device.room}
+            onChange={(e) => onChange({ room: e.target.value })}
+          >
+            <option value="">지정 안 함</option>
+            {withCurrent(roomCodes, device.room).map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <>
+          <FormField
+            label="방 (선택)"
+            defaultValue={device.room}
+            list={ROOM_LIST_ID}
+            placeholder="예: 거실"
+            onChange={(e) => onChange({ room: e.target.value })}
+          />
+          <datalist id={ROOM_LIST_ID}>
+            {roomOptions.map((r) => (
+              <option key={r} value={r} />
+            ))}
+          </datalist>
+        </>
+      )}
 
       <label className="fac-field">
         <span className="form-field__label">방향 (선택)</span>

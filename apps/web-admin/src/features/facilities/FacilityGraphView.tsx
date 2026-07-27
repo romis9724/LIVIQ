@@ -160,7 +160,7 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
     const query = searchRef.current?.value ?? "";
     const hit = findFacilityByName(nodes, query);
     if (!hit) {
-      setSearchError(query.trim() ? "해당 이름의 설비를 찾지 못했습니다." : null);
+      setSearchError(query.trim() ? "해당 이름·코드의 설비를 찾지 못했습니다." : null);
       return;
     }
     setSearchError(null);
@@ -169,9 +169,14 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
     setSelection({ kind: "facility", facilityId: hit.pgId });
   }
 
-  const facilityNames = nodes
-    .filter((node) => node.label === "facility" && node.name)
-    .map((node) => node.name as string);
+  // datalist 후보 — 이름과 코드번호 둘 다(코드로도 찾아갈 수 있다, H14-2).
+  const searchOptions = [
+    ...new Set(
+      nodes
+        .filter((node) => node.label === "facility")
+        .flatMap((node) => [node.name, node.code].filter((v): v is string => Boolean(v))),
+    ),
+  ];
 
   return (
     <div className="fac-stage">
@@ -257,13 +262,13 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
             className="fac-graph__search-input"
             type="search"
             list={SEARCH_LIST_ID}
-            placeholder="설비 이름 (예: 101동 승강기)"
+            placeholder="설비 이름·코드 (예: 101동 승강기, EL-401-01)"
             autoComplete="off"
             onChange={() => setSearchError(null)}
           />
           <datalist id={SEARCH_LIST_ID}>
-            {facilityNames.map((name) => (
-              <option key={name} value={name} />
+            {searchOptions.map((option) => (
+              <option key={option} value={option} />
             ))}
           </datalist>
           <Button type="submit" variant="secondary">

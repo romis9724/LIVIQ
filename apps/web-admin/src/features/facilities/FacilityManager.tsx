@@ -231,9 +231,12 @@ export function FacilityManager() {
                   {STATUS_META[f.status].icon}
                 </span>
                 <span className="fac-card__body">
-                  <span className="fac-card__name">{f.name}</span>
+                  <span className="fac-card__name">
+                    {f.name}
+                    {f.code ? <span className="fac-code">{f.code}</span> : null}
+                  </span>
                   <span className="fac-card__meta">
-                    {f.location ?? "위치 미지정"} · 다음 점검 {shortDate(f.nextCheckAt)}
+                    {f.location ?? "위치 미지정"}
                   </span>
                 </span>
                 <span className={`fac-pill fac-pill--${STATUS_META[f.status].css}`}>
@@ -330,7 +333,10 @@ function FacilityDetailPanel({
             {meta.icon}
           </span>
           <div>
-            <div className="fac-detail__name">{detail.name}</div>
+            <div className="fac-detail__name">
+              {detail.name}
+              {detail.code ? <span className="fac-code">{detail.code}</span> : null}
+            </div>
             <span className={`fac-pill fac-pill--${meta.css}`}>
               <span className={`fac-dot fac-dot--${meta.css}`} aria-hidden="true" />
               {meta.label}
@@ -339,7 +345,7 @@ function FacilityDetailPanel({
         </div>
         <p className="fac-detail__desc">
           {detail.type ? `${detail.type} · ` : ""}
-          {detail.location ?? "위치 미지정"} · 다음 점검 {shortDate(detail.nextCheckAt)}
+          {detail.location ?? "위치 미지정"}
         </p>
       </div>
 
