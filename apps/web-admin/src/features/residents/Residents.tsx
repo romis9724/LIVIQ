@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Button, Dialog, EmptyState, FileDropzone, Skeleton, Toast } from "@liviq/ui";
-import type { ToastTone } from "@liviq/ui";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
+import {
+  Button,
+  Dialog,
+  EmptyState,
+  FileDropzone,
+  FilterChips,
+  PageToolbar,
+  SearchField,
+  Skeleton,
+  StatCard,
+  StatGrid,
+  Toast,
+} from "@liviq/ui";
+import type { FilterChipItem, ToastTone } from "@liviq/ui";
 import {
   ApiError,
   ROSTER_TEMPLATE_URL,
@@ -62,9 +74,10 @@ export function Residents() {
   // 명부 목록(H7-9) — 검색은 제출 시 적용(appliedQuery), 필터·페이지는 즉시.
   const [roster, setRoster] = useState<RosterList | null>(null);
   const [rosterError, setRosterError] = useState<string | null>(null);
-  const [queryInput, setQueryInput] = useState("");
+  // 검색 input은 uncontrolled(ref) — controlled는 한글 IME 조합이 리렌더로 깨진다.
+  const searchRef = useRef<HTMLInputElement>(null);
   const [appliedQuery, setAppliedQuery] = useState("");
-  const [stateFilter, setStateFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState<RosterStateFilter>("");
   const [page, setPage] = useState(1);
   // 업로드 패널 열림 — 최초 로드 때 한 번만 결정(명부 없으면 펼침), 이후엔 사용자 조작만 반영.
   // 리로드마다 counts로 다시 계산하면 업로드 직후 패널이 저절로 접혀 결과가 숨는다.
@@ -207,13 +220,26 @@ export function Residents() {
 
       <main className="admin-page__main">
         {counts ? (
-          <div className="apv-stats" role="status" aria-label="명부 요약">
-            <StatChip label="명부 전체" value={counts.total} />
-            <StatChip label="미가입" value={counts.unregistered} tone="wait" />
-            <StatChip label="가입완료" value={counts.joined} tone="ok" />
-            <StatChip label="전출 후보" value={counts.movedOut} tone="warn" />
-            <StatChip label="승인 대기" value={waiting} tone={waiting > 0 ? "action" : undefined} />
-          </div>
+          <StatGrid className="apv-stats">
+            <StatCard label="명부 전체" value={counts.total.toLocaleString()} unit="세대원" />
+            <StatCard label="미가입" value={counts.unregistered.toLocaleString()} />
+            {/* 값 색은 0건일 때 쓰지 않는다 — 없는 상태를 강조색으로 알리지 않는다(docs/05 §5A). */}
+            <StatCard
+              label="가입완료"
+              value={counts.joined.toLocaleString()}
+              tone={counts.joined > 0 ? "success" : "default"}
+            />
+            <StatCard
+              label="전출 후보"
+              value={counts.movedOut.toLocaleString()}
+              tone={counts.movedOut > 0 ? "danger" : "default"}
+            />
+            <StatCard
+              label="승인 대기"
+              value={waiting.toLocaleString()}
+              tone={waiting > 0 ? "warning" : "default"}
+            />
+          </StatGrid>
         ) : null}
 
         <section className="apv-queue" aria-labelledby="apv-queue-h">
@@ -253,11 +279,10 @@ export function Residents() {
         <RosterTable
           roster={roster}
           error={rosterError}
-          queryInput={queryInput}
-          onQueryInput={setQueryInput}
+          searchRef={searchRef}
           onSearch={() => {
             setPage(1);
-            setAppliedQuery(queryInput.trim());
+            setAppliedQuery(searchRef.current?.value.trim() ?? "");
           }}
           stateFilter={stateFilter}
           onStateFilter={(next) => {
@@ -309,31 +334,13 @@ export function Residents() {
   );
 }
 
-function StatChip({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "ok" | "warn" | "wait" | "action";
-}) {
-  return (
-    <span className="apv-stat" data-tone={tone}>
-      <span className="apv-stat__value">{value.toLocaleString()}</span>
-      <span className="apv-stat__label">{label}</span>
-    </span>
-  );
-}
-
 interface RosterTableProps {
   roster: RosterList | null;
   error: string | null;
-  queryInput: string;
-  onQueryInput: (value: string) => void;
+  searchRef: RefObject<HTMLInputElement | null>;
   onSearch: () => void;
-  stateFilter: string;
-  onStateFilter: (value: string) => void;
+  stateFilter: RosterStateFilter;
+  onStateFilter: (value: RosterStateFilter) => void;
   page: number;
   onPage: (value: number) => void;
   busyId: string | null;
@@ -341,18 +348,20 @@ interface RosterTableProps {
   onDelete: (entry: RosterEntry) => void;
 }
 
-const STATE_FILTERS = [
-  { value: "", label: "전체" },
-  { value: "unregistered", label: "미가입" },
-  { value: "joined", label: "가입완료" },
-  { value: "moved_out", label: "전출 후보" },
-] as const;
+// "" = 전체(상태 미지정) — 서버 계약(schemas/roster)의 state 코드값 + 빈 값.
+type RosterStateFilter = "" | "unregistered" | "joined" | "moved_out";
+
+const STATE_FILTERS: readonly FilterChipItem<RosterStateFilter>[] = [
+  { id: "", label: "전체" },
+  { id: "unregistered", label: "미가입" },
+  { id: "joined", label: "가입완료" },
+  { id: "moved_out", label: "전출 후보" },
+];
 
 function RosterTable({
   roster,
   error,
-  queryInput,
-  onQueryInput,
+  searchRef,
   onSearch,
   stateFilter,
   onStateFilter,
@@ -370,44 +379,38 @@ function RosterTable({
         주민 명부
       </h2>
 
-      {/* 상태 필터 + 검색 — 한 툴바로 묶음(운영자 피드백 6). */}
-      <div className="apv-roster__toolbar">
-        <div className="apv-roster__filters" role="tablist" aria-label="명부 상태 필터">
-          {STATE_FILTERS.map((filter) => (
-            <button
-              key={filter.value}
-              type="button"
-              role="tab"
-              aria-selected={stateFilter === filter.value}
-              className="apv-roster__filter"
-              data-state={filter.value || "all"}
-              data-active={stateFilter === filter.value || undefined}
-              onClick={() => onStateFilter(filter.value)}
-            >
-              {filter.label}
-            </button>
-          ))}
-        </div>
-        <form
-          className="apv-roster__search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSearch();
-          }}
-        >
-          <input
-            className="apv-roster__search-input"
-            value={queryInput}
-            onChange={(e) => onQueryInput(e.target.value)}
-            placeholder="동 또는 호수 검색 (예: 401, 201)"
-            aria-label="명부 검색"
-            inputMode="numeric"
+      {/* 상태 필터 + 검색 — 공통 툴바 패턴(docs/05 §5A). */}
+      <PageToolbar
+        start={
+          <FilterChips
+            items={STATE_FILTERS}
+            value={stateFilter}
+            onChange={onStateFilter}
+            label="명부 상태 필터"
           />
-          <Button type="submit" variant="secondary" size="sm">
-            검색
-          </Button>
-        </form>
-      </div>
+        }
+        end={
+          <form
+            className="apv-roster__search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSearch();
+            }}
+          >
+            <SearchField
+              ref={searchRef}
+              label="명부 검색"
+              defaultValue=""
+              placeholder="동 또는 호수 검색 (예: 401, 201)"
+              inputMode="numeric"
+            />
+            <Button type="submit" variant="secondary">
+              검색
+            </Button>
+          </form>
+        }
+      />
+
 
       {error ? (
         <EmptyState icon="⚠" title="명부를 불러오지 못했습니다" description={error} />

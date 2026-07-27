@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Dialog, FileDropzone, SurfaceCard, Toast } from "@liviq/ui";
+import { Button, Dialog, FileDropzone, StatCard, StatGrid, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
 import { ApiError, applyFeeUpload, uploadFeeExcel, type FeeUploadResult } from "@/lib/api";
 import { formatWon, monthLabel } from "./logic";
@@ -225,20 +225,11 @@ function ReviewStep({ result, period, applying, onBack, onApply }: ReviewStepPro
         {monthLabel(period)} 검증 결과
       </h2>
 
-      <div className="fu-stats">
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">분배 항목</div>
-          <div className="fu-stat__value">{result.rowCount}행</div>
-        </SurfaceCard>
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">세대 수(분모)</div>
-          <div className="fu-stat__value">{HOUSEHOLD_DIVISOR}세대</div>
-        </SurfaceCard>
-        <SurfaceCard className="fu-stat">
-          <div className="fu-stat__label">세대당 합계</div>
-          <div className="fu-stat__value">{formatWon(result.total)}</div>
-        </SurfaceCard>
-      </div>
+      <StatGrid className="fu-review-stats">
+        <StatCard label="분배 항목" value={result.rowCount} unit="행" />
+        <StatCard label="세대 수(분모)" value={HOUSEHOLD_DIVISOR} unit="세대" />
+        <StatCard label="세대당 합계" value={formatWon(result.total)} />
+      </StatGrid>
 
       {result.preview.length > 0 ? (
         <div className="surface-card fu-tablecard">

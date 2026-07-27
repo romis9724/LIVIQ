@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Button, EmptyState, Skeleton, SurfaceCard } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Button,
+  EmptyState,
+  PageToolbar,
+  SearchField,
+  Skeleton,
+  StatCard,
+  StatGrid,
+} from "@liviq/ui";
 import {
   ApiError,
   getAdminFeeDetail,
@@ -30,6 +38,9 @@ function errorMessage(err: unknown): string {
 export function FeesAdmin() {
   const [view, setView] = useState<View>("list");
   const [period, setPeriod] = useState<string>(currentMonth());
+  // 동·호는 조회 버튼(제출) 때만 반영 — 입력은 uncontrolled(ref)로 둔다(IME·리렌더 방지).
+  const buildingRef = useRef<HTMLInputElement>(null);
+  const unitRef = useRef<HTMLInputElement>(null);
   const [building, setBuilding] = useState("");
   const [unit, setUnit] = useState("");
   const [data, setData] = useState<AdminFeeList | null>(null);
@@ -71,9 +82,14 @@ export function FeesAdmin() {
     }
   }
 
+  // 제출 때 ref 값을 조회 조건으로 승격 — 값이 바뀌면 load 이펙트가 다시 돈다.
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
-    void load();
+    const nextBuilding = buildingRef.current?.value.trim() ?? "";
+    const nextUnit = unitRef.current?.value.trim() ?? "";
+    setBuilding(nextBuilding);
+    setUnit(nextUnit);
+    if (nextBuilding === building && nextUnit === unit) void load();
   }
 
   const isEmpty = data !== null && data.householdCount === 0;
@@ -87,17 +103,53 @@ export function FeesAdmin() {
       </header>
 
       <main className="admin-page__main">
-        <div className="fu-head-row">
-          {view === "list" ? (
-            <Button variant="primary" onClick={() => setView("upload")}>
-              엑셀 등록
-            </Button>
-          ) : (
-            <Button variant="secondary" onClick={() => setView("list")}>
-              ← 목록으로
-            </Button>
-          )}
-        </div>
+        <PageToolbar
+          start={
+            view === "list" ? (
+              <form className="fu-filters" onSubmit={onSearch}>
+                <label className="fu-filter" htmlFor="fu-month">
+                  <span className="fu-filter__label">조회 월</span>
+                  <input
+                    id="fu-month"
+                    type="month"
+                    value={period}
+                    onChange={(e) => setPeriod(e.target.value)}
+                  />
+                </label>
+                <SearchField
+                  ref={buildingRef}
+                  label="동 검색"
+                  placeholder="동 (예: 401)"
+                  inputMode="numeric"
+                  className="fu-filters__q"
+                  defaultValue={building}
+                />
+                <SearchField
+                  ref={unitRef}
+                  label="호 검색"
+                  placeholder="호 (예: 201)"
+                  inputMode="numeric"
+                  className="fu-filters__q"
+                  defaultValue={unit}
+                />
+                <Button type="submit" variant="secondary">
+                  조회
+                </Button>
+              </form>
+            ) : null
+          }
+          end={
+            view === "list" ? (
+              <Button variant="primary" onClick={() => setView("upload")}>
+                엑셀 등록
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setView("list")}>
+                ← 목록으로
+              </Button>
+            )
+          }
+        />
 
         {view === "upload" ? (
           <UploadWizard onApplied={() => setView("list")} />
@@ -119,43 +171,6 @@ export function FeesAdmin() {
           )
         ) : (
           <div className="fu-status">
-            <form className="fu-filters" onSubmit={onSearch}>
-              <div className="fu-filter">
-                <label htmlFor="fu-month">조회 월</label>
-                <input
-                  id="fu-month"
-                  type="month"
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                />
-              </div>
-              <div className="fu-filter">
-                <label htmlFor="fu-building">동</label>
-                <input
-                  id="fu-building"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 401"
-                  value={building}
-                  onChange={(e) => setBuilding(e.target.value)}
-                />
-              </div>
-              <div className="fu-filter">
-                <label htmlFor="fu-unit">호</label>
-                <input
-                  id="fu-unit"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 201"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                조회
-              </Button>
-            </form>
-
             {loading ? (
               <div className="surface-card fu-tablecard fu-loading">
                 <Skeleton height="1.5rem" />
@@ -177,16 +192,10 @@ export function FeesAdmin() {
               />
             ) : (
               <>
-                <div className="fu-summary">
-                  <SurfaceCard className="fu-stat">
-                    <div className="fu-stat__label">세대 수</div>
-                    <div className="fu-stat__value">{data.householdCount}세대</div>
-                  </SurfaceCard>
-                  <SurfaceCard className="fu-stat">
-                    <div className="fu-stat__label">합계</div>
-                    <div className="fu-stat__value">{formatWon(data.totalSum)}</div>
-                  </SurfaceCard>
-                </div>
+                <StatGrid>
+                  <StatCard label="세대 수" value={data.householdCount} unit="세대" />
+                  <StatCard label="합계" value={formatWon(data.totalSum)} />
+                </StatGrid>
 
                 <section aria-labelledby="fu-lookup-title">
                   <h2 id="fu-lookup-title" className="fu-section__title">

@@ -1,6 +1,14 @@
 "use client";
 
-import { Button, EmptyState, Skeleton, Toast } from "@liviq/ui";
+import {
+  Button,
+  EmptyState,
+  FilterChips,
+  PageToolbar,
+  SearchField,
+  Skeleton,
+  Toast,
+} from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -133,6 +141,10 @@ export function InquiryAdmin() {
   );
 
   const counts = useMemo(() => countByStatus(inquiries), [inquiries]);
+  const filterItems = useMemo(
+    () => FILTERS.map((f) => ({ id: f.id, label: f.label, count: counts[f.id] })),
+    [counts],
+  );
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return inquiries.filter((inquiry) => {
@@ -160,31 +172,19 @@ export function InquiryAdmin() {
       </header>
 
       <main className="admin-page__main">
-        <div className="ia-head">
-          <div className="ia-filters" role="tablist" aria-label="상태 필터">
-            {FILTERS.map((f) => (
-              <button
-                key={f.id}
-                role="tab"
-                aria-selected={filter === f.id}
-                className="ia-filter"
-                data-active={filter === f.id || undefined}
-                onClick={() => setFilter(f.id)}
-              >
-                {f.label}
-                <span className="ia-filter__count">{counts[f.id]}</span>
-              </button>
-            ))}
-          </div>
-          <input
-            type="search"
-            className="ia-search"
-            placeholder="제목 검색"
-            aria-label="민원 검색"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <PageToolbar
+          start={
+            <FilterChips items={filterItems} value={filter} onChange={setFilter} label="상태 필터" />
+          }
+          end={
+            // uncontrolled — value 를 되돌리지 않아야 한글 IME 조합이 끊기지 않는다.
+            <SearchField
+              label="민원 검색"
+              placeholder="제목 검색"
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+          }
+        />
 
         <InquiryBody
           loading={loading}

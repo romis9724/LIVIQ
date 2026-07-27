@@ -22,25 +22,25 @@
   min-width: 220px;
 }
 
-/* ---- 직원 목록 ---- */
+/* ---- 직원 목록 (공통 .data-list 위에 열 배치만 얹는다) ---- */
 .sf-rows {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
   /* ul 기본 스타일 제거 — 카드가 오른쪽으로 밀리며 잘리던 원인(H7-5) */
   list-style: none;
   margin: 0;
   padding: 0;
 }
-.sf-row {
+.sf-skeletons {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.sf-rows .sf-row {
   gap: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-3) var(--space-5);
+  /* 행 자체는 선택 대상이 아니다 — .data-list__item 기본 커서·hover만 되돌린다. */
+  cursor: default;
+}
+.sf-rows .sf-row:hover {
+  background: transparent;
 }
 .sf-row__main {
   display: flex;
@@ -90,6 +90,11 @@
   background: var(--color-surface-sunken);
   color: var(--color-text-muted);
   border-color: var(--color-border);
+}
+
+/* 행 삭제 — 빨간 버튼의 시각 소음을 줄인다(텍스트만 위험색, 확인은 Dialog가 담당). */
+.sf-row__delete {
+  color: color-mix(in oklch, var(--color-danger) 70%, var(--color-text));
 }
 
 .sf-toast {

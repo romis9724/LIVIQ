@@ -1,6 +1,15 @@
 "use client";
 
-import { Button, EmptyState, Skeleton } from "@liviq/ui";
+import {
+  Button,
+  EmptyState,
+  FilterChips,
+  PageToolbar,
+  SearchField,
+  Skeleton,
+  StatCard,
+  StatGrid,
+} from "@liviq/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
@@ -8,7 +17,6 @@ import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/li
 import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
 import { DocumentTable } from "./DocumentTable";
 import {
-  INDEX_META,
   STATUS_FILTERS,
   filterDocs,
   hasActiveIndexing,
@@ -19,8 +27,6 @@ import "./documents.css";
 
 // ponytail: 폴링, 문서량 커지면 SSE/웹소켓
 const POLL_INTERVAL_MS = 5000;
-
-type SummaryTone = "success" | "accent" | "neutral" | "danger";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -98,77 +104,58 @@ export function DocumentManager() {
       </header>
 
       <main className="admin-page__main doc-main">
-        <div className="doc-summary">
-          <SummaryCard
-            icon={INDEX_META.indexed.icon}
+        {/* 값 색은 0건일 때 쓰지 않는다 — 없는 상태를 강조색으로 알리지 않기 위해(docs/05 §5A). */}
+        <StatGrid>
+          <StatCard
             label="색인 완료"
-            count={summary.indexed}
-            tone="success"
+            value={summary.indexed}
+            tone={summary.indexed > 0 ? "success" : "default"}
           />
-          <SummaryCard
-            icon={INDEX_META.indexing.icon}
-            label="색인 중"
-            count={summary.indexing}
-            tone="accent"
-          />
-          <SummaryCard
-            icon={INDEX_META.pending.icon}
-            label="대기"
-            count={summary.pending}
-            tone="neutral"
-          />
-          <SummaryCard
-            icon={INDEX_META.failed.icon}
+          <StatCard label="색인 중" value={summary.indexing} />
+          <StatCard label="대기" value={summary.pending} />
+          <StatCard
             label="실패"
-            count={summary.failed}
-            tone="danger"
+            value={summary.failed}
+            tone={summary.failed > 0 ? "danger" : "default"}
           />
-        </div>
+        </StatGrid>
 
-        <div className="doc-toolbar">
-          <div className="doc-filters" role="group" aria-label="색인 상태 필터">
-            {STATUS_FILTERS.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                className="doc-filter"
-                aria-pressed={statusFilter === filter.value}
-                onClick={() => setStatusFilter(filter.value)}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          <form className="doc-searchform" onSubmit={applySearch}>
-            <select
-              className="doc-select doc-searchform__category"
-              value={category}
-              aria-label="문서 분류 필터"
-              onChange={(event) => setCategory(event.target.value)}
-            >
-              <option value="">전체 분류</option>
-              {[...categoryLabels].map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <input
-              ref={searchRef}
-              className="doc-input doc-search"
-              type="search"
-              defaultValue=""
-              placeholder="제목 검색"
-              aria-label="문서 제목 검색"
+        <PageToolbar
+          start={
+            <FilterChips
+              items={STATUS_FILTERS}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              label="색인 상태 필터"
             />
-            <Button type="submit" variant="secondary">
-              검색
-            </Button>
-          </form>
-          <Link href="/documents/new" className="btn btn--primary">
-            새 문서
-          </Link>
-        </div>
+          }
+          end={
+            <>
+              <form className="doc-searchform" onSubmit={applySearch}>
+                <select
+                  className="doc-select doc-searchform__category"
+                  value={category}
+                  aria-label="문서 분류 필터"
+                  onChange={(event) => setCategory(event.target.value)}
+                >
+                  <option value="">전체 분류</option>
+                  {[...categoryLabels].map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <SearchField ref={searchRef} label="문서 제목 검색" defaultValue="" placeholder="제목 검색" />
+                <Button type="submit" variant="secondary">
+                  검색
+                </Button>
+              </form>
+              <Link href="/documents/new" className="btn btn--primary">
+                새 문서
+              </Link>
+            </>
+          }
+        />
 
         <DocumentsBody
           loading={loading}
@@ -183,30 +170,6 @@ export function DocumentManager() {
         />
       </main>
     </>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  count,
-  tone,
-}: {
-  icon: string;
-  label: string;
-  count: number;
-  tone: SummaryTone;
-}) {
-  return (
-    <div className={`surface-card doc-summary__card doc-summary__card--${tone}`}>
-      <span className="doc-summary__label">
-        <span className="doc-summary__icon" aria-hidden="true">
-          {icon}
-        </span>
-        {label}
-      </span>
-      <span className="doc-summary__count">{count}</span>
-    </div>
   );
 }
 

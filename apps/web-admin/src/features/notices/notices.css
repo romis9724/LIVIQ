@@ -8,12 +8,6 @@
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-/* 목록의 주 액션 줄 — 헤더에서 콘텐츠 상단으로 내렸다. H14-2. */
-.notice-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-4);
-}
 .notice-back {
   flex: none;
   color: var(--color-accent);
@@ -73,6 +67,10 @@
 }
 .notice-table tbody tr {
   border-top: 1px solid var(--color-border);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.notice-table tbody tr:hover {
+  background: var(--color-surface-sunken);
 }
 
 .notice-title-link {
@@ -99,12 +97,13 @@
 .notice-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: var(--text-xs);
   font-weight: 600;
   border: 1px solid transparent;
+  white-space: nowrap;
 }
 .notice-badge--draft {
   background: var(--color-surface-sunken);
@@ -134,10 +133,11 @@
 }
 
 /* ============ 폼 ============ */
+/* 폼 간격 리듬 — 필드 사이 --space-4, 액션 줄만 --space-2 더(docs/05 §5A). */
 .notice-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 .notice-field {
   display: flex;
@@ -250,7 +250,7 @@
 /* 목록 분류 배지. */
 .notice-cat {
   display: inline-block;
-  padding: 2px var(--space-2);
+  padding: var(--space-1) var(--space-3);
   border-radius: 999px;
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
@@ -342,6 +342,7 @@
   display: flex;
   justify-content: flex-end;
   gap: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 /* ============ 첨부 ============ */

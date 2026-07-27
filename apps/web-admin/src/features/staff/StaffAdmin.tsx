@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Dialog, EmptyState, FormField, Skeleton, Toast } from "@liviq/ui";
-import type { ToastTone } from "@liviq/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Dialog,
+  EmptyState,
+  FilterChips,
+  FormField,
+  PageToolbar,
+  Skeleton,
+  Toast,
+} from "@liviq/ui";
+import type { FilterChipItem, ToastTone } from "@liviq/ui";
 import {
   ApiError,
   deactivateStaff,
@@ -35,6 +44,16 @@ function roleText(roles: string[]): string {
   return roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ");
 }
 
+// 역할 필터 — "all"은 전체.
+type RoleFilter = "all" | "MANAGER" | "STAFF";
+
+function matchesRole(member: StaffMember, filter: RoleFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "MANAGER") return member.roles.includes("MANAGER");
+  // 소장은 STAFF 권한도 함께 갖는 경우가 있어 "직원"에서는 제외한다.
+  return member.roles.includes("STAFF") && !member.roles.includes("MANAGER");
+}
+
 /** STAFF 전용(소장 아님)·비활성 아님일 때만 비활성화 가능. 소장·자기 자신은 서버도 400. */
 function canDeactivate(member: StaffMember): boolean {
   return (
@@ -47,6 +66,9 @@ function canDeactivate(member: StaffMember): boolean {
 export function StaffAdmin() {
   const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  // 초대 폼은 툴바의 주요 액션으로 접고 펼친다. 기본은 펼침(소장의 첫 할 일).
+  const [inviteOpen, setInviteOpen] = useState(true);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const [name, setName] = useState("");
@@ -144,6 +166,16 @@ export function StaffAdmin() {
     }
   }
 
+  const roleFilters: readonly FilterChipItem<RoleFilter>[] = useMemo(
+    () => [
+      { id: "all", label: "전체", count: staff?.length },
+      { id: "MANAGER", label: "소장", count: staff?.filter((m) => matchesRole(m, "MANAGER")).length },
+      { id: "STAFF", label: "직원", count: staff?.filter((m) => matchesRole(m, "STAFF")).length },
+    ],
+    [staff],
+  );
+  const visibleStaff = staff?.filter((member) => matchesRole(member, roleFilter)) ?? null;
+
   return (
     <>
       <header className="admin-page__header">
@@ -153,7 +185,33 @@ export function StaffAdmin() {
       </header>
 
       <main className="admin-page__main">
-        <section className="surface-card sf-invite" aria-labelledby="sf-invite-h">
+        <PageToolbar
+          start={
+            <FilterChips
+              items={roleFilters}
+              value={roleFilter}
+              onChange={setRoleFilter}
+              label="직원 역할 필터"
+            />
+          }
+          end={
+            <Button
+              variant="primary"
+              aria-expanded={inviteOpen}
+              aria-controls="sf-invite"
+              onClick={() => setInviteOpen(!inviteOpen)}
+            >
+              {inviteOpen ? "초대 폼 닫기" : "직원 초대"}
+            </Button>
+          }
+        />
+
+        <section
+          id="sf-invite"
+          className="surface-card sf-invite"
+          aria-labelledby="sf-invite-h"
+          hidden={!inviteOpen}
+        >
           <h2 id="sf-invite-h" className="sf-section__title">
             직원 초대
           </h2>
@@ -199,21 +257,23 @@ export function StaffAdmin() {
 
           {loadError ? (
             <EmptyState icon="⚠" title="목록을 불러오지 못했습니다" description={loadError} />
-          ) : staff === null ? (
-            <div className="sf-rows">
+          ) : visibleStaff === null ? (
+            <div className="sf-skeletons">
               <Skeleton height="64px" />
               <Skeleton height="64px" />
             </div>
-          ) : staff.length === 0 ? (
+          ) : visibleStaff.length === 0 ? (
             <EmptyState
               icon="👥"
-              title="등록된 직원이 없습니다"
-              description="위에서 직원을 초대해 보세요."
+              title={staff?.length ? "조건에 맞는 직원이 없습니다" : "등록된 직원이 없습니다"}
+              description={
+                staff?.length ? "역할 필터를 확인해 주세요." : "‘직원 초대’로 직원을 추가하세요."
+              }
             />
           ) : (
-            <ul className="sf-rows">
-              {staff.map((member) => (
-                <li key={member.userId} className="sf-row">
+            <ul className="data-list sf-rows">
+              {visibleStaff.map((member) => (
+                <li key={member.userId} className="data-list__item sf-row">
                   <div className="sf-row__main">
                     <span className="sf-row__name">{member.name ?? "이름 미기록"}</span>
                     <span className="sf-row__email">{member.email ?? "이메일 미기록"}</span>
@@ -235,8 +295,9 @@ export function StaffAdmin() {
                   ) : null}
                   {member.userId !== meId ? (
                     <Button
-                      variant="danger"
+                      variant="ghost"
                       size="sm"
+                      className="sf-row__delete"
                       disabled={busyId === member.userId}
                       onClick={() => setDeleteTarget(member)}
                     >

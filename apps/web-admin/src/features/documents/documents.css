@@ -65,40 +65,10 @@
   cursor: not-allowed;
 }
 
-.doc-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.doc-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.doc-filter {
-  padding: 5px var(--space-3);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.doc-filter:hover {
-  border-color: var(--color-accent);
-  color: var(--color-text);
-}
-.doc-filter:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-.doc-filter[aria-pressed="true"] {
-  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+/* 툴바 본체·필터 칩·검색 입력은 공통 컴포넌트(.page-toolbar/.filter-chips/.search-field).
+   doc-main이 gap으로 간격을 주므로 툴바 자체 margin은 지운다. */
+.doc-main > .page-toolbar {
+  margin-bottom: 0;
 }
 .doc-searchform {
   display: flex;
@@ -108,9 +78,6 @@
 }
 .doc-searchform__category {
   min-width: 150px;
-}
-.doc-search {
-  min-width: 200px;
 }
 
 .doc-loading {
@@ -126,57 +93,6 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 50;
-}
-
-.doc-summary {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-/* 상태 요약 카드 — 대시보드 액션 카드(.dash-action)와 시각 톤 통일.
-   상단 tone 스트립 + 아이콘 칩 + 큰 카운트. 링크가 아니라 요약이므로 hover lift 없음(정적). */
-.doc-summary__card {
-  --tone: var(--color-accent);
-  flex: 1;
-  min-width: 140px;
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  border-color: color-mix(in oklch, var(--tone) 55%, var(--color-border));
-}
-.doc-summary__card--success {
-  --tone: var(--color-success);
-}
-.doc-summary__card--accent {
-  --tone: var(--color-accent);
-}
-.doc-summary__card--neutral {
-  --tone: var(--color-border-strong);
-}
-.doc-summary__card--danger {
-  --tone: var(--color-danger);
-}
-.doc-summary__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-.doc-summary__icon {
-  font-size: var(--text-base);
-  line-height: 1;
-}
-.doc-summary__count {
-  align-self: flex-end;
-  font-size: var(--text-xl);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: color-mix(in oklch, var(--tone) 60%, var(--color-text));
 }
 
 .doc-tablecard {
@@ -209,6 +125,9 @@
 }
 .doc-table tbody tr {
   border-top: 1px solid var(--color-border);
+}
+.doc-table tbody tr:hover {
+  background: var(--color-surface-sunken);
 }
 .doc-nowrap {
   white-space: nowrap;

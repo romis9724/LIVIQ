@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, EmptyState, Skeleton } from "@liviq/ui";
+import { Button, EmptyState, FilterChips, PageToolbar, Skeleton } from "@liviq/ui";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -8,6 +8,15 @@ import { ApiError, listCodeGroups, listNotices, type Notice } from "@/lib/api";
 import { NOTICE_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
 import { STATUS_META, shortDate, shortDateTime, sortNotices } from "./data";
 import "./notices.css";
+
+const STATUS_FILTERS = [
+  { id: "all", label: "전체" },
+  { id: "draft", label: "임시저장" },
+  { id: "scheduled", label: "예약" },
+  { id: "published", label: "발행" },
+] as const;
+
+type StatusFilter = (typeof STATUS_FILTERS)[number]["id"];
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -19,6 +28,7 @@ export function NoticeBoard() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   const load = useCallback(async () => {
     try {
@@ -47,6 +57,18 @@ export function NoticeBoard() {
   }, []);
 
   const rows = useMemo(() => sortNotices(notices), [notices]);
+  const chips = useMemo(
+    () =>
+      STATUS_FILTERS.map((f) => ({
+        ...f,
+        count: f.id === "all" ? rows.length : rows.filter((n) => n.status === f.id).length,
+      })),
+    [rows],
+  );
+  const visibleRows = useMemo(
+    () => (statusFilter === "all" ? rows : rows.filter((n) => n.status === statusFilter)),
+    [rows, statusFilter],
+  );
 
   return (
     <>
@@ -57,15 +79,26 @@ export function NoticeBoard() {
       </header>
 
       <main className="admin-page__main">
-        <div className="notice-toolbar">
-          <Link href="/notices/new" className="btn btn--primary">
-            새 공지 작성
-          </Link>
-        </div>
+        <PageToolbar
+          start={
+            <FilterChips
+              items={chips}
+              value={statusFilter}
+              onChange={setStatusFilter}
+              label="상태 필터"
+            />
+          }
+          end={
+            <Link href="/notices/new" className="btn btn--primary">
+              새 공지 작성
+            </Link>
+          }
+        />
         <NoticeBoardBody
           loading={loading}
           loadError={loadError}
-          rows={rows}
+          rows={visibleRows}
+          filtered={statusFilter !== "all"}
           categoryLabels={categoryLabels}
           onRetry={() => {
             setLoading(true);
@@ -81,11 +114,20 @@ interface BodyProps {
   loading: boolean;
   loadError: string | null;
   rows: readonly Notice[];
+  /** 상태 필터가 걸린 상태 — 빈 목록 문구를 구분한다(docs/05 §9). */
+  filtered: boolean;
   categoryLabels: Map<string, string>;
   onRetry: () => void;
 }
 
-function NoticeBoardBody({ loading, loadError, rows, categoryLabels, onRetry }: BodyProps) {
+function NoticeBoardBody({
+  loading,
+  loadError,
+  rows,
+  filtered,
+  categoryLabels,
+  onRetry,
+}: BodyProps) {
   if (loading) {
     return (
       <div className="surface-card notice-loading">
@@ -106,7 +148,13 @@ function NoticeBoardBody({ loading, loadError, rows, categoryLabels, onRetry }: 
     );
   }
   if (rows.length === 0) {
-    return (
+    return filtered ? (
+      <EmptyState
+        icon="📢"
+        title="해당 상태의 공지가 없습니다"
+        description="다른 상태를 선택해 보세요."
+      />
+    ) : (
       <EmptyState
         icon="📢"
         title="등록된 공지가 없습니다"
