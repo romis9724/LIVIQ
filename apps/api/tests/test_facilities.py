@@ -11,13 +11,14 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest_asyncio
-from app.deps import RequestContext, get_context, get_tenant_session
+from app.deps import RequestContext, get_context, get_graph, get_tenant_session
 from app.main import create_app
 from conftest import TENANT_ID
 from httpx import ASGITransport
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.graph import FacilityGraph, GraphLink, GraphNode
 from liviq_db.models import OutboxEvent, Tenant
 
 OTHER_TENANT_ID = uuid.UUID("99999999-9999-9999-9999-999999999999")
@@ -34,16 +35,33 @@ async def _seed(session: AsyncSession) -> None:
     await session.flush()
 
 
+class StubGraph:
+    """GraphClient의 그래프 조회만 흉내내는 스텁 — tenant 인자를 기록하고 결과/예외를 낸다."""
+
+    def __init__(self, result: FacilityGraph | None = None, error: Exception | None = None) -> None:
+        self.result = result or FacilityGraph(nodes=(), links=())
+        self.error = error
+        self.calls: list[str] = []
+
+    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
+        self.calls.append(tenant_id)
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
 def _make_client(
     db_session: AsyncSession,
     *,
     tenant_id: uuid.UUID = TENANT_ID,
     user_id: uuid.UUID = MANAGER_ID,
     roles: tuple[str, ...] = ("MANAGER",),
+    graph: StubGraph | None = None,
 ) -> httpx.AsyncClient:
     app = create_app()
     app.dependency_overrides[get_context] = lambda: RequestContext(tenant_id, user_id, roles=roles)
     app.dependency_overrides[get_tenant_session] = lambda: db_session
+    app.dependency_overrides[get_graph] = lambda: graph  # None = Neo4j 미배선
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -201,6 +219,101 @@ async def test_maintenance_records_outbox(seeded: AsyncSession) -> None:
     assert events[0].event_type == "created"
     assert events[0].payload is not None
     assert events[0].payload["parts"] == {"belt": 1, "seals": ["a", "b"]}
+
+
+# ── 그래프 조회 (H13-1, ADR-0022) ────────────────────────────────────────────
+
+
+def _sample_graph(facility_id: str, incident_id: str) -> FacilityGraph:
+    return FacilityGraph(
+        nodes=(
+            GraphNode(
+                pg_id=facility_id,
+                label="facility",
+                name="지하펌프",
+                type="급배수",
+                location="지하1층",
+                status="fault",
+            ),
+            GraphNode(
+                pg_id=incident_id,
+                label="incident",
+                name="누수",
+                at="2026-07-01T00:00:00Z",
+                resolved=True,
+            ),
+        ),
+        links=(GraphLink(source=facility_id, target=incident_id, kind="HAS_INCIDENT"),),
+    )
+
+
+async def test_graph_returns_nodes_and_links_without_extra_fields(seeded: AsyncSession) -> None:
+    facility_id, incident_id = str(uuid.uuid4()), str(uuid.uuid4())
+    stub = StubGraph(_sample_graph(facility_id, incident_id))
+    async with _make_client(seeded, graph=stub) as c:
+        response = await c.get("/admin/facilities/graph")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert stub.calls == [str(TENANT_ID)]  # tenant 인자 강제(격리 CRITICAL)
+    assert body["degraded"] is False
+    assert [n["pg_id"] for n in body["nodes"]] == [facility_id, incident_id]
+    assert body["links"] == [{"source": facility_id, "target": incident_id, "kind": "HAS_INCIDENT"}]
+    # 응답 스키마 고정 — embedding 등 여분 필드가 새지 않는다
+    assert set(body["nodes"][0]) == {
+        "pg_id",
+        "label",
+        "name",
+        "type",
+        "location",
+        "status",
+        "at",
+        "resolved",
+    }
+    assert body["nodes"][1]["resolved"] is True
+
+
+async def test_graph_scopes_query_to_caller_tenant(seeded: AsyncSession) -> None:
+    """타 tenant 호출은 자기 tenant로만 질의하고, PG 폴백에서도 남의 시설이 새지 않는다."""
+    async with _make_client(seeded) as owner:
+        await _create_facility(owner)
+
+    stub = StubGraph()
+    async with _make_client(seeded, tenant_id=OTHER_TENANT_ID, graph=stub) as other:
+        body = (await other.get("/admin/facilities/graph")).json()
+    assert stub.calls == [str(OTHER_TENANT_ID)]
+    assert body["nodes"] == []
+
+    broken = StubGraph(error=RuntimeError("neo4j down"))
+    async with _make_client(seeded, tenant_id=OTHER_TENANT_ID, graph=broken) as other:
+        fallback = (await other.get("/admin/facilities/graph")).json()
+    assert fallback["degraded"] is True
+    assert fallback["nodes"] == []
+
+
+async def test_graph_falls_back_to_pg_when_neo4j_unavailable(seeded: AsyncSession) -> None:
+    async with _make_client(seeded) as owner:
+        created = await _create_facility(owner)
+
+    for graph in (StubGraph(error=RuntimeError("neo4j down")), None):  # 예외 · 미배선
+        async with _make_client(seeded, graph=graph) as c:
+            response = await c.get("/admin/facilities/graph")
+
+        assert response.status_code == 200, response.text  # 503 금지
+        body = response.json()
+        assert body["degraded"] is True
+        assert body["links"] == []
+        assert [(n["pg_id"], n["label"], n["status"]) for n in body["nodes"]] == [
+            (created["id"], "facility", "fault")
+        ]
+
+
+async def test_graph_is_manager_only(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, graph=StubGraph()) as manager:
+        assert (await manager.get("/admin/facilities/graph")).status_code == 200
+    for user_id, roles in ((FACILITY_ID, ("STAFF",)), (RESIDENT_ID, ("RESIDENT",))):
+        async with _make_client(seeded, user_id=user_id, roles=roles, graph=StubGraph()) as c:
+            assert (await c.get("/admin/facilities/graph")).status_code == 403
 
 
 # ── 역할 (CRITICAL) ──────────────────────────────────────────────────────────

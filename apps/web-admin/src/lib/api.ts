@@ -1035,6 +1035,73 @@ export async function createMaintenance(
   return toMaintenance(await response.json());
 }
 
+// ── 시설 그래프 (H13-1 · ADR-0022 — Neo4j 파생 읽기, 미가용 시 PG 축약 폴백) ──
+
+export type GraphNodeLabel = "facility" | "incident" | "maintenance";
+export type GraphLinkKind = "HAS_INCIDENT" | "HAS_MAINTENANCE";
+
+/** 그래프 노드. 라벨별로 채워지는 필드가 다르다(시설=type·status, 장애=at·resolved). */
+export interface GraphNode {
+  pgId: string;
+  label: GraphNodeLabel;
+  name: string | null;
+  type: string | null;
+  location: string | null;
+  status: string | null;
+  at: string | null;
+  resolved: boolean | null;
+}
+
+export interface GraphLink {
+  source: string;
+  target: string;
+  kind: GraphLinkKind;
+}
+
+/** degraded=true 면 Neo4j 미가용 — 노드만 있는 PG 축약 그래프(관계 없음). */
+export interface FacilityGraph {
+  nodes: GraphNode[];
+  links: GraphLink[];
+  degraded: boolean;
+}
+
+interface RawGraphNode {
+  pg_id: string;
+  label: GraphNodeLabel;
+  name?: string | null;
+  type?: string | null;
+  location?: string | null;
+  status?: string | null;
+  at?: string | null;
+  resolved?: boolean | null;
+}
+
+function toGraphNode(raw: RawGraphNode): GraphNode {
+  return {
+    pgId: raw.pg_id,
+    label: raw.label,
+    name: raw.name ?? null,
+    type: raw.type ?? null,
+    location: raw.location ?? null,
+    status: raw.status ?? null,
+    at: raw.at ?? null,
+    resolved: raw.resolved ?? null,
+  };
+}
+
+export async function getFacilityGraph(): Promise<FacilityGraph> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    nodes: (body.nodes as RawGraphNode[]).map(toGraphNode),
+    links: body.links as GraphLink[],
+    degraded: Boolean(body.degraded),
+  };
+}
+
 // ── 가입 승인 (docs/01 §13, docs/06 §2 · MANAGER 전용) ─────────────────────────
 // 이름은 서버가 마스킹해서 준다 — 웹에서 재마스킹하지 않는다(원문 미보유).
 

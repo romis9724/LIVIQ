@@ -5,6 +5,7 @@ import { DeckGL, MapView, PolygonLayer } from "deck.gl";
 import type { Color, MapViewState, PickingInfo } from "deck.gl";
 import { EmptyState } from "@liviq/ui";
 import type { TwinGeometryItem } from "@/lib/api";
+import { isWebglSupported } from "@/lib/webgl";
 import {
   OVERLAY_LABELS,
   boundsToViewState,
@@ -29,19 +30,9 @@ interface TwinDeckProps {
   onSelectHousehold: (householdId: string) => void;
 }
 
-/** WebGL 지원 여부 — 미지원이면 캔버스 대신 안내를 띄운다(클라이언트 전용). */
-function webglSupported(): boolean {
-  try {
-    const canvas = document.createElement("canvas");
-    return Boolean(canvas.getContext("webgl2") ?? canvas.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
-
 export function TwinDeck({ geometry, overlay, overlayKind, onSelectHousehold }: TwinDeckProps) {
   const [failed, setFailed] = useState(false);
-  const supported = useMemo(webglSupported, []);
+  const supported = useMemo(isWebglSupported, []);
 
   const initialViewState = useMemo<MapViewState>(() => {
     const bounds = computeBounds(geometry);

@@ -265,6 +265,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/facilities/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Facility Graph
+         * @description 시설 그래프(Neo4j 파생) 조회 — 시설관리 메인의 읽기 경로(ADR-0022).
+         *
+         *     Neo4j 미가용은 503이 아니다 — PG `facilities`로 노드만 채운 축약 그래프에
+         *     `degraded=True`를 실어 화면이 한계를 표시하게 한다(docs/01 §10 장애 격리).
+         */
+        get: operations["get_facility_graph_admin_facilities_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/facilities/{facility_id}": {
         parameters: {
             query?: never;
@@ -2231,6 +2254,18 @@ export interface components {
              */
             updated_at: string;
         };
+        /** FacilityGraphOut */
+        FacilityGraphOut: {
+            /**
+             * Degraded
+             * @default false
+             */
+            degraded: boolean;
+            /** Links */
+            links: components["schemas"]["GraphLinkOut"][];
+            /** Nodes */
+            nodes: components["schemas"]["GraphNodeOut"][];
+        };
         /** FacilityListOut */
         FacilityListOut: {
             /** Items */
@@ -2397,6 +2432,43 @@ export interface components {
             unmatched: number;
             /** Unmatched Samples */
             unmatched_samples: string[];
+        };
+        /** GraphLinkOut */
+        GraphLinkOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE";
+            /** Source */
+            source: string;
+            /** Target */
+            target: string;
+        };
+        /**
+         * GraphNodeOut
+         * @description 그래프 노드(H13-1, ADR-0022). 라벨별로 채워지는 필드가 다르다 — embedding은 없음.
+         */
+        GraphNodeOut: {
+            /** At */
+            at?: string | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "facility" | "incident" | "maintenance";
+            /** Location */
+            location?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Pg Id */
+            pg_id: string;
+            /** Resolved */
+            resolved?: boolean | null;
+            /** Status */
+            status?: string | null;
+            /** Type */
+            type?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -4053,6 +4125,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_facility_graph_admin_facilities_graph_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FacilityGraphOut"];
                 };
             };
             /** @description Validation Error */

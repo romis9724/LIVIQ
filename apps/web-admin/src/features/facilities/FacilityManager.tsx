@@ -21,6 +21,7 @@ import {
 } from "@/lib/api";
 import { FacilityAssistantPanel } from "./FacilityAssistantPanel";
 import { IncidentDialog, MaintenanceDialog, RegisterDialog } from "./FacilityDialogs";
+import { HistorySection } from "./FacilityHistory";
 import { FILTERS, STATUS_META, STATUS_ORDER, countByStatus, shortDate, type FilterId } from "./data";
 import "./facilities.css";
 
@@ -397,45 +398,5 @@ function FacilityDetailPanel({
         </Button>
       </div>
     </aside>
-  );
-}
-
-interface HistoryItem {
-  id: string;
-  date: string;
-  primary: string;
-  secondary: string | null;
-}
-
-function HistorySection({
-  title,
-  empty,
-  items,
-}: {
-  title: string;
-  empty: string;
-  items: HistoryItem[];
-}) {
-  return (
-    <section className="fac-history">
-      <div className="fac-history__title">{title}</div>
-      {items.length === 0 ? (
-        <p className="fac-history__empty">{empty}</p>
-      ) : (
-        <ol className="fac-history__list">
-          {items.map((item) => (
-            <li key={item.id} className="fac-history__item">
-              <span className="fac-history__date">{item.date}</span>
-              <div className="fac-history__body">
-                <div className="fac-history__primary">{item.primary}</div>
-                {item.secondary ? (
-                  <div className="fac-history__secondary">{item.secondary}</div>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
   );
 }
