@@ -14,11 +14,27 @@ from pydantic import BaseModel, Field
 
 FacilityStatus = Literal["normal", "check", "fault", "risk"]
 
+# plan_room·plan_kind(HAS_ROOM·HAS_KIND)는 H14-1 — 도면과 마커 사이의 방·종류 허브
 GraphNodeLabel = Literal[
-    "facility", "incident", "maintenance", "floor_plan", "plan_device", "location", "complex"
+    "facility",
+    "incident",
+    "maintenance",
+    "floor_plan",
+    "plan_room",
+    "plan_kind",
+    "plan_device",
+    "location",
+    "complex",
 ]
 GraphLinkKind = Literal[
-    "HAS_INCIDENT", "HAS_MAINTENANCE", "HAS_DEVICE", "LINKED_TO", "LOCATED_IN", "PART_OF"
+    "HAS_INCIDENT",
+    "HAS_MAINTENANCE",
+    "HAS_ROOM",
+    "HAS_KIND",
+    "HAS_DEVICE",
+    "LINKED_TO",
+    "LOCATED_IN",
+    "PART_OF",
 ]
 
 __all__ = [

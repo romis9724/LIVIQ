@@ -62,9 +62,7 @@ async def _add_resident(
     tenant_id: uuid.UUID = TENANT_ID,
     household_id: uuid.UUID | None,
 ) -> None:
-    session.add(
-        User(id=user_id, tenant_id=tenant_id, status="active", household_id=household_id)
-    )
+    session.add(User(id=user_id, tenant_id=tenant_id, status="active", household_id=household_id))
     await session.flush()
 
 
@@ -300,9 +298,7 @@ async def test_manager_and_staff_forbidden(
     households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
 ) -> None:
     for role in ("MANAGER", "STAFF"):
-        async with _client(
-            db_session, FakeStorage(), roles=(role,), user_id=MANAGER_USER_ID
-        ) as c:
+        async with _client(db_session, FakeStorage(), roles=(role,), user_id=MANAGER_USER_ID) as c:
             resp = await c.get("/me/floor-plan")
         assert resp.status_code == 403
 
@@ -366,7 +362,11 @@ async def test_cross_tenant_same_unit_type_name_isolated(
     await db_session.flush()
     db_session.add(
         Household(
-            id=hid_b, tenant_id=TENANT_B_ID, building_id=building_b, floor=1, unit_no=101,
+            id=hid_b,
+            tenant_id=TENANT_B_ID,
+            building_id=building_b,
+            floor=1,
+            unit_no=101,
             status="active",
         )
     )
@@ -387,9 +387,7 @@ async def test_cross_tenant_same_unit_type_name_isolated(
 
 
 def _manager_client(db_session: AsyncSession, storage: FakeStorage) -> httpx.AsyncClient:
-    return _client(
-        db_session, storage, roles=("MANAGER",), user_id=MANAGER_USER_ID
-    )
+    return _client(db_session, storage, roles=("MANAGER",), user_id=MANAGER_USER_ID)
 
 
 async def test_admin_endpoints_forbidden_for_staff_and_resident(

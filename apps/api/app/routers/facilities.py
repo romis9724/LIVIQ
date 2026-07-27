@@ -147,21 +147,18 @@ async def get_facility_graph(
     ctx: Annotated[RequestContext, Depends(require_roles(*_READ_ROLES))],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
-    include_plan: Annotated[bool, Query()] = False,
 ) -> FacilityGraphOut:
     """시설 그래프(Neo4j 파생) 조회 — 시설관리 메인의 읽기 경로(ADR-0022).
 
     Neo4j 미가용은 503이 아니다 — PG `facilities`로 노드만 채운 축약 그래프에
     `degraded=True`를 실어 화면이 한계를 표시하게 한다(docs/01 §10 장애 격리).
 
-    `include_plan`은 기본 false — 평면도 마커까지 실으면 도면당 수십개라 과밀(H13-6),
-    opt-in 화면에서만 true로 요청한다.
+    도면 계층(floor_plan → plan_room·plan_kind 허브 → plan_device 마커)도 기본 포함한다
+    (H14-1 — 마커를 도면에 평면으로 매다는 대신 방·종류 허브를 그래프에 실체화).
     """
     if graph is not None:
         try:
-            result = await graph.fetch_facility_graph(
-                tenant_id=str(ctx.tenant_id), include_plan=include_plan
-            )
+            result = await graph.fetch_facility_graph(tenant_id=str(ctx.tenant_id))
         except Exception:  # noqa: BLE001 — 그래프 미가용이 화면 실패로 번지지 않게(폴백)
             logger.warning("시설 그래프 조회 실패 — PG 축약 폴백", exc_info=True)
         else:

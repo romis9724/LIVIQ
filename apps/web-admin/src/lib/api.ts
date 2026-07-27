@@ -938,6 +938,7 @@ export interface MaintenanceInput {
 export interface FacilityFilter {
   status?: FacilityStatus;
   type?: string;
+  limit?: number;
 }
 
 interface RawFacility {
@@ -1011,6 +1012,7 @@ export function buildFacilityQuery(filter: FacilityFilter): string {
   const search = new URLSearchParams();
   if (filter.status) search.set("status", filter.status);
   if (filter.type && filter.type.trim()) search.set("type", filter.type.trim());
+  if (filter.limit) search.set("limit", String(filter.limit));
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }
@@ -1089,8 +1091,9 @@ export async function createMaintenance(
 
 // ── 시설 그래프 (H13-1 · ADR-0022 — Neo4j 파생 읽기, 미가용 시 PG 축약 폴백) ──
 // location·floor_plan·plan_device 는 H13-7 추가 — 위치(동/실)·평면도·평면도 마커 노드.
-// complex 는 H13-7 확장 — 단지 노드(tenant당 1개). PART_OF 로 location·floor_plan 이 연결된다
-// (floor_plan→complex 는 include_plan=true 일 때만 응답에 포함).
+// complex 는 H13-7 확장 — 단지 노드(tenant당 1개). PART_OF 로 location·floor_plan 이 연결된다.
+// plan_room·plan_kind 는 H14-1 재구조화 — 마커를 도면에 평면으로 매달지 않고
+// 도면 →(HAS_ROOM·HAS_KIND) 방·종류 허브 →(HAS_DEVICE) 마커 계층으로 내려준다.
 
 export type GraphNodeLabel =
   | "facility"
@@ -1098,18 +1101,23 @@ export type GraphNodeLabel =
   | "maintenance"
   | "location"
   | "floor_plan"
+  | "plan_room"
+  | "plan_kind"
   | "plan_device"
   | "complex";
 export type GraphLinkKind =
   | "HAS_INCIDENT"
   | "HAS_MAINTENANCE"
   | "LOCATED_IN"
+  | "HAS_ROOM"
+  | "HAS_KIND"
   | "HAS_DEVICE"
   | "LINKED_TO"
   | "PART_OF";
 
 /** 그래프 노드. 라벨별로 채워지는 필드가 다르다(시설=type·status, 장애=at·resolved,
- *  location=name 이 위치 문자열, floor_plan=name 이 평형명, plan_device=name 이 종류(+방)). */
+ *  location=name 이 위치 문자열, floor_plan=name 이 평형명, plan_room=name 이 방 이름,
+ *  plan_kind=name 이 마커 종류, plan_device=name 이 종류(+방)). */
 export interface GraphNode {
   pgId: string;
   label: GraphNodeLabel;
@@ -1158,11 +1166,10 @@ function toGraphNode(raw: RawGraphNode): GraphNode {
   };
 }
 
-/** includePlan=true 면 평면도·마커(floor_plan·plan_device)도 함께 싣는다(H13-7, opt-in —
- *  도면당 마커 수십개라 기본은 제외). location·LOCATED_IN 은 includePlan 과 무관하게 항상 온다. */
-export async function getFacilityGraph(includePlan = false): Promise<FacilityGraph> {
-  const query = includePlan ? "?include_plan=true" : "";
-  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph${query}`, {
+/** 시설 그래프 전체 — facility·location·complex·floor_plan 에 더해 도면 하위 계층
+ *  (plan_room·plan_kind 허브 + plan_device 마커)까지 모두 기본 포함된다(H14-1). */
+export async function getFacilityGraph(): Promise<FacilityGraph> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);

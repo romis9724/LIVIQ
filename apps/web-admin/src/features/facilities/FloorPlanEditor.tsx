@@ -23,6 +23,7 @@ import {
   toPercent,
 } from "./floor-plan-admin-data";
 import "./facilities.css";
+import "./floor-plan.css";
 
 const TOAST_DURATION_MS = 3200;
 
@@ -235,15 +236,13 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
 
   return (
     <>
-      <header className="admin-page__header fp-editor-head">
+      <div className="fac-toolbar fp-editor-head">
         <div className="fac-head__text">
           <button type="button" className="btn btn--secondary btn--sm fp-back" onClick={handleBackClick}>
             ← 목록으로
           </button>
-          <h1 id="main" className="admin-page__title">
-            {plan.unitTypeName} 평면도 편집
-          </h1>
-          <p className="admin-page__lede">
+          <h3 className="fp-editor-title">{plan.unitTypeName} 평면도 편집</h3>
+          <p className="fac-toolbar__lede">
             도면을 클릭해 마커를 추가하고, 마커를 클릭해 정보를 편집합니다.
           </p>
         </div>
@@ -253,7 +252,7 @@ export function FloorPlanEditor({ planId, onBack, onSaved }: FloorPlanEditorProp
             {saving ? "저장 중…" : "저장"}
           </Button>
         </div>
-      </header>
+      </div>
 
       <div className="fp-editor">
         <div className="fp-canvas-wrap">

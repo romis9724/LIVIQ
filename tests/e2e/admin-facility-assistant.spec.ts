@@ -11,6 +11,9 @@ test("@llm 시설 도우미에 질문하면 원인 후보 또는 폴백을 출�
 }) => {
   await page.goto(`${ADMIN}/facilities`);
 
+  // AI 도우미는 상시 렌더가 아니라 플로팅 버튼 → 오버레이다(H14-1).
+  await page.getByRole("button", { name: "AI 도우미" }).click();
+
   const panel = page.locator(".fac-ai");
   await expect(panel).toBeVisible();
 

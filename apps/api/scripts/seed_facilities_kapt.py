@@ -101,9 +101,7 @@ async def _run(tenant_id: uuid.UUID) -> None:
     factory = create_session_factory(engine)
     try:
         async with factory() as session, session.begin():
-            complex_name = await session.scalar(
-                select(Tenant.name).where(Tenant.id == tenant_id)
-            )
+            complex_name = await session.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
             if complex_name is None:
                 raise SystemExit(f"단지를 찾을 수 없습니다: {tenant_id}")
             await session.execute(

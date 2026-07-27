@@ -42,13 +42,9 @@ class StubGraph:
         self.result = result or FacilityGraph(nodes=(), links=())
         self.error = error
         self.calls: list[str] = []
-        self.include_plan_calls: list[bool] = []
 
-    async def fetch_facility_graph(
-        self, *, tenant_id: str, include_plan: bool = False
-    ) -> FacilityGraph:
+    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
         self.calls.append(tenant_id)
-        self.include_plan_calls.append(include_plan)
         if self.error is not None:
             raise self.error
         return self.result
@@ -297,9 +293,7 @@ async def test_graph_accepts_location_node_and_link(seeded: AsyncSession) -> Non
     assert response.status_code == 200, response.text
     body = response.json()
     assert [n["label"] for n in body["nodes"]] == ["facility", "location"]
-    assert body["links"] == [
-        {"source": facility_id, "target": location_id, "kind": "LOCATED_IN"}
-    ]
+    assert body["links"] == [{"source": facility_id, "target": location_id, "kind": "LOCATED_IN"}]
 
 
 async def test_graph_accepts_complex_node_and_link(seeded: AsyncSession) -> None:
@@ -321,15 +315,6 @@ async def test_graph_accepts_complex_node_and_link(seeded: AsyncSession) -> None
     body = response.json()
     assert [n["label"] for n in body["nodes"]] == ["facility", "complex"]
     assert body["links"] == [{"source": facility_id, "target": complex_id, "kind": "PART_OF"}]
-
-
-async def test_graph_include_plan_defaults_false_and_opts_in(seeded: AsyncSession) -> None:
-    """평면도 마커 과밀 방지(H13-6) — 기본 제외, `?include_plan=true`로만 opt-in."""
-    stub = StubGraph()
-    async with _make_client(seeded, graph=stub) as c:
-        await c.get("/admin/facilities/graph")
-        await c.get("/admin/facilities/graph", params={"include_plan": "true"})
-    assert stub.include_plan_calls == [False, True]
 
 
 async def test_graph_scopes_query_to_caller_tenant(seeded: AsyncSession) -> None:

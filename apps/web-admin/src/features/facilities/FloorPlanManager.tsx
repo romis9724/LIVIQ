@@ -12,6 +12,7 @@ import {
 import { shortDate } from "./data";
 import { FloorPlanEditor } from "./FloorPlanEditor";
 import "./facilities.css";
+import "./floor-plan.css";
 
 const TOAST_DURATION_MS = 3200;
 
@@ -25,12 +26,17 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-/** 평면도 목록 + 업로드 + (선택 시) 편집기 전환. FacilitiesScreen 세 번째 탭. */
-export function FloorPlanManager() {
+interface FloorPlanManagerProps {
+  /** 그래프의 floor_plan 노드에서 바로 편집으로 들어올 때의 도면 id(H14-1). 없으면 목록부터. */
+  initialPlanId?: string | null;
+}
+
+/** 평면도 목록 + 업로드 + (선택 시) 편집기 전환. FacilitiesScreen 의 평면도 오버레이 내용. */
+export function FloorPlanManager({ initialPlanId = null }: FloorPlanManagerProps = {}) {
   const [plans, setPlans] = useState<AdminFloorPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialPlanId);
   const [showUpload, setShowUpload] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [toast, setToast] = useState<ToastState | null>(null);
@@ -99,21 +105,16 @@ export function FloorPlanManager() {
 
   return (
     <>
-      <header className="admin-page__header fac-head">
-        <div className="fac-head__text">
-          <h1 id="main" className="admin-page__title">
-            평면도
-          </h1>
-          <p className="admin-page__lede">
-            세대 타입별 도면과 시설 마커를 편집합니다. 좌표는 원본 이미지 픽셀 기준입니다.
-          </p>
-        </div>
+      <div className="fac-toolbar">
+        <p className="fac-toolbar__lede">
+          세대 타입별 도면과 시설 마커를 편집합니다. 좌표는 원본 이미지 픽셀 기준입니다.
+        </p>
         <Button variant="primary" onClick={() => setShowUpload(true)}>
           도면 업로드
         </Button>
-      </header>
+      </div>
 
-      <main className="fp-list-main">
+      <div className="fp-list-main">
         {loading ? (
           <>
             <Skeleton height="6rem" />
@@ -155,7 +156,7 @@ export function FloorPlanManager() {
             ))}
           </div>
         )}
-      </main>
+      </div>
 
       {showUpload ? (
         <UploadDialog busy={uploadBusy} onCancel={() => setShowUpload(false)} onSubmit={handleUpload} />

@@ -19,10 +19,6 @@ vi.mock("@/lib/api", () => ({
   createMaintenance: vi.fn(),
 }));
 
-vi.mock("./FacilityAssistantPanel", () => ({
-  FacilityAssistantPanel: () => null,
-}));
-
 import { FacilityManager } from "./FacilityManager";
 
 function facility(name: string, id: string): Facility {
