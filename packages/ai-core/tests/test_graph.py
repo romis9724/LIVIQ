@@ -229,6 +229,219 @@ async def test_fetch_facility_graph_isolates_other_tenant(graph: GraphClient) ->
     assert result.links == ()
 
 
+def _plan_props(
+    *, unit_type_name: str = "84M", devices: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    return {
+        "unit_type_name": unit_type_name,
+        "image_width": 923,
+        "image_height": 676,
+        "devices": devices if devices is not None else [],
+    }
+
+
+async def test_replace_floor_plan_creates_plan_and_devices(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    device_a, device_b = str(uuid.uuid4()), str(uuid.uuid4())
+    props = _plan_props(
+        devices=[
+            {"pg_id": device_a, "device_type": "room", "x": 10, "y": 20, "room": "거실"},
+            {"pg_id": device_b, "device_type": "콘센트", "x": 30, "y": 40, "dir": "left"},
+        ]
+    )
+
+    await graph.replace_floor_plan(tenant_id=tenant, pg_id=pg_id, props=props, version=1)
+
+    rows = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_DEVICE]->(d:PlanDevice) "
+        "RETURN fp.unit_type_name AS name, d.pg_id AS device_id, d.device_type AS device_type "
+        "ORDER BY device_id",
+        p=pg_id,
+        t=tenant,
+    )
+    assert len(rows) == 2
+    assert rows[0]["name"] == "84M"
+    assert {r["device_id"] for r in rows} == {device_a, device_b}
+
+
+async def test_replace_floor_plan_full_replace_idempotent(graph: GraphClient) -> None:
+    """재적용해도 device 수가 늘지 않고, 이전 버전 device는 완전히 소멸한다(CRITICAL)."""
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    old_device = str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props=_plan_props(
+            devices=[{"pg_id": old_device, "device_type": "room", "x": 1, "y": 1, "room": "방1"}]
+        ),
+        version=1,
+    )
+
+    new_device = str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props=_plan_props(
+            devices=[{"pg_id": new_device, "device_type": "room", "x": 2, "y": 2, "room": "방2"}]
+        ),
+        version=2,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p})-[:HAS_DEVICE]->(d:PlanDevice) RETURN d.pg_id AS id",
+        p=pg_id,
+    )
+    assert {r["id"] for r in rows} == {new_device}  # 옛 device 소멸, 새 device만 존재
+
+    orphan = await _read(
+        graph, "MATCH (d:PlanDevice {pg_id:$id}) RETURN count(*) AS c", id=old_device
+    )
+    assert orphan[0]["c"] == 0  # detach delete로 옛 노드 자체가 사라짐
+
+
+async def test_replace_floor_plan_links_device_to_facility(graph: GraphClient) -> None:
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    device_id, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props=_plan_props(
+            devices=[
+                {
+                    "pg_id": device_id,
+                    "device_type": "센서",
+                    "x": 5,
+                    "y": 5,
+                    "facility_id": facility_id,
+                }
+            ]
+        ),
+        version=1,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (d:PlanDevice {pg_id:$d})-[:LINKED_TO]->(f:Facility {pg_id:$f, tenant_id:$t}) "
+        "RETURN count(*) AS c",
+        d=device_id,
+        f=facility_id,
+        t=tenant,
+    )
+    assert rows[0]["c"] == 1
+
+
+async def test_replace_floor_plan_cross_tenant_isolation(graph: GraphClient) -> None:
+    tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+    pg_id = str(uuid.uuid4())  # 우연히 동일 pg_id를 쓰더라도 tenant로 분리돼야 함
+    device_a = str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant_a,
+        pg_id=pg_id,
+        props=_plan_props(
+            unit_type_name="84M",
+            devices=[{"pg_id": device_a, "device_type": "room", "x": 1, "y": 1}],
+        ),
+        version=1,
+    )
+    await graph.replace_floor_plan(
+        tenant_id=tenant_b, pg_id=pg_id, props=_plan_props(unit_type_name="59C"), version=1
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t}) RETURN fp.unit_type_name AS name",
+        p=pg_id,
+        t=tenant_a,
+    )
+    assert rows[0]["name"] == "84M"  # tenant_b 갱신이 tenant_a 노드를 덮지 않음
+
+    leak = await _read(
+        graph, "MATCH (d:PlanDevice {pg_id:$d, tenant_id:$t}) RETURN count(*) AS c",
+        d=device_a, t=tenant_b,
+    )
+    assert leak[0]["c"] == 0  # tenant_a의 device가 tenant_b에 노출되지 않음
+
+
+async def test_merge_facility_tombstone_deletes_node_and_relations(graph: GraphClient) -> None:
+    tenant, facility_id, incident_id = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=facility_id, props={"name": "펌프", "status": "fault"}, version=1
+    )
+    await graph.merge_incident(
+        tenant_id=tenant,
+        pg_id=incident_id,
+        facility_id=facility_id,
+        props={"symptom": "누수"},
+        version=1,
+    )
+
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=facility_id,
+        props={"deleted_at": "2026-07-27T00:00:00Z"},
+        version=2,
+    )
+
+    rows = await _read(
+        graph, "MATCH (f:Facility {pg_id:$p, tenant_id:$t}) RETURN f", p=facility_id, t=tenant
+    )
+    assert rows == []  # 노드 자체가 사라짐(관계 포함 detach delete)
+
+
+async def test_fetch_facility_graph_include_plan_adds_plan_nodes(graph: GraphClient) -> None:
+    tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
+    plan_id, device_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=facility_id, props={"name": "정수기", "status": "normal"}, version=1
+    )
+    await graph.replace_floor_plan(
+        tenant_id=tenant,
+        pg_id=plan_id,
+        props=_plan_props(
+            devices=[
+                {
+                    "pg_id": device_id,
+                    "device_type": "센서",
+                    "x": 1,
+                    "y": 1,
+                    "room": "거실",
+                    "facility_id": facility_id,
+                }
+            ]
+        ),
+        version=1,
+    )
+
+    default_result = await graph.fetch_facility_graph(tenant_id=tenant)
+    assert plan_id not in {n.pg_id for n in default_result.nodes}  # 기본은 제외(과밀 방지)
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant, include_plan=True)
+    by_id = {n.pg_id: n for n in result.nodes}
+    assert by_id[plan_id].label == "floor_plan"
+    assert by_id[device_id].label == "plan_device"
+    assert {(link.source, link.target, link.kind) for link in result.links} >= {
+        (plan_id, device_id, "HAS_DEVICE"),
+        (device_id, facility_id, "LINKED_TO"),
+    }
+
+
+async def test_fetch_facility_graph_include_plan_handles_device_less_plan(
+    graph: GraphClient,
+) -> None:
+    """마커 0개인 도면도 노드로는 나오되 HAS_DEVICE 관계는 없다."""
+    tenant, plan_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant, pg_id=plan_id, props=_plan_props(unit_type_name="59C"), version=1
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant, include_plan=True)
+
+    assert {n.pg_id for n in result.nodes} == {plan_id}
+    assert result.links == ()
+
+
 async def test_maintenance_parts_create_replaced(graph: GraphClient) -> None:
     tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
     log_id = str(uuid.uuid4())

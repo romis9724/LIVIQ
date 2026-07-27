@@ -6,6 +6,12 @@ TYPE_A(84M) 어노테이션(scripts/data/floor_plan_annotations.py — annotatio
 plan_devices(action=base)는 delete-then-insert로 전량 교체한다(재실행해도 개수가 늘지
 않음 — 트윈 geometry 업로드와 동일한 전체 교체 관례). 이미지 파일 2장은 S3(MinIO)에 put.
 
+도면+마커 스냅샷을 `outbox_events(aggregate_type='floor_plan')`에 도메인 행과 같은
+트랜잭션으로 기록한다(H13-6, `app.routers.floor_plans._floor_plan_snapshot` 재사용 —
+이중 쓰기 금지). floor_plan 행 자체를 delete-then-insert하므로 재실행마다 새 pg_id로
+`created` 이벤트가 나가고, 이전 실행의 Neo4j FloorPlan 노드는 자동 정리되지 않는다
+(ponytail: 재시딩이 잦아지면 tombstone 이벤트도 함께 내보내는 정리가 필요).
+
 입력(원본 프로토타입, LIVIQ 밖):
     ../apt-facility-finder/아파트 도면_clean.jpg   (TYPE_A, 923x676)
     ../apt-facility-finder/아파트 도면_B타입.jpg   (TYPE_B, 923x676)
@@ -27,6 +33,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.outbox import record_outbox
+from app.routers.floor_plans import _floor_plan_snapshot
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -172,6 +180,14 @@ async def _replace_floor_plan(
     ]
     session.add_all(devices)
     await session.flush()
+    await record_outbox(
+        session,
+        tenant_id=tenant_id,
+        aggregate_type="floor_plan",
+        aggregate_id=plan.id,
+        event_type="created",
+        payload=_floor_plan_snapshot(unit_type.name, plan, devices),
+    )
     return len(rooms), len(devices)
 
 

@@ -119,6 +119,10 @@ async def _apply_event(graph: GraphClient, llm: LlmClient, event: OutboxEvent) -
             version=version,
             parts=payload.get("parts"),
         )
+    elif event.aggregate_type == "floor_plan":
+        await graph.replace_floor_plan(
+            tenant_id=tenant, pg_id=pg_id, props=payload, version=version
+        )
     else:
         raise ValueError(f"알 수 없는 aggregate_type: {event.aggregate_type}")
 

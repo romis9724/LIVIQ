@@ -11,6 +11,7 @@ DB가 거부한다 — 충돌 시 IntegrityError가 요청 실패로 전파되�
 from __future__ import annotations
 
 import datetime
+import decimal
 import uuid
 from typing import Any
 
@@ -21,11 +22,13 @@ from liviq_db.models import OutboxEvent
 
 
 def _json_safe(value: Any) -> Any:
-    """JSONB 저장을 위해 UUID→str·datetime→isoformat로 재귀 직렬화."""
+    """JSONB 저장을 위해 UUID→str·datetime→isoformat·Decimal→float로 재귀 직렬화."""
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, datetime.datetime):
         return value.isoformat()
+    if isinstance(value, decimal.Decimal):
+        return float(value)
     if isinstance(value, dict):
         return {k: _json_safe(v) for k, v in value.items()}
     if isinstance(value, (list, tuple)):

@@ -14,8 +14,8 @@ from pydantic import BaseModel, Field
 
 FacilityStatus = Literal["normal", "check", "fault", "risk"]
 
-GraphNodeLabel = Literal["facility", "incident", "maintenance"]
-GraphLinkKind = Literal["HAS_INCIDENT", "HAS_MAINTENANCE"]
+GraphNodeLabel = Literal["facility", "incident", "maintenance", "floor_plan", "plan_device"]
+GraphLinkKind = Literal["HAS_INCIDENT", "HAS_MAINTENANCE", "HAS_DEVICE", "LINKED_TO"]
 
 __all__ = [
     "FacilityCreateIn",

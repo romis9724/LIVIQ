@@ -17,6 +17,7 @@ from app.deps import RequestContext, get_context, get_storage, get_tenant_sessio
 from app.main import create_app
 from conftest import MANAGER_USER_ID, TENANT_ID, USER_ID, FakeStorage, seed_tenant
 from httpx import ASGITransport
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from liviq_db.models import (
@@ -25,6 +26,7 @@ from liviq_db.models import (
     FloorPlan,
     Household,
     HouseholdGeometry,
+    OutboxEvent,
     PlanDevice,
     Tenant,
     UnitType,
@@ -593,3 +595,96 @@ async def test_admin_upload_rejects_non_image_file(
             files={"image": ("plan.txt", b"not an image", "text/plain")},
         )
     assert resp.status_code == 422
+
+
+# ── outbox 원자성(H13-6 — 그래프 반영 스냅샷) ────────────────────────────────
+
+
+async def _outbox_rows(session: AsyncSession, aggregate_id: uuid.UUID) -> list[OutboxEvent]:
+    rows = await session.scalars(
+        select(OutboxEvent)
+        .where(OutboxEvent.aggregate_type == "floor_plan", OutboxEvent.aggregate_id == aggregate_id)
+        .order_by(OutboxEvent.sequence)
+    )
+    return list(rows)
+
+
+async def test_admin_upload_records_floor_plan_outbox_snapshot(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.post(
+            "/admin/floor-plans",
+            data={"unit_type_name": "72A", "image_width": "800", "image_height": "600"},
+            files={"image": ("plan.jpg", b"fake-jpg-bytes", "image/jpeg")},
+        )
+    assert resp.status_code == 200, resp.text
+    plan_id = uuid.UUID(resp.json()["id"])
+
+    events = await _outbox_rows(db_session, plan_id)
+    assert len(events) == 1
+    assert events[0].event_type == "created"
+    assert events[0].payload == {
+        "unit_type_name": "72A",
+        "image_width": 800,
+        "image_height": 600,
+        "devices": [],
+    }
+
+
+async def test_admin_upload_replace_records_updated_outbox_with_preserved_devices(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=2)
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.post(
+            "/admin/floor-plans",
+            data={"unit_type_name": "84M", "image_width": "999", "image_height": "888"},
+            files={"image": ("new.png", b"fake-png-bytes", "image/png")},
+        )
+    assert resp.status_code == 200, resp.text
+
+    events = await _outbox_rows(db_session, plan.id)
+    assert [e.event_type for e in events] == ["updated"]  # 시드 자체는 outbox 없이 넣은 픽스처
+    payload = events[0].payload
+    assert payload is not None
+    assert payload["image_width"] == 999
+    assert len(payload["devices"]) == 2  # 기존 device 보존
+
+
+async def test_admin_devices_put_records_floor_plan_outbox_snapshot(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=1)
+    facility_id = uuid.uuid4()
+    db_session.add(Facility(id=facility_id, tenant_id=TENANT_ID, name="정수기", status="normal"))
+    await db_session.flush()
+    payload = {
+        "devices": [
+            {
+                "device_type": "센서",
+                "x": 10,
+                "y": 20,
+                "room": "거실",
+                "facility_id": str(facility_id),
+            }
+        ]
+    }
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+    assert resp.status_code == 200, resp.text
+
+    events = await _outbox_rows(db_session, plan.id)
+    assert len(events) == 1
+    assert events[0].event_type == "updated"
+    snapshot = events[0].payload
+    assert snapshot is not None
+    assert snapshot["unit_type_name"] == "84M"
+    assert len(snapshot["devices"]) == 1  # 기존 room 1개 → 전체 교체로 신규 1개
+    device = snapshot["devices"][0]
+    assert device["device_type"] == "센서"
+    assert device["room"] == "거실"
+    assert device["facility_id"] == str(facility_id)
+    assert "pg_id" in device  # graph-sync가 PlanDevice.pg_id로 쓸 키
