@@ -1,24 +1,36 @@
-"""inquiries 라우터 통합 — 실 PG. 접수·분류코드·소유권·배정·답변/피드백·상태 게이트 (ADR-0018)."""
+"""inquiries 라우터 통합 — 실 PG. 접수·분류코드·소유권·배정·답변/피드백·상태 게이트 (ADR-0018).
+
+민원-시설 연결/추천(H13-2, ADR-0022)은 별도 절 참조 — 승인 게이트·마스킹 fail-closed·
+tenant 격리가 CRITICAL.
+"""
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 import pytest_asyncio
-from app.deps import RequestContext, get_context, get_tenant_session
+from app.deps import RequestContext, get_context, get_llm, get_tenant_session
 from app.main import create_app
 from conftest import BUILDING_ID, TENANT_ID
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.llm.client import ChatResponse, ChatUsage
+from ai_core.masking import MaskingFailedError
 from liviq_db.models import (
     Building,
     Code,
     CodeGroup,
+    Facility,
     Household,
+    Inquiry,
+    InquiryEvent,
     Notification,
     Tenant,
     User,
@@ -36,6 +48,12 @@ CATEGORY2_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")  # "하자" act
 INACTIVE_CATEGORY_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000003")  # 비활성
 # 다른 그룹(NOTICE_CATEGORY) 코드 — 그룹 불일치 422 검증용
 NOTICE_CODE_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000001")
+# 시설(같은 tenant) — 민원-시설 연결/추천 테스트용
+FACILITY_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")  # "승강기 1호기"
+FACILITY2_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000002")  # "정화조"
+# 타 tenant 시설 — 격리 검증용
+OTHER_TENANT_ID = uuid.UUID("99999999-9999-9999-9999-999999999999")
+OTHER_FACILITY_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000099")
 
 
 async def _seed(session: AsyncSession) -> None:
@@ -118,16 +136,69 @@ async def _seed(session: AsyncSession) -> None:
             ),
         ]
     )
+    session.add_all(
+        [
+            Facility(id=FACILITY_ID, tenant_id=TENANT_ID, name="승강기 1호기", status="normal"),
+            Facility(id=FACILITY2_ID, tenant_id=TENANT_ID, name="정화조", status="normal"),
+        ]
+    )
     await session.flush()
 
 
+async def _seed_other_tenant_facility(session: AsyncSession) -> None:
+    """타 tenant 시설 1건 — facility_id 격리 검증용(§13.3와 동형, ADR-0022)."""
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(OTHER_TENANT_ID))
+    )
+    session.add(Tenant(id=OTHER_TENANT_ID, name="단지B", status="active"))
+    await session.flush()
+    session.add(
+        Facility(
+            id=OTHER_FACILITY_ID,
+            tenant_id=OTHER_TENANT_ID,
+            name="타단지 정화조",
+            status="normal",
+        )
+    )
+    await session.flush()
+    await session.execute(  # 컨텍스트 복귀(우리 단지)
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
+    )
+
+
 def _make_client(
-    db_session: AsyncSession, user_id: uuid.UUID, roles: tuple[str, ...]
+    db_session: AsyncSession,
+    user_id: uuid.UUID,
+    roles: tuple[str, ...],
+    *,
+    llm: object | None = None,
 ) -> httpx.AsyncClient:
     app = create_app()
     app.dependency_overrides[get_context] = lambda: RequestContext(TENANT_ID, user_id, roles=roles)
     app.dependency_overrides[get_tenant_session] = lambda: db_session
+    if llm is not None:
+        app.dependency_overrides[get_llm] = lambda: llm
     return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+async def _event_count(session: AsyncSession, inquiry_id: object) -> int:
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(InquiryEvent)
+            .where(InquiryEvent.inquiry_id == inquiry_id)
+        )
+        or 0
+    )
+
+
+def _mock_llm(text: str) -> AsyncMock:
+    """suggest_facilities가 부르는 llm.chat만 흉내내는 목 — 실 네트워크 없음."""
+    llm = AsyncMock()
+    llm.chat.return_value = ChatResponse(
+        text=text, usage=ChatUsage(input_tokens=0, output_tokens=0)
+    )
+    return llm
 
 
 @pytest_asyncio.fixture
@@ -626,3 +697,154 @@ async def test_done_locks_admin_mutations_422(seeded: AsyncSession) -> None:
         assert (
             await mgr.post(f"/admin/inquiries/{inquiry_id}/comments", json={"body": "추가 답변"})
         ).status_code == 422
+
+
+# ── 민원-시설 연결/추천(FR-FAC-05, ADR-0022 결정 3, H13-2) ───────────────────
+
+
+async def test_manager_links_and_unlinks_facility(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="누수", body="천장에서 물이 샙니다")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        linked = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"facility_id": str(FACILITY_ID)}
+        )
+        assert linked.status_code == 200, linked.text
+        body = linked.json()
+        assert body["facility_id"] == str(FACILITY_ID)
+        assert body["facility_name"] == "승강기 1호기"
+
+        events = (await mgr.get(f"/inquiries/{inquiry['id']}/events")).json()["items"]
+        assert events[-1]["type"] == "facility_linked"
+        assert events[-1]["payload"] == {
+            "facility_id": str(FACILITY_ID),
+            "facility_name": "승강기 1호기",
+        }
+
+        unlinked = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"facility_id": None}
+        )
+        assert unlinked.status_code == 200
+        assert unlinked.json()["facility_id"] is None
+
+
+async def test_facility_link_forbidden_for_staff_and_resident_403(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, STAFF_ID, ("STAFF",)) as staff:
+        response = await staff.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"facility_id": str(FACILITY_ID)}
+        )
+    assert response.status_code == 403  # 시설 연결은 소장 전용 — _ADMIN_ROLES와 다름
+
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as resident:
+        response = await resident.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"facility_id": str(FACILITY_ID)}
+        )
+    assert response.status_code == 403
+
+
+async def test_facility_suggest_forbidden_for_staff_and_resident_403(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    llm = _mock_llm(json.dumps({"candidates": []}))
+    async with _make_client(seeded, STAFF_ID, ("STAFF",), llm=llm) as staff:
+        response = await staff.post(f"/admin/inquiries/{inquiry['id']}/facility-suggest")
+    assert response.status_code == 403
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",), llm=llm) as resident:
+        response = await resident.post(f"/admin/inquiries/{inquiry['id']}/facility-suggest")
+    assert response.status_code == 403
+    llm.chat.assert_not_called()  # 인가 실패 — 아직 도달 못 함
+
+
+# ── CRITICAL ①: 승인 게이트 — suggest는 부수효과 0 ───────────────────────────
+
+
+async def test_facility_suggest_has_no_side_effects_approval_gate(seeded: AsyncSession) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="누수", body="천장에서 물이 샙니다")
+    inquiry_id = uuid.UUID(str(inquiry["id"]))
+    events_before = await _event_count(seeded, inquiry_id)
+
+    llm = _mock_llm(
+        json.dumps({"candidates": [{"facility_id": str(FACILITY_ID), "reason": "누수 관련 설비"}]})
+    )
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",), llm=llm) as mgr:
+        response = await mgr.post(f"/admin/inquiries/{inquiry['id']}/facility-suggest")
+    assert response.status_code == 200
+    assert len(response.json()["candidates"]) == 1  # 후보는 제시되지만 DB에 반영되지 않음
+
+    stored = await seeded.scalar(select(Inquiry).where(Inquiry.id == inquiry_id))
+    assert stored is not None
+    assert stored.facility_id is None  # facility_id 불변
+    assert await _event_count(seeded, inquiry_id) == events_before  # inquiry_events 불변
+
+
+# ── CRITICAL ②: 마스킹 fail-closed — LLM 호출 자체가 없어야 함 ───────────────
+
+
+async def test_facility_suggest_masking_fail_closed_503_skips_llm_call(
+    seeded: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+
+    def _raise_masking_failed(_: str) -> None:
+        raise MaskingFailedError("마스킹 후 PII 잔존")
+
+    monkeypatch.setattr("app.facility_suggest.ensure_masked", _raise_masking_failed)
+
+    llm = _mock_llm(json.dumps({"candidates": []}))
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",), llm=llm) as mgr:
+        response = await mgr.post(f"/admin/inquiries/{inquiry['id']}/facility-suggest")
+    assert response.status_code == 503
+    llm.chat.assert_not_called()  # fail-closed — 호출 직전에 중단(규칙 2)
+
+
+# ── CRITICAL ③: tenant 격리 — PUT과 suggest 둘 다 ────────────────────────────
+
+
+async def test_facility_link_rejects_cross_tenant_facility_404(seeded: AsyncSession) -> None:
+    await _seed_other_tenant_facility(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        response = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility",
+            json={"facility_id": str(OTHER_FACILITY_ID)},
+        )
+        assert response.status_code == 404  # 격리 — 존재 여부 노출 안 함
+        current = (await mgr.get(f"/inquiries/{inquiry['id']}")).json()
+        assert current["facility_id"] is None  # 실패한 시도는 facility_id를 바꾸지 않음
+
+
+async def test_facility_suggest_discards_hallucinated_id_and_isolates_tenant(
+    seeded: AsyncSession,
+) -> None:
+    await _seed_other_tenant_facility(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="누수", body="천장에서 물이 샙니다")
+
+    hallucinated_id = uuid.uuid4()  # 목록에 없는 id — 환각
+    llm = _mock_llm(
+        json.dumps(
+            {
+                "candidates": [
+                    {"facility_id": str(FACILITY_ID), "reason": "배관 관련 설비로 추정됩니다"},
+                    {"facility_id": str(hallucinated_id), "reason": "목록에 없는 설비"},
+                ]
+            }
+        )
+    )
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",), llm=llm) as mgr:
+        response = await mgr.post(f"/admin/inquiries/{inquiry['id']}/facility-suggest")
+    assert response.status_code == 200
+    candidates = response.json()["candidates"]
+    assert [c["facility_id"] for c in candidates] == [str(FACILITY_ID)]  # 환각 폐기
+    assert candidates[0]["reason"]  # reason 포함
+
+    # 프롬프트에 실린 설비 목록은 자기 tenant만 — 타 tenant 시설명이 새지 않는다.
+    messages = llm.chat.call_args.args[0]
+    prompt = messages[1]["content"]
+    assert "타단지 정화조" not in prompt
+    assert "승강기 1호기" in prompt
