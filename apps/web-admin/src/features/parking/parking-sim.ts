@@ -27,6 +27,9 @@ const PICK_JITTER_PX = 500;
 const PLATE_ATTEMPTS = 50;
 const PLATE_LETTERS = "가나다라마거너더러머버서어저허";
 
+/** 소속 필터의 "외부 차량" 그룹 키(동명이 아닌 유일 값). */
+export const EXTERNAL_GROUP = "외부";
+
 /** 배치도 위 사각 영역(코어·램프 등) — 거리 계산 기준. */
 export interface ParkingRect {
   x: number;
@@ -210,6 +213,21 @@ export function summarize(
     empty: spots.length - occupied,
     byDong,
   };
+}
+
+/** 소속 필터 대조 — "외부"는 외부 차량, 그 외는 동명. 빈자리는 어느 그룹에도 속하지 않는다. */
+export function matchesGroup(car: ParkedCar | undefined, group: string): boolean {
+  if (!car) return false;
+  return group === EXTERNAL_GROUP ? car.external : car.dong === group;
+}
+
+/** "0 0 3020 1082" → [minX, minY, width, height]. 파싱 실패는 0 으로 둔다(2D·3D 공용). */
+export function parseViewBox(viewBox: string): [number, number, number, number] {
+  const parts = viewBox
+    .trim()
+    .split(/[\s,]+/)
+    .map((v) => Number.parseFloat(v));
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 0];
 }
 
 /** 주차 경과 시간 — "3시간 20분" / "20분". 미래 입차(음수)는 "0분". */

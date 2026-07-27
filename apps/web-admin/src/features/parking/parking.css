@@ -4,6 +4,28 @@
  * (twin-data RGB 상수와 같은 설계 예외 — docs/05 §5: 캔버스/배치도 색은 토큰 외 허용).
  */
 
+/* ---- 3D 뷰 팔레트 (H14-4) ----
+   three(WebGL)는 oklch 를 파싱하지 못해 3D 씬이 쓰는 색만 sRGB hex 로 :root 에 둔다
+   (facilities 그래프 팔레트와 같은 예외 — 캔버스가 getComputedStyle 로 읽는다).
+   의미는 2D 배치도와 같다: 빈자리 초록 · 입주민 파랑 · 외부 주황 · 선택 빨강. */
+:root {
+  --pk3d-bg: #eef1f5; /* 씬 배경 = 안개 색 */
+  --pk3d-floor: #8f979f; /* 바닥 슬래브(아스팔트) */
+  --pk3d-line: #f5f7f9; /* 주차선 */
+  --pk3d-empty: #34a05e;
+  --pk3d-resident: #3b82f6;
+  --pk3d-external: #ea580c;
+  --pk3d-dim: #bcc3ca; /* 소속 필터에 걸러진 면·차량 — 바닥보다 밝게 둬 구분은 남긴다 */
+  --pk3d-selected: #ef4444;
+  --pk3d-car-resident: #5b8def;
+  --pk3d-car-external: #f97316;
+  --pk3d-glass: #3a3f47; /* 차 캐빈(앞유리) */
+  --pk3d-building: #94a3b8; /* 동 footprint(반투명) */
+  --pk3d-core: #7d8894; /* 엘리베이터 코어 */
+  --pk3d-box: #d9a92c; /* 램프·설비실 */
+  --pk3d-label: #f8fafc; /* 동명·구역명 스프라이트(어두운 외곽선을 둘러 어디서나 읽힌다) */
+}
+
 .pk-stack {
   display: flex;
   flex-direction: column;
@@ -178,6 +200,45 @@
   border-color: var(--color-text);
 }
 
+/* ---- 2D/3D 보기 전환 — 기본 2D, 3D 는 옵트인(H14-4) ---- */
+.pk-viewtabs {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.pk-viewtab {
+  appearance: none;
+  cursor: pointer;
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+}
+.pk-viewtab:hover {
+  color: var(--color-text);
+}
+.pk-viewtab[data-active] {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.pk-viewtab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 /* ---- 선택한 면 안내(aria-live) ---- */
 .pk-answer {
   margin: 0;
@@ -258,6 +319,31 @@
 /* 전역 svg 리셋의 max-width:100% 가 확대 배율(인라인 width)을 잘라내므로 줌 상태에서만 해제. */
 .pk-map__viewport[data-zoomed] .pk-map__svg {
   max-width: none;
+}
+
+/* ---- 3D 뷰 무대 — 캔버스 크기는 컨테이너 실측(ResizeObserver)에 맞춘다 ---- */
+.pk-view3d {
+  position: relative;
+  height: clamp(320px, 48vh, 620px);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--pk3d-bg);
+  touch-action: none; /* 드래그를 카메라 회전으로 쓴다 — 브라우저 스크롤에 넘기지 않음 */
+  cursor: grab;
+}
+.pk-view3d canvas {
+  display: block;
+}
+.pk-view3d__status,
+.pk-view3d__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(320px, 48vh, 620px);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
 }
 
 /* 줌 컨트롤 — 배치도 위 우측. 전체 보기(1x)에서 축소 버튼은 비활성. */
