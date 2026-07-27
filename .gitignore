@@ -65,3 +65,6 @@ _local/
 
 # 검증·리포트 생성 산출물 (fixture는 evals/fixtures에 커밋, 산출물은 재생성 대상)
 outputs/
+
+# 데모 문서 PDF (scripts/generate_demo_docs.py 산출물 — 콘텐츠 원본만 커밋)
+apps/api/scripts/data/generated_docs/
