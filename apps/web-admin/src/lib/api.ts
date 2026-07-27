@@ -2475,7 +2475,8 @@ function toAdminFloorPlanItem(raw: RawAdminFloorPlan): AdminFloorPlanItem {
   return {
     id: raw.id,
     unitTypeName: raw.unit_type_name,
-    imageUrl: raw.image_url,
+    // image_url은 api 상대 경로(/floor-plans/{id}/image — presign 대체) — 절대 URL로.
+    imageUrl: `${API_BASE_URL}${raw.image_url}`,
     imageWidth: raw.image_width,
     imageHeight: raw.image_height,
     deviceCount: raw.device_count,

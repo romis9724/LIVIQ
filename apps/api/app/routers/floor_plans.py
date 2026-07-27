@@ -27,7 +27,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,6 +56,17 @@ router = APIRouter(tags=["floor-plans"])
 
 _RESIDENT = require_roles("RESIDENT")
 _MANAGER = require_roles("MANAGER")
+_IMAGE_VIEWER = require_roles("RESIDENT", "MANAGER")
+
+
+def _image_path(floor_plan_id: uuid.UUID) -> str:
+    """도면 이미지의 api 상대 경로 — presign 대신 api가 스트리밍한다.
+
+    presigned URL은 S3_ENDPOINT_URL(내부 `minio:9000`) 기준이라 브라우저가 접근할 수
+    없는 배포 형상(1호스트 Caddy — MinIO 미노출)이 있다. 웹은 이 경로에 API_BASE_URL을
+    붙여 <img src>로 쓴다(세션 쿠키 동봉 — 인가·tenant 격리가 그대로 적용된다).
+    """
+    return f"/floor-plans/{floor_plan_id}/image"
 
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB — 도면 이미지 상한
@@ -79,7 +90,6 @@ async def _resident_household_id(session: AsyncSession, ctx: RequestContext) -> 
 async def get_my_floor_plan(
     ctx: Annotated[RequestContext, Depends(_RESIDENT)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    storage: Annotated[Storage, Depends(get_storage)],
 ) -> MyFloorPlanOut:
     household_id = await _resident_household_id(session, ctx)
 
@@ -113,16 +123,70 @@ async def get_my_floor_plan(
 
     devices = await session.scalars(_base_devices_stmt(ctx.tenant_id, plan.id))
 
-    image_url = await storage.presigned_get_url(plan.image_key)
     return MyFloorPlanOut(
         plan=FloorPlanOut(
             id=plan.id,
-            image_url=image_url,
+            image_url=_image_path(plan.id),
             image_width=plan.image_width,
             image_height=plan.image_height,
             unit_type_name=unit_type.name,
         ),
         devices=[_plan_device_out(d) for d in devices],
+    )
+
+
+async def _ensure_resident_owns_plan(
+    session: AsyncSession, ctx: RequestContext, plan: FloorPlan
+) -> None:
+    """본인 세대 평형의 도면만 — 아니면 존재 여부도 숨긴다(06:11 소유권 계약)."""
+    household_id = await _resident_household_id(session, ctx)
+    unit_type_label = await session.scalar(
+        select(HouseholdGeometry.unit_type_label).where(
+            HouseholdGeometry.tenant_id == ctx.tenant_id,
+            HouseholdGeometry.household_id == household_id,
+        )
+    )
+    owned_unit_type_id = (
+        await session.scalar(
+            select(UnitType.id).where(
+                UnitType.tenant_id == ctx.tenant_id,
+                UnitType.name == _normalize_label(unit_type_label),
+            )
+        )
+        if unit_type_label
+        else None
+    )
+    if owned_unit_type_id is None or owned_unit_type_id != plan.unit_type_id:
+        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다")
+
+
+@router.get("/floor-plans/{floor_plan_id}/image")
+async def get_floor_plan_image(
+    ctx: Annotated[RequestContext, Depends(_IMAGE_VIEWER)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    storage: Annotated[Storage, Depends(get_storage)],
+    floor_plan_id: uuid.UUID,
+) -> Response:
+    """도면 이미지 스트리밍 — presign 대체(_image_path 참조). 인가는 역할별:
+    MANAGER는 tenant 내 전부, RESIDENT는 본인 세대 평형의 도면만."""
+    plan = await session.scalar(
+        select(FloorPlan).where(
+            FloorPlan.tenant_id == ctx.tenant_id, FloorPlan.id == floor_plan_id
+        )
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다")
+    if "MANAGER" not in ctx.roles:
+        await _ensure_resident_owns_plan(session, ctx, plan)
+
+    data = await storage.get(plan.image_key)
+    media_type = "image/png" if plan.image_key.endswith(".png") else "image/jpeg"
+    return Response(
+        content=data,
+        media_type=media_type,
+        # 도면은 버전 교체 시 image_key(v{n})가 바뀌지만 URL은 plan id 고정 —
+        # 짧은 private 캐시만 허용해 교체 직후 구 이미지 노출을 최소화한다.
+        headers={"Cache-Control": "private, max-age=300"},
     )
 
 
@@ -242,7 +306,6 @@ async def _read_validated_image(file: UploadFile) -> tuple[bytes, str]:
 async def list_admin_floor_plans(
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    storage: Annotated[Storage, Depends(get_storage)],
 ) -> AdminFloorPlanListOut:
     rows = await session.execute(
         select(FloorPlan, UnitType.name, func.count(PlanDevice.id))
@@ -260,7 +323,7 @@ async def list_admin_floor_plans(
         AdminFloorPlanListItemOut(
             id=plan.id,
             unit_type_name=unit_type_name,
-            image_url=await storage.presigned_get_url(plan.image_key),
+            image_url=_image_path(plan.id),
             image_width=plan.image_width,
             image_height=plan.image_height,
             device_count=device_count,
@@ -275,7 +338,6 @@ async def list_admin_floor_plans(
 async def get_admin_floor_plan(
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    storage: Annotated[Storage, Depends(get_storage)],
     floor_plan_id: uuid.UUID,
 ) -> AdminFloorPlanDetailOut:
     plan = await _get_admin_plan(session, ctx.tenant_id, floor_plan_id)
@@ -288,7 +350,7 @@ async def get_admin_floor_plan(
     return AdminFloorPlanDetailOut(
         plan=FloorPlanOut(
             id=plan.id,
-            image_url=await storage.presigned_get_url(plan.image_key),
+            image_url=_image_path(plan.id),
             image_width=plan.image_width,
             image_height=plan.image_height,
             unit_type_name=unit_type_name or "",
@@ -359,7 +421,7 @@ async def upsert_admin_floor_plan(
     return AdminFloorPlanListItemOut(
         id=plan.id,
         unit_type_name=unit_type.name,
-        image_url=await storage.presigned_get_url(plan.image_key),
+        image_url=_image_path(plan.id),
         image_width=plan.image_width,
         image_height=plan.image_height,
         device_count=device_count or 0,
@@ -390,7 +452,6 @@ async def _validate_facility_ids(
 async def replace_admin_plan_devices(
     ctx: Annotated[RequestContext, Depends(_MANAGER)],
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
-    storage: Annotated[Storage, Depends(get_storage)],
     floor_plan_id: uuid.UUID,
     body: AdminPlanDevicesReplaceIn,
 ) -> AdminFloorPlanDetailOut:
@@ -451,7 +512,7 @@ async def replace_admin_plan_devices(
     return AdminFloorPlanDetailOut(
         plan=FloorPlanOut(
             id=plan.id,
-            image_url=await storage.presigned_get_url(plan.image_key),
+            image_url=_image_path(plan.id),
             image_width=plan.image_width,
             image_height=plan.image_height,
             unit_type_name=unit_type_name or "",

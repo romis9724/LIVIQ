@@ -73,7 +73,8 @@ export async function getMyFloorPlan(): Promise<FloorPlanData | null> {
   return {
     plan: {
       id: plan.id,
-      imageUrl: plan.image_url,
+      // image_url은 api 상대 경로(/floor-plans/{id}/image — presign 대체) — 절대 URL로.
+      imageUrl: `${API_BASE_URL}${plan.image_url}`,
       imageWidth: plan.image_width,
       imageHeight: plan.image_height,
       unitTypeName: plan.unit_type_name ?? null,
