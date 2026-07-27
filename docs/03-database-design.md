@@ -588,16 +588,17 @@ jobs(id, tenant_id, type,                                   -- ingest|ocr|reembe
 
 ### 4.8 평면도·디지털트윈
 
-> **⚠ 세대 내부 2D 평면도(`unit_types`·`floor_plans`·`plan_devices`)는 미구현 설계다**(2026-07-26 실측 확인).
-> 테이블은 초기 스키마(`d5422d3f35d5`)에 실존하지만 **3개 모두 0행**이고, api·ai-worker 코드 참조는
-> `unit_types` 0 · `floor_plans` 0 · `plan_devices` 2(H8-5 세대 삭제 보호의 링크 체크뿐)다.
-> 경위: 단지 트윈은 H9에서 **`household_geometries` 기반 3D**로 갔고([ADR-0019](adr/0019-complex-twin-3d.md)),
-> H9-6은 `unit_types` 마스터+FK CRUD를 만들었다가 **과설계로 폐기**해 트윈 라벨 표시 전용으로 축소했다
-> ([09 §8.11](09-implementation-harness.md)).
-> **테이블은 남긴다**(사용자 결정 2026-07-26 — drop 마이그레이션은 스키마를 실제와 맞추는 이득보다
-> `plan_devices` 참조 코드까지 손대는 비용·되돌리기 비용이 크고, 입주민 평면도 기능을 살릴 때 재사용한다).
-> 아래 설계는 **그 기능을 구현할 때의 계약**으로 읽을 것 — 현행 동작 설명이 아니다. 구현된 트윈은
-> 이 절 뒤쪽의 `household_geometries`다.
+> **H13-3에서 기동**(2026-07-27 인터뷰 확정 — apt-facility-finder 프로토타입 포팅). 세대 내부 2D 평면도
+> (`unit_types`·`floor_plans`·`plan_devices`)는 초기 스키마(`d5422d3f35d5`)에 실존했으나 H13-3 이전까지
+> **3개 모두 0행**이었고, api·ai-worker 코드 참조도 `unit_types` 0 · `floor_plans` 0 · `plan_devices` 2
+> (H8-5 세대 삭제 보호의 링크 체크뿐)에 그쳤다(2026-07-26 실측). 경위: 단지 트윈은 H9에서
+> **`household_geometries` 기반 3D**로 갔고([ADR-0019](adr/0019-complex-twin-3d.md)), H9-6은 `unit_types`
+> 마스터+FK CRUD를 만들었다가 **과설계로 폐기**해 트윈 라벨 표시 전용으로 축소했다
+> ([09 §8.11](09-implementation-harness.md)). 당시 **테이블은 남겨졌다**(drop 마이그레이션이 `plan_devices`
+> 참조 코드까지 손대는 비용·되돌리기 비용보다 이득이 작다는 판단 — 입주민 평면도 기능을 살릴 때 재사용
+> 전제) — H13-3이 그 재사용이다. **신규 ADR 없음** — 아래는 기존 §4.8 계약의 기동이며
+> [ADR-0022](adr/0022-facility-graph-dashboard.md)가 범위를 커버한다. 구현된 트윈은 이 절 뒤쪽의
+> `household_geometries`다 — 세대 내부 2D 평면도와는 **별개 표면**(단지 외형 3D).
 
 배경 이미지(스캔 원본) + 좌표 레이어 방식(CAD 벡터화 아님). 마커는 정적 데이터(IoT 미연동, 추후 확장 여지).
 
@@ -615,15 +616,31 @@ floor_plans(id, tenant_id, scope,               -- unit_type|building_common|sit
 plan_devices(id, tenant_id, floor_plan_id,
              household_id NULL,      -- NULL=타입 기본, 값=해당 세대 오버라이드
              base_device_id NULL,    -- move/hide 대상 기본 장치
-             action,                 -- base|add|move|hide
-             device_type,            -- entrance_door|room_door|window|outlet|breaker_box|router|facility_point|…
+             action,                 -- base|add|move|hide (H13-3은 base만 기동 — 아래 오버라이드 문단)
+             device_type,            -- entrance_door|room_door|window|outlet|breaker_box|router|facility_point|room|…
              x numeric, y numeric,   -- 배경 이미지 픽셀 좌표
+             room NULL,              -- 방 이름(H13-3 신규) — "안방 콘센트" 같은 방 축 질의용
+             dir NULL,                -- 벽 방향 up|down|left|right(H13-3 신규), NULL=원형 마커
              label, memo, photo_key NULL,
              facility_id NULL,       -- scope=site/building_common일 때 facilities 연결(nullable FK)
              created_at, updated_at)
 ```
 
-**렌더 규칙**: 세대 평면도 = 타입 `base` 장치 − 세대 `hide` − 세대 `move`(대체) + 세대 `add`. 좌표계는 원본 이미지 픽셀, 프론트는 viewBox 스케일링.
+**세대 오버라이드는 스키마 보유·H13 미구현**: `action`은 `base|add|move|hide` 4값을 스키마상 보유하지만
+H13-3은 **`action='base'`·`household_id=NULL`만** 적재·조회한다(타입 기본 장치 공통 노출, 세대별 add/move/hide
+없음). 아래 렌더 규칙은 오버라이드를 구현할 때의 **향후 계약**으로 존치한다.
+
+**렌더 규칙**(향후 계약 — H13-3 범위는 `base`뿐): 세대 평면도 = 타입 `base` 장치 − 세대 `hide` − 세대 `move`(대체) + 세대 `add`. 좌표계는 원본 이미지 픽셀, 프론트는 viewBox 스케일링.
+
+**방 중심좌표**: 신규 테이블 없음 — `plan_devices`에 `device_type='room'` 행으로 표현한다(`x`/`y`=방 중심 좌표,
+`room`=해당 방 이름). 자연어 위치 질의(H13-5)는 이 행과 일반 장치 행의 `room` 컬럼을 같은 방식으로 필터한다.
+
+**`unit_types` ↔ `household_geometries.unit_type_label`**: 두 표면이 평형을 각자 표시한다 — `unit_types`는
+H13-3 평면도 마스터 라벨(예: `84M`), `household_geometries.unit_type_label`은 H9 트윈 `units.json` 업로드
+원본 라벨(예: `84M(공공임대)`, 표시용 — unit_types 마스터와 무관, §4.8 도입부 원문 그대로). 세대→평면도 매칭은
+**라벨 정규화 매칭**(괄호 이하 등 부가 표기 제거 후 비교, 예: `84M(공공임대)`→`84M`)으로 세대의
+`unit_type_label`에서 `unit_types.name`을 찾는다 — 두 테이블 간 FK는 두지 않는다(업로드 원본 라벨이 자유
+형식이라 강제 매칭 불가, 정규화 실패 시 해당 세대는 평면도 없음으로 처리).
 
 **접근 통제**: 입주민은 **본인 세대**의 `floor_plans`/`plan_devices`만 열람. 타 세대 평면도 접근 절대 불가 — **RLS는 tenant 경계까지만 보장**하고, 본인 세대 한정은 **앱 소유권 검증**(`household_id` 일치)으로 강제한다([06]). 단지 배치도·공용층은 인증 입주민 공통 열람.
 

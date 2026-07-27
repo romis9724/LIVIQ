@@ -229,12 +229,16 @@ async def get_auth_lookup_session() -> AsyncIterator[AsyncSession]:
         yield session
 
 
+SIGNED_URL_TTL_S = 600  # 서명 URL TTL 10분(docs/06 §5) — 소유권 검증 API 경유 발급
+
+
 class Storage(Protocol):
     """원본 파일 저장 인터페이스 — 테스트는 인메모리, 운영은 S3(MinIO)."""
 
     async def put(self, key: str, data: bytes) -> None: ...
     async def get(self, key: str) -> bytes: ...
     async def delete(self, key: str) -> None: ...
+    async def presigned_get_url(self, key: str) -> str: ...
 
 
 class Queue(Protocol):
@@ -265,6 +269,11 @@ def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트
             async def delete(self, key: str) -> None:
                 _MEMORY_STORE.pop(key, None)
 
+            async def presigned_get_url(self, key: str) -> str:
+                # ponytail: 브라우저가 로드할 실제 서버가 없는 백엔드(E2E/테스트 전용) —
+                # 키만 담은 자리표시자. 운영은 S3Storage의 실제 presigned URL을 쓴다.
+                return f"memory://{key}"
+
         return MemoryStorage()
 
     import boto3
@@ -289,6 +298,15 @@ def get_storage() -> Storage:  # pragma: no cover — boto3 I/O 배선(테스트
 
         async def delete(self, key: str) -> None:
             await asyncio.to_thread(client.delete_object, Bucket=settings.s3_bucket, Key=key)
+
+        async def presigned_get_url(self, key: str) -> str:
+            url: str = await asyncio.to_thread(
+                client.generate_presigned_url,
+                "get_object",
+                Params={"Bucket": settings.s3_bucket, "Key": key},
+                ExpiresIn=SIGNED_URL_TTL_S,
+            )
+            return url
 
     return S3Storage()
 

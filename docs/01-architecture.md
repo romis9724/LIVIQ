@@ -201,7 +201,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈 · H13 시설 그래프)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈 · H13 시설 그래프·평면도)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -349,6 +349,18 @@
 | `DELETE /admin/codes/{id}` | MANAGER | 도메인 참조(notices·documents FK) 존재 시 409(H8-6 적용) — 비활성(active=false)으로 숨김 권장 |
 
 > 코드는 tenant 스코프 계층(그룹→코드, `parent_id` 자기참조)이며 표준 tenant RLS([03 §5](03-database-design.md) 일반 규칙) 대상이다. 하드코딩된 분류(공지 category·문서 source_type)를 흡수하며, 도메인 테이블(`notices.category_code_id` NULL 허용·`documents.category_code_id` NOT NULL)은 H8-6에서 `codes.id`를 FK(RESTRICT)로 참조 전환됐다(적용됨). 동/호수 관리(H8-5)는 기존 `buildings`·`households` CRUD 엔드포인트를 사용한다. H9-6: 세대 목록(`GET /admin/buildings/{id}/households`) 응답에 `unit_type_label`이 추가된다 — 트윈 `household_geometries`(세대 1:1)의 라벨을 outerjoin해 **표시만** 하며(`201호(84M)`), 평면도 타입 마스터·수동 지정은 두지 않는다(갱신은 units.json 재업로드 — H9-6에서 업로드 UI를 제거해 엔드포인트 직접 호출·시드 스크립트로만 수행).
+
+**평면도** (H13-3~5 · [03 §4.8](03-database-design.md), 화면: 입주민 홈 우리집 평면도 / 관리자 시설관리)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /me/floor-plan` | RESIDENT | 세션 `household_id`로 세대의 `unit_type` 평면도+`base` 장치 목록 직행(동·호 선택 없음). 오버라이드(add/move/hide) 미구현 — `base`만(H13-3) |
+| `POST /admin/floor-plans` | MANAGER | 도면 이미지 업로드(MinIO `{tenant_id}/` 프리픽스, 서명 URL) → `floor_plans` 등록(H13-4) |
+| `PUT /admin/floor-plans/{id}/devices` | MANAGER | 마커 배치(좌표·`room`·`dir`·라벨·메모·사진·`facility_id`) 편집 — 전량 교체(H13-4) |
+
+> 어시스턴트 위치 질의(H13-5, "우리집 공유기 어디?")는 신규 엔드포인트가 아니라 기존 `POST
+> /assistant/ask` 경로 내부에 **읽기 전용 도구**로 등록된다([ADR-0007](adr/0007-readonly-tool-agent.md)) —
+> 규칙 파서 1차(LLM 미호출) 실패 시만 LLM 보조 spec 추출, 조회는 본인 `household_id` 범위로 강제.
 
 **단지 트윈** (H9 · [ADR-0019](adr/0019-complex-twin-3d.md), 화면: 관리자 단지 트윈)
 

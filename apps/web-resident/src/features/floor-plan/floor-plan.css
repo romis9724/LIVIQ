@@ -1,0 +1,241 @@
+/* 우리집 평면도 — 이미지 배경 + % 좌표 마커 오버레이. 토큰만 사용. */
+.floor-plan {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.floor-plan__header {
+  flex: none;
+  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.floor-plan__back {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-left: calc(-1 * var(--space-2));
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
+.floor-plan__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.floor-plan__main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.floor-plan__unit-type {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.floor-plan__msg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 카테고리 칩 토글 */
+.floor-plan__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.floor-plan-chip {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.floor-plan-chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.floor-plan-chip[data-category="electric"]::before {
+  background: var(--color-warning);
+}
+.floor-plan-chip[data-category="network"]::before {
+  background: var(--color-accent);
+}
+.floor-plan-chip[data-category="water_heat"]::before {
+  background: var(--color-success);
+}
+.floor-plan-chip[data-category="safety"]::before {
+  background: var(--color-danger);
+}
+.floor-plan-chip[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+  background: var(--color-citation);
+}
+
+/* 도면 캔버스 — 이미지 원본 비율 유지, 좌표는 % 변환 */
+.floor-plan__canvas {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  background: var(--color-surface-sunken);
+}
+.floor-plan__image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.floor-plan-room-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: color-mix(in oklch, var(--color-surface) 78%, transparent);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.floor-plan-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.floor-plan-marker[data-category="electric"] {
+  background: var(--color-warning);
+}
+.floor-plan-marker[data-category="network"] {
+  background: var(--color-accent);
+}
+.floor-plan-marker[data-category="water_heat"] {
+  background: var(--color-success);
+}
+.floor-plan-marker[data-category="safety"] {
+  background: var(--color-danger);
+}
+.floor-plan-marker__arrow {
+  color: var(--color-on-accent);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* 마커 팝오버 */
+.floor-plan-popover {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 16px));
+}
+/* 상단 가장자리 마커: 위로 펼치면 컨테이너 밖으로 잘리므로 아래로 뒤집는다. */
+.floor-plan-popover[data-flip] {
+  transform: translate(-50%, 16px);
+}
+.floor-plan-popover {
+  min-width: 10rem;
+  max-width: 14rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+  padding: var(--space-3);
+  z-index: 1;
+}
+.floor-plan-popover__close {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.floor-plan-popover__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-right: var(--space-4);
+}
+.floor-plan-popover__body > div {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.floor-plan-popover__body dt {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.floor-plan-popover__body dd {
+  font-weight: 600;
+}
+
+/* 접근성 대체 — 목록으로 보기 */
+.floor-plan__list-toggle {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.floor-plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.floor-plan-table th,
+.floor-plan-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.floor-plan-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}

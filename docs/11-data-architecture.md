@@ -29,7 +29,7 @@
 | 첨부(추출 텍스트) | PG `document_chunks`, 원본 S3 | pgvector | 문서와 동일 파이프라인 |
 | 시설 이력(설비·장애·조치·부품) | PG(SoR) → Neo4j(파생) | **Neo4j 노드 벡터만** | 그래프 확장 + 증상 유사도 |
 | 관리비 | PG `fees` | **없음(정형, SQL 조회)** | AI는 설명만, 계산·검색 불필요 |
-| 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities` | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 · **그래프 노드 편입 예정**(H13-3+ — 평면도 마커·방·평형을 outbox 경유로 Neo4j에 투영, FR-FAC-06. **SoR은 PG 유지**) |
+| 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities`(**H13-3 기동** — 죽은 스키마였던 `unit_types`·`floor_plans`·`plan_devices`가 이때부터 실 행 보유, 저장 위치는 이 표의 결정 그대로 불변) | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 · **그래프 노드 편입 예정**(H13-3+ — 평면도 마커·방·평형을 outbox 경유로 Neo4j에 투영, FR-FAC-06. **SoR은 PG 유지**) |
 | 명부·계정 | PG `users`·`pii_vault` | **없음** | 정형·PII 분리 저장 |
 | 주차 배치도·등록 차량 | PG `parking_layouts`·`parking_vehicles`(번호판 암호문) | **없음(정형, SQL 조회)** | 면 좌표·차량은 정형 질의, 번호판은 LLM 미노출(§3.4.2) |
 
