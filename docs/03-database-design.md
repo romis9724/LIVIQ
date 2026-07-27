@@ -582,7 +582,15 @@ ai_eval_golden(id, tenant_id NULL, question text,          -- NULL=공용 골든
 jobs(id, tenant_id, type,                                   -- ingest|ocr|reembed|eval
      ref_id, status, attempts int, error text NULL,
      created_at, updated_at)
+
+ai_backend_config(id int PK CHECK (id = 1),                 -- 전역 단일 행 (H15-1)
+                  base_url text, model text,
+                  api_key text NULL,                        -- 응답에는 항상 마스킹
+                  reasoning_effort text NULL,
+                  updated_at)
 ```
+
+> **`ai_backend_config`(H15-1)**: LLM 생성 백엔드(ollama·vLLM·OpenAI 등 OpenAI-호환)의 런타임 전환용 전역 설정. 테넌트 데이터가 아니므로 `tenant_id`·RLS 없음. 행이 없으면 env `LLM_*` 폴백(기존 계약 유지). **임베딩(`EMBED_*`)은 제외** — 임베딩 모델 교체는 기존 벡터 색인과 차원·공간 불일치를 낳으므로 env+재색인 절차로만 변경한다. api_key는 SYS_ADMIN이 UI로 입력하며 응답에는 끝 4자만 노출.
 
 > **`audit_logs` append-only 강제**: 런타임 DB role에 `INSERT`·`SELECT`만 `GRANT`, `UPDATE`·`DELETE`는 `REVOKE`(RLS와 동일한 Alembic custom migration 게이트에서 설정). 앱 코드 규율이 아니라 **권한으로 수정·삭제 차단**.
 
