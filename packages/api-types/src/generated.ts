@@ -820,7 +820,9 @@ export interface paths {
          * @description 명부 목록(H7-9) — 동·호·성함(마스킹)·상태 + 총계 + 마지막 업로드 요약.
          *
          *     명부 행 = 명부 출신 사용자(login_id 없음·PII 참조 보유·pre_registered/inactive).
-         *     q는 동 이름 또는 호수 일치 검색. 생년월일은 반환하지 않는다(운영자 결정, H7-9).
+         *     building은 동 이름 일치, q는 호수 일치 **또는 성함·차량번호 부분 일치**(H14 — 검색이
+         *     있을 때만 대상 행의 성함·해당 세대 차량을 복호해 대조한다. 응답의 성함은 여전히 마스킹).
+         *     생년월일은 반환하지 않는다(운영자 결정, H7-9).
          */
         get: operations["list_roster_admin_roster_get"];
         put?: never;
@@ -1505,6 +1507,27 @@ export interface paths {
         put?: never;
         /** Explain */
         post: operations["explain_fees_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/floor-plans/{floor_plan_id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Floor Plan Image
+         * @description 도면 이미지 스트리밍 — presign 대체(_image_path 참조). 인가는 역할별:
+         *     MANAGER는 tenant 내 전부, RESIDENT는 본인 세대 평형의 도면만.
+         */
+        get: operations["get_floor_plan_image_floor_plans__floor_plan_id__image_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5719,6 +5742,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+                building?: string;
                 state?: string;
                 page?: number;
                 size?: number;
@@ -7093,6 +7117,42 @@ export interface operations {
                 "application/json": components["schemas"]["FeeExplainRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_floor_plan_image_floor_plans__floor_plan_id__image_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                floor_plan_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

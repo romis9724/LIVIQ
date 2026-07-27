@@ -152,7 +152,7 @@ async def test_resident_gets_own_floor_plan(
     assert body["plan"]["unit_type_name"] == "84M"
     assert body["plan"]["image_width"] == 923
     assert body["plan"]["image_height"] == 676
-    assert body["plan"]["image_url"].startswith("fake-signed://")
+    assert body["plan"]["image_url"].endswith("/image")
     assert len(body["devices"]) == 3
     assert {d["room"] for d in body["devices"]} == {"방0", "방1", "방2"}
     assert all(d["device_type"] == "room" for d in body["devices"])
@@ -246,6 +246,69 @@ async def test_geometry_missing_404(
     await _add_resident(db_session, household_id=hid)
     async with _client(db_session, FakeStorage()) as c:
         resp = await c.get("/me/floor-plan")
+    assert resp.status_code == 404
+
+
+# ── 이미지 스트리밍 (presign 대체 — 브라우저가 MinIO에 직접 못 붙는 배포 형상) ──
+
+
+async def test_image_manager_streams_bytes(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    storage = FakeStorage()
+    storage.objects[plan.image_key] = b"jpeg-bytes"
+
+    async with _manager_client(db_session, storage) as c:
+        resp = await c.get(f"/floor-plans/{plan.id}/image")
+    assert resp.status_code == 200, resp.text
+    assert resp.content == b"jpeg-bytes"
+    assert resp.headers["content-type"] == "image/jpeg"
+
+
+async def test_image_resident_own_unit_type(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    hid = households[(3, 301)]
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    await _add_geometry(db_session, household_id=hid, unit_type_label="84M")
+    await _add_resident(db_session, household_id=hid)
+    storage = FakeStorage()
+    storage.objects[plan.image_key] = b"jpeg-bytes"
+
+    async with _client(db_session, storage) as c:
+        resp = await c.get(f"/floor-plans/{plan.id}/image")
+    assert resp.status_code == 200, resp.text
+    assert resp.content == b"jpeg-bytes"
+
+
+async def test_image_resident_other_unit_type_404(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    """본인 평형이 아닌 도면은 존재 여부도 숨긴다(06:11 소유권 계약)."""
+    hid = households[(3, 301)]
+    other_plan = await _seed_plan(db_session, unit_type_name="59C", room_devices=0)
+    await _add_geometry(db_session, household_id=hid, unit_type_label="84M")
+    await _add_resident(db_session, household_id=hid)
+    storage = FakeStorage()
+    storage.objects[other_plan.image_key] = b"jpeg-bytes"
+
+    async with _client(db_session, storage) as c:
+        resp = await c.get(f"/floor-plans/{other_plan.id}/image")
+    assert resp.status_code == 404
+
+
+async def test_image_cross_tenant_404(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    storage = FakeStorage()
+    storage.objects[plan.image_key] = b"jpeg-bytes"
+
+    async with _client(
+        db_session, storage, roles=("MANAGER",), tenant_id=uuid.uuid4()
+    ) as c:
+        resp = await c.get(f"/floor-plans/{plan.id}/image")
     assert resp.status_code == 404
 
 
@@ -447,7 +510,7 @@ async def test_admin_list_floor_plans(
     items = {item["unit_type_name"]: item for item in resp.json()["items"]}
     assert items["84M"]["device_count"] == 3
     assert items["59C"]["device_count"] == 1
-    assert items["84M"]["image_url"].startswith("fake-signed://")
+    assert items["84M"]["image_url"] == f"/floor-plans/{items['84M']['id']}/image"
 
 
 async def test_admin_get_floor_plan_detail(
