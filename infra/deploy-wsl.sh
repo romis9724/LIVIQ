@@ -194,53 +194,76 @@ smoke() {
 # 이 단계는 이력·백업·타 호스트 배포 경로를 남기기 위한 것이다. 그래서 파이프라인에서
 # 스모크 **뒤에** 돈다 — 레지스트리에는 실제로 검증을 통과한 이미지만 올라간다.
 #
-# 이름 규약이 GHCR 과 다르다:
-#   GHCR(release.yml) : ghcr.io/<owner>/liviq-api:<sha>        ← 하이픈
-#   GitLab 프로젝트    : <host>/<group>/<project>/api:<sha>     ← 서브경로
-# GitLab 은 프로젝트 경로 하위에 이미지를 담으므로 후자가 자연스러운 형태다.
+# 이름 규약은 레지스트리마다 다르다:
+#   GHCR(release.yml) : ghcr.io/<owner>/liviq-api:<sha>            ← 하이픈
+#   GitLab 프로젝트    : <host>/<group>/<project>/api:<sha>         ← 프로젝트 경로 하위
+#   Nexus(hosted+커넥터): <host>:8082/liviq/api:<sha>               ← 커넥터 포트 + 임의 경로
+# REGISTRY_IMAGE 가 그 좌표를 통째로 결정한다 — 스크립트는 규약을 가정하지 않는다.
 #
-# 전제: 이 레지스트리는 평문 HTTP(:5050)라 daemon 이 거부한다 → 호스트에 1회 설정이 필요하다.
-#   /etc/docker/daemon.json : {"insecure-registries": ["<host>:5050"]} + systemctl restart docker
-# 자격증명은 CI가 자동 주입한다(CI_REGISTRY_USER / CI_REGISTRY_PASSWORD = 잡 토큰).
+# 전제 2가지:
+#   ① 평문 HTTP 레지스트리는 daemon 이 거부한다 → 호스트에 1회 설정이 필요하다.
+#      /etc/docker/daemon.json : {"insecure-registries": ["<host>:<port>"]} + systemctl restart docker
+#   ② 자격증명은 env 로만 받는다(인자 금지 — ps 노출). REGISTRY_USER/REGISTRY_PASSWORD 가 1순위,
+#      없으면 GitLab 이 자동 주입하는 CI_REGISTRY_USER/CI_REGISTRY_PASSWORD(잡 토큰)로 떨어진다.
 # **login 을 이 함수가 직접 한다** — 프리플라이트보다 login 이 먼저 일어나면 docker 의 중첩
 # 에러가 먼저 터져서 진단이 가려진다(실측). 순서는 프리플라이트 → login → push → logout 이다.
-# 토큰은 인자가 아니라 env 로만 받는다(ps 노출 회피). 끝나면 ~/.docker/config.json 을 비운다
-# (shell executor 는 홈이 잡 사이에 유지된다).
+# 끝나면 ~/.docker/config.json 을 비운다(shell executor 는 홈이 잡 사이에 유지된다).
 publish() {
   local target="${REGISTRY_IMAGE:-${CI_REGISTRY_IMAGE:-}}"
-  [ -n "$target" ] || die "REGISTRY_IMAGE(또는 CI_REGISTRY_IMAGE) 필요 — 예: 192.168.10.153:5050/dhkim/liviq"
-
-  # ── 프리플라이트: 토큰 realm 이 닿는지 먼저 본다 ────────────────
-  # 이걸 안 하면 docker 가 중첩된 메시지로 실패해 원인이 가려진다(실측):
-  #   Get "http://<host>:5050/v2/": Get "http://<host>/jwt/auth?...": dial tcp <host>:80: no route to host
-  # 진짜 원인은 **GitLab external_url 에 포트가 없어서** 레지스트리가 realm 을 80 으로 알려주는 것이다.
-  # 레포에서 고칠 수 없는 서버 설정이므로, 여기서 정확히 지목하고 멈춘다.
-  local reg="${CI_REGISTRY:-${target%%/*}}" realm
-  realm="$(curl -sS -i --max-time 8 "http://${reg}/v2/" 2>/dev/null \
-            | sed -n 's/.*realm="\([^"]*\)".*/\1/p' | head -1)"
-  if [ -n "$realm" ]; then
-    local realm_host="${realm#http://}"; realm_host="${realm_host#https://}"; realm_host="${realm_host%%/*}"
-    if ! curl -sS -o /dev/null --max-time 8 "${realm}" 2>/dev/null; then
-      die "레지스트리 인증 realm 에 닿지 못한다: ${realm}
-  레지스트리는 ${reg} 로 서비스되는데 토큰 realm 은 ${realm_host} 를 가리킨다.
-  원인: GitLab 의 external_url 에 포트가 빠져 있다(§5 ③ 과 같은 뿌리).
-  GitLab 호스트에서 고친다 — /etc/gitlab/gitlab.rb :
-      external_url          'http://${reg}'
-      registry_external_url 'http://${reg}'
-    적용: sudo gitlab-ctl reconfigure
-  이 수정은 CI 클론 URL 문제도 같이 해결한다(그때는 러너의 clone_url 오버라이드가 불필요해진다).
-  배포 자체는 로컬 이미지로 이미 끝나 있다 — 이 실패는 '게시(백업)'만 못 한 것이다."
-    fi
+  [ -n "$target" ] || die "REGISTRY_IMAGE(또는 CI_REGISTRY_IMAGE) 필요 — 예: 192.168.10.153:8082/liviq"
+  # 자격증명은 **대상 레지스트리와 짝이 맞아야 한다.** GitLab 잡 토큰(CI_REGISTRY_*)은 GitLab
+  # 레지스트리 전용이므로, 대상이 CI_REGISTRY_IMAGE 가 아닐 때 그걸로 폴백하면 남의 레지스트리에
+  # 엉뚱한 자격증명을 들이민다 → 401. 실제로 밟았다(2026-07-27): protected 변수가 비보호
+  # 브랜치에 주입되지 않아 REGISTRY_USER 가 비었고, 폴백이 잡 토큰으로 Nexus 로그인을 시도했다.
+  # 그 401 은 "계정이 틀렸다"처럼 보여 원인을 가린다.
+  local user pass
+  if [ -n "${REGISTRY_USER:-}${REGISTRY_PASSWORD:-}" ]; then
+    user="${REGISTRY_USER:-}"; pass="${REGISTRY_PASSWORD:-}"
+  elif [ -n "${CI_REGISTRY_IMAGE:-}" ] && [ "$target" = "${CI_REGISTRY_IMAGE:-}" ]; then
+    user="${CI_REGISTRY_USER:-}"; pass="${CI_REGISTRY_PASSWORD:-}"  # GitLab 레지스트리 = 잡 토큰
+  else
+    die "REGISTRY_USER·REGISTRY_PASSWORD 가 없다 (대상: ${target}).
+  GitLab 잡 토큰은 GitLab 레지스트리 전용이라 폴백하지 않는다.
+  CI 라면 두 변수가 **protected** 인지 확인할 것 — 비보호 브랜치 파이프라인에는 주입되지 않는다
+  (보호 브랜치는 GitLab 프로젝트 Settings > Repository > Protected branches 에서 확인)."
   fi
 
+  # ── 프리플라이트: /v2/ 가 응답하는지, 토큰 realm 이 닿는지 ────────
+  # 이걸 안 하면 docker 가 중첩된 메시지로 실패해 원인이 가려진다(실측):
+  #   Get "http://<host>:5050/v2/": Get "http://<host>/jwt/auth?...": dial tcp <host>:80: no route to host
+  local reg="${target%%/*}" realm code
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 8 "http://${reg}/v2/" 2>/dev/null || echo 000)"
+  case "$code" in
+    000) die "레지스트리에 닿지 못한다: http://${reg}/v2/ (방화벽·포트·호스트 확인)" ;;
+    401 | 200) : ;; # 401=인증 요구(정상) · 200=익명 허용
+    *) log "경고: http://${reg}/v2/ 가 ${code} 를 준다 — 레지스트리가 아닐 수 있다" ;;
+  esac
+
+  # realm 검사는 **URL 형태일 때만** 한다. Bearer 토큰 레지스트리(GitLab)는 realm 이 URL 이지만
+  # BASIC 인증(Nexus)은 realm 이 사람이 읽는 문자열("Sonatype Nexus Repository Manager")이다 —
+  # 그걸 URL 로 착각해 curl 하면 정상 구성을 실패로 오판한다(정합 시 실제로 밟은 함정).
+  realm="$(curl -sS -i --max-time 8 "http://${reg}/v2/" 2>/dev/null \
+            | sed -n 's/.*realm="\([^"]*\)".*/\1/p' | head -1)"
+  case "$realm" in
+    http://* | https://*)
+      local realm_host="${realm#http*://}"; realm_host="${realm_host%%/*}"
+      if ! curl -sS -o /dev/null --max-time 8 "${realm}" 2>/dev/null; then
+        die "레지스트리 인증 realm 에 닿지 못한다: ${realm}
+  레지스트리는 ${reg} 로 서비스되는데 토큰 realm 은 ${realm_host} 를 가리킨다.
+  GitLab 이라면 external_url 에 포트가 빠진 것이다(docs/13 §8) — 서버 설정이라 레포에서 못 고친다.
+  배포 자체는 로컬 이미지로 이미 끝나 있다 — 이 실패는 '게시(백업)'만 못 한 것이다."
+      fi
+      ;;
+  esac
+
   # ── 로그인 ──────────────────────────────────────────────────────
-  if [ -n "${CI_REGISTRY_PASSWORD:-}" ]; then
+  if [ -n "$pass" ]; then
     trap 'docker logout "$reg" >/dev/null 2>&1 || true' RETURN
-    printf '%s' "$CI_REGISTRY_PASSWORD" \
-      | docker login "$reg" -u "${CI_REGISTRY_USER:?CI_REGISTRY_USER 필요}" --password-stdin \
-      || die "레지스트리 로그인 실패: $reg"
+    printf '%s' "$pass" \
+      | docker login "$reg" -u "${user:?REGISTRY_USER(또는 CI_REGISTRY_USER) 필요}" --password-stdin \
+      || die "레지스트리 로그인 실패: $reg (계정·권한 확인 — hosted 저장소에 쓰기 권한이 필요하다)"
   else
-    log "CI_REGISTRY_PASSWORD 없음 — 이미 로그인된 상태를 전제한다"
+    log "REGISTRY_PASSWORD 없음 — 이미 로그인된 상태를 전제한다"
   fi
 
   log "게시 — ${target}/*:${IMAGE_TAG}"
