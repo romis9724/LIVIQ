@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
 import {
   ApiError,
   linkInquiryFacility,
+  linkInquiryFacilityByCode,
   listFacilities,
   suggestInquiryFacility,
   type Facility,
@@ -32,6 +33,8 @@ export function InquiryFacilityLink({ inquiry, onUpdated, showToast }: InquiryFa
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [facilitiesError, setFacilitiesError] = useState<string | null>(null);
   const [pickedId, setPickedId] = useState("");
+  const [codeInput, setCodeInput] = useState(""); // 영숫자 코드라 controlled 로 둬도 IME 문제 없다
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
@@ -39,7 +42,8 @@ export function InquiryFacilityLink({ inquiry, onUpdated, showToast }: InquiryFa
 
   useEffect(() => {
     let alive = true;
-    void listFacilities()
+    // ponytail: 서버 기본 limit 20 — 설비 37건이 잘린다. 100+ 되면 검색형 선택으로 교체.
+    void listFacilities({ limit: 100 })
       .then((items) => {
         if (alive) setFacilities(items);
       })
@@ -60,6 +64,29 @@ export function InquiryFacilityLink({ inquiry, onUpdated, showToast }: InquiryFa
       showToast(facilityId ? "설비를 연결했습니다." : "설비 연결을 해제했습니다.");
     } catch (err) {
       showToast(errorMessage(err), "danger");
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  /** 코드번호 직접 연결(H14-2) — 목록에서 고르지 않고 접수 화면에서 바로 잇는 경로. */
+  async function handleLinkByCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const code = codeInput.trim();
+    if (!code) return;
+    setLinking(true);
+    setCodeError(null);
+    try {
+      onUpdated(await linkInquiryFacilityByCode(inquiry.id, code));
+      setCandidates(null);
+      setCodeInput("");
+      showToast("설비를 연결했습니다.");
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setCodeError(`‘${code}’ 코드의 설비가 이 단지에 없습니다.`);
+      } else {
+        setCodeError(errorMessage(err));
+      }
     } finally {
       setLinking(false);
     }
@@ -106,7 +133,7 @@ export function InquiryFacilityLink({ inquiry, onUpdated, showToast }: InquiryFa
           <option value="">설비 선택</option>
           {facilities.map((f) => (
             <option key={f.id} value={f.id}>
-              {f.name}
+              {f.code ? `${f.code} · ${f.name}` : f.name}
             </option>
           ))}
         </select>
@@ -122,6 +149,29 @@ export function InquiryFacilityLink({ inquiry, onUpdated, showToast }: InquiryFa
         </Button>
       </div>
       {facilitiesError ? <p className="ia-facility__suggest-error">{facilitiesError}</p> : null}
+
+      <form className="ia-facility__pick" onSubmit={(e) => void handleLinkByCode(e)}>
+        <label className="sr-only" htmlFor={`ia-facility-code-${inquiry.id}`}>
+          설비 코드번호로 연결
+        </label>
+        <input
+          id={`ia-facility-code-${inquiry.id}`}
+          className="ia-facility__code"
+          type="text"
+          autoComplete="off"
+          placeholder="코드번호 (예: EL-401-01)"
+          value={codeInput}
+          disabled={linking}
+          onChange={(e) => {
+            setCodeInput(e.target.value);
+            setCodeError(null);
+          }}
+        />
+        <Button type="submit" variant="secondary" disabled={linking || !codeInput.trim()}>
+          코드로 연결
+        </Button>
+      </form>
+      {codeError ? <p className="ia-facility__suggest-error">{codeError}</p> : null}
 
       {suggestError ? <p className="ia-facility__suggest-error">{suggestError}</p> : null}
       {candidates && candidates.length === 0 ? (

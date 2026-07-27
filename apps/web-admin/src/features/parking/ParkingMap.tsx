@@ -10,13 +10,17 @@ import {
   type ReactNode,
 } from "react";
 import type { ParkingLayout, ParkingSpot } from "@/lib/api";
-import { SPOT_H, SPOT_W, elapsedText, type ParkedCar } from "./parking-sim";
+import {
+  SPOT_H,
+  SPOT_W,
+  elapsedText,
+  matchesGroup,
+  parseViewBox,
+  type ParkedCar,
+} from "./parking-sim";
 
 // 면 상태 — 색·툴팁·강조가 모두 이 값으로 갈린다(색 단독 전달 금지: 툴팁·목록에 문구 병기).
 type SpotState = "empty" | "resident" | "external";
-
-/** 소속 필터의 "외부 차량" 그룹 키(동명이 아닌 유일 값). */
-export const EXTERNAL_GROUP = "외부";
 
 const NUMBER_OFFSET_TOP = 11; // dir=down 면은 위쪽에 번호
 const NUMBER_OFFSET_BOTTOM = 5; // dir=up 면은 아래쪽에 번호
@@ -333,12 +337,6 @@ function CarGlyph({ spot, state }: { spot: ParkingSpot; state: SpotState }) {
   );
 }
 
-/** 소속 필터 대조 — "외부"는 외부 차량, 그 외는 동명. 빈자리는 어느 그룹에도 속하지 않는다. */
-function matchesGroup(car: ParkedCar | undefined, group: string): boolean {
-  if (!car) return false;
-  return group === EXTERNAL_GROUP ? car.external : car.dong === group;
-}
-
 /** 툴팁 — 면 번호·특수면 종류 + 차량 정보(관리자는 번호판 전체 표시). */
 function spotTooltip(spot: ParkingSpot, car: ParkedCar | undefined, nowMs: number): string {
   const head = `${spot.no}면${spot.kind !== "일반" ? ` (${spot.kind})` : ""}`;
@@ -347,13 +345,4 @@ function spotTooltip(spot: ParkingSpot, car: ParkedCar | undefined, nowMs: numbe
     return `${head} — 외부차량 ${car.plate} · 주차 ${elapsedText(car.entryMs, nowMs)} 경과`;
   }
   return `${head} — ${car.plate} · ${car.dong} ${car.ho}`;
-}
-
-/** "0 0 3020 1082" → [minX, minY, width, height]. 파싱 실패는 0 으로 둔다(프레임 크기만 영향). */
-function parseViewBox(viewBox: string): [number, number, number, number] {
-  const parts = viewBox
-    .trim()
-    .split(/[\s,]+/)
-    .map((v) => Number.parseFloat(v));
-  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 0];
 }

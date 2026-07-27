@@ -164,10 +164,6 @@ export function TenantAdmin() {
         <h1 id="main" className="admin-page__title">
           단지 관리
         </h1>
-        <p className="admin-page__lede">
-          단지를 생성하고 각 단지에 소장을 초대합니다(단지당 1명). 초대 메일의 링크로 소장이
-          비밀번호를 설정하면 계정이 활성화됩니다.
-        </p>
       </header>
 
       <main className="admin-page__main">

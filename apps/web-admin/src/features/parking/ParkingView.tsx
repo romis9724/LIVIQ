@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
@@ -11,6 +12,7 @@ import {
   type ParkingVehicle,
 } from "@/lib/api";
 import {
+  EXTERNAL_GROUP,
   SIM_SEED,
   simulateParking,
   summarize,
@@ -18,9 +20,27 @@ import {
   type ParkedCar,
   type ParkingCounts,
 } from "./parking-sim";
-import { EXTERNAL_GROUP, ParkingMap } from "./ParkingMap";
+import { ParkingMap } from "./ParkingMap";
 import { ParkingList } from "./ParkingList";
 import "./parking.css";
+
+// three.js 는 무겁다 — 3D 뷰는 옵트인이라 눌렀을 때만 클라이언트로 불러온다
+// (기본 2D 배치도는 그대로, 타 라우트·초기 진입 번들에 three 가 새지 않게 — ADR-0022 결정 4).
+const ParkingView3D = dynamic(() => import("./ParkingView3D").then((m) => m.ParkingView3D), {
+  ssr: false,
+  loading: () => (
+    <div className="pk-view3d__status" role="status" aria-live="polite">
+      3D 뷰 불러오는 중…
+    </div>
+  ),
+});
+
+type ViewMode = "2d" | "3d";
+
+const VIEW_MODES: readonly { id: ViewMode; label: string }[] = [
+  { id: "2d", label: "2D 배치도" },
+  { id: "3d", label: "3D 뷰" },
+];
 
 type CountKey = Exclude<keyof ParkingCounts, "byDong">;
 
@@ -76,17 +96,14 @@ export function ParkingView() {
         <h1 id="main" className="admin-page__title">
           주차장 대시보드
         </h1>
-        <p className="admin-page__lede">
-          지하 1층 배치도에서 입주민·외부 차량을 확인합니다. 면을 누르면 어느 동 몇 호 차량인지
-          표시됩니다.
-        </p>
+      </header>
+
+      <main className="admin-page__main">
+        {/* 데이터 정직성 안내는 콘텐츠 최상단 유지 — 점유가 실측처럼 보이면 안 된다. */}
         <p className="pk-sim-badge">
           <span aria-hidden="true">🧪</span> 점유 현황은 시뮬레이션입니다(번호판 인식 연동 전).
           배치도·차량 목록은 등록 데이터입니다.
         </p>
-      </header>
-
-      <main className="admin-page__main">
         {state.kind === "loading" ? (
           <LoadingSkeleton />
         ) : state.kind === "error" ? (
@@ -137,6 +154,8 @@ function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
   const [selectedNo, setSelectedNo] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
+  // 기본은 2D — 3D 는 옵트인이고, WebGL 이 없거나 느린 기기는 2D 로 계속 볼 수 있다.
+  const [viewMode, setViewMode] = useState<ViewMode>("2d");
 
   // 점유는 마운트 1회 계산 — 시드·nowMs 고정이라 재렌더에도 같은 상태를 보여준다.
   const sim = useMemo(
@@ -178,6 +197,20 @@ function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
           active={group === EXTERNAL_GROUP}
           onClick={() => setGroup(group === EXTERNAL_GROUP ? null : EXTERNAL_GROUP)}
         />
+        <div className="pk-viewtabs" role="group" aria-label="배치도 보기 방식">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode.id}
+              type="button"
+              className="pk-viewtab"
+              aria-pressed={viewMode === mode.id}
+              data-active={viewMode === mode.id || undefined}
+              onClick={() => setViewMode(mode.id)}
+            >
+              {mode.label}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           className="pk-list-toggle"
@@ -195,15 +228,26 @@ function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
 
       <div className="pk-main" data-list={listOpen || undefined}>
         <section className="surface-card pk-stage">
-          <ParkingMap
-            layout={layout}
-            bySpot={sim.bySpot}
-            nowMs={nowMs}
-            selectedNo={selectedNo}
-            activeGroup={group}
-            onSelect={setSelectedNo}
-            summaryLabel={mapSummaryLabel(counts)}
-          />
+          {viewMode === "3d" ? (
+            <ParkingView3D
+              layout={layout}
+              bySpot={sim.bySpot}
+              selectedNo={selectedNo}
+              activeGroup={group}
+              onSelect={setSelectedNo}
+              summaryLabel={mapSummaryLabel(counts)}
+            />
+          ) : (
+            <ParkingMap
+              layout={layout}
+              bySpot={sim.bySpot}
+              nowMs={nowMs}
+              selectedNo={selectedNo}
+              activeGroup={group}
+              onSelect={setSelectedNo}
+              summaryLabel={mapSummaryLabel(counts)}
+            />
+          )}
           <MapLegend />
         </section>
 

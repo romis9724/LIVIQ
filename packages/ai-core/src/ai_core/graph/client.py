@@ -24,6 +24,8 @@ EMBEDDING_DIMENSIONS = 1024
 # db.index.vector.queryNodes는 전역 top-K 후 tenant 필터 → 여유 배수로 뽑아 recall 보전
 _SEARCH_OVERSAMPLE = 5
 _DATABASE = "neo4j"
+# plan_devices 스냅샷에서 '방 자체'를 뜻하는 device_type — 마커가 아니라 방 허브로 승격한다(H14-1)
+_ROOM_DEVICE_TYPE = "room"
 
 
 @dataclass(frozen=True)
@@ -43,10 +45,12 @@ class GraphNode:
 
     pg_id: str
     # facility | incident | maintenance | floor_plan | plan_device (H13-6)
-    # | location | complex (H13-7 — 단지 루트)
+    # | location | complex (H13-7 — 단지 루트) | plan_room | plan_kind (H14-1 — 도면 하위 허브)
     label: str
     name: str | None = None  # facility.name | incident.symptom | maintenance.work |
-    # floor_plan.unit_type_name | plan_device.device_type(+room) | location.name | complex.name
+    # floor_plan.unit_type_name | plan_device.device_type(+room) | location.name | complex.name |
+    # plan_room.name(방) | plan_kind.name(마커 종류)
+    code: str | None = None  # facility.code — 시설 코드번호(H14-2)
     type: str | None = None  # facility.type (계통 렌즈)
     location: str | None = None  # facility.location (위치 렌즈, H13-2)
     status: str | None = None  # facility.status
@@ -56,10 +60,10 @@ class GraphNode:
 
 @dataclass(frozen=True)
 class GraphLink:
-    source: str  # facility | floor_plan pg_id
+    source: str  # facility | floor_plan pg_id | plan_room·plan_kind 합성 id
     target: str  # incident | maintenance | plan_device | facility pg_id
     # HAS_INCIDENT | HAS_MAINTENANCE | HAS_DEVICE | LINKED_TO (H13-6)
-    # | LOCATED_IN | PART_OF (H13-7)
+    # | LOCATED_IN | PART_OF (H13-7) | HAS_ROOM | HAS_KIND (H14-1)
     kind: str
 
 
@@ -169,7 +173,7 @@ class GraphClient:
             "MERGE (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET f.last_applied_version = -1 "
             "WITH f WHERE $version > f.last_applied_version "
-            "SET f.name = $name, f.location = $location, f.type = $type, "
+            "SET f.name = $name, f.code = $code, f.location = $location, f.type = $type, "
             "    f.status = $status, f.last_applied_version = $version "
             "WITH f "
             "OPTIONAL MATCH (f)-[old:LOCATED_IN]->(:Location) "
@@ -187,6 +191,7 @@ class GraphClient:
                 "tenant": tenant_id,
                 "version": version,
                 "name": props.get("name"),
+                "code": props.get("code"),
                 "location": location,
                 "type": props.get("type"),
                 "status": props.get("status"),
@@ -282,17 +287,30 @@ class GraphClient:
     async def replace_floor_plan(
         self, *, tenant_id: str, pg_id: str, props: Mapping[str, Any], version: int
     ) -> None:
-        """평면도 도면 upsert + 마커(`PlanDevice`) 전체 교체(H13-6, docs/03 §4.9 floor_plan 스냅샷).
+        """평면도 도면 upsert + 하위 그래프 전체 교체(H13-6, docs/03 §4.9 floor_plan 스냅샷).
+
+        **계층(H14-1 재구조화 — 사용자 요청)**: 도면 → 방·종류 허브 → 마커.
+        `device_type='room'`인 스냅샷 항목은 마커가 아니라 방 자체라 `(:PlanRoom)` 허브로
+        승격하고(`HAS_ROOM`), 나머지 요소의 distinct `device_type`은 `(:PlanKind)` 허브가
+        된다(`HAS_KIND`). 마커(`:PlanDevice`)는 도면에 직결하지 않고 자기 방·자기 종류
+        허브에서 각각 `HAS_DEVICE`로 내려온다(방 정보가 없는 마커는 종류 허브에만 달린다) —
+        화면이 가상 허브를 발명하지 않도록 그래프에 실체화한다(ADR-0022, H13-7 교훈).
 
         PG `plan_devices`는 항상 delete-then-insert 전체교체라 그래프도 동일 정책 —
-        기존 `HAS_DEVICE` 대상 전부 detach delete 후 스냅샷으로 재생성한다. `facility_id`가
-        있는 마커는 `LINKED_TO`로 Facility에 연결(merge_incident 관례와 동일 stub 허용).
+        기존 하위 노드(허브·마커, 구 모델의 도면 직결 마커 포함)를 detach delete 후 스냅샷으로
+        재생성한다. `facility_id`가 있는 마커는 `LINKED_TO`로 Facility에 연결(merge_incident
+        관례와 동일 stub 허용).
 
         `complex_name`이 있으면 단지 루트 `(:Complex {tenant_id})`를 실체화해
         `(fp)-[:PART_OF]->(complex)`로 잇는다(H13-7 — 도면에는 Location 개념이 없어
         직결만 한다, facility의 위치 경유 분기 없음).
         """
         devices = [dict(d) for d in props.get("devices") or []]
+        # device_type이 빈 항목은 종류 허브를 만들 수 없어 제외한다(PG는 NOT NULL — 방어).
+        # 남기면 허브 없는 고아 마커가 되어 다음 전체 교체의 순회에도 걸리지 않는다.
+        markers = [
+            d for d in devices if d.get("device_type") and d["device_type"] != _ROOM_DEVICE_TYPE
+        ]
         await self._run(
             "MERGE (fp:FloorPlan {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET fp.last_applied_version = -1 "
@@ -300,8 +318,10 @@ class GraphClient:
             "SET fp.unit_type_name = $unit_type_name, fp.image_width = $image_width, "
             "    fp.image_height = $image_height, fp.last_applied_version = $version "
             "WITH fp "
-            "OPTIONAL MATCH (fp)-[:HAS_DEVICE]->(old:PlanDevice) "
-            "DETACH DELETE old "
+            # 구 모델(도면 직결 마커)도 같은 패턴으로 걷힌다 — HAS_DEVICE를 함께 훑는다.
+            "OPTIONAL MATCH (fp)-[:HAS_ROOM|HAS_KIND|HAS_DEVICE]->(old) "
+            "OPTIONAL MATCH (old)-[:HAS_DEVICE]->(old_device:PlanDevice) "
+            "DETACH DELETE old, old_device "
             "WITH DISTINCT fp "
             "FOREACH (_ IN CASE WHEN $complex_name IS NULL OR $complex_name = '' "
             "THEN [] ELSE [1] END | "
@@ -309,12 +329,24 @@ class GraphClient:
             "    SET c.name = $complex_name "
             "    MERGE (fp)-[:PART_OF]->(c)) "
             "WITH DISTINCT fp "
+            "FOREACH (room IN $rooms | "
+            "    CREATE (fp)-[:HAS_ROOM]->"
+            "        (:PlanRoom {tenant_id: $tenant, plan_pg_id: $pg_id, name: room})) "
+            "FOREACH (kind IN $kinds | "
+            "    CREATE (fp)-[:HAS_KIND]->"
+            "        (:PlanKind {tenant_id: $tenant, plan_pg_id: $pg_id, name: kind})) "
+            "WITH fp "
             "UNWIND $devices AS device "
             "CREATE (d:PlanDevice {pg_id: device.pg_id, tenant_id: $tenant}) "
             "SET d.device_type = device.device_type, d.x = device.x, d.y = device.y, "
             "    d.room = device.room, d.dir = device.dir, d.label = device.label "
-            "MERGE (fp)-[:HAS_DEVICE]->(d) "
+            "WITH fp, d, device "
+            "MATCH (k:PlanKind {tenant_id: $tenant, plan_pg_id: $pg_id, name: device.device_type}) "
+            "MERGE (k)-[:HAS_DEVICE]->(d) "
             "WITH d, device "
+            "FOREACH (room IN CASE WHEN device.room IS NULL THEN [] ELSE [device.room] END | "
+            "    MERGE (r:PlanRoom {tenant_id: $tenant, plan_pg_id: $pg_id, name: room}) "
+            "    MERGE (r)-[:HAS_DEVICE]->(d)) "
             "FOREACH (_ IN CASE WHEN device.facility_id IS NULL THEN [] ELSE [1] END | "
             "    MERGE (f:Facility {pg_id: device.facility_id, tenant_id: $tenant}) "
             "    ON CREATE SET f.last_applied_version = -1 "
@@ -326,7 +358,9 @@ class GraphClient:
                 "unit_type_name": props.get("unit_type_name"),
                 "image_width": props.get("image_width"),
                 "image_height": props.get("image_height"),
-                "devices": devices,
+                "devices": markers,
+                "rooms": _plan_room_names(devices),
+                "kinds": _distinct(d.get("device_type") for d in markers),
                 "complex_name": props.get("complex_name"),
             },
         )
@@ -382,24 +416,23 @@ class GraphClient:
 
     # ── 화면 조회 (H13-1 — 시설 그래프 메인의 유일한 읽기 경로) ─────────────
 
-    async def fetch_facility_graph(
-        self, *, tenant_id: str, include_plan: bool = False
-    ) -> FacilityGraph:
+    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
         """단지 시설 그래프 전체(노드 + 관계). 관계 0인 고아 시설도 노드로 포함.
-        Location·Complex 노드와 LOCATED_IN·PART_OF 관계는 include_plan과 무관하게 항상
-        포함한다(H13-7 — 기본 그래프의 뼈대, docs/11 §4 원 모델 + 단지 루트 노드).
+        Location·Complex·FloorPlan 노드와 LOCATED_IN·PART_OF 관계는 항상 포함한다
+        (H13-7·H14-1 — 기본 그래프의 뼈대, docs/11 §4 원 모델 + 단지 루트 노드).
+        도면 하위 계층(PlanRoom·PlanKind·PlanDevice + HAS_ROOM·HAS_KIND·HAS_DEVICE·
+        LINKED_TO)도 기본 포함 — 마커는 평면(도면 직결)이 아니라 방·종류 허브를 거쳐
+        내려온다(H14-1 재구조화).
 
         tenant는 시설·이웃 양쪽에 강제한다. 반환 프로퍼티는 열거식 —
         `embedding`은 결과에 들어갈 수 없다(페이로드 폭발 방지, ADR-0022).
-
-        `include_plan=True`면 평면도·마커(FloorPlan·PlanDevice)도 실어 반환한다(H13-6) —
-        마커가 단지 전체 시설 대비 훨씬 많아(도면당 수십개) 기본은 제외, 화면이 opt-in.
         """
         records = await self._run(
             "MATCH (f:Facility {tenant_id: $tenant}) "
             "OPTIONAL MATCH (f)-[r:HAS_INCIDENT|HAS_MAINTENANCE]->(n) "
             "WHERE n.tenant_id = $tenant "
             "RETURN f.pg_id AS facility_id, f.name AS facility_name, f.type AS facility_type, "
+            "       f.code AS facility_code, "
             "       f.location AS facility_location, f.status AS facility_status, "
             "       type(r) AS kind, n.pg_id AS node_id, "
             "       n.symptom AS symptom, n.occurred_at AS occurred_at, "
@@ -417,6 +450,7 @@ class GraphClient:
                     pg_id=facility_id,
                     label="facility",
                     name=r["facility_name"],
+                    code=r["facility_code"],
                     type=r["facility_type"],
                     location=r["facility_location"],
                     status=r["facility_status"],
@@ -429,15 +463,10 @@ class GraphClient:
             links.append(GraphLink(source=facility_id, target=node_id, kind=kind))
 
         await self._merge_location_graph(tenant_id=tenant_id, nodes=nodes, links=links)
-
-        if include_plan:
-            await self._merge_plan_graph(tenant_id=tenant_id, nodes=nodes, links=links)
-
-        # 링크가 가리키는 노드가 먼저 존재해야 하므로(dangling 링크 방지) plan 병합 뒤에 실행 —
-        # include_plan=True일 때만 FloorPlan發 PART_OF도 잡는다.
-        await self._merge_complex_graph(
-            tenant_id=tenant_id, nodes=nodes, links=links, include_plan=include_plan
-        )
+        await self._merge_plan_graph(tenant_id=tenant_id, nodes=nodes, links=links)
+        # 링크가 가리키는 노드가 먼저 존재해야 하므로(dangling 링크 방지) 도면 병합 뒤에 실행 —
+        # FloorPlan發 PART_OF도 여기서 잡는다.
+        await self._merge_complex_graph(tenant_id=tenant_id, nodes=nodes, links=links)
 
         return FacilityGraph(nodes=tuple(nodes.values()), links=tuple(links))
 
@@ -445,7 +474,7 @@ class GraphClient:
         self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]
     ) -> None:
         """Location 노드·LOCATED_IN 관계를 fetch_facility_graph 결과에 덧붙인다 —
-        include_plan과 무관하게 항상 포함(기본 그래프의 뼈대, H13-7)."""
+        기본 그래프의 뼈대라 항상 포함(H13-7)."""
         records = await self._run(
             "MATCH (f:Facility {tenant_id: $tenant})-[:LOCATED_IN]->"
             "(loc:Location {tenant_id: $tenant}) "
@@ -464,21 +493,15 @@ class GraphClient:
             )
 
     async def _merge_complex_graph(
-        self,
-        *,
-        tenant_id: str,
-        nodes: dict[str, GraphNode],
-        links: list[GraphLink],
-        include_plan: bool,
+        self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]
     ) -> None:
         """단지 루트 Complex 노드·PART_OF 관계를 항상 덧붙인다(그래프 중심, H13-7 — 사용자
         요청). PART_OF 소스는 Facility(직결) 또는 Location(경유) — merge_facility가 위치
-        유무로 이미 갈라 만든다. FloorPlan發 PART_OF(replace_floor_plan)는 그 노드가 이미
-        결과에 실려있는 include_plan=True일 때만 포함(dangling 링크 방지)."""
-        source_labels = "n:Facility OR n:Location" + (" OR n:FloorPlan" if include_plan else "")
+        유무로 이미 갈라 만든다. FloorPlan發 PART_OF(replace_floor_plan)도 포함 —
+        도면은 기본 표시라 노드가 이미 결과에 실려있다(H14-1)."""
         records = await self._run(
             "MATCH (n)-[:PART_OF]->(c:Complex {tenant_id: $tenant}) "
-            f"WHERE n.tenant_id = $tenant AND ({source_labels}) "
+            "WHERE n.tenant_id = $tenant AND (n:Facility OR n:Location OR n:FloorPlan) "
             "RETURN CASE WHEN n:Facility OR n:FloorPlan THEN n.pg_id ELSE n.name END AS source_id, "
             "       c.name AS complex_name "
             "ORDER BY complex_name",
@@ -495,33 +518,103 @@ class GraphClient:
     async def _merge_plan_graph(
         self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]
     ) -> None:
-        """평면도·마커 노드/관계를 fetch_facility_graph 결과에 덧붙인다(include_plan=True 전용)."""
+        """평면도 계층(도면 → 방·종류 허브 → 마커)을 결과에 덧붙인다 — 기본 표시(H14-1).
+
+        허브에는 pg_id가 없어(그래프 실체지만 PG 행이 아니다) `{도면}:room:{방}` /
+        `{도면}:kind:{종류}` 형태의 합성 식별자를 쓴다(Location이 name을 pg_id로 쓰는 전례).
+        마커는 방·종류 양쪽에서 내려와 행이 중복되므로 노드는 dict로 dedupe한다.
+        """
         records = await self._run(
             "MATCH (fp:FloorPlan {tenant_id: $tenant}) "
-            "OPTIONAL MATCH (fp)-[:HAS_DEVICE]->(d:PlanDevice) "
+            "OPTIONAL MATCH (fp)-[:HAS_ROOM|HAS_KIND]->(hub) "
+            "OPTIONAL MATCH (hub)-[:HAS_DEVICE]->(d:PlanDevice) "
             "OPTIONAL MATCH (d)-[:LINKED_TO]->(f:Facility {tenant_id: $tenant}) "
             "RETURN fp.pg_id AS plan_id, fp.unit_type_name AS unit_type_name, "
+            "       hub:PlanRoom AS is_room, hub.name AS hub_name, "
             "       d.pg_id AS device_id, d.device_type AS device_type, d.room AS room, "
             "       f.pg_id AS facility_id "
-            "ORDER BY unit_type_name, device_id",
+            "ORDER BY unit_type_name, hub_name, device_id",
             {"tenant": tenant_id},
         )
+        linked_devices: set[str] = set()  # 마커는 방·종류 두 행에 나타난다 — LINKED_TO는 1회만
         for r in records:
             plan_id = r["plan_id"]
             if plan_id not in nodes:
                 nodes[plan_id] = GraphNode(
                     pg_id=plan_id, label="floor_plan", name=r["unit_type_name"]
                 )
+            hub_name = r["hub_name"]
+            if hub_name is None:  # 허브 0개인 도면
+                continue
+            is_room = bool(r["is_room"])
+            hub_id = _plan_hub_id(plan_id, "room" if is_room else "kind", hub_name)
+            if hub_id not in nodes:
+                nodes[hub_id] = GraphNode(
+                    pg_id=hub_id, label="plan_room" if is_room else "plan_kind", name=hub_name
+                )
+            links.append(
+                GraphLink(source=plan_id, target=hub_id, kind="HAS_ROOM" if is_room else "HAS_KIND")
+            )
             device_id = r["device_id"]
-            if device_id is None:  # 마커 0개인 도면
+            if device_id is None:  # 마커 0개인 허브
                 continue
             if device_id not in nodes:
                 name = r["device_type"] if not r["room"] else f"{r['device_type']}({r['room']})"
                 nodes[device_id] = GraphNode(pg_id=device_id, label="plan_device", name=name)
-            links.append(GraphLink(source=plan_id, target=device_id, kind="HAS_DEVICE"))
+            links.append(GraphLink(source=hub_id, target=device_id, kind="HAS_DEVICE"))
             facility_id = r["facility_id"]
-            if facility_id is not None:
+            if facility_id is not None and device_id not in linked_devices:
+                linked_devices.add(device_id)
                 links.append(GraphLink(source=device_id, target=facility_id, kind="LINKED_TO"))
+
+    # ── 정리 (H14-1 — PG에서 사라진 도면의 잔존 노드) ───────────────────────
+
+    async def prune_floor_plans(self, *, tenant_id: str, keep_pg_ids: Sequence[str]) -> int:
+        """해당 tenant의 FloorPlan 중 `keep_pg_ids`에 없는 노드를 하위 계층(PlanRoom·PlanKind·
+        PlanDevice)과 함께 삭제하고 삭제한 도면 수를 반환한다.
+
+        PG 도면 행이 사라지면(과거 시드의 delete-then-insert 등) 그래프에는 tombstone
+        이벤트가 없어 옛 노드가 고아로 남는다 — 시드가 현재 pg_id 집합으로 호출해 정리한다.
+        `keep_pg_ids`가 비면 해당 tenant의 도면을 **전부** 지운다(PG에 도면 0건인 경우).
+        tenant는 MATCH에 구조적으로 박혀 있어 타 tenant 노드는 대상이 될 수 없다.
+        """
+        records = await self._run(
+            "MATCH (fp:FloorPlan {tenant_id: $tenant}) "
+            "WHERE NOT fp.pg_id IN $keep "
+            # HAS_DEVICE 직결은 구 모델(도면→마커) 잔재까지 함께 걷기 위한 것
+            "OPTIONAL MATCH (fp)-[:HAS_ROOM|HAS_KIND|HAS_DEVICE]->(hub) "
+            "OPTIONAL MATCH (hub)-[:HAS_DEVICE]->(d:PlanDevice) "
+            "WITH collect(DISTINCT fp) AS plans, collect(DISTINCT hub) AS hubs, "
+            "     collect(DISTINCT d) AS devices "
+            "FOREACH (n IN plans + hubs + devices | DETACH DELETE n) "
+            "RETURN size(plans) AS deleted",
+            {"tenant": tenant_id, "keep": list(keep_pg_ids)},
+        )
+        return int(records[0]["deleted"]) if records else 0
+
+
+def _plan_hub_id(plan_pg_id: str, hub: str, name: str) -> str:
+    """방·종류 허브의 화면 식별자(pg_id 없는 노드 — Location이 name을 쓰는 전례)."""
+    return f"{plan_pg_id}:{hub}:{name}"
+
+
+def _distinct(values: Any) -> list[str]:
+    """빈 값 제외 + 입력 순서 보존 중복 제거(그래프 허브 이름 목록)."""
+    seen: dict[str, None] = {}
+    for value in values:
+        if value:
+            seen.setdefault(str(value), None)
+    return list(seen)
+
+
+def _plan_room_names(devices: Sequence[Mapping[str, Any]]) -> list[str]:
+    """방 허브 이름 — `device_type='room'` 항목의 방 이름 + 마커가 참조하는 방 이름.
+
+    마커가 room 행 없는 방을 가리켜도 허브가 생겨 마커가 방 축에서 누락되지 않는다.
+    """
+    declared = (d.get("room") for d in devices if d.get("device_type") == _ROOM_DEVICE_TYPE)
+    referenced = (d.get("room") for d in devices if d.get("device_type") != _ROOM_DEVICE_TYPE)
+    return _distinct([*declared, *referenced])
 
 
 def _neighbor_node(kind: str, node_id: str, record: Any) -> GraphNode:

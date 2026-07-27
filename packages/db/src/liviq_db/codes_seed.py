@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from liviq_db.facility_systems import FACILITY_SYSTEMS
+
 
 class CodeSeed(NamedTuple):
     code: str
@@ -41,5 +43,53 @@ DEFAULT_CODE_GROUPS: tuple[CodeGroupSeed, ...] = (
         group_key="INQUIRY_CATEGORY",
         name="민원 카테고리",
         codes=_codes("설비", "하자", "소음", "주차", "공용부", "보안", "기타"),
+    ),
+    # 시설 코드(H14-2)의 계통 약어 — code=약어·label=한글. facility_systems 단일 출처에서 파생.
+    CodeGroupSeed(
+        group_key="FACILITY_SYSTEM",
+        name="시설 계통",
+        codes=tuple(CodeSeed(s.abbr, s.label) for s in FACILITY_SYSTEMS),
+    ),
+    # 평면도 요소·방 종류(H14-2) — 값은 ai_core.tools.floor_plan_parser의 사전 키와 일치해야
+    # 한다(패키지 의존 방향상 임포트 불가 — 드리프트는 apps/api 테스트가 잡는다).
+    CodeGroupSeed(
+        group_key="PLAN_DEVICE_TYPE",
+        name="평면도 요소 종류",
+        codes=_codes(
+            "콘센트",
+            "분전함",
+            "통신단자함",
+            "TV·인터넷 단자",
+            "가스밸브",
+            "수도 차단밸브",
+            "보일러",
+            "난방 분배기",
+            "온도조절기",
+            "에어컨 배관",
+            "소화기",
+            "화재감지기",
+            "경량칸막이",
+            "월패드",
+        ),
+    ),
+    CodeGroupSeed(
+        group_key="PLAN_ROOM",
+        name="평면도 방",
+        codes=_codes(
+            "거실",
+            "주방",
+            "안방",
+            "침실1",
+            "침실2",
+            "욕실1",
+            "욕실2",
+            "현관",
+            "팬트리",
+            "다용도실",
+            "발코니(전면)",
+            "발코니(후면)",
+            "발코니(측면)",
+            "실외기실",
+        ),
     ),
 )

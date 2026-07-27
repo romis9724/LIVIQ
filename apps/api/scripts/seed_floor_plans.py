@@ -2,15 +2,17 @@
 
 TYPE_A(84M) 어노테이션(scripts/data/floor_plan_annotations.py — annotations.js 이식본)을
 그대로 적재하고, TYPE_B(59C)는 원본의 mirrorType 로직(좌우반전: x→W-x, dir left↔right
-반전)을 이식해 파생한다. unit_types 행이 없으면 생성하고, floor_plans(scope=unit_type)·
-plan_devices(action=base)는 delete-then-insert로 전량 교체한다(재실행해도 개수가 늘지
-않음 — 트윈 geometry 업로드와 동일한 전체 교체 관례). 이미지 파일 2장은 S3(MinIO)에 put.
+반전)을 이식해 파생한다. unit_types 행이 없으면 생성하고, floor_plans(scope=unit_type)는
+(tenant, unit_type) 기준 **업서트**(기존 행이 있으면 갱신 — id 보존), plan_devices
+(action=base)만 delete-then-insert로 전량 교체한다(재실행해도 개수가 늘지 않음 —
+트윈 geometry 업로드와 동일한 전체 교체 관례). 이미지 파일 2장은 S3(MinIO)에 put.
 
 도면+마커 스냅샷을 `outbox_events(aggregate_type='floor_plan')`에 도메인 행과 같은
 트랜잭션으로 기록한다(H13-6, `app.routers.floor_plans._floor_plan_snapshot` 재사용 —
-이중 쓰기 금지). floor_plan 행 자체를 delete-then-insert하므로 재실행마다 새 pg_id로
-`created` 이벤트가 나가고, 이전 실행의 Neo4j FloorPlan 노드는 자동 정리되지 않는다
-(ponytail: 재시딩이 잦아지면 tombstone 이벤트도 함께 내보내는 정리가 필요).
+이중 쓰기 금지). floor_plan 행 id가 보존되므로 재시드해도 같은 pg_id로 `updated`
+이벤트가 나가 Neo4j가 같은 노드를 갱신한다(H14-1 — 옛 pg_id 잔존 노드 재발 방지).
+그래도 과거 실행이 남긴 고아 노드는 있을 수 있어, 시드 마지막에 NEO4J_* env가 있으면
+`GraphClient.prune_floor_plans`로 현재 pg_id 집합 밖의 FloorPlan을 정리한다.
 
 입력(원본 프로토타입, LIVIQ 밖):
     ../apt-facility-finder/아파트 도면_clean.jpg   (TYPE_A, 923x676)
@@ -38,6 +40,7 @@ from app.routers.floor_plans import _floor_plan_snapshot
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.graph import GraphClient
 from liviq_db.engine import create_engine, create_session_factory
 from liviq_db.models import FloorPlan, PlanDevice, Tenant, UnitType
 
@@ -72,9 +75,9 @@ def _dec(value: float) -> decimal.Decimal:
     return decimal.Decimal(str(value))
 
 
-def _mirrored(rooms: list[dict[str, Any]], elements: list[dict[str, Any]], width: int) -> tuple[
-    list[dict[str, Any]], list[dict[str, Any]]
-]:
+def _mirrored(
+    rooms: list[dict[str, Any]], elements: list[dict[str, Any]], width: int
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """원본 mirrorType 이식 — x→width-x, 화살표 방향 좌우 반전(annotations.js와 동일 규칙)."""
     mirrored_rooms = [{**r, "x": width - r["x"]} for r in rooms]
     mirrored_elements = []
@@ -116,43 +119,46 @@ async def _replace_floor_plan(
     rooms: list[dict[str, Any]],
     elements: list[dict[str, Any]],
     complex_name: str | None,
-) -> tuple[int, int]:
-    """해당 unit_type의 기존 floor_plan+devices 전체 교체 후 신규 적재.
+) -> tuple[uuid.UUID, int, int]:
+    """해당 unit_type의 도면을 업서트하고 devices는 전량 교체 적재.
 
-    (room 수, device 총 수) 반환.
+    도면 행은 id를 보존한다(delete-then-insert 금지 — 새 pg_id가 Neo4j에 고아 FloorPlan
+    노드를 남긴다, H14-1). (floor_plan id, room 수, device 총 수) 반환.
     """
-    existing = await session.scalar(
-        select(FloorPlan).where(
-            FloorPlan.tenant_id == tenant_id,
-            FloorPlan.scope == "unit_type",
-            FloorPlan.unit_type_id == unit_type.id,
-        )
-    )
-    if existing is not None:
-        await session.execute(
-            delete(PlanDevice).where(
-                PlanDevice.tenant_id == tenant_id, PlanDevice.floor_plan_id == existing.id
-            )
-        )
-        await session.execute(delete(FloorPlan).where(FloorPlan.id == existing.id))
-        await session.flush()
-
     image_key = f"{tenant_id}/floor-plans/{unit_type.name}/v1.jpg"
     image_path = SOURCE_DIR / image_file
     if not image_path.exists():
         raise SystemExit(f"원본 이미지를 찾을 수 없습니다: {image_path}")
     await storage.put(image_key, image_path.read_bytes())
 
-    plan = FloorPlan(
-        tenant_id=tenant_id,
-        scope="unit_type",
-        unit_type_id=unit_type.id,
-        image_key=image_key,
-        image_width=IMAGE_WIDTH,
-        image_height=IMAGE_HEIGHT,
-        version=1,
+    plan = await session.scalar(
+        select(FloorPlan).where(
+            FloorPlan.tenant_id == tenant_id,
+            FloorPlan.scope == "unit_type",
+            FloorPlan.unit_type_id == unit_type.id,
+        )
     )
-    session.add(plan)
+    is_new = plan is None
+    if plan is None:
+        plan = FloorPlan(
+            tenant_id=tenant_id,
+            scope="unit_type",
+            unit_type_id=unit_type.id,
+            image_key=image_key,
+            image_width=IMAGE_WIDTH,
+            image_height=IMAGE_HEIGHT,
+            version=1,
+        )
+        session.add(plan)
+    else:
+        await session.execute(
+            delete(PlanDevice).where(
+                PlanDevice.tenant_id == tenant_id, PlanDevice.floor_plan_id == plan.id
+            )
+        )
+        plan.image_key = image_key
+        plan.image_width = IMAGE_WIDTH
+        plan.image_height = IMAGE_HEIGHT
     await session.flush()
 
     devices = [
@@ -186,15 +192,36 @@ async def _replace_floor_plan(
         tenant_id=tenant_id,
         aggregate_type="floor_plan",
         aggregate_id=plan.id,
-        event_type="created",
+        event_type="created" if is_new else "updated",
         payload=_floor_plan_snapshot(unit_type.name, plan, devices, complex_name),
     )
-    return len(rooms), len(devices)
+    return plan.id, len(rooms), len(devices)
 
 
 def _report(rows: list[tuple[str, int, int]]) -> None:
     for name, room_count, device_count in rows:
         print(f"{name}: rooms {room_count} · devices(전체) {device_count} · 이미지 업로드 완료")
+
+
+async def _prune_graph_floor_plans(tenant_id: uuid.UUID, plan_ids: list[uuid.UUID]) -> None:
+    """현재 pg_id 집합 밖의 Neo4j FloorPlan 잔존 노드 정리(과거 delete-then-insert 유산).
+
+    NEO4J_* env가 없으면 건너뛴다 — 그래프 없이도 시드는 성공해야 한다(PG가 단일 출처).
+    """
+    try:
+        graph = GraphClient.from_settings()
+    except Exception as exc:  # noqa: BLE001 — env 미설정·미기동은 시드 실패가 아니다
+        print(f"Neo4j 미설정 — 잔존 도면 노드 정리 생략({exc})")
+        return
+    try:
+        pruned = await graph.prune_floor_plans(
+            tenant_id=str(tenant_id), keep_pg_ids=[str(i) for i in plan_ids]
+        )
+        print(f"Neo4j 잔존 FloorPlan 정리: {pruned}건")
+    except Exception as exc:  # noqa: BLE001 — 정리는 보조 작업, 시드 결과를 뒤집지 않는다
+        print(f"Neo4j 잔존 도면 노드 정리 실패({exc}) — 그래프 확인 필요")
+    finally:
+        await graph.close()
 
 
 async def _run(tenant_id: uuid.UUID) -> None:
@@ -205,19 +232,18 @@ async def _run(tenant_id: uuid.UUID) -> None:
     storage = get_storage()
     try:
         async with factory() as session, session.begin():
-            complex_name = await session.scalar(
-                select(Tenant.name).where(Tenant.id == tenant_id)
-            )
+            complex_name = await session.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
             if complex_name is None:
                 raise SystemExit(f"단지를 찾을 수 없습니다: {tenant_id}")
             await session.execute(
                 text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
             )
             rows: list[tuple[str, int, int]] = []
+            plan_ids: list[uuid.UUID] = []
             for spec in UNIT_TYPE_SPECS:
                 unit_type = await _get_or_create_unit_type(session, tenant_id, spec["name"])
                 rooms, elements = _rooms_and_elements_for(spec)
-                room_count, device_count = await _replace_floor_plan(
+                plan_id, room_count, device_count = await _replace_floor_plan(
                     session,
                     storage,
                     tenant_id,
@@ -227,8 +253,10 @@ async def _run(tenant_id: uuid.UUID) -> None:
                     elements,
                     complex_name,
                 )
+                plan_ids.append(plan_id)
                 rows.append((spec["name"], room_count, device_count))
         _report(rows)
+        await _prune_graph_floor_plans(tenant_id, plan_ids)
         print(f"단지: {tenant_id}")
     finally:
         await engine.dispose()

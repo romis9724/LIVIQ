@@ -73,15 +73,23 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+
+/** 대기자 명단은 '승인 대기' 카드의 버튼으로 여는 모달이다(H14 — 상시 섹션 폐지). */
+async function openQueue() {
+  fireEvent.click(await screen.findByRole("button", { name: "대기자 명단" }));
+}
+
 describe("Approvals", () => {
   it("서버가 마스킹한 이름을 그대로 노출한다(재마스킹 없음)", async () => {
     render(<Residents />);
+    await openQueue();
     expect(await screen.findByText("홍*동")).toBeDefined();
     expect(screen.getByText("103동 1502호")).toBeDefined();
   });
 
   it("명부 일치/불일치 배지를 노출한다", async () => {
     const { container } = render(<Residents />);
+    await openQueue();
     await screen.findByText("홍*동");
     expect(container.querySelectorAll(".apv-match--ok").length).toBe(1);
     expect(container.querySelectorAll(".apv-match--warn").length).toBe(1);
@@ -89,6 +97,7 @@ describe("Approvals", () => {
 
   it("승인하면 목록에서 사라지고 대기 건수가 준다", async () => {
     const { container } = render(<Residents />);
+    await openQueue();
     await screen.findByText("홍*동");
     const count = () => container.querySelector(".apv-count")?.textContent;
     expect(count()).toBe("2건 대기");
@@ -100,6 +109,7 @@ describe("Approvals", () => {
 
   it("거절은 사유 입력 전까지 확정 버튼이 비활성", async () => {
     render(<Residents />);
+    await openQueue();
     await screen.findByText("홍*동");
     fireEvent.click(screen.getAllByRole("button", { name: "거절" })[0]!);
 
@@ -115,6 +125,7 @@ describe("Approvals", () => {
   it("모든 신청을 처리하면 빈 상태를 보여준다", async () => {
     listApprovals.mockResolvedValue([]);
     render(<Residents />);
+    await openQueue();
     expect(await screen.findByText(/대기 중인 가입 신청이 없습니다/)).toBeDefined();
   });
 });

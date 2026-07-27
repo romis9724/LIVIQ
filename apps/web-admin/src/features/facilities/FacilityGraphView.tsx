@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import dynamic from "next/dynamic";
 import { Button, EmptyState } from "@liviq/ui";
-import { ApiError, getFacilityGraph, type FacilityGraph, type GraphNode } from "@/lib/api";
+import {
+  ApiError,
+  getFacilityGraph,
+  type FacilityGraph,
+  type GraphNode,
+  type GraphNodeLabel,
+} from "@/lib/api";
 import { FacilityGraphPanel, type GraphPanelSelection } from "./FacilityGraphPanel";
 import {
   COMPLEX_COLOR_VAR,
@@ -13,6 +19,9 @@ import {
   LOCATION_COLOR_VAR,
   MAINTENANCE_COLOR_VAR,
   PLAN_DEVICE_COLOR_VAR,
+  PLAN_KIND_COLOR_VAR,
+  PLAN_ROOM_COLOR_VAR,
+  complexSummary,
   findFacilityByName,
   lensColorVar,
   lensGroups,
@@ -41,16 +50,19 @@ const NODE_KIND_LEGEND: readonly { label: string; colorVar: string }[] = [
   { label: "정비", colorVar: MAINTENANCE_COLOR_VAR },
 ];
 
-// 위치·단지는 항상 표시(위치는 계통 렌즈에선 중립색, 위치 렌즈에선 위 그룹 목록의 색을 그대로
-// 쓴다 — 이 스와치는 '위치 노드가 존재한다'는 표식일 뿐이다. 단지는 렌즈 무관 고정색).
-// 평면도·마커는 토글 on 일 때만(H13-7).
-const LOCATION_LEGEND: readonly { label: string; colorVar: string }[] = [
+// 위치·단지·평면도는 항상 표시(위치는 계통 렌즈에선 중립색, 위치 렌즈에선 위 그룹 목록의 색을
+// 그대로 쓴다 — 이 스와치는 '위치 노드가 존재한다'는 표식일 뿐이다. 단지·평면도는 고정색).
+const HUB_LEGEND: readonly { label: string; colorVar: string }[] = [
   { label: "위치(허브)", colorVar: LOCATION_COLOR_VAR },
   { label: "단지", colorVar: COMPLEX_COLOR_VAR },
 ];
+
+// 도면 계층(H14-1) — 평면도 → 방·종류 허브 → 마커. 같은 주황 계열로 한 덩어리로 읽히게 한다.
 const PLAN_LEGEND: readonly { label: string; colorVar: string }[] = [
   { label: "평면도", colorVar: FLOOR_PLAN_COLOR_VAR },
-  { label: "평면도 마커", colorVar: PLAN_DEVICE_COLOR_VAR },
+  { label: "방", colorVar: PLAN_ROOM_COLOR_VAR },
+  { label: "종류", colorVar: PLAN_KIND_COLOR_VAR },
+  { label: "마커(작은 점)", colorVar: PLAN_DEVICE_COLOR_VAR },
 ];
 
 // 렌즈 — 계통별(기본)·위치별(동 단위, H13-2 ADR-0022 결정 2). 범례 제목도 렌즈에 따라 전환.
@@ -63,6 +75,9 @@ const LENS_LEGEND_TITLE: Record<GraphLens, string> = {
   location: "위치(설비 노드)",
 };
 
+// 상세 엔드포인트가 없는 도면 하위 노드 — 클릭해도 패널을 열지 않는다(H14-1).
+const PLAN_SUBGRAPH_LABELS = new Set<GraphNodeLabel>(["plan_room", "plan_kind", "plan_device"]);
+
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -74,13 +89,14 @@ function errorMessage(err: unknown): string {
 }
 
 interface FacilityGraphViewProps {
-  onSwitchToList: () => void;
+  onOpenList: () => void;
+  onEditFloorPlan: (planId: string) => void;
 }
 
-export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
+/** 전체화면 3D 그래프 + 플로팅 패널 2개(왼쪽 현황·보기 설정 / 오른쪽 노드 상세) — H14-1. */
+export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraphViewProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [lens, setLens] = useState<GraphLens>("system");
-  const [includePlan, setIncludePlan] = useState(false);
   const [selection, setSelection] = useState<GraphPanelSelection | null>(null);
   const [focus, setFocus] = useState<{ pgId: string; seq: number } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -88,23 +104,24 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const focusSeq = useRef(0);
 
-  const load = useCallback(async (planFlag: boolean) => {
+  const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      setState({ kind: "ready", graph: await getFacilityGraph(planFlag) });
+      setState({ kind: "ready", graph: await getFacilityGraph() });
     } catch (err) {
       setState({ kind: "error", message: errorMessage(err) });
     }
   }, []);
 
   useEffect(() => {
-    void load(includePlan);
-  }, [load, includePlan]);
+    void load();
+  }, [load]);
 
   const graph = state.kind === "ready" ? state.graph : null;
   const nodes = useMemo(() => graph?.nodes ?? [], [graph]);
   const links = useMemo(() => graph?.links ?? [], [graph]);
   const groups = useMemo(() => lensGroups(lens, nodes), [lens, nodes]);
+  const summary = useMemo(() => complexSummary(nodes), [nodes]);
 
   // 장애·정비 노드 클릭은 부모 시설의 패널을 연다(이력 노드 자체엔 상세 엔드포인트가 없다).
   const facilityIdOf = useCallback(
@@ -115,10 +132,11 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
     [links],
   );
 
-  // location·floor_plan·complex 는 전용 패널, plan_device 클릭은 무동작(H13-7 — 마커 자체엔
-  // 볼 상세가 없다).
+  // location·floor_plan·complex 는 전용 패널(H13-7). 도면 하위 계층(방·종류 허브·마커)은
+  // 상세 엔드포인트가 없어 클릭을 조용히 무시한다(H14-1 — 잘못된 시설 패널을 여는 것보다 낫다).
   const handleSelectNode = useCallback(
     (node: GraphNode) => {
+      if (PLAN_SUBGRAPH_LABELS.has(node.label)) return;
       if (node.label === "location") {
         setSelection({ kind: "location", node });
         return;
@@ -131,7 +149,6 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
         setSelection({ kind: "complex", node });
         return;
       }
-      if (node.label === "plan_device") return;
       const facilityId = facilityIdOf(node);
       if (facilityId) setSelection({ kind: "facility", facilityId });
     },
@@ -143,7 +160,7 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
     const query = searchRef.current?.value ?? "";
     const hit = findFacilityByName(nodes, query);
     if (!hit) {
-      setSearchError(query.trim() ? "해당 이름의 설비를 찾지 못했습니다." : null);
+      setSearchError(query.trim() ? "해당 이름·코드의 설비를 찾지 못했습니다." : null);
       return;
     }
     setSearchError(null);
@@ -152,139 +169,50 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
     setSelection({ kind: "facility", facilityId: hit.pgId });
   }
 
-  const header = (
-    <header className="admin-page__header">
-      <h1 id="main" className="admin-page__title">
-        시설 관리
-      </h1>
-      <p className="admin-page__lede">
-        설비와 장애·정비 이력의 관계를 계통별로 봅니다. 확정 데이터만 표시하며, 상태 변경·기록은
-        목록 보기에서 담당자가 직접 수행합니다.
-      </p>
-    </header>
-  );
-
-  if (state.kind === "loading") {
-    return (
-      <>
-        {header}
-        <div className="fac-graph__status" role="status" aria-live="polite">
-          시설 그래프 불러오는 중…
-        </div>
-      </>
-    );
-  }
-
-  if (state.kind === "error") {
-    return (
-      <>
-        {header}
-        <div className="fac-graph__empty">
-          <EmptyState
-            icon="⚠"
-            title="시설 그래프를 불러오지 못했습니다"
-            description={state.message}
-            action={
-              <Button variant="secondary" onClick={() => void load(includePlan)}>
-                다시 시도
-              </Button>
-            }
-          />
-        </div>
-      </>
-    );
-  }
-
-  if (nodes.length === 0) {
-    return (
-      <>
-        {header}
-        <div className="fac-graph__empty">
-          <EmptyState
-            icon="🏗"
-            title="시설이 없습니다"
-            description="목록 보기의 ‘설비 등록’으로 첫 시설을 추가하면 그래프에 나타납니다."
-            action={
-              <Button variant="secondary" onClick={onSwitchToList}>
-                목록 보기로 전환
-              </Button>
-            }
-          />
-        </div>
-      </>
-    );
-  }
-
-  const facilityNames = nodes
-    .filter((node) => node.label === "facility" && node.name)
-    .map((node) => node.name as string);
+  // datalist 후보 — 이름과 코드번호 둘 다(코드로도 찾아갈 수 있다, H14-2).
+  const searchOptions = [
+    ...new Set(
+      nodes
+        .filter((node) => node.label === "facility")
+        .flatMap((node) => [node.name, node.code].filter((v): v is string => Boolean(v))),
+    ),
+  ];
 
   return (
-    <>
-      {header}
-      <div className="fac-graph">
-        {state.graph.degraded ? (
-          <p className="fac-graph__banner" role="status">
-            관계 정보 일시 미표시 — 설비 노드만 보여 줍니다. 장애·정비 연결은 그래프 동기화가
-            복구되면 다시 나타납니다.
-          </p>
-        ) : null}
-
-        <div className="fac-graph__toolbar">
-          <div className="fac-viewtabs" role="tablist" aria-label="그래프 렌즈">
-            {LENS_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                role="tab"
-                aria-selected={lens === option.id}
-                className="fac-viewtab"
-                data-active={lens === option.id || undefined}
-                onClick={() => setLens(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+    <div className="fac-stage">
+      <div className="fac-stage__canvas">
+        {state.kind === "loading" ? (
+          <div className="fac-graph__status" role="status" aria-live="polite">
+            시설 그래프 불러오는 중…
           </div>
-          <label className="fac-plantoggle">
-            <input
-              type="checkbox"
-              checked={includePlan}
-              onChange={(event) => setIncludePlan(event.target.checked)}
+        ) : state.kind === "error" ? (
+          <div className="fac-graph__empty">
+            <EmptyState
+              icon="⚠"
+              title="시설 그래프를 불러오지 못했습니다"
+              description={state.message}
+              action={
+                <Button variant="secondary" onClick={() => void load()}>
+                  다시 시도
+                </Button>
+              }
             />
-            평면도 표시
-          </label>
-        </div>
-
-        <form className="fac-graph__search" role="search" onSubmit={handleSearch}>
-          <label className="fac-graph__search-hint" htmlFor="fac-graph-search">
-            설비 검색
-          </label>
-          <input
-            id="fac-graph-search"
-            ref={searchRef}
-            className="fac-graph__search-input"
-            type="search"
-            list={SEARCH_LIST_ID}
-            placeholder="설비 이름 (예: 101동 승강기)"
-            autoComplete="off"
-            onChange={() => setSearchError(null)}
-          />
-          <datalist id={SEARCH_LIST_ID}>
-            {facilityNames.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-          <Button type="submit" variant="secondary">
-            찾아가기
-          </Button>
-          <span className="fac-graph__search-hint" role="status" aria-live="polite">
-            {searchError ?? "선택한 설비로 카메라가 이동합니다."}
-          </span>
-        </form>
-
-        <div className="fac-graph__body">
-          <section className="fac-graph__stage" aria-label="시설 관계 3D 그래프">
+          </div>
+        ) : nodes.length === 0 ? (
+          <div className="fac-graph__empty">
+            <EmptyState
+              icon="🏗"
+              title="시설이 없습니다"
+              description="‘설비 목록·등록’에서 첫 시설을 추가하면 그래프에 나타납니다."
+              action={
+                <Button variant="secondary" onClick={onOpenList}>
+                  설비 목록 열기
+                </Button>
+              }
+            />
+          </div>
+        ) : (
+          <section className="fac-stage__graph" aria-label="시설 관계 3D 그래프">
             <FacilityGraphCanvas
               nodes={nodes}
               links={links}
@@ -293,57 +221,173 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
               focus={focus}
               onSelectNode={handleSelectNode}
             />
-            <ul className="fac-graph__legend" aria-label="그래프 범례">
-              <li className="fac-graph__legend-title">{LENS_LEGEND_TITLE[lens]}</li>
-              {groups.map((group) => (
-                <li key={group} className="fac-graph__legend-item">
-                  <span
-                    className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
-                    style={{ backgroundColor: `var(${lensColorVar(lens, group, groups)})` }}
-                    aria-hidden="true"
-                  />
-                  {group}
-                </li>
-              ))}
-              <li className="fac-graph__legend-title">이력 노드(작은 점)</li>
-              {NODE_KIND_LEGEND.map((entry) => (
-                <li key={entry.label} className="fac-graph__legend-item">
-                  <span
-                    className="fac-graph__legend-swatch"
-                    style={{ backgroundColor: `var(${entry.colorVar})` }}
-                    aria-hidden="true"
-                  />
-                  {entry.label}
-                </li>
-              ))}
-              {LOCATION_LEGEND.map((entry) => (
-                <li key={entry.label} className="fac-graph__legend-item">
-                  <span
-                    className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
-                    style={{ backgroundColor: `var(${entry.colorVar})` }}
-                    aria-hidden="true"
-                  />
-                  {entry.label}
-                </li>
-              ))}
-              {includePlan
-                ? PLAN_LEGEND.map((entry) => (
-                    <li key={entry.label} className="fac-graph__legend-item">
-                      <span
-                        className="fac-graph__legend-swatch"
-                        style={{ backgroundColor: `var(${entry.colorVar})` }}
-                        aria-hidden="true"
-                      />
-                      {entry.label}
-                    </li>
-                  ))
-                : null}
-            </ul>
           </section>
-
-          <FacilityGraphPanel selection={selection} nodes={nodes} links={links} />
-        </div>
+        )}
       </div>
-    </>
+
+      <section className="fac-float fac-float--left" aria-label="시설 현황·보기 설정">
+        <h2 className="fac-float__title">시설 현황</h2>
+        <SummaryChips summary={summary} ready={state.kind === "ready"} />
+
+        {graph?.degraded ? (
+          <p className="fac-graph__banner" role="status">
+            관계 정보 일시 미표시 — 설비 노드만 보여 줍니다. 장애·정비 연결은 그래프 동기화가
+            복구되면 다시 나타납니다.
+          </p>
+        ) : null}
+
+        <div className="fac-viewtabs" role="tablist" aria-label="그래프 렌즈">
+          {LENS_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              role="tab"
+              aria-selected={lens === option.id}
+              className="fac-viewtab"
+              data-active={lens === option.id || undefined}
+              onClick={() => setLens(option.id)}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <form className="fac-graph__search" role="search" onSubmit={handleSearch}>
+          <label className="sr-only" htmlFor="fac-graph-search">
+            설비 검색
+          </label>
+          <input
+            id="fac-graph-search"
+            ref={searchRef}
+            className="fac-graph__search-input"
+            type="search"
+            list={SEARCH_LIST_ID}
+            placeholder="설비 이름·코드 (예: 101동 승강기, EL-401-01)"
+            autoComplete="off"
+            onChange={() => setSearchError(null)}
+          />
+          <datalist id={SEARCH_LIST_ID}>
+            {searchOptions.map((option) => (
+              <option key={option} value={option} />
+            ))}
+          </datalist>
+          <Button type="submit" variant="secondary">
+            찾아가기
+          </Button>
+        </form>
+        <p className="fac-graph__search-hint" role="status" aria-live="polite">
+          {searchError ?? "노드를 클릭하면 오른쪽에 상세가 열립니다."}
+        </p>
+
+        <Legend lens={lens} groups={groups} />
+      </section>
+
+      {selection ? (
+        <aside className="fac-float fac-float--right" aria-label="선택한 노드 상세">
+          <div className="fac-float__bar">
+            <button
+              type="button"
+              className="fac-float__close"
+              onClick={() => setSelection(null)}
+            >
+              상세 닫기
+            </button>
+          </div>
+          <FacilityGraphPanel
+            selection={selection}
+            nodes={nodes}
+            links={links}
+            onEditFloorPlan={onEditFloorPlan}
+          />
+        </aside>
+      ) : null}
+    </div>
+  );
+}
+
+/** 현황 요약 — 설비·미해결 장애·위치·도면 수(그래프 데이터 파생, 신규 API 없음). */
+function SummaryChips({
+  summary,
+  ready,
+}: {
+  summary: ReturnType<typeof complexSummary>;
+  ready: boolean;
+}) {
+  const items: readonly { label: string; value: number; danger?: boolean }[] = [
+    { label: "설비", value: summary.facilityCount },
+    { label: "미해결 장애", value: summary.openIncidentCount, danger: true },
+    { label: "위치", value: summary.locationCount },
+    { label: "도면", value: summary.floorPlanCount },
+  ];
+  return (
+    <ul className="fac-summary" aria-live="polite">
+      {items.map((item) => (
+        <li
+          key={item.label}
+          className="fac-summary__item"
+          // 0건이면 경고색을 쓰지 않는다 — 문제 없음을 붉게 강조할 이유가 없다.
+          data-tone={item.danger && item.value > 0 ? "danger" : undefined}
+        >
+          <span className="fac-summary__value">{ready ? item.value : "–"}</span>
+          <span className="fac-summary__label">{item.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 범례 — 색만으로 상태를 전달하지 않도록 항상 라벨을 병기한다(docs/05 §6). 좁은 화면에서
+ *  플로팅 패널이 커지지 않도록 접이식(details)으로 둔다. */
+function Legend({ lens, groups }: { lens: GraphLens; groups: readonly string[] }) {
+  return (
+    <details className="fac-legend">
+      <summary className="fac-legend__summary">범례</summary>
+      <ul className="fac-legend__list">
+        <li className="fac-graph__legend-title">{LENS_LEGEND_TITLE[lens]}</li>
+        {groups.map((group) => (
+          <li key={group} className="fac-graph__legend-item">
+            <span
+              className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
+              style={{ backgroundColor: `var(${lensColorVar(lens, group, groups)})` }}
+              aria-hidden="true"
+            />
+            {group}
+          </li>
+        ))}
+        <li className="fac-graph__legend-title">이력 노드(작은 점)</li>
+        {NODE_KIND_LEGEND.map((entry) => (
+          <li key={entry.label} className="fac-graph__legend-item">
+            <span
+              className="fac-graph__legend-swatch"
+              style={{ backgroundColor: `var(${entry.colorVar})` }}
+              aria-hidden="true"
+            />
+            {entry.label}
+          </li>
+        ))}
+        <li className="fac-graph__legend-title">허브 노드</li>
+        {HUB_LEGEND.map((entry) => (
+          <li key={entry.label} className="fac-graph__legend-item">
+            <span
+              className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
+              style={{ backgroundColor: `var(${entry.colorVar})` }}
+              aria-hidden="true"
+            />
+            {entry.label}
+          </li>
+        ))}
+        <li className="fac-graph__legend-title">도면 계층(평면도 → 방·종류 → 마커)</li>
+        {PLAN_LEGEND.map((entry) => (
+          <li key={entry.label} className="fac-graph__legend-item">
+            <span
+              className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
+              style={{ backgroundColor: `var(${entry.colorVar})` }}
+              aria-hidden="true"
+            />
+            {entry.label}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

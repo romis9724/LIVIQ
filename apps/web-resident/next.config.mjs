@@ -17,9 +17,9 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // @liviq/ui 는 빌드 산출물 없이 소스(TS/CSS)를 그대로 export → Next 가 트랜스파일.
   transpilePackages: ["@liviq/ui"],
-  experimental: {
-    optimizePackageImports: ["@liviq/ui"],
-  },
+  // optimizePackageImports(["@liviq/ui"]) 제거(H14) — dev 서버가 배럴 분석을 캐시해
+  // ui에 export를 추가할 때마다 undefined 컴포넌트로 깨졌다(.next 삭제 전까지, 3회 실증).
+  // 프로덕션 tree-shaking은 ESM으로 충분하다.
 };
 
 export default nextConfig;

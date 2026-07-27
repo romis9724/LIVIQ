@@ -14,11 +14,27 @@ from pydantic import BaseModel, Field
 
 FacilityStatus = Literal["normal", "check", "fault", "risk"]
 
+# plan_room·plan_kind(HAS_ROOM·HAS_KIND)는 H14-1 — 도면과 마커 사이의 방·종류 허브
 GraphNodeLabel = Literal[
-    "facility", "incident", "maintenance", "floor_plan", "plan_device", "location", "complex"
+    "facility",
+    "incident",
+    "maintenance",
+    "floor_plan",
+    "plan_room",
+    "plan_kind",
+    "plan_device",
+    "location",
+    "complex",
 ]
 GraphLinkKind = Literal[
-    "HAS_INCIDENT", "HAS_MAINTENANCE", "HAS_DEVICE", "LINKED_TO", "LOCATED_IN", "PART_OF"
+    "HAS_INCIDENT",
+    "HAS_MAINTENANCE",
+    "HAS_ROOM",
+    "HAS_KIND",
+    "HAS_DEVICE",
+    "LINKED_TO",
+    "LOCATED_IN",
+    "PART_OF",
 ]
 
 __all__ = [
@@ -59,6 +75,8 @@ class FacilityPatchIn(BaseModel):
 class FacilityOut(BaseModel):
     id: uuid.UUID
     name: str
+    code: str | None  # 서버 부여 코드번호(H14-2) — 입력·수정 스키마에는 없다
+
     location: str | None
     type: str | None
     status: FacilityStatus
@@ -117,6 +135,7 @@ class GraphNodeOut(BaseModel):
     pg_id: str
     label: GraphNodeLabel
     name: str | None = None  # 시설명 | 장애 증상 | 정비 작업
+    code: str | None = None  # 시설 코드번호(H14-2, facility 라벨만)
     type: str | None = None  # 시설 계통(계통 렌즈)
     location: str | None = None
     # 파생 그래프 값이라 Literal로 좁히지 않는다(동기화 지연 값이 500이 되면 안 됨)

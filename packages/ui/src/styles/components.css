@@ -80,7 +80,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
-  padding: var(--space-6);
+  /* §5A 카드 내부 리듬 — 화면마다 24/16px 혼재하던 것을 16px 단일화(H14-5, simplistic). */
+  padding: var(--space-4);
 }
 
 /* ============ CitationCard ============ */
@@ -360,6 +361,237 @@
   );
   background-size: 680px 100%;
   animation: liviq-shimmer 1.3s infinite linear;
+}
+
+/* ============ StatCard / StatGrid (docs/05 §5A) ============ */
+.stat-grid {
+  display: grid;
+  /* 한 줄 최대 5칸(트랙 하한 = 20% - gap) + auto-fill — 카드가 2~3장뿐이어도 빈 트랙이 남아
+     한 장이 화면 폭을 다 먹지 않는다(auto-fit이면 빈 트랙이 접혀 다시 늘어난다).
+     좁은 화면은 max()의 9rem이 하한으로 걸려 칸 수가 자연히 준다. */
+  grid-template-columns: repeat(auto-fill, minmax(max(9rem, calc(20% - var(--space-3))), 1fr));
+  gap: var(--space-3);
+}
+.stat-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+}
+.stat-card__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+.stat-card__value {
+  margin-top: var(--space-1);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+/* 상태 강조는 값 색만 — 배경·테두리는 default와 동일하게 둔다. */
+.stat-card__value--success {
+  color: color-mix(in oklch, var(--color-success) 80%, var(--color-text));
+}
+.stat-card__value--warning {
+  color: color-mix(in oklch, var(--color-warning) 60%, var(--color-text));
+}
+.stat-card__value--danger {
+  color: var(--color-danger);
+}
+.stat-card__unit {
+  margin-left: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.stat-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.stat-card__action {
+  flex: none;
+}
+.stat-card__action .btn--sm {
+  min-height: 32px; /* 카드 안 보조 액션 — 카드 높이를 키우지 않게 낮춘다 */
+  padding: 0 var(--space-3);
+}
+
+/* ============ PageToolbar (docs/05 §5A) ============ */
+.page-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-height: var(--tap-min);
+  margin-bottom: var(--space-4);
+}
+.page-toolbar__start,
+.page-toolbar__end {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.page-toolbar__end {
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .page-toolbar__end {
+    margin-left: 0;
+  }
+}
+
+/* ============ FilterChips (docs/05 §5A) ============ */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.filter-chip:hover {
+  background: var(--color-surface-sunken);
+}
+.filter-chip[aria-selected="true"] {
+  border-color: var(--color-accent);
+  background: color-mix(in oklch, var(--color-accent) 10%, var(--color-surface));
+  color: var(--color-accent);
+}
+.filter-chip__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+.filter-chip[aria-selected="true"] .filter-chip__count {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* ============ SearchField (docs/05 §5A) ============ */
+.search-field {
+  min-height: var(--tap-min);
+  width: 220px;
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 1rem; /* 모바일 자동 확대 방지 */
+}
+.search-field:focus-visible {
+  border-color: var(--color-accent);
+}
+
+/* ============ 관리자 표(.admin-table — docs/05 §5A 목록 2형 중 ①, 기준: 문서 관리) ============ */
+/* 카드 안 표: <div class="surface-card admin-tablecard"><div class="admin-table__scroll"><table class="admin-table"> */
+.admin-tablecard {
+  padding: 0;
+  overflow: hidden;
+}
+.admin-table__scroll {
+  overflow-x: auto;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.admin-table thead tr {
+  background: var(--color-surface-sunken);
+  text-align: left;
+  color: var(--color-text);
+}
+.admin-table th {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.admin-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+.admin-table tbody tr:hover {
+  background: var(--color-surface-sunken);
+}
+
+/* 표 카드 하단 페이저 — 카드가 padding 0(admin-tablecard)이라 자체 여백을 가진다. */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.pagination__status {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============ 선택형 카드 리스트(.data-list — docs/05 §5A 목록 2형 중 ②) ============ */
+.data-list {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.data-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.data-list__item:last-child {
+  border-bottom: 0;
+}
+.data-list__item:hover {
+  background: var(--color-surface-sunken);
+}
+.data-list__item[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 /* ============ Dialog ============ */

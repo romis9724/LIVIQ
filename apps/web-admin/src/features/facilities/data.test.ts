@@ -12,6 +12,7 @@ import {
 function fac(status: Facility["status"]): Facility {
   return {
     id: crypto.randomUUID(),
+    code: null,
     name: "설비",
     location: null,
     type: null,

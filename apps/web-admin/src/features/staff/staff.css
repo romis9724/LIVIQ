@@ -1,15 +1,13 @@
 /* 설정 · 직원 관리 — 초대 폼 + 직원 목록(역할·상태·초대일). 토큰만 사용. */
 
-.sf-section__title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  margin-bottom: var(--space-4);
-}
-
 /* ---- 직원 초대 ---- */
 .sf-invite {
   margin-bottom: var(--space-6);
+}
+/* 입력 라벨은 목록 표 헤더(.sf-table th)와 같은 크기·굵기로 맞춘다. */
+.sf-invite .form-field__label {
+  font-size: var(--text-base);
+  font-weight: 700;
 }
 .sf-invite__form {
   display: flex;
@@ -22,58 +20,81 @@
   min-width: 220px;
 }
 
-/* ---- 직원 목록 ---- */
-.sf-rows {
+/* ---- 직원 목록 (문서 관리와 같은 열 있는 표 — docs/05 §5A 목록 ①형) ---- */
+.sf-skeletons {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  /* ul 기본 스타일 제거 — 카드가 오른쪽으로 밀리며 잘리던 원인(H7-5) */
-  list-style: none;
-  margin: 0;
+}
+.sf-tablecard {
   padding: 0;
+  overflow: hidden;
 }
-.sf-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
-  padding: var(--space-3) var(--space-5);
+/* 좁은 화면에서 열이 넘쳐도 레이아웃이 깨지지 않게 가로 스크롤로 흘린다. */
+.sf-table__scroll {
+  overflow-x: auto;
 }
-.sf-row__main {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex: 1;
-  min-width: 0;
-  flex-wrap: wrap;
+.sf-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+  font-size: var(--text-sm);
+}
+.sf-table thead tr {
+  background: var(--color-surface-sunken);
+  text-align: left;
+}
+.sf-table th {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sf-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.sf-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+.sf-table tbody tr:hover {
+  background: var(--color-surface-sunken);
 }
 .sf-row__name {
-  font-weight: 700;
-  overflow-wrap: anywhere;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .sf-row__email {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 .sf-row__roles {
   color: var(--color-text-muted);
-  font-size: var(--text-sm);
   font-weight: 600;
+  white-space: nowrap;
 }
 .sf-row__date {
-  font-size: var(--text-sm);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
-  flex: none;
+  white-space: nowrap;
+}
+/* th 기본 정렬(left)보다 명시도가 높아야 헤더가 버튼(오른쪽 정렬)과 맞는다. */
+.sf-table th.sf-table__actions-col {
+  text-align: right;
+}
+.sf-row__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+.sf-row__actions > * + * {
+  margin-left: var(--space-2);
 }
 
 .sf-status {
+  display: inline-block;
   font-size: var(--text-sm);
   font-weight: 700;
+  white-space: nowrap;
   border-radius: 999px;
   padding: 2px 10px;
   border: 1px solid transparent;
@@ -92,15 +113,14 @@
   border-color: var(--color-border);
 }
 
+/* 행 삭제 — 빨간 버튼의 시각 소음을 줄인다(텍스트만 위험색, 확인은 Dialog가 담당). */
+.sf-row__delete {
+  color: color-mix(in oklch, var(--color-danger) 70%, var(--color-text));
+}
+
 .sf-toast {
   position: fixed;
   right: var(--space-6);
   bottom: var(--space-6);
   z-index: 20;
-}
-
-@media (max-width: 640px) {
-  .sf-row {
-    flex-wrap: wrap;
-  }
 }

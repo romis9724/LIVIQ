@@ -75,6 +75,8 @@ export function TwinView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
 
+  const closeDetail = useCallback(() => setSelectedId(null), []);
+
   // 실사 3D 컨트롤 — 렌더 스타일·시점·clip. 뷰 전환에도 유지(iframe 재마운트 시 ready 효과가 재동기화).
   const [renderStyle, setRenderStyle] = useState<RenderStyle>("shell");
   // 단지 고정 기본 on — 인트로 후 iframe initialLock 이 재적용해 단지를 화면 중앙에 둔다.
@@ -138,9 +140,9 @@ export function TwinView() {
         <h1 id="main" className="admin-page__title">
           트윈 대시보드
         </h1>
-        <p className="admin-page__lede">
-          세대 3D 모형에 상태를 색으로 겹쳐 봅니다. 확정 데이터만 표시하며 AI는 개입하지 않습니다.
-        </p>
+      </header>
+
+      <main className="admin-page__main">
         {showControls ? (
           <div className="twin-controls">
             <TabGroup
@@ -187,9 +189,6 @@ export function TwinView() {
             ) : null}
           </div>
         ) : null}
-      </header>
-
-      <main className="admin-page__main">
         <TwinBody
           geo={geo}
           occupancy={overlays.occupancy ?? {}}
@@ -203,7 +202,7 @@ export function TwinView() {
       </main>
 
       {selectedId ? (
-        <TwinDetailPanel householdId={selectedId} onClose={() => setSelectedId(null)} />
+        <TwinDetailPanel householdId={selectedId} onClose={closeDetail} />
       ) : null}
     </>
   );

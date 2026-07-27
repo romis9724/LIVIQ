@@ -231,10 +231,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Facilities */
+        /**
+         * List Facilities
+         * @description 목록 조회. `code`는 코드번호 정확 일치 — 민원 접수의 코드 조회 경로(H14-2).
+         */
         get: operations["list_facilities_admin_facilities_get"];
         put?: never;
-        /** Create Facility */
+        /**
+         * Create Facility
+         * @description 시설 등록. 코드번호는 서버가 부여한다(입력 없음 — H14-2).
+         */
         post: operations["create_facility_admin_facilities_post"];
         delete?: never;
         options?: never;
@@ -279,8 +285,8 @@ export interface paths {
          *     Neo4j 미가용은 503이 아니다 — PG `facilities`로 노드만 채운 축약 그래프에
          *     `degraded=True`를 실어 화면이 한계를 표시하게 한다(docs/01 §10 장애 격리).
          *
-         *     `include_plan`은 기본 false — 평면도 마커까지 실으면 도면당 수십개라 과밀(H13-6),
-         *     opt-in 화면에서만 true로 요청한다.
+         *     도면 계층(floor_plan → plan_room·plan_kind 허브 → plan_device 마커)도 기본 포함한다
+         *     (H14-1 — 마커를 도면에 평면으로 매다는 대신 방·종류 허브를 그래프에 실체화).
          */
         get: operations["get_facility_graph_admin_facilities_graph_get"];
         put?: never;
@@ -635,9 +641,9 @@ export interface paths {
         get?: never;
         /**
          * Link Inquiry Facility
-         * @description 담당자 지정 = 정식 연결(FR-FAC-05 ①). null이면 해제.
+         * @description 담당자 지정 = 정식 연결(FR-FAC-05 ①). facility_id·code 둘 다 없으면 해제.
          *
-         *     facility_id를 쓰는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
+         *     시설을 지정하는 유일한 경로다 — LLM 추천은 이 액션을 대신하지 못한다(규칙 8).
          *     대상 설비는 같은 단지의 미삭제 설비여야 한다(아니면 404 — 타 단지 존재 노출 금지).
          */
         put: operations["link_inquiry_facility_admin_inquiries__inquiry_id__facility_put"];
@@ -2421,6 +2427,8 @@ export interface components {
         };
         /** FacilityDetailOut */
         FacilityDetailOut: {
+            /** Code */
+            code: string | null;
             /**
              * Created At
              * Format: date-time
@@ -2468,11 +2476,16 @@ export interface components {
         };
         /**
          * FacilityLinkIn
-         * @description 정식 연결 승인 입력. null이면 연결 해제(FR-FAC-05 ①).
+         * @description 정식 연결 승인 입력. facility_id 또는 code 중 하나 — 둘 다 없으면 연결 해제(FR-FAC-05 ①).
+         *
+         *     code는 시설 코드번호(H14-2) — 민원 접수에서 코드로 바로 연결하는 경로. 코드는 단지 안에서만
+         *     유일하므로 resolve도 tenant 스코프다(타 단지 코드는 404).
          */
         FacilityLinkIn: {
+            /** Code */
+            code?: string | null;
             /** Facility Id */
-            facility_id: string | null;
+            facility_id?: string | null;
         };
         /** FacilityListOut */
         FacilityListOut: {
@@ -2483,6 +2496,8 @@ export interface components {
         };
         /** FacilityOut */
         FacilityOut: {
+            /** Code */
+            code: string | null;
             /**
              * Created At
              * Format: date-time
@@ -2691,7 +2706,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE" | "HAS_DEVICE" | "LINKED_TO" | "LOCATED_IN" | "PART_OF";
+            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE" | "HAS_ROOM" | "HAS_KIND" | "HAS_DEVICE" | "LINKED_TO" | "LOCATED_IN" | "PART_OF";
             /** Source */
             source: string;
             /** Target */
@@ -2704,11 +2719,13 @@ export interface components {
         GraphNodeOut: {
             /** At */
             at?: string | null;
+            /** Code */
+            code?: string | null;
             /**
              * Label
              * @enum {string}
              */
-            label: "facility" | "incident" | "maintenance" | "floor_plan" | "plan_device" | "location" | "complex";
+            label: "facility" | "incident" | "maintenance" | "floor_plan" | "plan_room" | "plan_kind" | "plan_device" | "location" | "complex";
             /** Location */
             location?: string | null;
             /** Name */
@@ -4317,6 +4334,7 @@ export interface operations {
             query?: {
                 status?: ("normal" | "check" | "fault" | "risk") | null;
                 type?: string | null;
+                code?: string | null;
                 page?: number;
                 limit?: number;
             };
@@ -4429,9 +4447,7 @@ export interface operations {
     };
     get_facility_graph_admin_facilities_graph_get: {
         parameters: {
-            query?: {
-                include_plan?: boolean;
-            };
+            query?: never;
             header?: {
                 "x-dev-tenant-id"?: string | null;
                 "x-dev-user-id"?: string | null;

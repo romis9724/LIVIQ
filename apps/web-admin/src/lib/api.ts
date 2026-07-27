@@ -447,6 +447,20 @@ export async function linkInquiryFacility(id: string, facilityId: string | null)
   return toInquiry(await response.json());
 }
 
+/**
+ * 코드번호로 정식 연결(H14-2) — 민원 접수에서 설비를 목록에서 찾지 않고 바로 잇는 경로.
+ * facility_id 경로와 같은 액션이며 서버가 tenant 안에서 코드를 resolve 한다(없거나 타 단지면 404).
+ */
+export async function linkInquiryFacilityByCode(id: string, code: string): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/facility`, {
+    method: "PUT",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
 export interface FacilitySuggestCandidate {
   facilityId: string;
   name: string;
@@ -877,6 +891,8 @@ export type FacilityStatus = "normal" | "check" | "fault" | "risk";
 
 export interface Facility {
   id: string;
+  /** 설비 코드번호(예 EL-401-01) — 서버가 자동 부여, 사용자 수정 불가(H14-2). 구 데이터는 null. */
+  code: string | null;
   name: string;
   location: string | null;
   type: string | null;
@@ -938,10 +954,14 @@ export interface MaintenanceInput {
 export interface FacilityFilter {
   status?: FacilityStatus;
   type?: string;
+  /** 설비 코드번호 정확 일치(H14-2). */
+  code?: string;
+  limit?: number;
 }
 
 interface RawFacility {
   id: string;
+  code?: string | null;
   name: string;
   location: string | null;
   type: string | null;
@@ -973,6 +993,7 @@ interface RawMaintenance {
 function toFacility(raw: RawFacility): Facility {
   return {
     id: raw.id,
+    code: raw.code ?? null,
     name: raw.name,
     location: raw.location,
     type: raw.type,
@@ -1011,6 +1032,8 @@ export function buildFacilityQuery(filter: FacilityFilter): string {
   const search = new URLSearchParams();
   if (filter.status) search.set("status", filter.status);
   if (filter.type && filter.type.trim()) search.set("type", filter.type.trim());
+  if (filter.code && filter.code.trim()) search.set("code", filter.code.trim());
+  if (filter.limit) search.set("limit", String(filter.limit));
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }
@@ -1089,8 +1112,9 @@ export async function createMaintenance(
 
 // ── 시설 그래프 (H13-1 · ADR-0022 — Neo4j 파생 읽기, 미가용 시 PG 축약 폴백) ──
 // location·floor_plan·plan_device 는 H13-7 추가 — 위치(동/실)·평면도·평면도 마커 노드.
-// complex 는 H13-7 확장 — 단지 노드(tenant당 1개). PART_OF 로 location·floor_plan 이 연결된다
-// (floor_plan→complex 는 include_plan=true 일 때만 응답에 포함).
+// complex 는 H13-7 확장 — 단지 노드(tenant당 1개). PART_OF 로 location·floor_plan 이 연결된다.
+// plan_room·plan_kind 는 H14-1 재구조화 — 마커를 도면에 평면으로 매달지 않고
+// 도면 →(HAS_ROOM·HAS_KIND) 방·종류 허브 →(HAS_DEVICE) 마커 계층으로 내려준다.
 
 export type GraphNodeLabel =
   | "facility"
@@ -1098,21 +1122,28 @@ export type GraphNodeLabel =
   | "maintenance"
   | "location"
   | "floor_plan"
+  | "plan_room"
+  | "plan_kind"
   | "plan_device"
   | "complex";
 export type GraphLinkKind =
   | "HAS_INCIDENT"
   | "HAS_MAINTENANCE"
   | "LOCATED_IN"
+  | "HAS_ROOM"
+  | "HAS_KIND"
   | "HAS_DEVICE"
   | "LINKED_TO"
   | "PART_OF";
 
 /** 그래프 노드. 라벨별로 채워지는 필드가 다르다(시설=type·status, 장애=at·resolved,
- *  location=name 이 위치 문자열, floor_plan=name 이 평형명, plan_device=name 이 종류(+방)). */
+ *  location=name 이 위치 문자열, floor_plan=name 이 평형명, plan_room=name 이 방 이름,
+ *  plan_kind=name 이 마커 종류, plan_device=name 이 종류(+방)). */
 export interface GraphNode {
   pgId: string;
   label: GraphNodeLabel;
+  /** 설비 노드의 코드번호(H14-2). 다른 라벨은 null. */
+  code: string | null;
   name: string | null;
   type: string | null;
   location: string | null;
@@ -1137,6 +1168,7 @@ export interface FacilityGraph {
 interface RawGraphNode {
   pg_id: string;
   label: GraphNodeLabel;
+  code?: string | null;
   name?: string | null;
   type?: string | null;
   location?: string | null;
@@ -1149,6 +1181,7 @@ function toGraphNode(raw: RawGraphNode): GraphNode {
   return {
     pgId: raw.pg_id,
     label: raw.label,
+    code: raw.code ?? null,
     name: raw.name ?? null,
     type: raw.type ?? null,
     location: raw.location ?? null,
@@ -1158,11 +1191,10 @@ function toGraphNode(raw: RawGraphNode): GraphNode {
   };
 }
 
-/** includePlan=true 면 평면도·마커(floor_plan·plan_device)도 함께 싣는다(H13-7, opt-in —
- *  도면당 마커 수십개라 기본은 제외). location·LOCATED_IN 은 includePlan 과 무관하게 항상 온다. */
-export async function getFacilityGraph(includePlan = false): Promise<FacilityGraph> {
-  const query = includePlan ? "?include_plan=true" : "";
-  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph${query}`, {
+/** 시설 그래프 전체 — facility·location·complex·floor_plan 에 더해 도면 하위 계층
+ *  (plan_room·plan_kind 허브 + plan_device 마커)까지 모두 기본 포함된다(H14-1). */
+export async function getFacilityGraph(): Promise<FacilityGraph> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
@@ -1239,12 +1271,13 @@ export interface RosterList {
   lastUpload: { uploadedAt: string; rowCount: number; errorCount: number } | null;
 }
 
-/** 명부 목록(MANAGER) — 검색(q=동·호)·상태 필터·페이지네이션. */
+/** 명부 목록(MANAGER) — 동 선택(building) + 검색(q=호·성함·차량번호)·상태 필터·페이지네이션. */
 export async function listRoster(
-  params: { q?: string; state?: string; page?: number; size?: number } = {},
+  params: { q?: string; building?: string; state?: string; page?: number; size?: number } = {},
 ): Promise<RosterList> {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
+  if (params.building) search.set("building", params.building);
   if (params.state) search.set("state", params.state);
   if (params.page) search.set("page", String(params.page));
   if (params.size) search.set("size", String(params.size));

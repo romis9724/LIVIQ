@@ -5,6 +5,7 @@
 
 import type { TwinGeometryItem } from "@/lib/api";
 import { formatWon } from "@/features/fee-upload/logic";
+import { normalizeUnitType } from "@/features/facilities/floor-plan-admin-data";
 
 // deck.gl fill 은 [r,g,b] 0-255 배열이라 CSS 토큰 변수를 직접 못 쓴다(WebGL).
 // 아래 RGB 상수는 tokens.css semantic 의도의 근사값이다(설계 예외 — docs/05 §5).
@@ -245,4 +246,17 @@ export function boundsToViewState(bounds: Bounds, viewportWidth = 900): ViewStat
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+/**
+ * 세대 unitTypeLabel("84M(공공임대)") ↔ 평면도 unitTypeName 매칭 → 평면도 id(없으면 null).
+ * 괄호 뒤 부기는 무시한다(normalizeUnitType 재사용 — 평면도 관리 화면과 같은 규칙).
+ */
+export function matchFloorPlanId(
+  plans: readonly { id: string; unitTypeName: string }[],
+  unitTypeLabel: string | null,
+): string | null {
+  const key = normalizeUnitType(unitTypeLabel);
+  if (!key) return null;
+  return plans.find((p) => normalizeUnitType(p.unitTypeName) === key)?.id ?? null;
 }

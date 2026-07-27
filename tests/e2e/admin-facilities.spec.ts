@@ -12,6 +12,9 @@ test("설비 등록 후 장애를 기록하면 상세 이력에 반영된다", a
 
   await page.goto(`${ADMIN}/facilities`);
 
+  // 메인은 전체화면 그래프 — 목록·등록은 플로팅 버튼의 오버레이로 연다(H14-1).
+  await page.getByRole("button", { name: "설비 목록·등록" }).click();
+
   // 설비 등록 다이얼로그.
   await page.getByRole("button", { name: "설비 등록" }).click();
   const dialog = page.getByRole("dialog", { name: "설비 등록" });

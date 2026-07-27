@@ -8,6 +8,7 @@ import {
   colorForOverlay,
   computeBounds,
   legendForOverlay,
+  matchFloorPlanId,
   occupancyColor,
   occupancyMetrics,
   overlayValueText,
@@ -193,5 +194,23 @@ describe("boundsToViewState", () => {
   it("span 0(단일점)은 기본 확대율로 폴백", () => {
     const vs = boundsToViewState({ minLng: 127.0, minLat: 37.0, maxLng: 127.0, maxLat: 37.0 });
     expect(vs.zoom).toBe(18);
+  });
+});
+
+describe("matchFloorPlanId", () => {
+  const plans = [
+    { id: "p59", unitTypeName: "59A" },
+    { id: "p84", unitTypeName: "84M (공공임대)" },
+  ];
+
+  it("괄호 부기를 무시하고 세대 타입에 맞는 평면도 id 를 찾는다", () => {
+    expect(matchFloorPlanId(plans, "84M(민간분양)")).toBe("p84");
+    expect(matchFloorPlanId(plans, "59A")).toBe("p59");
+  });
+
+  it("타입이 없거나 맞는 평면도가 없으면 null", () => {
+    expect(matchFloorPlanId(plans, null)).toBeNull();
+    expect(matchFloorPlanId(plans, "  ")).toBeNull();
+    expect(matchFloorPlanId(plans, "101B")).toBeNull();
   });
 });

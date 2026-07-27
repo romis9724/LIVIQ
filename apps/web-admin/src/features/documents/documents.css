@@ -65,40 +65,10 @@
   cursor: not-allowed;
 }
 
-.doc-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.doc-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-.doc-filter {
-  padding: 5px var(--space-3);
-  border: 1px solid var(--color-border-strong);
-  border-radius: 999px;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-.doc-filter:hover {
-  border-color: var(--color-accent);
-  color: var(--color-text);
-}
-.doc-filter:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-.doc-filter[aria-pressed="true"] {
-  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+/* 툴바 본체·필터 칩·검색 입력은 공통 컴포넌트(.page-toolbar/.filter-chips/.search-field).
+   doc-main이 gap으로 간격을 주므로 툴바 자체 margin은 지운다. */
+.doc-main > .page-toolbar {
+  margin-bottom: 0;
 }
 .doc-searchform {
   display: flex;
@@ -108,9 +78,6 @@
 }
 .doc-searchform__category {
   min-width: 150px;
-}
-.doc-search {
-  min-width: 200px;
 }
 
 .doc-loading {
@@ -128,87 +95,8 @@
   z-index: 50;
 }
 
-.doc-summary {
-  display: flex;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-/* 상태 요약 카드 — 대시보드 액션 카드(.dash-action)와 시각 톤 통일.
-   상단 tone 스트립 + 아이콘 칩 + 큰 카운트. 링크가 아니라 요약이므로 hover lift 없음(정적). */
-.doc-summary__card {
-  --tone: var(--color-accent);
-  flex: 1;
-  min-width: 140px;
-  padding: var(--space-3) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  border-color: color-mix(in oklch, var(--tone) 55%, var(--color-border));
-}
-.doc-summary__card--success {
-  --tone: var(--color-success);
-}
-.doc-summary__card--accent {
-  --tone: var(--color-accent);
-}
-.doc-summary__card--neutral {
-  --tone: var(--color-border-strong);
-}
-.doc-summary__card--danger {
-  --tone: var(--color-danger);
-}
-.doc-summary__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-.doc-summary__icon {
-  font-size: var(--text-base);
-  line-height: 1;
-}
-.doc-summary__count {
-  align-self: flex-end;
-  font-size: var(--text-xl);
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: color-mix(in oklch, var(--tone) 60%, var(--color-text));
-}
-
-.doc-tablecard {
-  padding: 0;
-  overflow: hidden;
-}
-.doc-table__scroll {
-  overflow-x: auto;
-}
 .doc-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 920px;
-  font-size: var(--text-sm);
-}
-.doc-table thead tr {
-  background: var(--color-surface-sunken);
-  text-align: left;
-  color: var(--color-text);
-}
-.doc-table th {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.doc-table td {
-  padding: var(--space-3) var(--space-4);
-  vertical-align: middle;
-}
-.doc-table tbody tr {
-  border-top: 1px solid var(--color-border);
+  min-width: 920px; /* 나머지 사양은 공용 .admin-table(@liviq/ui) — 기준 화면 */
 }
 .doc-nowrap {
   white-space: nowrap;
@@ -299,19 +187,6 @@
   color: var(--color-danger);
 }
 
-/* ── 목록 헤더(제목 + 새 문서 버튼) ─────────────────────────────────────── */
-.doc-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.doc-head__text {
-  flex: 1;
-  min-width: 260px;
-}
-
 /* ── 작성·수정 폼 ──────────────────────────────────────────────────────── */
 .doc-form {
   display: flex;
@@ -361,16 +236,18 @@
   flex-direction: column;
   gap: var(--space-5);
 }
+/* 상세 헤더 한 줄 — 뒤로가기 + 제목 + 색인 배지(오른쪽 끝). H14-2. */
 .doc-detail__head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+  align-items: center;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
+.doc-detail__head .doc-idx {
+  margin-left: auto;
+}
 .doc-back {
-  display: inline-block;
-  margin-bottom: var(--space-2);
+  flex: none;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-muted);
@@ -385,14 +262,17 @@
   border-radius: var(--radius-sm);
 }
 .doc-detail__submeta {
-  margin: var(--space-1) 0 0;
+  flex: none;
+  margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
+/* 섹션 h2 — 전 관리 메뉴 공통 수치(docs/05 §5A: --text-lg/700). */
 .doc-section__title {
   margin: 0;
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--color-text);
 }
 .doc-hint {

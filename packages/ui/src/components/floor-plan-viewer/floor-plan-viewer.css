@@ -1,0 +1,200 @@
+/* FloorPlanViewer — 도면 이미지 배경 + % 좌표 마커 오버레이. 토큰만 사용. */
+.floor-plan-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.floor-plan-viewer__msg {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* 카테고리 칩 토글 */
+.floor-plan-viewer__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.floor-plan-viewer__chip {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.floor-plan-viewer__chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.floor-plan-viewer__chip[data-category="electric"]::before {
+  background: var(--color-warning);
+}
+.floor-plan-viewer__chip[data-category="network"]::before {
+  background: var(--color-accent);
+}
+.floor-plan-viewer__chip[data-category="water_heat"]::before {
+  background: var(--color-success);
+}
+.floor-plan-viewer__chip[data-category="safety"]::before {
+  background: var(--color-danger);
+}
+.floor-plan-viewer__chip[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+  background: var(--color-citation);
+}
+
+/* 도면 캔버스 — 이미지 원본 비율 유지, 좌표는 % 변환 */
+.floor-plan-viewer__canvas {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  background: var(--color-surface-sunken);
+}
+.floor-plan-viewer__image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+}
+
+.floor-plan-viewer__room-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: color-mix(in oklch, var(--color-surface) 78%, transparent);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.floor-plan-viewer__marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.floor-plan-viewer__marker[data-category="electric"] {
+  background: var(--color-warning);
+}
+.floor-plan-viewer__marker[data-category="network"] {
+  background: var(--color-accent);
+}
+.floor-plan-viewer__marker[data-category="water_heat"] {
+  background: var(--color-success);
+}
+.floor-plan-viewer__marker[data-category="safety"] {
+  background: var(--color-danger);
+}
+.floor-plan-viewer__arrow {
+  color: var(--color-on-accent);
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* 마커 팝오버 */
+.floor-plan-viewer__popover {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 16px));
+  min-width: 10rem;
+  max-width: 14rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+  padding: var(--space-3);
+  z-index: 1;
+}
+/* 상단 가장자리 마커: 위로 펼치면 컨테이너 밖으로 잘리므로 아래로 뒤집는다. */
+.floor-plan-viewer__popover[data-flip] {
+  transform: translate(-50%, 16px);
+}
+.floor-plan-viewer__popover-close {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.floor-plan-viewer__popover-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-right: var(--space-4);
+}
+.floor-plan-viewer__popover-body > div {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.floor-plan-viewer__popover-body dt {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.floor-plan-viewer__popover-body dd {
+  font-weight: 600;
+}
+
+/* 접근성 대체 — 목록으로 보기 */
+.floor-plan-viewer__list-toggle {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.floor-plan-viewer__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.floor-plan-viewer__table th,
+.floor-plan-viewer__table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.floor-plan-viewer__table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}

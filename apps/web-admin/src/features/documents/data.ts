@@ -16,14 +16,14 @@ export const VISIBILITY_META: Record<Visibility, { icon: string; label: string }
 
 export const VISIBILITIES: readonly Visibility[] = ["ALL", "RESIDENT", "ADMIN"];
 
-// 필터 탭 — "전체"는 상태 미지정.
+// 필터 탭 — "전체"는 상태 미지정. 공통 FilterChips 계약(id·label)에 맞춘다.
 export type StatusFilter = IndexStatus | "all";
-export const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "전체" },
-  { value: "indexed", label: "완료" },
-  { value: "indexing", label: "색인 중" },
-  { value: "pending", label: "대기" },
-  { value: "failed", label: "실패" },
+export const STATUS_FILTERS: readonly { id: StatusFilter; label: string }[] = [
+  { id: "all", label: "전체" },
+  { id: "indexed", label: "완료" },
+  { id: "indexing", label: "색인 중" },
+  { id: "pending", label: "대기" },
+  { id: "failed", label: "실패" },
 ];
 
 export interface Summary {

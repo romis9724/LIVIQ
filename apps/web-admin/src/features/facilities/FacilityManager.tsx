@@ -19,7 +19,6 @@ import {
   type IncidentInput,
   type MaintenanceInput,
 } from "@/lib/api";
-import { FacilityAssistantPanel } from "./FacilityAssistantPanel";
 import { IncidentDialog, MaintenanceDialog, RegisterDialog } from "./FacilityDialogs";
 import { HistorySection } from "./FacilityHistory";
 import { FILTERS, STATUS_META, STATUS_ORDER, countByStatus, shortDate, type FilterId } from "./data";
@@ -67,7 +66,8 @@ export function FacilityManager() {
     const seq = ++listSeq.current;
     setLoading(true);
     try {
-      const items = await listFacilities();
+      // ponytail: 서버 기본 limit 20에 37건이 잘렸다 — 상한 100으로. 100+ 되면 페이지네이션 필요.
+      const items = await listFacilities({ limit: 100 });
       if (seq !== listSeq.current) return; // 더 최신 조회가 이미 반영됨 — 이 결과는 버린다
       setFacilities(items);
       setLoadError(null);
@@ -172,20 +172,15 @@ export function FacilityManager() {
 
   return (
     <>
-      <header className="admin-page__header fac-head">
-        <div className="fac-head__text">
-          <h1 id="main" className="admin-page__title">
-            시설 관리
-          </h1>
-          <p className="admin-page__lede">
-            단지 시설의 운영 상태와 장애·정비 이력을 관리합니다. 상태 변경·기록은 담당자가 직접
-            수행합니다.
-          </p>
-        </div>
+      <div className="fac-toolbar">
+        <p className="fac-toolbar__lede">
+          단지 시설의 운영 상태와 장애·정비 이력을 관리합니다. 상태 변경·기록은 담당자가 직접
+          수행합니다.
+        </p>
         <Button variant="primary" onClick={() => setDialog("register")}>
           설비 등록
         </Button>
-      </header>
+      </div>
 
       <div className="fac-filters" role="tablist" aria-label="상태 필터">
         {FILTERS.map((f) => (
@@ -202,7 +197,7 @@ export function FacilityManager() {
         ))}
       </div>
 
-      <main className="fac-main">
+      <div className="fac-main">
         <div className="fac-list">
           {loading ? (
             <>
@@ -236,9 +231,12 @@ export function FacilityManager() {
                   {STATUS_META[f.status].icon}
                 </span>
                 <span className="fac-card__body">
-                  <span className="fac-card__name">{f.name}</span>
+                  <span className="fac-card__name">
+                    {f.name}
+                    {f.code ? <span className="fac-code">{f.code}</span> : null}
+                  </span>
                   <span className="fac-card__meta">
-                    {f.location ?? "위치 미지정"} · 다음 점검 {shortDate(f.nextCheckAt)}
+                    {f.location ?? "위치 미지정"}
                   </span>
                 </span>
                 <span className={`fac-pill fac-pill--${STATUS_META[f.status].css}`}>
@@ -261,9 +259,7 @@ export function FacilityManager() {
           onRecordIncident={() => setDialog("incident")}
           onRecordMaintenance={() => setDialog("maintenance")}
         />
-      </main>
-
-      <FacilityAssistantPanel />
+      </div>
 
       {dialog === "register" ? (
         <RegisterDialog busy={busy} onCancel={() => setDialog(null)} onSubmit={handleRegister} />
@@ -337,7 +333,10 @@ function FacilityDetailPanel({
             {meta.icon}
           </span>
           <div>
-            <div className="fac-detail__name">{detail.name}</div>
+            <div className="fac-detail__name">
+              {detail.name}
+              {detail.code ? <span className="fac-code">{detail.code}</span> : null}
+            </div>
             <span className={`fac-pill fac-pill--${meta.css}`}>
               <span className={`fac-dot fac-dot--${meta.css}`} aria-hidden="true" />
               {meta.label}
@@ -346,7 +345,7 @@ function FacilityDetailPanel({
         </div>
         <p className="fac-detail__desc">
           {detail.type ? `${detail.type} · ` : ""}
-          {detail.location ?? "위치 미지정"} · 다음 점검 {shortDate(detail.nextCheckAt)}
+          {detail.location ?? "위치 미지정"}
         </p>
       </div>
 

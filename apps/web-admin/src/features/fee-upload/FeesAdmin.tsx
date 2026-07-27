@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Button, EmptyState, Skeleton, SurfaceCard } from "@liviq/ui";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Button,
+  EmptyState,
+  PageToolbar,
+  Pagination,
+  SearchField,
+  Skeleton,
+  StatCard,
+  StatGrid,
+} from "@liviq/ui";
 import {
   ApiError,
   getAdminFeeDetail,
@@ -9,6 +18,7 @@ import {
   type AdminFeeDetail,
   type AdminFeeList,
 } from "@/lib/api";
+import { usePaging } from "@/lib/paging";
 import { UploadWizard } from "./UploadWizard";
 import { FeeInvoice } from "./FeeInvoice";
 import { formatWon, monthLabel, unitLabel } from "./logic";
@@ -30,6 +40,9 @@ function errorMessage(err: unknown): string {
 export function FeesAdmin() {
   const [view, setView] = useState<View>("list");
   const [period, setPeriod] = useState<string>(currentMonth());
+  // 동·호는 조회 버튼(제출) 때만 반영 — 입력은 uncontrolled(ref)로 둔다(IME·리렌더 방지).
+  const buildingRef = useRef<HTMLInputElement>(null);
+  const unitRef = useRef<HTMLInputElement>(null);
   const [building, setBuilding] = useState("");
   const [unit, setUnit] = useState("");
   const [data, setData] = useState<AdminFeeList | null>(null);
@@ -60,6 +73,9 @@ export function FeesAdmin() {
     if (view === "list") void load();
   }, [view, load]);
 
+  // 조회 결과 전량을 받아 클라이언트 페이징 — 조회 조건이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(data?.households ?? []);
+
   async function openDetail(householdId: string, label: string) {
     setDetail(null);
     setDetailError(null);
@@ -71,37 +87,86 @@ export function FeesAdmin() {
     }
   }
 
+  // 제출 때 ref 값을 조회 조건으로 승격 — 값이 바뀌면 load 이펙트가 다시 돈다.
   function onSearch(e: React.FormEvent) {
     e.preventDefault();
-    void load();
+    const nextBuilding = buildingRef.current?.value.trim() ?? "";
+    const nextUnit = unitRef.current?.value.trim() ?? "";
+    setBuilding(nextBuilding);
+    setUnit(nextUnit);
+    paging.reset();
+    if (nextBuilding === building && nextUnit === unit) void load();
   }
 
   const isEmpty = data !== null && data.householdCount === 0;
+  // 현황 → 조회 조건 → 목록 순서(docs/05 §5A) — 목록 뷰에서 결과가 있을 때만 현황을 얹는다.
+  const showSummary = view === "list" && !loading && !loadError && data !== null && !isEmpty;
 
   return (
     <>
       <header className="admin-page__header">
-        <div className="fu-head-row">
-          <h1 id="main" className="admin-page__title">
-            관리비 관리
-          </h1>
-          {view === "list" ? (
-            <Button variant="primary" onClick={() => setView("upload")}>
-              엑셀 등록
-            </Button>
-          ) : (
-            <Button variant="secondary" onClick={() => setView("list")}>
-              ← 목록으로
-            </Button>
-          )}
-        </div>
-        <p className="admin-page__lede">
-          단지 총액 엑셀을 세대수(574)로 균등분배해 동/호별로 조회합니다. AI는 설명만 하며 계산·부과에
-          관여하지 않습니다.
-        </p>
+        <h1 id="main" className="admin-page__title">
+          관리비 관리
+        </h1>
       </header>
 
       <main className="admin-page__main">
+        {showSummary && data ? (
+          <StatGrid className="fu-stats">
+            <StatCard label="세대 수" value={data.householdCount} unit="세대" />
+            <StatCard label="합계" value={formatWon(data.totalSum)} />
+          </StatGrid>
+        ) : null}
+
+        <PageToolbar
+          start={
+            view === "list" ? (
+              <form className="fu-filters" onSubmit={onSearch}>
+                <input
+                  id="fu-month"
+                  type="month"
+                  aria-label="조회 월"
+                  value={period}
+                  onChange={(e) => {
+                    setPeriod(e.target.value);
+                    paging.reset();
+                  }}
+                />
+                <SearchField
+                  ref={buildingRef}
+                  label="동 검색"
+                  placeholder="동 (예: 401)"
+                  inputMode="numeric"
+                  className="fu-filters__q"
+                  defaultValue={building}
+                />
+                <SearchField
+                  ref={unitRef}
+                  label="호 검색"
+                  placeholder="호 (예: 201)"
+                  inputMode="numeric"
+                  className="fu-filters__q"
+                  defaultValue={unit}
+                />
+                <Button type="submit" variant="secondary">
+                  조회
+                </Button>
+              </form>
+            ) : null
+          }
+          end={
+            view === "list" ? (
+              <Button variant="primary" onClick={() => setView("upload")}>
+                엑셀 등록
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setView("list")}>
+                ← 목록으로
+              </Button>
+            )
+          }
+        />
+
         {view === "upload" ? (
           <UploadWizard onApplied={() => setView("list")} />
         ) : view === "detail" ? (
@@ -114,7 +179,7 @@ export function FeesAdmin() {
               caption={`${detail.buildingName}동 ${unitLabel(detail.floor, detail.unitNo)} · ${monthLabel(detail.period)}`}
             />
           ) : (
-            <div className="surface-card fu-tablecard fu-loading">
+            <div className="surface-card admin-tablecard fu-loading">
               <Skeleton height="1.5rem" />
               <Skeleton height="1.5rem" />
               <Skeleton height="1.5rem" />
@@ -122,45 +187,8 @@ export function FeesAdmin() {
           )
         ) : (
           <div className="fu-status">
-            <form className="fu-filters" onSubmit={onSearch}>
-              <div className="fu-filter">
-                <label htmlFor="fu-month">조회 월</label>
-                <input
-                  id="fu-month"
-                  type="month"
-                  value={period}
-                  onChange={(e) => setPeriod(e.target.value)}
-                />
-              </div>
-              <div className="fu-filter">
-                <label htmlFor="fu-building">동</label>
-                <input
-                  id="fu-building"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 401"
-                  value={building}
-                  onChange={(e) => setBuilding(e.target.value)}
-                />
-              </div>
-              <div className="fu-filter">
-                <label htmlFor="fu-unit">호</label>
-                <input
-                  id="fu-unit"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="예: 201"
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                조회
-              </Button>
-            </form>
-
             {loading ? (
-              <div className="surface-card fu-tablecard fu-loading">
+              <div className="surface-card admin-tablecard fu-loading">
                 <Skeleton height="1.5rem" />
                 <Skeleton height="1.5rem" />
                 <Skeleton height="1.5rem" />
@@ -179,63 +207,56 @@ export function FeesAdmin() {
                 description={`${monthLabel(period)} 관리비가 아직 없거나 검색 조건에 맞는 세대가 없습니다. 엑셀 등록으로 반영하세요.`}
               />
             ) : (
-              <>
-                <div className="fu-summary">
-                  <SurfaceCard className="fu-stat">
-                    <div className="fu-stat__label">세대 수</div>
-                    <div className="fu-stat__value">{data.householdCount}세대</div>
-                  </SurfaceCard>
-                  <SurfaceCard className="fu-stat">
-                    <div className="fu-stat__label">합계</div>
-                    <div className="fu-stat__value">{formatWon(data.totalSum)}</div>
-                  </SurfaceCard>
-                </div>
-
-                <section aria-labelledby="fu-lookup-title">
-                  <h2 id="fu-lookup-title" className="fu-section__title">
-                    동/호별 관리비
-                  </h2>
-                  <div className="surface-card fu-tablecard">
-                    <table className="fu-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">동</th>
-                          <th scope="col">호</th>
-                          <th scope="col" className="fu-num">
-                            당월 고지금액
-                          </th>
-                          <th scope="col">
-                            <span className="sr-only">고지서</span>
-                          </th>
+              <section aria-label="동/호별 관리비">
+                <div className="surface-card admin-tablecard">
+                  <table className="admin-table fu-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">동</th>
+                        <th scope="col">호</th>
+                        <th scope="col" className="fu-num">
+                          당월 고지금액
+                        </th>
+                        <th scope="col">
+                          <span className="sr-only">고지서</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paging.rows.map((h) => (
+                        <tr key={h.householdId}>
+                          <td>{h.buildingName}</td>
+                          <td>{unitLabel(h.floor, h.unitNo)}</td>
+                          <td className="fu-num">{formatWon(h.total)}</td>
+                          <td className="fu-num">
+                            <button
+                              type="button"
+                              className="fu-link"
+                              onClick={() =>
+                                void openDetail(
+                                  h.householdId,
+                                  `${h.buildingName}동 ${unitLabel(h.floor, h.unitNo)}`,
+                                )
+                              }
+                            >
+                              고지서 →
+                            </button>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {data.households.map((h) => (
-                          <tr key={h.householdId}>
-                            <td>{h.buildingName}</td>
-                            <td>{unitLabel(h.floor, h.unitNo)}</td>
-                            <td className="fu-num">{formatWon(h.total)}</td>
-                            <td className="fu-num">
-                              <button
-                                type="button"
-                                className="fu-link"
-                                onClick={() =>
-                                  void openDetail(
-                                    h.householdId,
-                                    `${h.buildingName}동 ${unitLabel(h.floor, h.unitNo)}`,
-                                  )
-                                }
-                              >
-                                고지서 →
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </>
+                      ))}
+                    </tbody>
+                  </table>
+                  {paging.totalPages > 1 ? (
+                    <Pagination
+                      page={paging.page}
+                      totalPages={paging.totalPages}
+                      totalCount={data.households.length}
+                      onPage={paging.setPage}
+                      label="세대 목록 페이지"
+                    />
+                  ) : null}
+                </div>
+              </section>
             )}
           </div>
         )}

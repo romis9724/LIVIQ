@@ -1,0 +1,282 @@
+/* 시설관리 전체화면 셸(H14-1) — 배경 전체가 3D 그래프, 나머지는 그 위에 뜨는 플로팅 패널.
+   탭 3개(그래프/목록/평면도)를 폐지하고 목록·평면도·AI 도우미는 오버레이로 연다.
+   토큰만 사용(하드코딩 금지) · 좁은 화면에선 패널이 겹치지 않도록 상단/하단으로 분리한다. */
+
+.fac-screen {
+  /* 좌측 컬럼(도구 버튼 행 + 시설 현황 패널)의 공유 폭 — 두 요소의 옆 라인을 맞춘다. */
+  --fac-left-col: 24rem;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-surface-sunken);
+}
+
+/* ── 그래프 무대 ─────────────────────────────────────────────────────────── */
+.fac-stage {
+  position: absolute;
+  inset: 0;
+}
+.fac-stage__canvas,
+.fac-stage__graph {
+  position: absolute;
+  inset: 0;
+}
+
+/* ── 플로팅 패널 공통 ────────────────────────────────────────────────────── */
+.fac-float {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: color-mix(in oklch, var(--color-surface) 94%, transparent);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(6px);
+}
+/* 현황 패널은 도구 버튼 행(.fac-dock, 좌상단) 바로 아래에서 시작한다(사용자 요청). */
+.fac-float--left {
+  top: calc(var(--space-4) + var(--tap-min) + var(--space-2));
+  left: var(--space-4);
+  width: var(--fac-left-col);
+  max-height: calc(100% - var(--tap-min) - var(--space-8) - var(--space-2));
+}
+.fac-float--right {
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 23rem;
+  max-height: calc(100% - var(--space-8));
+  padding: var(--space-3) 0 0;
+}
+.fac-float__title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.fac-float__bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 var(--space-4);
+}
+.fac-float__close,
+.fac-overlay__close {
+  min-height: var(--tap-min);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.fac-float__close:hover,
+.fac-overlay__close:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.fac-float__close:focus-visible,
+.fac-overlay__close:focus-visible,
+.fac-dock__btn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ── 현황 요약 타일 ──────────────────────────────────────────────────────── */
+.fac-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fac-summary__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-sunken);
+}
+.fac-summary__item[data-tone="danger"] {
+  border-color: color-mix(in oklch, var(--color-danger) 40%, transparent);
+  background: color-mix(in oklch, var(--color-danger) 8%, var(--color-surface));
+}
+.fac-summary__value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--color-text);
+}
+.fac-summary__item[data-tone="danger"] .fac-summary__value {
+  color: var(--color-danger);
+}
+.fac-summary__label {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  word-break: keep-all; /* 한국어는 어절 단위로 줄바꿈(‘미해결 장/애’ 방지) */
+}
+
+/* ── 범례(접이식) ───────────────────────────────────────────────────────── */
+.fac-legend {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.fac-legend__summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.fac-legend__summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.fac-legend__list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-size: var(--text-sm);
+}
+
+/* ── 도구 버튼(목록·평면도·AI) — "시설 현황" 패널 바로 위(좌상단), 패널과 폭 정렬 ── */
+.fac-dock {
+  position: absolute;
+  z-index: 3;
+  top: var(--space-4);
+  left: var(--space-4);
+  width: var(--fac-left-col);
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-2);
+}
+.fac-dock__btn {
+  flex: 1 1 0;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  padding: 8px 8px;
+  border-radius: 999px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-card);
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.fac-dock__btn:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ── 오버레이(목록·평면도·AI 도우미) ────────────────────────────────────── */
+/* z-index 40 — 안쪽 다이얼로그(.dialog-backdrop)·토스트(50)가 이 위에 뜬다. */
+.fac-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: oklch(0% 0 0 / 0.4);
+}
+.fac-overlay__panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 72rem;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.fac-overlay__panel:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.fac-overlay__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.fac-overlay__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.fac-overlay__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+/* ── 좁은 화면 — 플로팅 패널이 겹치지 않게 위/아래로 분리(375px 기준) ──── */
+@media (max-width: 720px) {
+  .fac-float--left {
+    top: calc(var(--space-3) + var(--tap-min) + var(--space-2));
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto;
+    max-height: 38%;
+  }
+  /* 좁은 폭에선 현황 타일을 한 줄로 눕혀 패널 높이를 줄인다(그래프를 최대한 남긴다). */
+  .fac-summary {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .fac-summary__item {
+    padding: var(--space-2);
+  }
+  .fac-float--right {
+    top: auto;
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: var(--space-3);
+    width: auto;
+    max-height: 40%;
+  }
+  .fac-dock {
+    top: var(--space-3);
+    left: var(--space-3);
+    right: var(--space-3);
+    width: auto; /* 고정폭(--fac-left-col)이 375px 를 넘어 잘리는 것 방지 */
+  }
+  /* 375px 에서도 도구 버튼이 한 줄에 들어가야 상세 시트를 가리지 않는다 — 아이콘은 뺀다. */
+  .fac-dock__btn {
+    padding: 8px 10px;
+  }
+  .fac-dock__icon {
+    display: none;
+  }
+  .fac-overlay {
+    padding: 0;
+  }
+  .fac-overlay__panel {
+    border: none;
+    border-radius: 0;
+  }
+}

@@ -6,6 +6,9 @@ import type { Code, CodeGroup } from "./api";
 export const NOTICE_CATEGORY_GROUP = "NOTICE_CATEGORY";
 export const DOC_CATEGORY_GROUP = "DOC_CATEGORY";
 export const INQUIRY_CATEGORY_GROUP = "INQUIRY_CATEGORY";
+// 평면도 마커 입력(H14-2) — 종류·방을 자유 입력이 아니라 공통 코드에서 고르게 한다.
+export const PLAN_DEVICE_TYPE_GROUP = "PLAN_DEVICE_TYPE";
+export const PLAN_ROOM_GROUP = "PLAN_ROOM";
 
 export interface CodeOption {
   id: string;

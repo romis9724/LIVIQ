@@ -8,8 +8,8 @@ K-apt(공동주택관리정보시스템) A33982105 실측 시설물 + 표준 필
 도메인 행 변경과 outbox_events 기록은 한 트랜잭션(app/routers/facilities.py의
 _facility_snapshot·record_outbox 재사용 — 이중 쓰기 금지, docs/03 §4.9).
 
-facilities 테이블에는 memo/description 컬럼이 없어(모델 확인) memo는 name에
-" — " 구분자로 병기해 저장한다(data/facilities_kapt.py 모듈 docstring 참고).
+데이터 상수의 memo는 참고용 원천 기록일 뿐 저장하지 않는다 — name " — " 병기는
+H14에서 폐기(사용자 지시: 설비명은 짧게).
 
 실행(DATABASE_URL은 apps/api/.env에서 로드):
 
@@ -26,6 +26,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from app.facility_code import assign_facility_code
 from app.outbox import record_outbox
 from app.routers.facilities import _facility_snapshot
 from sqlalchemy import select, text
@@ -42,8 +43,6 @@ from data.facilities_kapt import ALLOWED_TYPES, FACILITIES  # noqa: E402
 # 파일럿 단지(첫마을 4단지 푸르지오) — 다른 시드 스크립트와 동일 tenant.
 DEFAULT_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 
-_MEMO_SEP = " — "  # facilities에 memo 컬럼이 없어 name에 병기하는 구분자
-
 
 def _validate_types() -> None:
     """type 슬러그 오타 방지 — 허용 집합 밖 값이 있으면 즉시 중단."""
@@ -53,8 +52,8 @@ def _validate_types() -> None:
 
 
 def _full_name(row: dict[str, Any]) -> str:
-    memo = row.get("memo")
-    return f"{row['name']}{_MEMO_SEP}{memo}" if memo else row["name"]
+    # 이름은 짧게 유지 — memo를 " — "로 병기하던 방식은 화면을 어지럽혀 폐기(H14, 사용자 지시).
+    return str(row["name"])
 
 
 async def _upsert_facility(
@@ -74,9 +73,13 @@ async def _upsert_facility(
         existing.location = row["location"]
         return existing, False
 
+    # 코드번호는 API와 같은 부여 함수로(H14-2) — 기존 행의 코드는 그대로 둔다(불변).
     facility = Facility(
         tenant_id=tenant_id,
         name=name,
+        code=await assign_facility_code(
+            session, tenant_id=tenant_id, type_=row["type"], location=row["location"]
+        ),
         location=row["location"],
         type=row["type"],
         status="normal",
@@ -101,9 +104,7 @@ async def _run(tenant_id: uuid.UUID) -> None:
     factory = create_session_factory(engine)
     try:
         async with factory() as session, session.begin():
-            complex_name = await session.scalar(
-                select(Tenant.name).where(Tenant.id == tenant_id)
-            )
+            complex_name = await session.scalar(select(Tenant.name).where(Tenant.id == tenant_id))
             if complex_name is None:
                 raise SystemExit(f"단지를 찾을 수 없습니다: {tenant_id}")
             await session.execute(

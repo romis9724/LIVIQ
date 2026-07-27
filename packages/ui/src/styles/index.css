@@ -3,3 +3,4 @@
 @import "./global.css";
 @import "./components.css";
 @import "../components/file-dropzone/file-dropzone.css";
+@import "../components/floor-plan-viewer/floor-plan-viewer.css";

@@ -1,33 +1,5 @@
 /* 관리비 관리 — 엑셀 업로드 마법사 + 부과 현황. 디자인 토큰만 사용. */
 
-/* 탭 */
-.fu-tabs {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-.fu-tab {
-  min-height: 42px;
-  padding: 0 var(--space-4);
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--color-text-muted);
-  font-family: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  cursor: pointer;
-  margin-bottom: -1px;
-}
-.fu-tab:hover {
-  color: var(--color-text);
-}
-.fu-tab[aria-selected="true"] {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
-}
-
 /* 스테퍼 (notice-composer 스타일 이식, fee-upload 국소) */
 .fu-stepper {
   list-style: none;
@@ -92,6 +64,7 @@
 .fu-card__title {
   font-size: var(--text-lg);
   font-weight: 700;
+  letter-spacing: -0.01em;
   margin-bottom: var(--space-2);
 }
 .fu-card__lede {
@@ -110,21 +83,25 @@
   font-weight: 600;
   margin-bottom: var(--space-2);
 }
+.fu-field input,
 .fu-field select {
-  appearance: none;
-  -webkit-appearance: none;
   min-height: var(--tap-min);
-  padding: 0 var(--space-6) 0 var(--space-3);
+  padding: 0 var(--space-3);
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 1rem; /* 모바일 자동 확대 방지 */
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background-color: var(--color-surface);
+  color: var(--color-text);
+  max-width: 260px;
+}
+.fu-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: var(--space-6);
   background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right var(--space-3) center;
-  color: var(--color-text);
-  max-width: 260px;
 }
 .fu-field__help {
   font-size: var(--text-sm);
@@ -163,82 +140,11 @@
   justify-content: space-between;
 }
 
-/* 검증 진행 */
-.fu-progress {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-.fu-spinner {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-accent);
-  animation: fu-spin 0.8s linear infinite;
-}
-@keyframes fu-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* 상태 배지 */
-.fu-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: var(--text-sm);
-  font-weight: 700;
-}
-.fu-badge--ok {
-  background: color-mix(in oklch, var(--color-success) 16%, transparent);
-  color: color-mix(in oklch, var(--color-success) 55%, var(--color-text));
-}
-.fu-badge--err {
-  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
-  color: var(--color-danger);
-}
-
-/* 오류 리포트 */
-.fu-errnote {
-  margin: var(--space-4) 0;
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: color-mix(in oklch, var(--color-danger) 8%, transparent);
-  color: var(--color-danger);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-/* 표 */
-.fu-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-.fu-table th,
-.fu-table td {
-  text-align: left;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
-}
-.fu-table th {
-  font-weight: 700;
-  color: var(--color-text-muted);
-  background: var(--color-surface-sunken);
-}
+/* 표 사양은 공용 .admin-table(@liviq/ui, 기준: 문서 관리) — 숫자 열 정렬만 로컬. */
 .fu-table td.fu-num,
 .fu-table th.fu-num {
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-.fu-tablecard {
-  overflow: hidden;
 }
 .fu-table__more {
   padding: var(--space-3) var(--space-4);
@@ -246,40 +152,9 @@
   font-size: var(--text-sm);
 }
 
-/* 미리보기 요약 카드 */
-.fu-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
+/* 미리보기 요약 카드(StatGrid) — 표와의 간격만 국소 지정. */
+.fu-review-stats {
   margin-bottom: var(--space-6);
-}
-@media (max-width: 720px) {
-  .fu-stats {
-    grid-template-columns: 1fr;
-  }
-}
-.fu-stat {
-  padding: var(--space-5) var(--space-6);
-}
-.fu-stat__label {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  margin-bottom: var(--space-2);
-}
-.fu-stat__value {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.fu-stat__delta {
-  font-size: var(--text-sm);
-  font-weight: 700;
-}
-.fu-stat__delta--up {
-  color: color-mix(in oklch, var(--color-danger) 60%, var(--color-text));
-}
-.fu-stat__delta--down {
-  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
 }
 
 /* 완료 화면 */
@@ -315,93 +190,50 @@
   flex-direction: column;
   gap: var(--space-6);
 }
+/* 조회 조건(조회 월·동·호) — PageToolbar 좌측 슬롯 한 줄. */
 .fu-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  align-items: flex-end;
-}
-.fu-filter {
-  display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--space-2);
 }
-.fu-filter label {
+.fu-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.fu-filter__label {
   font-size: var(--text-sm);
   font-weight: 600;
+  color: var(--color-text-muted);
 }
-.fu-filter select {
-  appearance: none;
-  -webkit-appearance: none;
+.fu-filter input,
+.fu-filters input[type="month"] {
   min-height: var(--tap-min);
-  padding: 0 var(--space-6) 0 var(--space-3);
+  padding: 0 var(--space-3);
   font-family: inherit;
-  font-size: 1rem;
+  font-size: 1rem; /* 모바일 자동 확대 방지 */
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
   background-color: var(--color-surface);
-  background-image: var(--select-chevron);
-  background-repeat: no-repeat;
-  background-position: right var(--space-3) center;
   color: var(--color-text);
 }
-.fu-summary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
+/* 동·호 입력은 짧다 — SearchField 기본 220px 축소. */
+.fu-filters__q {
+  width: 9rem;
 }
-@media (max-width: 720px) {
-  .fu-summary {
-    grid-template-columns: 1fr;
-  }
-}
-.fu-history {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.fu-history__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--color-border);
-  font-size: var(--text-sm);
-}
-.fu-history__item:last-child {
-  border-bottom: none;
-}
-.fu-history__month {
-  font-weight: 700;
-  min-width: 88px;
-}
-.fu-history__rev {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--color-surface-sunken);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-weight: 600;
-}
-.fu-history__at {
-  color: var(--color-text-muted);
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
+/* 섹션 h2 — 전 관리 메뉴 공통 수치(docs/05 §5A: --text-lg/700). */
 .fu-section__title {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-4);
+}
+/* 현황 카드는 툴바 위 — 툴바 자체 margin-bottom과 리듬을 맞춘다. */
+.fu-stats {
   margin-bottom: var(--space-4);
 }
 
-.fu-toast {
-  position: fixed;
-  right: var(--space-6);
-  bottom: var(--space-6);
-  z-index: 20;
-}
 .fu-toast-slot {
   position: fixed;
   bottom: var(--space-6);
@@ -414,34 +246,6 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-}
-
-/* 헤더 행(제목 + 액션 버튼) */
-.fu-head-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
-/* 검색 필터의 텍스트/월 입력 */
-.fu-filter input {
-  min-height: var(--tap-min);
-  padding: 0 var(--space-3);
-  font-family: inherit;
-  font-size: 1rem;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  max-width: 160px;
-}
-.fu-filters {
-  align-items: flex-end;
-}
-.fu-filters .btn,
-.fu-filters button {
-  min-height: var(--tap-min);
 }
 
 /* 목록의 고지서 링크 버튼 */

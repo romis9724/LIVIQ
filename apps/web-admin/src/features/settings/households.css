@@ -3,7 +3,7 @@
 .hh-layout {
   display: grid;
   grid-template-columns: minmax(220px, 300px) 1fr;
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-items: start;
 }
 
@@ -19,7 +19,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 .hh-buildings__list {
   display: flex;
@@ -79,9 +79,9 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3);
   flex-wrap: wrap;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 .hh-households__actions {
   display: flex;
@@ -143,7 +143,7 @@
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 1px 10px;
+  padding: 0 var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 .hh-preview__count {
@@ -192,7 +192,7 @@
 .hh-modal__title {
   font-size: var(--text-lg);
   font-weight: 700;
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 .hh-form {
   display: flex;

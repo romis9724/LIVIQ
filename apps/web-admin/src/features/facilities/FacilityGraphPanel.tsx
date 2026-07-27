@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmptyState, Skeleton } from "@liviq/ui";
+import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
   getFacility,
@@ -24,6 +24,7 @@ import {
 // 그래프 노드 클릭 → 시설 상세. 데이터는 목록 뷰와 같은 GET /admin/facilities/{id} 를 재사용한다
 // (그래프는 읽기 전용 소비자 — ADR-0022 결정 1). 상태 변경·기록은 목록 뷰 다이얼로그가 담당.
 // location·floor_plan·complex 노드는 상세 엔드포인트가 없어 그래프 데이터에서 바로 파생한다(H13-7).
+// floor_plan 패널의 ‘평면도 편집’은 상위(FacilitiesScreen)의 평면도 오버레이를 연다(H14-1).
 
 export type GraphPanelSelection =
   | { kind: "facility"; facilityId: string }
@@ -32,9 +33,10 @@ export type GraphPanelSelection =
   | { kind: "complex"; node: GraphNode };
 
 interface FacilityGraphPanelProps {
-  selection: GraphPanelSelection | null;
+  selection: GraphPanelSelection;
   nodes: readonly GraphNode[];
   links: readonly GraphLink[];
+  onEditFloorPlan: (planId: string) => void;
 }
 
 function errorMessage(err: unknown): string {
@@ -42,8 +44,13 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPanelProps) {
-  const facilityId = selection?.kind === "facility" ? selection.facilityId : null;
+export function FacilityGraphPanel({
+  selection,
+  nodes,
+  links,
+  onEditFloorPlan,
+}: FacilityGraphPanelProps) {
+  const facilityId = selection.kind === "facility" ? selection.facilityId : null;
   const [detail, setDetail] = useState<FacilityDetail | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -85,38 +92,36 @@ export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPan
     };
   }, []);
 
-  if (!selection) {
-    return (
-      <aside className="fac-graph__panel">
-        <EmptyState
-          icon="🕸"
-          title="노드를 선택하세요"
-          description="그래프에서 설비·위치·장애·정비 노드를 클릭하면 해당 현황과 이력이 표시됩니다."
-        />
-      </aside>
-    );
-  }
-
   if (selection.kind === "location") {
     return <LocationPanel node={selection.node} nodes={nodes} links={links} />;
   }
 
   if (selection.kind === "floor_plan") {
+    const planId = selection.node.pgId;
     return (
-      <aside className="fac-graph__panel">
-        <EmptyState
-          icon="🗺"
-          title={selection.node.name ?? "평면도"}
-          description="이 평면도의 도면·마커는 ‘평면도’ 탭에서 확인·수정할 수 있습니다."
-        />
-      </aside>
+      <div className="fac-graph__panel">
+        <div className="fac-detail__head">
+          <span className="fac-detail__icon" aria-hidden="true">
+            🗺
+          </span>
+          <div className="fac-detail__name">{selection.node.name ?? "평면도"}</div>
+        </div>
+        <p className="fac-detail__desc">
+          세대 타입별 도면입니다. 도면과 시설 마커는 편집 화면에서 확인·수정합니다.
+        </p>
+        <div className="fac-detail__actions">
+          <Button variant="primary" onClick={() => onEditFloorPlan(planId)}>
+            평면도 편집
+          </Button>
+        </div>
+      </div>
     );
   }
 
   if (selection.kind === "complex") {
     const { locationCount, facilityCount } = complexSummary(nodes);
     return (
-      <aside className="fac-graph__panel">
+      <div className="fac-graph__panel">
         <div className="fac-detail__head">
           <span className="fac-detail__icon" aria-hidden="true">
             🏘
@@ -126,24 +131,24 @@ export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPan
         <p className="fac-detail__desc">
           위치 {locationCount}개 · 설비 {facilityCount}개
         </p>
-      </aside>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <aside className="fac-graph__panel">
+      <div className="fac-graph__panel">
         <EmptyState icon="⚠" title="시설 정보를 불러오지 못했습니다" description={error} />
-      </aside>
+      </div>
     );
   }
 
   if (!detail) {
     return (
-      <aside className="fac-graph__panel">
+      <div className="fac-graph__panel">
         <Skeleton height="6rem" />
         <Skeleton height="10rem" />
-      </aside>
+      </div>
     );
   }
 
@@ -152,14 +157,17 @@ export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPan
   const estimated = estimatedInquiries(inquiries, detail.location);
 
   return (
-    <aside className="fac-graph__panel" aria-busy={loading || undefined}>
+    <div className="fac-graph__panel" aria-busy={loading || undefined}>
       <div>
         <div className="fac-detail__head">
           <span className="fac-detail__icon" data-status={meta.css} aria-hidden="true">
             {meta.icon}
           </span>
           <div>
-            <div className="fac-detail__name">{detail.name}</div>
+            <div className="fac-detail__name">
+              {detail.name}
+              {detail.code ? <span className="fac-code">{detail.code}</span> : null}
+            </div>
             <span className={`fac-pill fac-pill--${meta.css}`}>
               <span className={`fac-dot fac-dot--${meta.css}`} aria-hidden="true" />
               {meta.label}
@@ -168,7 +176,7 @@ export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPan
         </div>
         <p className="fac-detail__desc">
           {detail.type ? `${detail.type} · ` : "미분류 · "}
-          {detail.location ?? "위치 미지정"} · 다음 점검 {shortDate(detail.nextCheckAt)}
+          {detail.location ?? "위치 미지정"}
         </p>
       </div>
 
@@ -194,7 +202,7 @@ export function FacilityGraphPanel({ selection, nodes, links }: FacilityGraphPan
       />
 
       <RelatedInquiries linked={linked} estimated={estimated} />
-    </aside>
+    </div>
   );
 }
 
@@ -211,7 +219,7 @@ function LocationPanel({
 }) {
   const facilities = facilitiesAtLocation(nodes, links, node.pgId);
   return (
-    <aside className="fac-graph__panel">
+    <div className="fac-graph__panel">
       <div className="fac-detail__head">
         <span className="fac-detail__icon" aria-hidden="true">
           📍
@@ -231,7 +239,7 @@ function LocationPanel({
           };
         })}
       />
-    </aside>
+    </div>
   );
 }
 

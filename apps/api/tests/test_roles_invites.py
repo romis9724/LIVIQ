@@ -164,7 +164,7 @@ async def test_sys_admin_create_list_and_invite_manager(
         assert created.status_code == 201, created.text
         tid = created.json()["id"]
 
-        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017·0018) — 시스템 그룹 3종.
+        # 단지 생성 시 기본 공통 코드 시드(H8-4, ADR-0017·0018) + 시설·평면도 그룹(H14-2).
         await db_session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=tid)
         )
@@ -173,7 +173,14 @@ async def test_sys_admin_create_list_and_invite_manager(
                 select(CodeGroup.group_key).where(CodeGroup.tenant_id == uuid.UUID(tid))
             )
         )
-        assert set(seeded_groups) == {"NOTICE_CATEGORY", "DOC_CATEGORY", "INQUIRY_CATEGORY"}
+        assert set(seeded_groups) == {
+            "NOTICE_CATEGORY",
+            "DOC_CATEGORY",
+            "INQUIRY_CATEGORY",
+            "FACILITY_SYSTEM",
+            "PLAN_DEVICE_TYPE",
+            "PLAN_ROOM",
+        }
 
         listed = await c.get("/admin/tenants")
         assert listed.status_code == 200

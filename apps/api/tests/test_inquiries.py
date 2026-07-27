@@ -138,8 +138,20 @@ async def _seed(session: AsyncSession) -> None:
     )
     session.add_all(
         [
-            Facility(id=FACILITY_ID, tenant_id=TENANT_ID, name="승강기 1호기", status="normal"),
-            Facility(id=FACILITY2_ID, tenant_id=TENANT_ID, name="정화조", status="normal"),
+            Facility(
+                id=FACILITY_ID,
+                tenant_id=TENANT_ID,
+                name="승강기 1호기",
+                code="EL-101-01",
+                status="normal",
+            ),
+            Facility(
+                id=FACILITY2_ID,
+                tenant_id=TENANT_ID,
+                name="정화조",
+                code="SN-CMN-01",
+                status="normal",
+            ),
         ]
     )
     await session.flush()
@@ -157,6 +169,7 @@ async def _seed_other_tenant_facility(session: AsyncSession) -> None:
             id=OTHER_FACILITY_ID,
             tenant_id=OTHER_TENANT_ID,
             name="타단지 정화조",
+            code="PK-777-01",  # 우리 단지에 없는 코드 — 코드 연결 격리 검증용(H14-2)
             status="normal",
         )
     )
@@ -726,6 +739,48 @@ async def test_manager_links_and_unlinks_facility(seeded: AsyncSession) -> None:
         )
         assert unlinked.status_code == 200
         assert unlinked.json()["facility_id"] is None
+
+
+async def test_manager_links_facility_by_code(seeded: AsyncSession) -> None:
+    """코드번호로도 연결된다(H14-2) — 민원 접수에서 코드 한 줄로 시설 지정."""
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="덜컹", body="승강기가 덜컹거립니다")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        linked = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"code": "EL-101-01"}
+        )
+        assert linked.status_code == 200, linked.text
+        assert linked.json()["facility_id"] == str(FACILITY_ID)
+        assert linked.json()["facility_name"] == "승강기 1호기"
+
+        unknown = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"code": "EL-101-99"}
+        )
+        assert unknown.status_code == 404
+
+        both = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility",
+            json={"facility_id": str(FACILITY_ID), "code": "EL-101-01"},
+        )
+        assert both.status_code == 422  # 둘 중 하나만
+
+        unlinked = await mgr.put(f"/admin/inquiries/{inquiry['id']}/facility", json={})
+        assert unlinked.status_code == 200
+        assert unlinked.json()["facility_id"] is None
+
+
+async def test_facility_link_by_code_rejects_other_tenant_code_404(seeded: AsyncSession) -> None:
+    """CRITICAL 격리 — 타 단지에만 있는 코드는 해석되지 않는다."""
+    await _seed_other_tenant_facility(seeded)
+    async with _make_client(seeded, AUTHOR_ID, ("RESIDENT",)) as author:
+        inquiry = await _create(author, title="t", body="b")
+    async with _make_client(seeded, MANAGER_ID, ("MANAGER",)) as mgr:
+        response = await mgr.put(
+            f"/admin/inquiries/{inquiry['id']}/facility", json={"code": "PK-777-01"}
+        )
+        assert response.status_code == 404
+        current = (await mgr.get(f"/inquiries/{inquiry['id']}")).json()
+        assert current["facility_id"] is None
 
 
 async def test_facility_link_forbidden_for_staff_and_resident_403(seeded: AsyncSession) -> None:

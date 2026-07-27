@@ -1,14 +1,32 @@
 "use client";
 
-import { Button, EmptyState, Skeleton } from "@liviq/ui";
+import {
+  Button,
+  EmptyState,
+  FilterChips,
+  PageToolbar,
+  Pagination,
+  SearchField,
+  Skeleton,
+  StatCard,
+  StatGrid,
+} from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/lib/api";
 import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
+import { usePaging } from "@/lib/paging";
 import { DocumentTable } from "./DocumentTable";
 import {
-  INDEX_META,
   STATUS_FILTERS,
   filterDocs,
   hasActiveIndexing,
@@ -19,8 +37,6 @@ import "./documents.css";
 
 // ponytail: 폴링, 문서량 커지면 SSE/웹소켓
 const POLL_INTERVAL_MS = 5000;
-
-type SummaryTone = "success" | "accent" | "neutral" | "danger";
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -83,136 +99,106 @@ export function DocumentManager() {
     [docs, statusFilter, appliedQuery, appliedCategory],
   );
 
+  // 전량 로드 후 클라이언트 페이징 — 필터·검색이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visibleDocs);
+  const { reset: resetPage } = paging;
+
   const applySearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAppliedQuery(searchRef.current?.value ?? "");
     setAppliedCategory(category);
+    resetPage();
   };
 
   return (
     <>
-      <header className="admin-page__header doc-head">
-        <div className="doc-head__text">
-          <h1 id="main" className="admin-page__title">
-            문서 관리
-          </h1>
-          <p className="admin-page__lede">
-            관리규약·회의록·지침을 게시글로 관리합니다. 첨부 문서가 색인되면 AI가 출처로 인용하며,
-            개정판을 올리면 최신본을 따라갑니다.
-          </p>
-        </div>
-        <Link href="/documents/new" className="btn btn--primary">
-          새 문서
-        </Link>
+      <header className="admin-page__header">
+        <h1 id="main" className="admin-page__title">
+          문서 관리
+        </h1>
       </header>
 
       <main className="admin-page__main doc-main">
-        <div className="doc-summary">
-          <SummaryCard
-            icon={INDEX_META.indexed.icon}
+        {/* 값 색은 0건일 때 쓰지 않는다 — 없는 상태를 강조색으로 알리지 않기 위해(docs/05 §5A). */}
+        <StatGrid>
+          <StatCard
             label="색인 완료"
-            count={summary.indexed}
-            tone="success"
+            value={summary.indexed}
+            tone={summary.indexed > 0 ? "success" : "default"}
           />
-          <SummaryCard
-            icon={INDEX_META.indexing.icon}
-            label="색인 중"
-            count={summary.indexing}
-            tone="accent"
-          />
-          <SummaryCard
-            icon={INDEX_META.pending.icon}
-            label="대기"
-            count={summary.pending}
-            tone="neutral"
-          />
-          <SummaryCard
-            icon={INDEX_META.failed.icon}
+          <StatCard label="색인 중" value={summary.indexing} />
+          <StatCard label="대기" value={summary.pending} />
+          <StatCard
             label="실패"
-            count={summary.failed}
-            tone="danger"
+            value={summary.failed}
+            tone={summary.failed > 0 ? "danger" : "default"}
           />
-        </div>
+        </StatGrid>
 
-        <div className="doc-toolbar">
-          <div className="doc-filters" role="group" aria-label="색인 상태 필터">
-            {STATUS_FILTERS.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                className="doc-filter"
-                aria-pressed={statusFilter === filter.value}
-                onClick={() => setStatusFilter(filter.value)}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
-          <form className="doc-searchform" onSubmit={applySearch}>
-            <select
-              className="doc-select doc-searchform__category"
-              value={category}
-              aria-label="문서 분류 필터"
-              onChange={(event) => setCategory(event.target.value)}
-            >
-              <option value="">전체 분류</option>
-              {[...categoryLabels].map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <input
-              ref={searchRef}
-              className="doc-input doc-search"
-              type="search"
-              defaultValue=""
-              placeholder="제목 검색"
-              aria-label="문서 제목 검색"
+        <PageToolbar
+          start={
+            <FilterChips
+              items={STATUS_FILTERS}
+              value={statusFilter}
+              onChange={(id) => {
+                setStatusFilter(id);
+                resetPage();
+              }}
+              label="색인 상태 필터"
             />
-            <Button type="submit" variant="secondary">
-              검색
-            </Button>
-          </form>
-        </div>
+          }
+          end={
+            <>
+              <form className="doc-searchform" onSubmit={applySearch}>
+                <select
+                  className="doc-select doc-searchform__category"
+                  value={category}
+                  aria-label="문서 분류 필터"
+                  onChange={(event) => setCategory(event.target.value)}
+                >
+                  <option value="">전체 분류</option>
+                  {[...categoryLabels].map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <SearchField ref={searchRef} label="문서 제목 검색" defaultValue="" placeholder="제목 검색" />
+                <Button type="submit" variant="secondary">
+                  검색
+                </Button>
+              </form>
+              <Link href="/documents/new" className="btn btn--primary">
+                새 문서
+              </Link>
+            </>
+          }
+        />
 
         <DocumentsBody
           loading={loading}
           loadError={loadError}
           docs={docs}
-          visibleDocs={visibleDocs}
+          visibleDocs={paging.rows}
           categoryLabels={categoryLabels}
           onRetry={() => {
             setLoading(true);
             void load();
           }}
+          pager={
+            paging.totalPages > 1 ? (
+              <Pagination
+                page={paging.page}
+                totalPages={paging.totalPages}
+                totalCount={visibleDocs.length}
+                onPage={paging.setPage}
+                label="문서 목록 페이지"
+              />
+            ) : null
+          }
         />
       </main>
     </>
-  );
-}
-
-function SummaryCard({
-  icon,
-  label,
-  count,
-  tone,
-}: {
-  icon: string;
-  label: string;
-  count: number;
-  tone: SummaryTone;
-}) {
-  return (
-    <div className={`surface-card doc-summary__card doc-summary__card--${tone}`}>
-      <span className="doc-summary__label">
-        <span className="doc-summary__icon" aria-hidden="true">
-          {icon}
-        </span>
-        {label}
-      </span>
-      <span className="doc-summary__count">{count}</span>
-    </div>
   );
 }
 
@@ -220,9 +206,12 @@ interface DocumentsBodyProps {
   loading: boolean;
   loadError: string | null;
   docs: readonly DocumentItem[];
+  /** 현재 페이지 분량만 받는다(페이징은 부모가 계산). */
   visibleDocs: readonly DocumentItem[];
   categoryLabels: Map<string, string>;
   onRetry: () => void;
+  /** 표 카드 하단 페이저 — 1페이지뿐이면 null. */
+  pager: ReactNode;
 }
 
 function DocumentsBody({
@@ -232,10 +221,11 @@ function DocumentsBody({
   visibleDocs,
   categoryLabels,
   onRetry,
+  pager,
 }: DocumentsBodyProps) {
   if (loading) {
     return (
-      <div className="surface-card doc-tablecard doc-loading">
+      <div className="surface-card admin-tablecard doc-loading">
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
@@ -275,5 +265,5 @@ function DocumentsBody({
       />
     );
   }
-  return <DocumentTable docs={visibleDocs} categoryLabels={categoryLabels} />;
+  return <DocumentTable docs={visibleDocs} categoryLabels={categoryLabels} pager={pager} />;
 }

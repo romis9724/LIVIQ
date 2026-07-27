@@ -23,19 +23,24 @@ export const INCIDENT_OPEN_COLOR_VAR = "--fac-node-incident-open";
 export const INCIDENT_RESOLVED_COLOR_VAR = "--fac-node-incident-resolved";
 export const MAINTENANCE_COLOR_VAR = "--fac-node-maintenance";
 export const LINK_COLOR_VAR = "--fac-graph-link";
-// H13-7 — 위치·평면도·평면도 마커·단지 노드(계통/위치 렌즈와 무관한 고정색).
+// H13-7 — 위치·평면도·단지 노드(계통/위치 렌즈와 무관한 고정색).
 export const LOCATION_COLOR_VAR = "--fac-node-location";
 export const FLOOR_PLAN_COLOR_VAR = "--fac-node-floor-plan";
-export const PLAN_DEVICE_COLOR_VAR = "--fac-node-plan-device";
 export const COMPLEX_COLOR_VAR = "--fac-node-complex";
+// H14-1 — 도면 하위 계층(방·종류 허브 → 마커). 평면도 계열 고정색.
+export const PLAN_ROOM_COLOR_VAR = "--fac-node-plan-room";
+export const PLAN_KIND_COLOR_VAR = "--fac-node-plan-kind";
+export const PLAN_DEVICE_COLOR_VAR = "--fac-node-plan-device";
 
 /** 노드 크기(nodeVal) — 시설이 이력보다 크게. 색만이 아니라 형태로도 유형이 구분되게.
- *  위치는 여러 설비가 모이는 허브라 시설보다 크게, 평면도 마커는 도면당 수십개라 점처럼 작게.
- *  단지는 tenant당 1개뿐인 최상위 허브라 가장 크다. */
+ *  위치는 여러 설비가 모이는 허브라 시설보다 크게.
+ *  단지는 tenant당 1개뿐인 최상위 허브라 가장 크다.
+ *  방·종류 허브는 도면과 마커 사이라 중간, 마커는 도면당 수십개라 점처럼 작게(H14-1). */
 export const NODE_VAL_FACILITY = 12;
 export const NODE_VAL_EVENT = 3;
 export const NODE_VAL_LOCATION = 20;
 export const NODE_VAL_FLOOR_PLAN = 14;
+export const NODE_VAL_PLAN_HUB = 7;
 export const NODE_VAL_PLAN_DEVICE = 1.5;
 export const NODE_VAL_COMPLEX = 30;
 export const NODE_VAL_FOCUS_SCALE = 4;
@@ -49,6 +54,9 @@ export function nodeBaseVal(label: GraphNodeLabel): number {
       return NODE_VAL_LOCATION;
     case "floor_plan":
       return NODE_VAL_FLOOR_PLAN;
+    case "plan_room":
+    case "plan_kind":
+      return NODE_VAL_PLAN_HUB;
     case "plan_device":
       return NODE_VAL_PLAN_DEVICE;
     case "complex":
@@ -79,7 +87,7 @@ export function systemGroups(nodes: readonly GraphNode[]): string[] {
 }
 
 /** 계통(system) 렌즈에서 링크로 계통을 물려받을 수 있는 라벨 — 장애·정비뿐이다.
- *  location·floor_plan·plan_device 는 여러 계통에 걸쳐 공유되는 노드라 계통 렌즈에서는
+ *  location·floor_plan 은 여러 계통에 걸쳐 공유되는 노드라 계통 렌즈에서는
  *  중립으로 남긴다(클러스터 힘도 걸리지 않는다 — H13-7, ADR-0022 결정 2 확장). */
 const SYSTEM_INHERITING_LABELS = new Set<GraphNodeLabel>(["incident", "maintenance"]);
 
@@ -165,7 +173,8 @@ export function lensGroups(lens: GraphLens, nodes: readonly GraphNode[]): string
 
 /** 위치(location) 렌즈에서 링크로 그룹을 물려받을 수 있는 라벨 — 장애·정비에 더해
  *  location 노드도 포함한다(위치 노드는 자기 그룹의 중심색을 그대로 쓴다 — H13-7 결정 3).
- *  floor_plan·plan_device 는 고유색이 고정이라 그룹 상속이 필요 없다. */
+ *  floor_plan 과 그 하위 계층(plan_room·plan_kind·plan_device)은 고유색이 고정이라
+ *  그룹 상속이 필요 없다. */
 const LOCATION_INHERITING_LABELS = new Set<GraphNodeLabel>(["incident", "maintenance", "location"]);
 
 /** 렌즈별 노드 id → 그룹(장애·정비는 링크 source 시설의 그룹을 물려받는다 — 결정 2). */
@@ -197,7 +206,7 @@ export function lensColorVar(lens: GraphLens, group: string, groups: readonly st
   return systemColorVar(group, groups);
 }
 
-/** 장애·정비·평면도·평면도 마커 노드의 고정색(계통/위치 렌즈 공통) — 그 외엔 null.
+/** 장애·정비·평면도(하위 계층 포함)·단지 노드의 고정색(계통/위치 렌즈 공통) — 그 외엔 null.
  *  location 은 렌즈에 따라 색이 달라져(결정 3) 여기서 다루지 않고 lensNodeColorVar 가 처리한다. */
 function eventColorVar(node: GraphNode): string | null {
   if (node.label === "incident") {
@@ -205,6 +214,8 @@ function eventColorVar(node: GraphNode): string | null {
   }
   if (node.label === "maintenance") return MAINTENANCE_COLOR_VAR;
   if (node.label === "floor_plan") return FLOOR_PLAN_COLOR_VAR;
+  if (node.label === "plan_room") return PLAN_ROOM_COLOR_VAR;
+  if (node.label === "plan_kind") return PLAN_KIND_COLOR_VAR;
   if (node.label === "plan_device") return PLAN_DEVICE_COLOR_VAR;
   if (node.label === "complex") return COMPLEX_COLOR_VAR;
   return null;
@@ -287,7 +298,10 @@ export function searchFacilities(
   return hits;
 }
 
-/** 이름 완전일치(검색창 입력·datalist 선택값 → 노드). 없으면 null. */
+/**
+ * 이름 완전일치(검색창 입력·datalist 선택값 → 노드). 이름이 안 맞으면 코드번호 완전일치도
+ * 본다(H14-2 — "EL-401-01" 로 바로 찾아가기). 그래도 없으면 이름 부분일치, 최종 실패는 null.
+ */
 export function findFacilityByName(nodes: readonly GraphNode[], name: string): GraphNode | null {
   const needle = normalize(name);
   if (!needle) return null;
@@ -295,6 +309,10 @@ export function findFacilityByName(nodes: readonly GraphNode[], name: string): G
     (node) => node.label === "facility" && node.name && normalize(node.name) === needle,
   );
   if (exact) return exact;
+  const byCode = nodes.find(
+    (node) => node.label === "facility" && node.code && normalize(node.code) === needle,
+  );
+  if (byCode) return byCode;
   return searchFacilities(nodes, name, 1)[0] ?? null;
 }
 
@@ -316,18 +334,24 @@ export function facilitiesAtLocation(
 export interface ComplexSummary {
   locationCount: number;
   facilityCount: number;
+  floorPlanCount: number;
+  openIncidentCount: number;
 }
 
-/** complex 노드 클릭 → 위치·설비 개수 한 줄 요약(그래프 데이터 파생 — tenant당 complex 는
- *  1개뿐이라 그래프의 location·facility 전체가 곧 그 단지 집계다, H13-7 확장). */
+/** 그래프 현황 요약(그래프 데이터 파생 — tenant당 complex 는 1개뿐이라 그래프의 노드 전체가
+ *  곧 그 단지 집계다, H13-7). 플로팅 현황 패널과 complex 노드 패널이 같은 값을 쓴다(H14-1). */
 export function complexSummary(nodes: readonly GraphNode[]): ComplexSummary {
   let locationCount = 0;
   let facilityCount = 0;
+  let floorPlanCount = 0;
+  let openIncidentCount = 0;
   for (const node of nodes) {
     if (node.label === "location") locationCount += 1;
     else if (node.label === "facility") facilityCount += 1;
+    else if (node.label === "floor_plan") floorPlanCount += 1;
+    else if (node.label === "incident" && !node.resolved) openIncidentCount += 1;
   }
-  return { locationCount, facilityCount };
+  return { locationCount, facilityCount, floorPlanCount, openIncidentCount };
 }
 
 function normalize(value: string): string {

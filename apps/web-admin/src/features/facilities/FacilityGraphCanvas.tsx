@@ -136,7 +136,9 @@ function nodeLabel(node: GraphDatum): string {
   if (node.label === "maintenance") return `정비 · ${name}`;
   if (node.label === "location") return `위치 · ${name}`;
   if (node.label === "floor_plan") return `평면도 · ${name}`;
-  if (node.label === "plan_device") return `평면도 마커 · ${name}`;
+  if (node.label === "plan_room") return `방 · ${name}`;
+  if (node.label === "plan_kind") return `종류 · ${name}`;
+  if (node.label === "plan_device") return `마커 · ${name}`;
   if (node.label === "complex") return `단지 · ${name}`;
   const status = node.status ? STATUS_META[node.status as keyof typeof STATUS_META] : undefined;
   return `설비 · ${name} · ${status?.label ?? node.status ?? "상태 미상"}`;

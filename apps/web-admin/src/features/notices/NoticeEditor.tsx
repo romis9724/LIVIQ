@@ -218,14 +218,12 @@ export function NoticeEditor({ mode, noticeId }: NoticeEditorProps) {
   return (
     <>
       <header className="admin-page__header notice-head">
-        <div className="notice-head__text">
-          <Link href="/notices" className="notice-back">
-            ← 공지 목록
-          </Link>
-          <h1 id="main" className="admin-page__title">
-            {title}
-          </h1>
-        </div>
+        <Link href="/notices" className="notice-back">
+          ← 공지 목록
+        </Link>
+        <h1 id="main" className="admin-page__title">
+          {title}
+        </h1>
       </header>
 
       <main className="admin-page__main notice-editor">

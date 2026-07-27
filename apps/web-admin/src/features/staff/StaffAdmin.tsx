@@ -1,8 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Dialog, EmptyState, FormField, Skeleton, Toast } from "@liviq/ui";
-import type { ToastTone } from "@liviq/ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Button,
+  Dialog,
+  EmptyState,
+  FilterChips,
+  FormField,
+  PageToolbar,
+  Pagination,
+  Skeleton,
+  Toast,
+} from "@liviq/ui";
+import type { FilterChipItem, ToastTone } from "@liviq/ui";
 import {
   ApiError,
   deactivateStaff,
@@ -12,6 +22,7 @@ import {
   listStaff,
   type StaffMember,
 } from "@/lib/api";
+import { usePaging } from "@/lib/paging";
 import "./staff.css";
 
 const TOAST_DURATION_MS = 3200;
@@ -35,6 +46,16 @@ function roleText(roles: string[]): string {
   return roles.map((r) => ROLE_LABEL[r] ?? r).join(" · ");
 }
 
+// 역할 필터 — "all"은 전체.
+type RoleFilter = "all" | "MANAGER" | "STAFF";
+
+function matchesRole(member: StaffMember, filter: RoleFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "MANAGER") return member.roles.includes("MANAGER");
+  // 소장은 STAFF 권한도 함께 갖는 경우가 있어 "직원"에서는 제외한다.
+  return member.roles.includes("STAFF") && !member.roles.includes("MANAGER");
+}
+
 /** STAFF 전용(소장 아님)·비활성 아님일 때만 비활성화 가능. 소장·자기 자신은 서버도 400. */
 function canDeactivate(member: StaffMember): boolean {
   return (
@@ -47,6 +68,7 @@ function canDeactivate(member: StaffMember): boolean {
 export function StaffAdmin() {
   const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const [name, setName] = useState("");
@@ -144,23 +166,29 @@ export function StaffAdmin() {
     }
   }
 
+  const roleFilters: readonly FilterChipItem<RoleFilter>[] = useMemo(
+    () => [
+      { id: "all", label: "전체", count: staff?.length },
+      { id: "MANAGER", label: "소장", count: staff?.filter((m) => matchesRole(m, "MANAGER")).length },
+      { id: "STAFF", label: "직원", count: staff?.filter((m) => matchesRole(m, "STAFF")).length },
+    ],
+    [staff],
+  );
+  const visibleStaff = staff?.filter((member) => matchesRole(member, roleFilter)) ?? null;
+  // 전량 로드 후 클라이언트 페이징 — 역할 필터가 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visibleStaff ?? []);
+
   return (
     <>
       <header className="admin-page__header">
         <h1 id="main" className="admin-page__title">
           직원 관리
         </h1>
-        <p className="admin-page__lede">
-          단지 직원을 초대하고 관리합니다. 초대 메일의 링크로 직원이 비밀번호를 설정하면 계정이
-          활성화됩니다.
-        </p>
       </header>
 
       <main className="admin-page__main">
-        <section className="surface-card sf-invite" aria-labelledby="sf-invite-h">
-          <h2 id="sf-invite-h" className="sf-section__title">
-            직원 초대
-          </h2>
+        {/* 입력 → 툴바 → 목록 순서(docs/05 §5A) — 초대 폼은 접지 않고 항상 노출한다. */}
+        <section className="surface-card sf-invite" aria-label="직원 초대">
           <form
             className="sf-invite__form"
             onSubmit={(e) => {
@@ -196,60 +224,103 @@ export function StaffAdmin() {
           </form>
         </section>
 
-        <section className="sf-list" aria-labelledby="sf-list-h">
-          <h2 id="sf-list-h" className="sf-section__title">
-            직원 목록
-          </h2>
+        <PageToolbar
+          start={
+            <FilterChips
+              items={roleFilters}
+              value={roleFilter}
+              onChange={(id) => {
+                setRoleFilter(id);
+                paging.reset();
+              }}
+              label="직원 역할 필터"
+            />
+          }
+        />
 
+        <section className="sf-list" aria-label="직원 목록">
           {loadError ? (
             <EmptyState icon="⚠" title="목록을 불러오지 못했습니다" description={loadError} />
-          ) : staff === null ? (
-            <div className="sf-rows">
+          ) : visibleStaff === null ? (
+            <div className="sf-skeletons">
               <Skeleton height="64px" />
               <Skeleton height="64px" />
             </div>
-          ) : staff.length === 0 ? (
+          ) : visibleStaff.length === 0 ? (
             <EmptyState
               icon="👥"
-              title="등록된 직원이 없습니다"
-              description="위에서 직원을 초대해 보세요."
+              title={staff?.length ? "조건에 맞는 직원이 없습니다" : "등록된 직원이 없습니다"}
+              description={
+                staff?.length ? "역할 필터를 확인해 주세요." : "‘직원 초대’로 직원을 추가하세요."
+              }
             />
           ) : (
-            <ul className="sf-rows">
-              {staff.map((member) => (
-                <li key={member.userId} className="sf-row">
-                  <div className="sf-row__main">
-                    <span className="sf-row__name">{member.name ?? "이름 미기록"}</span>
-                    <span className="sf-row__email">{member.email ?? "이메일 미기록"}</span>
-                    <span className="sf-row__roles">{roleText(member.roles)}</span>
-                    <span className={`sf-status sf-status--${member.status}`}>
-                      {STATUS_LABEL[member.status] ?? member.status}
-                    </span>
-                  </div>
-                  <span className="sf-row__date">초대 {member.invitedAt.slice(0, 10)}</span>
-                  {canDeactivate(member) ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busyId === member.userId}
-                      onClick={() => setDeactivateTarget(member)}
-                    >
-                      비활성화
-                    </Button>
-                  ) : null}
-                  {member.userId !== meId ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      disabled={busyId === member.userId}
-                      onClick={() => setDeleteTarget(member)}
-                    >
-                      삭제
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            /* 문서 관리와 같은 열 있는 표(docs/05 §5A 목록 ①형) — 행은 선택 대상이 아니다. */
+            <div className="surface-card sf-tablecard">
+              <div className="sf-table__scroll">
+                <table className="sf-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">이름</th>
+                      <th scope="col">이메일</th>
+                      <th scope="col">역할</th>
+                      <th scope="col">상태</th>
+                      <th scope="col">초대일</th>
+                      <th scope="col" className="sf-table__actions-col">
+                        관리
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paging.rows.map((member) => (
+                      <tr key={member.userId}>
+                        <td className="sf-row__name">{member.name ?? "이름 미기록"}</td>
+                        <td className="sf-row__email">{member.email ?? "이메일 미기록"}</td>
+                        <td className="sf-row__roles">{roleText(member.roles)}</td>
+                        <td>
+                          <span className={`sf-status sf-status--${member.status}`}>
+                            {STATUS_LABEL[member.status] ?? member.status}
+                          </span>
+                        </td>
+                        <td className="sf-row__date">{member.invitedAt.slice(0, 10)}</td>
+                        <td className="sf-row__actions">
+                          {canDeactivate(member) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busyId === member.userId}
+                              onClick={() => setDeactivateTarget(member)}
+                            >
+                              비활성화
+                            </Button>
+                          ) : null}
+                          {member.userId !== meId ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="sf-row__delete"
+                              disabled={busyId === member.userId}
+                              onClick={() => setDeleteTarget(member)}
+                            >
+                              삭제
+                            </Button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {paging.totalPages > 1 ? (
+                <Pagination
+                  page={paging.page}
+                  totalPages={paging.totalPages}
+                  totalCount={visibleStaff.length}
+                  onPage={paging.setPage}
+                  label="직원 목록 페이지"
+                />
+              ) : null}
+            </div>
           )}
         </section>
       </main>

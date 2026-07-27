@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { elapsedText, type ParkedCar } from "./parking-sim";
-import { EXTERNAL_GROUP } from "./ParkingMap";
+import { EXTERNAL_GROUP, elapsedText, type ParkedCar } from "./parking-sim";
 
 interface ParkingListProps {
   bySpot: ReadonlyMap<string, ParkedCar>;

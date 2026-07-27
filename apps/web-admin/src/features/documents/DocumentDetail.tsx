@@ -242,18 +242,16 @@ export function DocumentDetail() {
   return (
     <>
       <header className="admin-page__header doc-detail__head">
-        <div>
-          <Link href="/documents" className="doc-back">
-            ← 문서 목록
-          </Link>
-          <h1 id="main" className="admin-page__title">
-            {detail.title}
-          </h1>
-          <p className="doc-detail__submeta">
-            {categoryLabels.get(detail.categoryCodeId) ?? "미분류"} · v{detail.version} · 수정{" "}
-            {shortDate(detail.updatedAt)}
-          </p>
-        </div>
+        <Link href="/documents" className="doc-back">
+          ← 문서 목록
+        </Link>
+        <h1 id="main" className="admin-page__title">
+          {detail.title}
+        </h1>
+        <p className="doc-detail__submeta">
+          {categoryLabels.get(detail.categoryCodeId) ?? "미분류"} · v{detail.version} · 수정{" "}
+          {shortDate(detail.updatedAt)}
+        </p>
         <span className={`doc-idx doc-idx--${detail.indexStatus}`}>
           <span aria-hidden="true" className={ix.spin ? "doc-idx__spin" : undefined}>
             {ix.icon}

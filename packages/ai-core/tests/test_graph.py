@@ -360,10 +360,25 @@ async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(
     }
 
 
+async def test_facility_code_round_trips_to_graph_node(graph: GraphClient) -> None:
+    """시설 코드번호(H14-2)가 노드 프로퍼티로 저장되고 화면 조회에 실린다."""
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        props={"name": "지하펌프", "code": "WT-1-01", "status": "normal"},
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    assert [n.code for n in result.nodes if n.label == "facility"] == ["WT-1-01"]
+
+
 async def test_fetch_facility_graph_includes_location_node_and_link(
     graph: GraphClient,
 ) -> None:
-    """Location·LOCATED_IN은 include_plan과 무관하게 기본 그래프에 항상 실린다(H13-7)."""
+    """Location·LOCATED_IN은 기본 그래프의 뼈대 — 항상 실린다(H13-7)."""
     tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
     await graph.merge_facility(
         tenant_id=tenant,
@@ -385,7 +400,7 @@ async def test_fetch_facility_graph_includes_location_node_and_link(
 async def test_fetch_facility_graph_includes_complex_node_and_link(
     graph: GraphClient,
 ) -> None:
-    """Complex(단지 루트)·PART_OF는 include_plan과 무관하게 기본 그래프에 항상 실린다(H13-7)."""
+    """Complex(단지 루트)·PART_OF는 기본 그래프에 항상 실린다(H13-7)."""
     tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
     await graph.merge_facility(
         tenant_id=tenant,
@@ -445,65 +460,138 @@ def _plan_props(
     }
 
 
-async def test_replace_floor_plan_creates_plan_and_devices(graph: GraphClient) -> None:
+async def test_replace_floor_plan_creates_room_and_kind_hubs(graph: GraphClient) -> None:
+    """도면 → 방·종류 허브 → 마커 계층(H14-1 재구조화). room 타입 행은 PlanRoom으로 승격된다."""
     tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
-    device_a, device_b = str(uuid.uuid4()), str(uuid.uuid4())
+    room_row, marker_a, marker_b = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
     props = _plan_props(
         devices=[
-            {"pg_id": device_a, "device_type": "room", "x": 10, "y": 20, "room": "거실"},
-            {"pg_id": device_b, "device_type": "콘센트", "x": 30, "y": 40, "dir": "left"},
+            {"pg_id": room_row, "device_type": "room", "x": 10, "y": 20, "room": "거실"},
+            {"pg_id": marker_a, "device_type": "콘센트", "x": 30, "y": 40, "room": "거실"},
+            {"pg_id": marker_b, "device_type": "스위치", "x": 50, "y": 60, "room": "거실"},
         ]
     )
 
     await graph.replace_floor_plan(tenant_id=tenant, pg_id=pg_id, props=props, version=1)
 
-    rows = await _read(
+    rooms = await _read(
         graph,
-        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_DEVICE]->(d:PlanDevice) "
-        "RETURN fp.unit_type_name AS name, d.pg_id AS device_id, d.device_type AS device_type "
-        "ORDER BY device_id",
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_ROOM]->(r:PlanRoom) "
+        "RETURN r.name AS name, r.plan_pg_id AS plan_pg_id",
         p=pg_id,
         t=tenant,
     )
-    assert len(rows) == 2
-    assert rows[0]["name"] == "84M"
-    assert {r["device_id"] for r in rows} == {device_a, device_b}
+    assert rooms == [{"name": "거실", "plan_pg_id": pg_id}]
+
+    kinds = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_KIND]->(k:PlanKind) "
+        "RETURN k.name AS name ORDER BY name",
+        p=pg_id,
+        t=tenant,
+    )
+    assert [r["name"] for r in kinds] == ["스위치", "콘센트"]
+
+    # room 타입 행은 마커로 남지 않는다(허브로 승격)
+    markers = await _read(
+        graph, "MATCH (d:PlanDevice {tenant_id:$t}) RETURN d.pg_id AS id ORDER BY id", t=tenant
+    )
+    assert {r["id"] for r in markers} == {marker_a, marker_b}
+
+    # 체인: 도면 → 방 → 마커, 도면 → 종류 → 마커
+    chain = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_ROOM]->(:PlanRoom)"
+        "-[:HAS_DEVICE]->(d:PlanDevice) "
+        "RETURN d.pg_id AS id ORDER BY id",
+        p=pg_id,
+        t=tenant,
+    )
+    assert {r["id"] for r in chain} == {marker_a, marker_b}
+    by_kind = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_KIND]->(k:PlanKind)"
+        "-[:HAS_DEVICE]->(d:PlanDevice) "
+        "RETURN k.name AS kind, d.pg_id AS id ORDER BY kind",
+        p=pg_id,
+        t=tenant,
+    )
+    assert by_kind == [
+        {"kind": "스위치", "id": marker_b},
+        {"kind": "콘센트", "id": marker_a},
+    ]
 
 
-async def test_replace_floor_plan_full_replace_idempotent(graph: GraphClient) -> None:
-    """재적용해도 device 수가 늘지 않고, 이전 버전 device는 완전히 소멸한다(CRITICAL)."""
-    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
-    old_device = str(uuid.uuid4())
+async def test_replace_floor_plan_marker_without_room_links_kind_only(graph: GraphClient) -> None:
+    tenant, pg_id, marker = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
     await graph.replace_floor_plan(
         tenant_id=tenant,
         pg_id=pg_id,
-        props=_plan_props(
-            devices=[{"pg_id": old_device, "device_type": "room", "x": 1, "y": 1, "room": "방1"}]
-        ),
+        props=_plan_props(devices=[{"pg_id": marker, "device_type": "감지기", "x": 1, "y": 1}]),
         version=1,
     )
+
+    rows = await _read(
+        graph,
+        "MATCH (d:PlanDevice {pg_id:$d})<-[:HAS_DEVICE]-(hub) "
+        "RETURN labels(hub) AS labels, hub.name AS name",
+        d=marker,
+    )
+    assert rows == [{"labels": ["PlanKind"], "name": "감지기"}]
+    rooms = await _read(graph, "MATCH (r:PlanRoom {tenant_id:$t}) RETURN r.name AS n", t=tenant)
+    assert rooms == []  # 방 정보가 없으면 방 허브를 발명하지 않는다
+
+
+async def test_replace_floor_plan_full_replace_idempotent(graph: GraphClient) -> None:
+    """재적용해도 허브·마커가 늘지 않고, 이전 버전 노드는 완전히 소멸한다(CRITICAL)."""
+    tenant, pg_id = str(uuid.uuid4()), str(uuid.uuid4())
+    old_device = str(uuid.uuid4())
+    old_snapshot = _plan_props(
+        devices=[
+            {"pg_id": str(uuid.uuid4()), "device_type": "room", "x": 1, "y": 1, "room": "방1"},
+            {"pg_id": old_device, "device_type": "콘센트", "x": 1, "y": 1, "room": "방1"},
+        ]
+    )
+    await graph.replace_floor_plan(tenant_id=tenant, pg_id=pg_id, props=old_snapshot, version=1)
+    await graph.replace_floor_plan(
+        tenant_id=tenant, pg_id=pg_id, props=old_snapshot, version=1
+    )  # 같은 version 재실행 = no-op
+
+    hubs = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p})-[:HAS_ROOM|HAS_KIND]->(hub) RETURN count(*) AS c",
+        p=pg_id,
+    )
+    assert hubs[0]["c"] == 2  # 방1 + 콘센트, 중복 없음
 
     new_device = str(uuid.uuid4())
     await graph.replace_floor_plan(
         tenant_id=tenant,
         pg_id=pg_id,
         props=_plan_props(
-            devices=[{"pg_id": new_device, "device_type": "room", "x": 2, "y": 2, "room": "방2"}]
+            devices=[
+                {"pg_id": str(uuid.uuid4()), "device_type": "room", "x": 2, "y": 2, "room": "방2"},
+                {"pg_id": new_device, "device_type": "스위치", "x": 2, "y": 2, "room": "방2"},
+            ]
         ),
         version=2,
     )
 
     rows = await _read(
         graph,
-        "MATCH (fp:FloorPlan {pg_id:$p})-[:HAS_DEVICE]->(d:PlanDevice) RETURN d.pg_id AS id",
+        "MATCH (fp:FloorPlan {pg_id:$p})-[:HAS_ROOM|HAS_KIND]->(hub)-[:HAS_DEVICE]->(d:PlanDevice) "
+        "RETURN DISTINCT d.pg_id AS id",
         p=pg_id,
     )
-    assert {r["id"] for r in rows} == {new_device}  # 옛 device 소멸, 새 device만 존재
+    assert {r["id"] for r in rows} == {new_device}  # 옛 마커 소멸, 새 마커만 존재
 
     orphan = await _read(
-        graph, "MATCH (d:PlanDevice {pg_id:$id}) RETURN count(*) AS c", id=old_device
+        graph,
+        "MATCH (n) WHERE (n:PlanDevice AND n.pg_id = $id) OR (n:PlanRoom AND n.name = '방1') "
+        "OR (n:PlanKind AND n.name = '콘센트') RETURN count(*) AS c",
+        id=old_device,
     )
-    assert orphan[0]["c"] == 0  # detach delete로 옛 노드 자체가 사라짐
+    assert orphan[0]["c"] == 0  # detach delete로 옛 마커·허브가 함께 사라짐
 
 
 async def test_replace_floor_plan_links_device_to_facility(graph: GraphClient) -> None:
@@ -561,7 +649,7 @@ async def test_replace_floor_plan_cross_tenant_isolation(graph: GraphClient) -> 
         pg_id=pg_id,
         props=_plan_props(
             unit_type_name="84M",
-            devices=[{"pg_id": device_a, "device_type": "room", "x": 1, "y": 1}],
+            devices=[{"pg_id": device_a, "device_type": "콘센트", "x": 1, "y": 1, "room": "거실"}],
         ),
         version=1,
     )
@@ -578,10 +666,21 @@ async def test_replace_floor_plan_cross_tenant_isolation(graph: GraphClient) -> 
     assert rows[0]["name"] == "84M"  # tenant_b 갱신이 tenant_a 노드를 덮지 않음
 
     leak = await _read(
-        graph, "MATCH (d:PlanDevice {pg_id:$d, tenant_id:$t}) RETURN count(*) AS c",
-        d=device_a, t=tenant_b,
+        graph,
+        "MATCH (d:PlanDevice {pg_id:$d, tenant_id:$t}) RETURN count(*) AS c",
+        d=device_a,
+        t=tenant_b,
     )
     assert leak[0]["c"] == 0  # tenant_a의 device가 tenant_b에 노출되지 않음
+
+    hub_leak = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {pg_id:$p, tenant_id:$t})-[:HAS_ROOM|HAS_KIND]->(hub) "
+        "RETURN count(*) AS c",
+        p=pg_id,
+        t=tenant_b,
+    )
+    assert hub_leak[0]["c"] == 0  # 방·종류 허브도 tenant_b 도면에 붙지 않음(CRITICAL)
 
 
 async def test_merge_facility_tombstone_deletes_node_and_relations(graph: GraphClient) -> None:
@@ -620,7 +719,8 @@ async def test_merge_facility_tombstone_deletes_node_and_relations(graph: GraphC
     assert location_rel[0]["c"] == 0  # LOCATED_IN도 detach delete로 함께 소멸
 
 
-async def test_fetch_facility_graph_include_plan_adds_plan_nodes(graph: GraphClient) -> None:
+async def test_fetch_facility_graph_includes_plan_hierarchy(graph: GraphClient) -> None:
+    """도면 → 방·종류 허브 → 마커가 모두 기본 표시된다(H14-1 재구조화 — 사용자 요청)."""
     tenant, facility_id = str(uuid.uuid4()), str(uuid.uuid4())
     plan_id, device_id = str(uuid.uuid4()), str(uuid.uuid4())
     await graph.merge_facility(
@@ -629,47 +729,135 @@ async def test_fetch_facility_graph_include_plan_adds_plan_nodes(graph: GraphCli
     await graph.replace_floor_plan(
         tenant_id=tenant,
         pg_id=plan_id,
+        props={
+            **_plan_props(
+                devices=[
+                    {
+                        "pg_id": str(uuid.uuid4()),
+                        "device_type": "room",
+                        "x": 0,
+                        "y": 0,
+                        "room": "거실",
+                    },
+                    {
+                        "pg_id": device_id,
+                        "device_type": "센서",
+                        "x": 1,
+                        "y": 1,
+                        "room": "거실",
+                        "facility_id": facility_id,
+                    },
+                ]
+            ),
+            "complex_name": "첫마을 4단지 푸르지오",
+        },
+        version=1,
+    )
+
+    result = await graph.fetch_facility_graph(tenant_id=tenant)
+
+    by_id = {n.pg_id: n for n in result.nodes}
+    assert by_id[plan_id].label == "floor_plan"
+    assert by_id[plan_id].name == "84M"
+    room_id, kind_id = f"{plan_id}:room:거실", f"{plan_id}:kind:센서"
+    assert (by_id[room_id].label, by_id[room_id].name) == ("plan_room", "거실")
+    assert (by_id[kind_id].label, by_id[kind_id].name) == ("plan_kind", "센서")
+    assert by_id[device_id].label == "plan_device"
+    assert by_id[device_id].name == "센서(거실)"
+
+    edges = {(link.source, link.target, link.kind) for link in result.links}
+    assert (plan_id, room_id, "HAS_ROOM") in edges
+    assert (plan_id, kind_id, "HAS_KIND") in edges
+    assert (room_id, device_id, "HAS_DEVICE") in edges
+    assert (kind_id, device_id, "HAS_DEVICE") in edges
+    assert (device_id, facility_id, "LINKED_TO") in edges
+    # 도면發 PART_OF는 도면이 기본 표시라 항상 포함(dangling 아님)
+    assert (plan_id, "첫마을 4단지 푸르지오", "PART_OF") in edges
+
+
+async def test_prune_floor_plans_deletes_stale_plans_with_hubs_and_devices(
+    graph: GraphClient,
+) -> None:
+    """keep 목록 밖 도면은 하위 허브·마커까지 삭제, keep 도면은 보존(H14-1 잔존 노드 정리)."""
+    tenant = str(uuid.uuid4())
+    keep_id, stale_id = str(uuid.uuid4()), str(uuid.uuid4())
+    keep_device, stale_device = str(uuid.uuid4()), str(uuid.uuid4())
+    for plan_id, device_id in ((keep_id, keep_device), (stale_id, stale_device)):
+        await graph.replace_floor_plan(
+            tenant_id=tenant,
+            pg_id=plan_id,
+            props=_plan_props(
+                devices=[
+                    {
+                        "pg_id": str(uuid.uuid4()),
+                        "device_type": "room",
+                        "x": 1,
+                        "y": 1,
+                        "room": "안방",
+                    },
+                    {"pg_id": device_id, "device_type": "콘센트", "x": 1, "y": 1, "room": "안방"},
+                ]
+            ),
+            version=1,
+        )
+
+    deleted = await graph.prune_floor_plans(tenant_id=tenant, keep_pg_ids=[keep_id])
+
+    assert deleted == 1
+    plans = await _read(
+        graph, "MATCH (fp:FloorPlan {tenant_id:$t}) RETURN fp.pg_id AS id", t=tenant
+    )
+    assert [r["id"] for r in plans] == [keep_id]
+    devices = await _read(
+        graph, "MATCH (d:PlanDevice {tenant_id:$t}) RETURN d.pg_id AS id", t=tenant
+    )
+    assert [r["id"] for r in devices] == [keep_device]
+    hubs = await _read(
+        graph,
+        "MATCH (hub) WHERE (hub:PlanRoom OR hub:PlanKind) AND hub.tenant_id = $t "
+        "RETURN DISTINCT hub.plan_pg_id AS plan_id",
+        t=tenant,
+    )
+    assert [r["plan_id"] for r in hubs] == [keep_id]  # 허브도 도면과 함께 사라짐
+
+
+async def test_prune_floor_plans_isolates_other_tenant(graph: GraphClient) -> None:
+    """타 tenant 도면은 keep 목록에 없어도 불가침(CRITICAL — 격리)."""
+    tenant_a, tenant_b = str(uuid.uuid4()), str(uuid.uuid4())
+    plan_b, device_b = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.replace_floor_plan(
+        tenant_id=tenant_b,
+        pg_id=plan_b,
         props=_plan_props(
-            devices=[
-                {
-                    "pg_id": device_id,
-                    "device_type": "센서",
-                    "x": 1,
-                    "y": 1,
-                    "room": "거실",
-                    "facility_id": facility_id,
-                }
-            ]
+            devices=[{"pg_id": device_b, "device_type": "콘센트", "x": 1, "y": 1, "room": "안방"}]
         ),
         version=1,
     )
 
-    default_result = await graph.fetch_facility_graph(tenant_id=tenant)
-    assert plan_id not in {n.pg_id for n in default_result.nodes}  # 기본은 제외(과밀 방지)
+    # keep 빈 목록 = tenant_a의 도면 전부 삭제 의도 — 남의 tenant까지 번지면 안 된다
+    deleted = await graph.prune_floor_plans(tenant_id=tenant_a, keep_pg_ids=[])
 
-    result = await graph.fetch_facility_graph(tenant_id=tenant, include_plan=True)
-    by_id = {n.pg_id: n for n in result.nodes}
-    assert by_id[plan_id].label == "floor_plan"
-    assert by_id[device_id].label == "plan_device"
-    assert {(link.source, link.target, link.kind) for link in result.links} >= {
-        (plan_id, device_id, "HAS_DEVICE"),
-        (device_id, facility_id, "LINKED_TO"),
-    }
-
-
-async def test_fetch_facility_graph_include_plan_handles_device_less_plan(
-    graph: GraphClient,
-) -> None:
-    """마커 0개인 도면도 노드로는 나오되 HAS_DEVICE 관계는 없다."""
-    tenant, plan_id = str(uuid.uuid4()), str(uuid.uuid4())
-    await graph.replace_floor_plan(
-        tenant_id=tenant, pg_id=plan_id, props=_plan_props(unit_type_name="59C"), version=1
+    assert deleted == 0
+    rows = await _read(
+        graph,
+        "MATCH (fp:FloorPlan {tenant_id:$t})-[:HAS_ROOM|HAS_KIND]->(hub)"
+        "-[:HAS_DEVICE]->(d:PlanDevice) "
+        "RETURN DISTINCT fp.pg_id AS plan_id, d.pg_id AS device_id",
+        t=tenant_b,
     )
+    assert rows == [{"plan_id": plan_b, "device_id": device_b}]
 
-    result = await graph.fetch_facility_graph(tenant_id=tenant, include_plan=True)
 
-    assert {n.pg_id for n in result.nodes} == {plan_id}
-    assert result.links == ()
+async def test_prune_floor_plans_empty_keep_clears_tenant(graph: GraphClient) -> None:
+    """keep이 비면 해당 tenant 도면을 전부 지운다(PG에 도면 0건인 경우의 정리)."""
+    tenant, plan_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.replace_floor_plan(tenant_id=tenant, pg_id=plan_id, props=_plan_props(), version=1)
+
+    deleted = await graph.prune_floor_plans(tenant_id=tenant, keep_pg_ids=[])
+
+    assert deleted == 1
+    rows = await _read(graph, "MATCH (fp:FloorPlan {tenant_id:$t}) RETURN fp", t=tenant)
+    assert rows == []
 
 
 async def test_maintenance_parts_create_replaced(graph: GraphClient) -> None:
