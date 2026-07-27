@@ -199,8 +199,9 @@
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
+/* h1은 본문·수치보다 커야 한다(docs/05 §5A 타이포 위계 — 헤더 패딩은 컴팩트 유지). */
 .admin-page__title {
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.4;

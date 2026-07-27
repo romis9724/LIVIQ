@@ -35,6 +35,18 @@ export type { ToastProps, ToastTone } from "./components/toast/Toast";
 export { Dialog } from "./components/dialog/Dialog";
 export type { DialogProps } from "./components/dialog/Dialog";
 
+export { StatCard, StatGrid } from "./components/stat-card/StatCard";
+export type { StatCardProps, StatGridProps, StatTone } from "./components/stat-card/StatCard";
+
+export { PageToolbar } from "./components/page-toolbar/PageToolbar";
+export type { PageToolbarProps } from "./components/page-toolbar/PageToolbar";
+
+export { FilterChips } from "./components/filter-chips/FilterChips";
+export type { FilterChipsProps, FilterChipItem } from "./components/filter-chips/FilterChips";
+
+export { SearchField } from "./components/search-field/SearchField";
+export type { SearchFieldProps } from "./components/search-field/SearchField";
+
 export { Skeleton } from "./components/skeleton/Skeleton";
 export type { SkeletonProps } from "./components/skeleton/Skeleton";
 

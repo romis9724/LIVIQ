@@ -7,6 +7,7 @@ export default defineConfig({
     // 기본 node. 컴포넌트 테스트는 파일 상단 `// @vitest-environment jsdom`로 개별 전환.
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}"],
+    setupFiles: ["./src/test-setup.ts"],
     coverage: {
       provider: "v8",
       include: ["src/lib/**", "src/components/**"],
