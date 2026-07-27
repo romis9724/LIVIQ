@@ -140,9 +140,9 @@ export function TwinView() {
         <h1 id="main" className="admin-page__title">
           트윈 대시보드
         </h1>
-        <p className="admin-page__lede">
-          세대 3D 모형에 상태를 색으로 겹쳐 봅니다. 확정 데이터만 표시하며 AI는 개입하지 않습니다.
-        </p>
+      </header>
+
+      <main className="admin-page__main">
         {showControls ? (
           <div className="twin-controls">
             <TabGroup
@@ -189,9 +189,6 @@ export function TwinView() {
             ) : null}
           </div>
         ) : null}
-      </header>
-
-      <main className="admin-page__main">
         <TwinBody
           geo={geo}
           occupancy={overlays.occupancy ?? {}}

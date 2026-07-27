@@ -96,17 +96,14 @@ export function ParkingView() {
         <h1 id="main" className="admin-page__title">
           주차장 대시보드
         </h1>
-        <p className="admin-page__lede">
-          지하 1층 배치도에서 입주민·외부 차량을 확인합니다. 면을 누르면 어느 동 몇 호 차량인지
-          표시됩니다.
-        </p>
+      </header>
+
+      <main className="admin-page__main">
+        {/* 데이터 정직성 안내는 콘텐츠 최상단 유지 — 점유가 실측처럼 보이면 안 된다. */}
         <p className="pk-sim-badge">
           <span aria-hidden="true">🧪</span> 점유 현황은 시뮬레이션입니다(번호판 인식 연동 전).
           배치도·차량 목록은 등록 데이터입니다.
         </p>
-      </header>
-
-      <main className="admin-page__main">
         {state.kind === "loading" ? (
           <LoadingSkeleton />
         ) : state.kind === "error" ? (
