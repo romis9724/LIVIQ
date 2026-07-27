@@ -293,71 +293,100 @@ docker compose --env-file /etc/liviq/env.prod \
 
 ---
 
-## 8. 레지스트리 게시 — 현재 서버 설정으로는 실패한다 (미해결)
+## 8. 레지스트리 게시 — Nexus (2026-07-27 전환)
 
-`publish` 잡은 배선이 끝나 있고 `allow_failure: true` 다. **지금 이 GitLab 에서는 push 가 안 된다.**
-이유는 레포가 아니라 **GitLab 서버 설정**이다(2026-07-26 실측).
-
-### 증상
+게시 대상은 **사내 Nexus 의 docker hosted 저장소**다. GitLab 컨테이너 레지스트리는 쓰지 않는다.
 
 ```
-Get "http://192.168.10.153:5050/v2/":
-  Get "http://192.168.10.153/jwt/auth?...": dial tcp 192.168.10.153:80: connect: no route to host
+좌표: 192.168.10.153:8082/liviq/<앱>:<sha>   (+ latest — 편의 포인터, 배포에 쓰지 않음)
+저장소: docker-hub (format=docker, type=hosted) · 커넥터 :8082 · 데이터 /home 파티션
 ```
 
-레지스트리는 `:5050` 으로 서비스되는데, 인증 토큰 realm 은 포트 없는 주소를 알려준다:
+### 8.1 왜 GitLab 레지스트리를 못 쓰는가 (실측)
+
+그 GitLab 은 **docker 컨테이너**로 돌고 공개 포트가 `22→2222` · `80→5050` · `443→8443` 뿐이다.
+**레지스트리 포트(5000)가 공개되지 않았다.** 그래서 `:5050` 으로 push 하면 웹 vhost 로 가고
+`/v2/` 가 **dependency proxy** 로 응답한다:
 
 ```
-Www-Authenticate: Bearer realm="http://192.168.10.153/jwt/auth"
+Www-Authenticate: Bearer realm="http://192.168.10.153/jwt/auth", service="dependency_proxy"
+                                                        ↑ 포트 없음 → 그 80 은 닿지 않는다
 ```
 
-그 호스트의 80·443 은 닿지 않는다(실측: `:80`·`:443` 무응답, `:5050` 만 302). §5 ③ 과 **같은 뿌리**다 —
-`external_url` 에 포트가 빠져 있어 GitLab 이 자기 주소를 포트 없이 알려준다.
+처음엔 "`external_url` 에 포트가 빠졌다"로 진단했는데(증상은 맞다), 포트를 고쳐도 게시는 안 된다 —
+**레지스트리 자체가 노출돼 있지 않기 때문**이다. 컨테이너 안에서 `registry` 프로세스는 돌고 있으니
+포트만 공개하면 되지만, 그러려면 컨테이너 재생성(포트 매핑 변경)이 필요하고 이미지가 `/` 파티션에
+쌓인다 — **그 호스트의 `/` 는 이미 100% 였다**(§8.4). 사내에 Nexus 가 이미 있어 그쪽을 쓴다.
 
-### 고치는 곳 (GitLab 호스트, 이 레포 아님)
+### 8.2 준비 (완료된 항목)
 
-```ruby
-# /etc/gitlab/gitlab.rb
-external_url          'http://192.168.10.153:5050'
-registry_external_url 'http://192.168.10.153:5050'
-```
+| 항목 | 값 | 비고 |
+|---|---|---|
+| CI 변수 `REGISTRY_IMAGE` | `192.168.10.153:8082/liviq` | 비밀 아님 |
+| CI 변수 `REGISTRY_USER`·`REGISTRY_PASSWORD` | Nexus 계정 | **protected + masked**. 보호 브랜치(main)에서만 주입된다 |
+| Nexus `Docker Bearer Token Realm` | 활성 | Security → Realms |
+| 배포 호스트 `daemon.json` | `insecure-registries: [..., "192.168.10.153:8082"]` | 평문 HTTP |
+
+**함정(실측)**: 자격증명이 protected 라 **비보호 브랜치 파이프라인에는 주입되지 않는다.** 그때
+스크립트가 `CI_REGISTRY_*`(GitLab 잡 토큰)로 폴백하면 **GitLab 토큰으로 Nexus 로그인**을 시도해
+401 이 나고, 계정 오류처럼 보여 원인을 가린다. `deploy-wsl.sh` 는 대상이 `CI_REGISTRY_IMAGE` 와
+같을 때만 잡 토큰을 쓰고, 그 외에는 `REGISTRY_*` 를 요구하며 이 함정을 지목하고 죽는다.
+
+### 8.3 보존 정책 (태그 정리)
+
+Nexus 는 **unused blob 정리 태스크만** 돌고 있다(30분 주기) — 그건 태그가 지워진 뒤 참조 없는
+blob 을 회수하는 것이고, **태그 자체는 아무도 지우지 않는다.** 방치하면 릴리스마다 누적된다.
+
+- 릴리스 1회 = 이미지 4종. 레이어 공유로 증분은 대략 수백 MB 수준이다.
+- `docker-hosted` blob store 는 이미 **87GB**(타 프로젝트 포함), `/home` 여유 279GB.
+
+**정책: 30일 보존.** 근거 — 배포는 **호스트 로컬 이미지**로 하므로 게시본은 pull 되지 않는다
+(이력·백업·타 호스트 경로용). 즉 "마지막 다운로드 이후 30일"이 곧 "30일 지난 백업"이다.
+로컬 호스트 쪽은 별개로 `prune` 잡이 최근 `KEEP_TAGS`(기본 5)개를 보존한다.
+
+Nexus OSS 에는 "최근 N개 보존" 기준이 없다(Pro 기능) → 기간 기준으로 만든다. **관리자 1회 작업**:
 
 ```bash
-sudo gitlab-ctl reconfigure
+# ① 정책 생성
+curl -u <admin> -X POST 'http://192.168.10.153:8081/service/rest/v1/cleanup-policies' \
+  -H 'Content-Type: application/json' -d '{
+    "name": "docker-30d",
+    "format": "docker",
+    "criteriaLastDownloaded": 2592000,
+    "criteriaLastBlobUpdated": 2592000
+  }'
+# ② 저장소에 부착 — UI: Repositories > docker-hub > Cleanup policies 에서 docker-30d 선택 후 Save
+# ③ 실행 태스크 확인 — Tasks 에 "Admin - Cleanup repositories using their associated policies" 가
+#    스케줄로 있어야 실제로 지워진다(없으면 생성).
 ```
 
-이 한 번의 수정이 **세 가지를 같이 해결한다**: ① 레지스트리 push ② CI 클론 URL(§5 ③ — 러너의
-`clone_url` 오버라이드가 불필요해진다) ③ API 가 돌려주는 `web_url`·`http_url_to_repo` 정합.
+부착 전에 **드라이런**으로 영향 범위를 보는 것이 안전하다(UI 의 Preview). 30일이 짧다고 판단되면
+`criteriaLastDownloaded` 만 늘린다 — `criteriaLastBlobUpdated` 를 늘리면 오래된 태그가 영구히 남는다.
 
-서버를 못 고친다면 대안은 GitLab 호스트에서 80 → 5050 을 포워딩하는 것이다.
+### 8.4 곁들여 — 디스크 사고와 로그 회전 (2026-07-27)
 
-### 클라이언트 쪽 준비 (이미 완료)
+이 작업 중에 GitLab 호스트의 `/` 가 **100%**(여유 20KB)인 것을 발견했다. `docker exec` 조차
+`no space left on device` 로 실패했다.
 
-레지스트리가 평문 HTTP 라 daemon 이 거부한다. 이 호스트에는 이미 넣었다:
-
-```json
-// /etc/docker/daemon.json
-{ "insecure-registries": ["192.168.10.153:5050"] }
-```
-
-```bash
-sudo systemctl restart docker   # 컨테이너는 restart: unless-stopped 로 자동 복구된다
-```
-
-### 서버가 고쳐진 뒤 할 일
-
-1. `.gitlab-ci.yml` 의 `publish` 잡에서 **`allow_failure: true` 를 지운다** — 게시 실패는 "롤백 대상
-   백업이 없다"는 뜻이므로 그때는 파이프라인이 빨개져서 눈에 보여야 한다.
-2. 러너 `clone_url` 오버라이드는 남겨도 무해하지만, 정합을 위해 지워도 된다.
-
-게시되는 이름은 GHCR 과 규약이 다르다(GitLab 은 프로젝트 경로 하위에 담는다):
-
-| | 형태 |
+| 원인 | 크기 |
 |---|---|
-| GHCR(`release.yml`) | `ghcr.io/<owner>/liviq-api:<sha>` — 하이픈 |
-| GitLab 프로젝트 | `192.168.10.153:5050/dhkim/liviq/api:<sha>` — 서브경로 |
+| `abworks-gitlab` 컨테이너 stdout 로그 1개 | **25.1GB** |
+| `yona-notification` (DB 연결 실패 무한 반복) | 1.4GB |
 
----
+`daemon.json` 에 `log-opts`(max-size 100m)가 **있는데도** 안 걸렸다 — 그 설정은 **컨테이너 생성
+시점에 고정**되므로 설정보다 먼저 만들어진 컨테이너에는 적용되지 않는다. `docker image prune -a` 는
+**0B** 를 회수했다(실행 중 컨테이너가 이미지를 붙잡고 있다) — 이미지 정리는 답이 아니었다.
+
+조치: 로그 파일을 `: > file` 로 잘라 **27GB 회수**(fd 유지 방식이라 컨테이너 무중단), 그리고 두
+호스트에 무중단 회전 규칙을 넣었다.
+
+```
+/etc/logrotate.d/docker-container   →  size 100M · rotate 3 · compress · copytruncate
+```
+
+`copytruncate` 가 핵심이다 — containerd 가 로그 fd 를 들고 있어 기본 rename 방식은 회전 후 새
+파일에 아무것도 쌓이지 않는다. 대가는 복사·truncate 사이 몇 줄 손실이고, 컨테이너 stdout 은
+애플리케이션 정본 로그가 아니므로(GitLab 은 `/var/log/gitlab`) 수용한다.
 
 ## 9. 외부에서 브라우저로 접속 (도메인 없는 파일럿)
 
