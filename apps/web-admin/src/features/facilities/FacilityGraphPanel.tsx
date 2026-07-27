@@ -98,6 +98,7 @@ export function FacilityGraphPanel({ facilityId }: FacilityGraphPanelProps) {
   }
 
   const meta = STATUS_META[detail.status];
+  const linked = inquiries.filter((i) => i.facilityId === detail.id);
   const estimated = estimatedInquiries(inquiries, detail.location);
 
   return (
@@ -142,43 +143,67 @@ export function FacilityGraphPanel({ facilityId }: FacilityGraphPanelProps) {
         }))}
       />
 
-      <RelatedInquiries estimated={estimated} />
+      <RelatedInquiries linked={linked} estimated={estimated} />
     </aside>
   );
 }
 
-/** 관련 민원 — 아직 정식 연결이 없어(H13-2) 위치 문자열 매칭 '추정'만 보여준다. */
-function RelatedInquiries({ estimated }: { estimated: EstimatedInquiries }) {
+/**
+ * 관련 민원 — 담당자 정식 연결(facility_id)은 '연결' 배지, 그 외 위치 문자열 매칭은 '추정'
+ * 배지(H13-2, ADR-0022 결정 3). 정식 연결과 위치 추정이 겹치면 '연결'만 표시한다.
+ */
+function RelatedInquiries({
+  linked,
+  estimated,
+}: {
+  linked: readonly Inquiry[];
+  estimated: EstimatedInquiries;
+}) {
   const { token, items } = estimated;
+  const linkedIds = new Set(linked.map((i) => i.id));
+  const estimatedOnly = items.filter((i) => !linkedIds.has(i.id));
+  const hasAny = linked.length > 0 || estimatedOnly.length > 0;
 
   return (
     <section className="fac-history">
-      <div className="fac-history__title">
-        관련 민원 <span className="fac-estimate">추정</span>
-      </div>
-      {token === null ? (
+      <div className="fac-history__title">관련 민원</div>
+      {!hasAny ? (
         <p className="fac-history__empty">
-          설비 위치에 동 표기가 없어 관련 민원을 추정하지 않습니다.
+          {token === null
+            ? "연결된 민원이 없고, 설비 위치에 동 표기가 없어 추정도 할 수 없습니다."
+            : `연결된 민원이 없고, ‘${token}’에 해당하는 미종결 민원도 없습니다.`}
         </p>
-      ) : items.length === 0 ? (
-        <p className="fac-history__empty">‘{token}’에 해당하는 미종결 민원이 없습니다.</p>
       ) : (
         <ol className="fac-history__list">
-          {items.map((inquiry) => (
+          {linked.map((inquiry) => (
             <li key={inquiry.id} className="fac-history__item">
               <span className="fac-history__date">
                 {INQUIRY_STATUS_META[inquiry.status].label}
               </span>
               <div className="fac-history__body">
-                <div className="fac-history__primary">{inquiry.title}</div>
+                <div className="fac-history__primary">
+                  {inquiry.title} <span className="fac-linked">연결</span>
+                </div>
+              </div>
+            </li>
+          ))}
+          {estimatedOnly.map((inquiry) => (
+            <li key={inquiry.id} className="fac-history__item">
+              <span className="fac-history__date">
+                {INQUIRY_STATUS_META[inquiry.status].label}
+              </span>
+              <div className="fac-history__body">
+                <div className="fac-history__primary">
+                  {inquiry.title} <span className="fac-estimate">추정</span>
+                </div>
               </div>
             </li>
           ))}
         </ol>
       )}
       <p className="fac-estimate__note">
-        근거: 위치 문자열 매칭{token ? ` (‘${token}’)` : ""}. 담당자가 확인하기 전까지 확정된
-        연결이 아닙니다.
+        연결은 담당자가 지정한 정식 데이터입니다. 추정은 위치 문자열 매칭
+        {token ? ` (‘${token}’)` : ""}일 뿐, 담당자가 확인하기 전까지 확정된 연결이 아닙니다.
       </p>
     </section>
   );

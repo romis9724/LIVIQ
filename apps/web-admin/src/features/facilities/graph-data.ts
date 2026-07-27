@@ -85,11 +85,88 @@ export function nodeColorVar(
   systemById: ReadonlyMap<string, string>,
   groups: readonly string[],
 ): string {
+  return (
+    eventColorVar(node) ?? systemColorVar(systemById.get(node.pgId) ?? systemOf(node), groups)
+  );
+}
+
+// ── 렌즈(계통별/위치별) — H13-2, ADR-0022 결정 2 ────────────────────────────
+// 계통 렌즈는 위 systemOf/systemGroups/systemByNodeId 그대로. 위치 렌즈는 buildingToken
+// 기반 동 단위 그룹핑으로 같은 규칙(가나다 정렬·미상 그룹은 끝·이력 노드는 부모를 물려받음)을 따른다.
+
+export type GraphLens = "system" | "location";
+
+/** location 이 없거나 동 표기 추출 실패인 시설의 위치 그룹명. */
+export const UNLOCATED = "미지정";
+
+/** 시설 노드의 위치 그룹명(동 토큰). 동 표기가 없으면 '미지정'. */
+export function locationOf(node: GraphNode): string {
+  return buildingToken(node.location) ?? UNLOCATED;
+}
+
+/** 렌즈에 따른 노드 그룹명 — 계통(type) 또는 위치(동). */
+export function groupOf(lens: GraphLens, node: GraphNode): string {
+  return lens === "location" ? locationOf(node) : systemOf(node);
+}
+
+/** 렌즈별 그룹 목록(시설 노드 기준, 가나다 정렬, 미상 그룹은 항상 끝). 범례·색 배정의 기준. */
+export function lensGroups(lens: GraphLens, nodes: readonly GraphNode[]): string[] {
+  if (lens === "system") return systemGroups(nodes);
+  const named = new Set<string>();
+  let hasUnlocated = false;
+  for (const node of nodes) {
+    if (node.label !== "facility") continue;
+    const group = locationOf(node);
+    if (group === UNLOCATED) hasUnlocated = true;
+    else named.add(group);
+  }
+  const sorted = [...named].sort((a, b) => a.localeCompare(b, "ko"));
+  return hasUnlocated ? [...sorted, UNLOCATED] : sorted;
+}
+
+/** 렌즈별 노드 id → 그룹(장애·정비는 링크 source 시설의 그룹을 물려받는다 — 결정 2). */
+export function lensGroupByNodeId(
+  lens: GraphLens,
+  nodes: readonly GraphNode[],
+  links: readonly GraphLink[],
+): Map<string, string> {
+  if (lens === "system") return systemByNodeId(nodes, links);
+  const byId = new Map<string, string>();
+  for (const node of nodes) {
+    if (node.label === "facility") byId.set(node.pgId, locationOf(node));
+  }
+  for (const link of links) {
+    const group = byId.get(link.source);
+    if (group && !byId.has(link.target)) byId.set(link.target, group);
+  }
+  return byId;
+}
+
+/** 렌즈별 그룹 → 색 변수 — 같은 순환 팔레트 재사용, 위치 렌즈의 '미지정'은 중립색. */
+export function lensColorVar(lens: GraphLens, group: string, groups: readonly string[]): string {
+  if (lens === "location" && group === UNLOCATED) return UNCLASSIFIED_COLOR_VAR;
+  return systemColorVar(group, groups);
+}
+
+/** 장애·정비 노드의 색(계통/위치 렌즈 공통) — 시설 노드면 null. */
+function eventColorVar(node: GraphNode): string | null {
   if (node.label === "incident") {
     return node.resolved ? INCIDENT_RESOLVED_COLOR_VAR : INCIDENT_OPEN_COLOR_VAR;
   }
   if (node.label === "maintenance") return MAINTENANCE_COLOR_VAR;
-  return systemColorVar(systemById.get(node.pgId) ?? systemOf(node), groups);
+  return null;
+}
+
+/** 렌즈별 노드 색 변수 — nodeColorVar 와 같은 규칙을 계통/위치 공통으로 계산. */
+export function lensNodeColorVar(
+  lens: GraphLens,
+  node: GraphNode,
+  groupById: ReadonlyMap<string, string>,
+  groups: readonly string[],
+): string {
+  return (
+    eventColorVar(node) ?? lensColorVar(lens, groupById.get(node.pgId) ?? groupOf(lens, node), groups)
+  );
 }
 
 export interface Coords {

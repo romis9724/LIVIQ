@@ -691,6 +691,19 @@
   }
 }
 
+/* 정식 연결 민원 — 담당자 지정(facility_id) 배지. 위치 추정과 시각적으로 구분한다(결정 3①). */
+.fac-linked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+}
+
 /* 위치 추정 민원 — 확정처럼 보이지 않도록 배지 + 근거 문구를 함께 둔다(ADR-0022 결정 3③). */
 .fac-estimate {
   display: inline-flex;

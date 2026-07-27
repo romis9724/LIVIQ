@@ -497,3 +497,75 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* 연결 설비 — 담당자 정식 연결·AI 추천 승인 게이트(H13-2, ADR-0022 결정 3). */
+.ia-facility {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+.ia-facility__current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border);
+}
+.ia-facility__current-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ia-facility__empty,
+.ia-facility__suggest-error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.ia-facility__pick {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.ia-facility__pick .ia-select {
+  flex: 1;
+  min-width: 10rem;
+}
+.ia-facility__candidates {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ia-facility__candidate {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.ia-facility__candidate-name {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.ia-facility__candidate-reason {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+@media (max-width: 640px) {
+  .ia-facility__candidate {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

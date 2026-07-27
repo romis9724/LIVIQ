@@ -23,6 +23,8 @@ function inquiry(overrides: Partial<Inquiry>): Inquiry {
     assigneeUserId: overrides.assigneeUserId ?? null,
     authorUserId: overrides.authorUserId ?? "author",
     createdAt: overrides.createdAt ?? "2026-06-01T00:00:00Z",
+    facilityId: overrides.facilityId ?? null,
+    facilityName: overrides.facilityName ?? null,
   };
 }
 

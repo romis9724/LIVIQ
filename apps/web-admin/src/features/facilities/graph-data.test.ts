@@ -5,6 +5,7 @@ import {
   SYSTEM_COLOR_VARS,
   UNCLASSIFIED,
   UNCLASSIFIED_COLOR_VAR,
+  UNLOCATED,
   INCIDENT_OPEN_COLOR_VAR,
   INCIDENT_RESOLVED_COLOR_VAR,
   MAINTENANCE_COLOR_VAR,
@@ -13,6 +14,11 @@ import {
   estimatedInquiries,
   findFacilityByName,
   groupCenters,
+  lensColorVar,
+  lensGroupByNodeId,
+  lensGroups,
+  lensNodeColorVar,
+  locationOf,
   matchesBuilding,
   nodeColorVar,
   searchFacilities,
@@ -73,6 +79,8 @@ function inquiry(overrides: Partial<Inquiry> = {}): Inquiry {
     assigneeUserId: null,
     authorUserId: "u-1",
     createdAt: "2026-07-20T00:00:00Z",
+    facilityId: null,
+    facilityName: null,
     ...overrides,
   };
 }
@@ -274,6 +282,66 @@ describe("buildingToken / matchesBuilding", () => {
   it("공백을 무시하고 텍스트 포함 여부를 본다", () => {
     expect(matchesBuilding("401동", "401 동 엘리베이터가 멈췄어요")).toBe(true);
     expect(matchesBuilding("401동", "402동 엘리베이터가 멈췄어요")).toBe(false);
+  });
+});
+
+describe("locationOf", () => {
+  it("동 표기가 있으면 동 토큰", () => {
+    expect(locationOf(facilityNode("f1", { location: "401동 기계실" }))).toBe("401동");
+  });
+
+  it("동 표기가 없거나 위치가 null 이면 '미지정'", () => {
+    expect(locationOf(facilityNode("f1", { location: "지하 주차장" }))).toBe(UNLOCATED);
+    expect(locationOf(facilityNode("f1", { location: null }))).toBe(UNLOCATED);
+  });
+});
+
+describe("lensGroups", () => {
+  const nodes = [
+    facilityNode("f1", { type: "승강기", location: "101동" }),
+    facilityNode("f2", { type: "소방", location: "102동" }),
+    facilityNode("f3", { type: "승강기", location: null }),
+    incidentNode("i1", false),
+  ];
+
+  it("system 렌즈는 systemGroups 와 같다", () => {
+    expect(lensGroups("system", nodes)).toEqual(systemGroups(nodes));
+  });
+
+  it("location 렌즈는 동 토큰을 가나다 순으로 모으고 '미지정'은 마지막", () => {
+    expect(lensGroups("location", nodes)).toEqual(["101동", "102동", UNLOCATED]);
+  });
+});
+
+describe("lensGroupByNodeId", () => {
+  const nodes = [facilityNode("f1", { type: "전기", location: "401동" }), incidentNode("i1", false)];
+  const links: GraphLink[] = [{ source: "f1", target: "i1", kind: "HAS_INCIDENT" }];
+
+  it("location 렌즈 — 이력 노드는 부모 시설의 동을 물려받는다", () => {
+    const byId = lensGroupByNodeId("location", nodes, links);
+    expect(byId.get("f1")).toBe("401동");
+    expect(byId.get("i1")).toBe("401동");
+  });
+});
+
+describe("lensColorVar / lensNodeColorVar", () => {
+  it("location 렌즈의 '미지정'은 중립 변수", () => {
+    expect(lensColorVar("location", UNLOCATED, [UNLOCATED])).toBe(UNCLASSIFIED_COLOR_VAR);
+  });
+
+  it("location 렌즈의 동은 systemColorVar 와 같은 순환 팔레트를 쓴다", () => {
+    const groups = ["101동", "102동"];
+    expect(lensColorVar("location", "101동", groups)).toBe(SYSTEM_COLOR_VARS[0]);
+  });
+
+  it("장애·정비 노드는 렌즈와 무관하게 이력 색", () => {
+    const groupById = new Map<string, string>();
+    expect(lensNodeColorVar("location", incidentNode("i1", false), groupById, [])).toBe(
+      INCIDENT_OPEN_COLOR_VAR,
+    );
+    expect(lensNodeColorVar("location", maintenanceNode("m1"), groupById, [])).toBe(
+      MAINTENANCE_COLOR_VAR,
+    );
   });
 });
 

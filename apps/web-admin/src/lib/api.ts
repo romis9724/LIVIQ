@@ -282,6 +282,8 @@ export interface Inquiry {
   assigneeUserId: string | null;
   authorUserId: string;
   createdAt: string;
+  facilityId: string | null; // 담당자 정식 연결(H13-2, ADR-0022 결정 3①) — null 이면 미연결
+  facilityName: string | null;
 }
 
 export interface InquiryEvent {
@@ -307,6 +309,8 @@ interface RawInquiry {
   assignee_user_id: string | null;
   author_user_id: string;
   created_at: string;
+  facility_id: string | null;
+  facility_name: string | null;
 }
 
 interface RawInquiryEvent {
@@ -328,6 +332,8 @@ function toInquiry(raw: RawInquiry): Inquiry {
     assigneeUserId: raw.assignee_user_id,
     authorUserId: raw.author_user_id,
     createdAt: raw.created_at,
+    facilityId: raw.facility_id,
+    facilityName: raw.facility_name,
   };
 }
 
@@ -423,6 +429,52 @@ export async function replyInquiry(id: string, body: string): Promise<Inquiry> {
   });
   await ensureOk(response);
   return toInquiry(await response.json());
+}
+
+// ── 민원-시설 연결(FR-FAC-05, ADR-0022 결정 3, 소장 전용) ──────────────────────
+
+/**
+ * 담당자 지정 = 정식 연결(null 이면 해제). facility_id 를 쓰는 유일한 경로 — LLM 추천은
+ * 이 액션을 대신하지 못한다(규칙 8). 대상 설비가 같은 단지 미삭제 설비가 아니면 404.
+ */
+export async function linkInquiryFacility(id: string, facilityId: string | null): Promise<Inquiry> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/facility`, {
+    method: "PUT",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({ facility_id: facilityId }),
+  });
+  await ensureOk(response);
+  return toInquiry(await response.json());
+}
+
+export interface FacilitySuggestCandidate {
+  facilityId: string;
+  name: string;
+  reason: string;
+}
+
+interface RawFacilitySuggestCandidate {
+  facility_id: string;
+  name: string;
+  reason: string;
+}
+
+/**
+ * LLM 시설 후보 추천(최대 3) — 읽기 전용, DB 쓰기·이벤트·알림 없음(규칙 8). 연결 확정은
+ * linkInquiryFacility 승인으로 별도 수행. 마스킹 실패·LLM 미가용은 503(ApiError.message 안내문 그대로 노출).
+ */
+export async function suggestInquiryFacility(id: string): Promise<FacilitySuggestCandidate[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/inquiries/${id}/facility-suggest`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.candidates as RawFacilitySuggestCandidate[]).map((c) => ({
+    facilityId: c.facility_id,
+    name: c.name,
+    reason: c.reason,
+  }));
 }
 
 /** 처리 내역 타임라인 — 관리자도 조회 가능(경로는 /admin 아님 주의). */
