@@ -2,19 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { type ForceGraphMethods, type NodeObject } from "react-force-graph-3d";
+import * as THREE from "three";
 import { EmptyState } from "@liviq/ui";
 import type { GraphLink, GraphNode } from "@/lib/api";
 import { isWebglSupported } from "@/lib/webgl";
 import { STATUS_META } from "./data";
 import {
+  COMPLEX_COLOR_VAR,
   LINK_COLOR_VAR,
-  NODE_VAL_EVENT,
-  NODE_VAL_FACILITY,
+  LOCATION_COLOR_VAR,
   NODE_VAL_FOCUS_SCALE,
   centerByNodeId,
   groupCenters,
   lensGroupByNodeId,
   lensNodeColorVar,
+  nodeBaseVal,
   type Coords,
   type GraphLens,
 } from "./graph-data";
@@ -32,6 +34,8 @@ const CLUSTER_STRENGTH = 0.06; // 계통끼리 모으는 인력(너무 세면 �
 const FLY_TO_DISTANCE = 140;
 const FLY_TO_MS = 900;
 const FALLBACK_COLOR = "#69737d"; // CSS 변수 조회 실패 시 중립 회색(정상 경로에선 쓰이지 않음)
+const LOCATION_LABEL_OFFSET_Y = 14; // 위치 노드 크기(NODE_VAL_LOCATION)에 맞춘 라벨 높이
+const LOCATION_LABEL_SCALE = 0.06; // 캔버스 px → three 월드 단위 경험값
 
 interface FacilityGraphCanvasProps {
   nodes: readonly GraphNode[];
@@ -58,15 +62,52 @@ function clusterForce(centers: ReadonlyMap<string, Coords>, strength: number) {
     for (const node of simNodes) {
       const center = centers.get(String(node.id));
       if (!center) continue;
-      node.vx = (node.vx ?? 0) + (center.x - (node.x ?? 0)) * strength * alpha;
-      node.vy = (node.vy ?? 0) + (center.y - (node.y ?? 0)) * strength * alpha;
-      node.vz = (node.vz ?? 0) + (center.z - (node.z ?? 0)) * strength * alpha;
+      const dx = center.x - (node.x ?? 0);
+      const dy = center.y - (node.y ?? 0);
+      const dz = center.z - (node.z ?? 0);
+      // location·평면도 노드는 groupById 에 없어 center 도 없는 게 정상 경로다 — 그래도
+      // 방어적으로 유한값만 반영한다(H13-7, 클러스터 힘이 NaN 을 만들지 않게 하는 가드).
+      if (!Number.isFinite(dx) || !Number.isFinite(dy) || !Number.isFinite(dz)) continue;
+      node.vx = (node.vx ?? 0) + dx * strength * alpha;
+      node.vy = (node.vy ?? 0) + dy * strength * alpha;
+      node.vz = (node.vz ?? 0) + dz * strength * alpha;
     }
   };
   force.initialize = (nodes: FgNode[]): void => {
     simNodes = nodes;
   };
   return force;
+}
+
+/**
+ * 위치 노드 전용 텍스트 라벨 스프라이트(캔버스 텍스처) — 별도 라이브러리 없이 이미
+ * 의존성인 three 만으로 만든다. nodeThreeObjectExtend 로 기본 구체 위에 덧붙인다(위치
+ * 노드만 라벨 상시 표시, 설비는 hover 유지 — H13-7).
+ */
+function createLocationLabelSprite(name: string, color: string): THREE.Sprite {
+  const fontSize = 42;
+  const padding = 12;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const font = `700 ${fontSize}px sans-serif`;
+  if (ctx) {
+    ctx.font = font;
+    const width = Math.ceil(ctx.measureText(name).width) + padding * 2;
+    canvas.width = width;
+    canvas.height = fontSize + padding * 2;
+    // 캔버스 크기 변경은 컨텍스트를 리셋하므로 font 를 다시 설정해야 한다.
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "center";
+    ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  const material = new THREE.SpriteMaterial({ map: texture, depthWrite: false, transparent: true });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(canvas.width * LOCATION_LABEL_SCALE, canvas.height * LOCATION_LABEL_SCALE, 1);
+  sprite.position.set(0, LOCATION_LABEL_OFFSET_Y, 0);
+  return sprite;
 }
 
 /** 컨테이너 실측 크기 — 지정하지 않으면 라이브러리가 window 크기로 그려 레이아웃을 넘는다. */
@@ -93,6 +134,10 @@ function nodeLabel(node: GraphDatum): string {
     return `장애 · ${name} · ${node.resolved ? "조치됨" : "미해결"}`;
   }
   if (node.label === "maintenance") return `정비 · ${name}`;
+  if (node.label === "location") return `위치 · ${name}`;
+  if (node.label === "floor_plan") return `평면도 · ${name}`;
+  if (node.label === "plan_device") return `평면도 마커 · ${name}`;
+  if (node.label === "complex") return `단지 · ${name}`;
   const status = node.status ? STATUS_META[node.status as keyof typeof STATUS_META] : undefined;
   return `설비 · ${name} · ${status?.label ?? node.status ?? "상태 미상"}`;
 }
@@ -148,6 +193,17 @@ export function FacilityGraphCanvas({
     return byId;
   }, [nodes, colors, lens, groupById, groups]);
 
+  // 위치·단지 노드 라벨 색 — 렌즈와 무관하게 고정(라벨은 그래프 데이터 변경 시에만 다시
+  // 만들어져 렌즈 전환마다 갱신되지 않는다). 색 매칭보다 가독성이 우선이라 중립색으로 고정한다.
+  const locationLabelColor = useMemo(
+    () => (supported ? resolveColorVar(LOCATION_COLOR_VAR) : FALLBACK_COLOR),
+    [supported],
+  );
+  const complexLabelColor = useMemo(
+    () => (supported ? resolveColorVar(COMPLEX_COLOR_VAR) : FALLBACK_COLOR),
+    [supported],
+  );
+
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
@@ -198,11 +254,26 @@ export function FacilityGraphCanvas({
           showNavInfo={false}
           nodeLabel={nodeLabel}
           nodeVal={(node) => {
-            const base = node.label === "facility" ? NODE_VAL_FACILITY : NODE_VAL_EVENT;
+            const base = nodeBaseVal(node.label);
             return node.id === focus?.pgId ? base * NODE_VAL_FOCUS_SCALE : base;
           }}
           nodeColor={(node) => colorById.get(node.pgId) ?? FALLBACK_COLOR}
           nodeOpacity={0.92}
+          // react-force-graph-3d 의 타입 선언은 null 반환을 허용하지 않지만(타입 누락 —
+          // 실제로는 null 이면 기본 노드만 그린다) 런타임 동작은 문서화된 대로다.
+          // 단지 노드도 위치와 같은 스프라이트 로직을 재사용해 상시 라벨을 붙인다(H13-7 확장).
+          nodeThreeObject={
+            ((node: FgNode) => {
+              if (node.label === "location") {
+                return createLocationLabelSprite(node.name ?? "(이름 없음)", locationLabelColor);
+              }
+              if (node.label === "complex") {
+                return createLocationLabelSprite(node.name ?? "(이름 없음)", complexLabelColor);
+              }
+              return null;
+            }) as (node: FgNode) => THREE.Object3D
+          }
+          nodeThreeObjectExtend={(node) => node.label === "location" || node.label === "complex"}
           linkColor={() => colors.get(LINK_COLOR_VAR) ?? FALLBACK_COLOR}
           linkOpacity={0.5}
           linkWidth={0.6}

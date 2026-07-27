@@ -115,6 +115,7 @@ async def _replace_floor_plan(
     image_file: str,
     rooms: list[dict[str, Any]],
     elements: list[dict[str, Any]],
+    complex_name: str | None,
 ) -> tuple[int, int]:
     """해당 unit_type의 기존 floor_plan+devices 전체 교체 후 신규 적재.
 
@@ -186,7 +187,7 @@ async def _replace_floor_plan(
         aggregate_type="floor_plan",
         aggregate_id=plan.id,
         event_type="created",
-        payload=_floor_plan_snapshot(unit_type.name, plan, devices),
+        payload=_floor_plan_snapshot(unit_type.name, plan, devices, complex_name),
     )
     return len(rooms), len(devices)
 
@@ -204,7 +205,10 @@ async def _run(tenant_id: uuid.UUID) -> None:
     storage = get_storage()
     try:
         async with factory() as session, session.begin():
-            if await session.scalar(select(Tenant.id).where(Tenant.id == tenant_id)) is None:
+            complex_name = await session.scalar(
+                select(Tenant.name).where(Tenant.id == tenant_id)
+            )
+            if complex_name is None:
                 raise SystemExit(f"단지를 찾을 수 없습니다: {tenant_id}")
             await session.execute(
                 text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
@@ -214,7 +218,14 @@ async def _run(tenant_id: uuid.UUID) -> None:
                 unit_type = await _get_or_create_unit_type(session, tenant_id, spec["name"])
                 rooms, elements = _rooms_and_elements_for(spec)
                 room_count, device_count = await _replace_floor_plan(
-                    session, storage, tenant_id, unit_type, spec["image_file"], rooms, elements
+                    session,
+                    storage,
+                    tenant_id,
+                    unit_type,
+                    spec["image_file"],
+                    rooms,
+                    elements,
+                    complex_name,
                 )
                 rows.append((spec["name"], room_count, device_count))
         _report(rows)

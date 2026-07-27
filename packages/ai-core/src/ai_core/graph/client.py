@@ -42,9 +42,11 @@ class GraphNode:
     """
 
     pg_id: str
-    label: str  # facility | incident | maintenance | floor_plan | plan_device (H13-6)
+    # facility | incident | maintenance | floor_plan | plan_device (H13-6)
+    # | location | complex (H13-7 — 단지 루트)
+    label: str
     name: str | None = None  # facility.name | incident.symptom | maintenance.work |
-    # floor_plan.unit_type_name | plan_device.device_type(+room)
+    # floor_plan.unit_type_name | plan_device.device_type(+room) | location.name | complex.name
     type: str | None = None  # facility.type (계통 렌즈)
     location: str | None = None  # facility.location (위치 렌즈, H13-2)
     status: str | None = None  # facility.status
@@ -56,7 +58,9 @@ class GraphNode:
 class GraphLink:
     source: str  # facility | floor_plan pg_id
     target: str  # incident | maintenance | plan_device | facility pg_id
-    kind: str  # HAS_INCIDENT | HAS_MAINTENANCE | HAS_DEVICE | LINKED_TO (H13-6)
+    # HAS_INCIDENT | HAS_MAINTENANCE | HAS_DEVICE | LINKED_TO (H13-6)
+    # | LOCATED_IN | PART_OF (H13-7)
+    kind: str
 
 
 @dataclass(frozen=True)
@@ -105,10 +109,21 @@ class GraphClient:
                 f"FOR (n:{label}) REQUIRE (n.pg_id, n.tenant_id) IS UNIQUE",
                 {},
             )
-        # Part는 pg_id가 없다(JSONB 임베디드) — (tenant_id, name)이 키
+        # Part·Location은 pg_id가 없다(PG 원 컬럼값 유래) — (tenant_id, name)이 키
         await self._run(
             "CREATE CONSTRAINT part_tenant_name IF NOT EXISTS "
             "FOR (n:Part) REQUIRE (n.tenant_id, n.name) IS UNIQUE",
+            {},
+        )
+        await self._run(
+            "CREATE CONSTRAINT location_tenant_name IF NOT EXISTS "
+            "FOR (n:Location) REQUIRE (n.tenant_id, n.name) IS UNIQUE",
+            {},
+        )
+        # Complex는 단지당 1개 — tenant_id 단독 키(단지 루트 노드, H13-7)
+        await self._run(
+            "CREATE CONSTRAINT complex_tenant IF NOT EXISTS "
+            "FOR (n:Complex) REQUIRE n.tenant_id IS UNIQUE",
             {},
         )
         await self._run(
@@ -129,29 +144,67 @@ class GraphClient:
         """시설 upsert. `props.deleted_at`이 truthy면 tombstone — 노드를 관계까지 완전 삭제한다
         (facilities.py의 소프트 삭제 스냅샷 계약, H13-6). 삭제는 순서 역전 가드 없이 즉시 반영
         — 삭제 후 재작성 레이스는 이 파일럿 범위 밖
-        (ponytail: 재정렬 필요해지면 version 가드 추가)."""
+        (ponytail: 재정렬 필요해지면 version 가드 추가).
+
+        `location`이 비어있지 않으면 `(:Location {name, tenant_id})`를 실체화해
+        `(f)-[:LOCATED_IN]->(loc)`로 잇는다(docs/11 §4 원 모델 복원, H13-7 —
+        위치는 화면이 발명하는 가상 허브가 아니라 그래프 실체). 위치가 바뀌면 옛
+        LOCATED_IN을 먼저 제거하고 새로 연결하고, null/빈 문자열이면 관계만 제거한다.
+        재배선은 버전 가드 통과(실제 갱신) 시에만 일어난다. 참조 없는 고아 Location
+        정리는 하지 않음(ponytail: 시각 노이즈 아님 — 수요 생기면 후속).
+
+        `complex_name`이 비어있지 않으면 단지 루트 `(:Complex {tenant_id})`를 실체화한다
+        (사용자 요청 — 그래프 중심에 단지 노드). 위치가 있으면 `(loc)-[:PART_OF]->(complex)`,
+        없으면 `(f)-[:PART_OF]->(complex)` 직접 연결. Complex는 tenant당 1개라 위치 쪽 연결은
+        재배선이 필요 없고(같은 노드로 계속 MERGE), 시설 직결만 옛 관계를 지우고 다시 잇는다."""
         if props.get("deleted_at"):
             await self._run(
                 "MATCH (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) DETACH DELETE f",
                 {"pg_id": pg_id, "tenant": tenant_id},
             )
             return
-        await self._run(
+        location = props.get("location")
+        complex_name = props.get("complex_name")
+        applied = await self._run(
             "MERGE (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET f.last_applied_version = -1 "
             "WITH f WHERE $version > f.last_applied_version "
             "SET f.name = $name, f.location = $location, f.type = $type, "
-            "    f.status = $status, f.last_applied_version = $version",
+            "    f.status = $status, f.last_applied_version = $version "
+            "WITH f "
+            "OPTIONAL MATCH (f)-[old:LOCATED_IN]->(:Location) "
+            "DELETE old "
+            "WITH DISTINCT f "
+            "FOREACH (_ IN CASE WHEN $location IS NULL OR $location = '' THEN [] ELSE [1] END | "
+            "    MERGE (loc:Location {name: $location, tenant_id: $tenant}) "
+            "    MERGE (f)-[:LOCATED_IN]->(loc)) "
+            "WITH DISTINCT f "
+            "OPTIONAL MATCH (f)-[old2:PART_OF]->(:Complex) "
+            "DELETE old2 "
+            "RETURN f.pg_id AS pg_id",
             {
                 "pg_id": pg_id,
                 "tenant": tenant_id,
                 "version": version,
                 "name": props.get("name"),
-                "location": props.get("location"),
+                "location": location,
                 "type": props.get("type"),
                 "status": props.get("status"),
             },
         )
+        if applied and complex_name:
+            await self._run(
+                "MATCH (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) "
+                "MERGE (c:Complex {tenant_id: $tenant}) "
+                "SET c.name = $complex_name "
+                "WITH f, c "
+                "OPTIONAL MATCH (f)-[:LOCATED_IN]->(loc:Location) "
+                "FOREACH (_ IN CASE WHEN loc IS NULL THEN [1] ELSE [] END | "
+                "    MERGE (f)-[:PART_OF]->(c)) "
+                "FOREACH (_ IN CASE WHEN loc IS NULL THEN [] ELSE [1] END | "
+                "    MERGE (loc)-[:PART_OF]->(c))",
+                {"pg_id": pg_id, "tenant": tenant_id, "complex_name": complex_name},
+            )
 
     async def merge_incident(
         self,
@@ -234,6 +287,10 @@ class GraphClient:
         PG `plan_devices`는 항상 delete-then-insert 전체교체라 그래프도 동일 정책 —
         기존 `HAS_DEVICE` 대상 전부 detach delete 후 스냅샷으로 재생성한다. `facility_id`가
         있는 마커는 `LINKED_TO`로 Facility에 연결(merge_incident 관례와 동일 stub 허용).
+
+        `complex_name`이 있으면 단지 루트 `(:Complex {tenant_id})`를 실체화해
+        `(fp)-[:PART_OF]->(complex)`로 잇는다(H13-7 — 도면에는 Location 개념이 없어
+        직결만 한다, facility의 위치 경유 분기 없음).
         """
         devices = [dict(d) for d in props.get("devices") or []]
         await self._run(
@@ -245,6 +302,12 @@ class GraphClient:
             "WITH fp "
             "OPTIONAL MATCH (fp)-[:HAS_DEVICE]->(old:PlanDevice) "
             "DETACH DELETE old "
+            "WITH DISTINCT fp "
+            "FOREACH (_ IN CASE WHEN $complex_name IS NULL OR $complex_name = '' "
+            "THEN [] ELSE [1] END | "
+            "    MERGE (c:Complex {tenant_id: $tenant}) "
+            "    SET c.name = $complex_name "
+            "    MERGE (fp)-[:PART_OF]->(c)) "
             "WITH DISTINCT fp "
             "UNWIND $devices AS device "
             "CREATE (d:PlanDevice {pg_id: device.pg_id, tenant_id: $tenant}) "
@@ -264,6 +327,7 @@ class GraphClient:
                 "image_width": props.get("image_width"),
                 "image_height": props.get("image_height"),
                 "devices": devices,
+                "complex_name": props.get("complex_name"),
             },
         )
 
@@ -322,6 +386,8 @@ class GraphClient:
         self, *, tenant_id: str, include_plan: bool = False
     ) -> FacilityGraph:
         """단지 시설 그래프 전체(노드 + 관계). 관계 0인 고아 시설도 노드로 포함.
+        Location·Complex 노드와 LOCATED_IN·PART_OF 관계는 include_plan과 무관하게 항상
+        포함한다(H13-7 — 기본 그래프의 뼈대, docs/11 §4 원 모델 + 단지 루트 노드).
 
         tenant는 시설·이웃 양쪽에 강제한다. 반환 프로퍼티는 열거식 —
         `embedding`은 결과에 들어갈 수 없다(페이로드 폭발 방지, ADR-0022).
@@ -362,10 +428,69 @@ class GraphClient:
                 nodes[node_id] = _neighbor_node(kind, node_id, r)
             links.append(GraphLink(source=facility_id, target=node_id, kind=kind))
 
+        await self._merge_location_graph(tenant_id=tenant_id, nodes=nodes, links=links)
+
         if include_plan:
             await self._merge_plan_graph(tenant_id=tenant_id, nodes=nodes, links=links)
 
+        # 링크가 가리키는 노드가 먼저 존재해야 하므로(dangling 링크 방지) plan 병합 뒤에 실행 —
+        # include_plan=True일 때만 FloorPlan發 PART_OF도 잡는다.
+        await self._merge_complex_graph(
+            tenant_id=tenant_id, nodes=nodes, links=links, include_plan=include_plan
+        )
+
         return FacilityGraph(nodes=tuple(nodes.values()), links=tuple(links))
+
+    async def _merge_location_graph(
+        self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]
+    ) -> None:
+        """Location 노드·LOCATED_IN 관계를 fetch_facility_graph 결과에 덧붙인다 —
+        include_plan과 무관하게 항상 포함(기본 그래프의 뼈대, H13-7)."""
+        records = await self._run(
+            "MATCH (f:Facility {tenant_id: $tenant})-[:LOCATED_IN]->"
+            "(loc:Location {tenant_id: $tenant}) "
+            "RETURN f.pg_id AS facility_id, loc.name AS location_name "
+            "ORDER BY location_name",
+            {"tenant": tenant_id},
+        )
+        for r in records:
+            location_name = r["location_name"]
+            if location_name not in nodes:
+                nodes[location_name] = GraphNode(
+                    pg_id=location_name, label="location", name=location_name
+                )
+            links.append(
+                GraphLink(source=r["facility_id"], target=location_name, kind="LOCATED_IN")
+            )
+
+    async def _merge_complex_graph(
+        self,
+        *,
+        tenant_id: str,
+        nodes: dict[str, GraphNode],
+        links: list[GraphLink],
+        include_plan: bool,
+    ) -> None:
+        """단지 루트 Complex 노드·PART_OF 관계를 항상 덧붙인다(그래프 중심, H13-7 — 사용자
+        요청). PART_OF 소스는 Facility(직결) 또는 Location(경유) — merge_facility가 위치
+        유무로 이미 갈라 만든다. FloorPlan發 PART_OF(replace_floor_plan)는 그 노드가 이미
+        결과에 실려있는 include_plan=True일 때만 포함(dangling 링크 방지)."""
+        source_labels = "n:Facility OR n:Location" + (" OR n:FloorPlan" if include_plan else "")
+        records = await self._run(
+            "MATCH (n)-[:PART_OF]->(c:Complex {tenant_id: $tenant}) "
+            f"WHERE n.tenant_id = $tenant AND ({source_labels}) "
+            "RETURN CASE WHEN n:Facility OR n:FloorPlan THEN n.pg_id ELSE n.name END AS source_id, "
+            "       c.name AS complex_name "
+            "ORDER BY complex_name",
+            {"tenant": tenant_id},
+        )
+        for r in records:
+            complex_name = r["complex_name"]
+            if complex_name not in nodes:
+                nodes[complex_name] = GraphNode(
+                    pg_id=complex_name, label="complex", name=complex_name
+                )
+            links.append(GraphLink(source=r["source_id"], target=complex_name, kind="PART_OF"))
 
     async def _merge_plan_graph(
         self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]

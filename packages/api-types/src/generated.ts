@@ -2691,7 +2691,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE" | "HAS_DEVICE" | "LINKED_TO";
+            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE" | "HAS_DEVICE" | "LINKED_TO" | "LOCATED_IN" | "PART_OF";
             /** Source */
             source: string;
             /** Target */
@@ -2708,7 +2708,7 @@ export interface components {
              * Label
              * @enum {string}
              */
-            label: "facility" | "incident" | "maintenance" | "floor_plan" | "plan_device";
+            label: "facility" | "incident" | "maintenance" | "floor_plan" | "plan_device" | "location" | "complex";
             /** Location */
             location?: string | null;
             /** Name */

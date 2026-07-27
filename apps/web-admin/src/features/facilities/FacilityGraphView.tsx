@@ -4,11 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import dynamic from "next/dynamic";
 import { Button, EmptyState } from "@liviq/ui";
 import { ApiError, getFacilityGraph, type FacilityGraph, type GraphNode } from "@/lib/api";
-import { FacilityGraphPanel } from "./FacilityGraphPanel";
+import { FacilityGraphPanel, type GraphPanelSelection } from "./FacilityGraphPanel";
 import {
+  COMPLEX_COLOR_VAR,
+  FLOOR_PLAN_COLOR_VAR,
   INCIDENT_OPEN_COLOR_VAR,
   INCIDENT_RESOLVED_COLOR_VAR,
+  LOCATION_COLOR_VAR,
   MAINTENANCE_COLOR_VAR,
+  PLAN_DEVICE_COLOR_VAR,
   findFacilityByName,
   lensColorVar,
   lensGroups,
@@ -35,6 +39,18 @@ const NODE_KIND_LEGEND: readonly { label: string; colorVar: string }[] = [
   { label: "장애(미해결)", colorVar: INCIDENT_OPEN_COLOR_VAR },
   { label: "장애(조치됨)", colorVar: INCIDENT_RESOLVED_COLOR_VAR },
   { label: "정비", colorVar: MAINTENANCE_COLOR_VAR },
+];
+
+// 위치·단지는 항상 표시(위치는 계통 렌즈에선 중립색, 위치 렌즈에선 위 그룹 목록의 색을 그대로
+// 쓴다 — 이 스와치는 '위치 노드가 존재한다'는 표식일 뿐이다. 단지는 렌즈 무관 고정색).
+// 평면도·마커는 토글 on 일 때만(H13-7).
+const LOCATION_LEGEND: readonly { label: string; colorVar: string }[] = [
+  { label: "위치(허브)", colorVar: LOCATION_COLOR_VAR },
+  { label: "단지", colorVar: COMPLEX_COLOR_VAR },
+];
+const PLAN_LEGEND: readonly { label: string; colorVar: string }[] = [
+  { label: "평면도", colorVar: FLOOR_PLAN_COLOR_VAR },
+  { label: "평면도 마커", colorVar: PLAN_DEVICE_COLOR_VAR },
 ];
 
 // 렌즈 — 계통별(기본)·위치별(동 단위, H13-2 ADR-0022 결정 2). 범례 제목도 렌즈에 따라 전환.
@@ -64,25 +80,26 @@ interface FacilityGraphViewProps {
 export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [lens, setLens] = useState<GraphLens>("system");
-  const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null);
+  const [includePlan, setIncludePlan] = useState(false);
+  const [selection, setSelection] = useState<GraphPanelSelection | null>(null);
   const [focus, setFocus] = useState<{ pgId: string; seq: number } | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   // 한글 IME 조합이 controlled input 에서 씹히므로 검색창은 uncontrolled(ref) 로 둔다.
   const searchRef = useRef<HTMLInputElement>(null);
   const focusSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (planFlag: boolean) => {
     setState({ kind: "loading" });
     try {
-      setState({ kind: "ready", graph: await getFacilityGraph() });
+      setState({ kind: "ready", graph: await getFacilityGraph(planFlag) });
     } catch (err) {
       setState({ kind: "error", message: errorMessage(err) });
     }
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void load(includePlan);
+  }, [load, includePlan]);
 
   const graph = state.kind === "ready" ? state.graph : null;
   const nodes = useMemo(() => graph?.nodes ?? [], [graph]);
@@ -98,10 +115,25 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
     [links],
   );
 
+  // location·floor_plan·complex 는 전용 패널, plan_device 클릭은 무동작(H13-7 — 마커 자체엔
+  // 볼 상세가 없다).
   const handleSelectNode = useCallback(
     (node: GraphNode) => {
+      if (node.label === "location") {
+        setSelection({ kind: "location", node });
+        return;
+      }
+      if (node.label === "floor_plan") {
+        setSelection({ kind: "floor_plan", node });
+        return;
+      }
+      if (node.label === "complex") {
+        setSelection({ kind: "complex", node });
+        return;
+      }
+      if (node.label === "plan_device") return;
       const facilityId = facilityIdOf(node);
-      if (facilityId) setSelectedFacilityId(facilityId);
+      if (facilityId) setSelection({ kind: "facility", facilityId });
     },
     [facilityIdOf],
   );
@@ -117,7 +149,7 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
     setSearchError(null);
     focusSeq.current += 1;
     setFocus({ pgId: hit.pgId, seq: focusSeq.current });
-    setSelectedFacilityId(hit.pgId);
+    setSelection({ kind: "facility", facilityId: hit.pgId });
   }
 
   const header = (
@@ -153,7 +185,7 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
             title="시설 그래프를 불러오지 못했습니다"
             description={state.message}
             action={
-              <Button variant="secondary" onClick={() => void load()}>
+              <Button variant="secondary" onClick={() => void load(includePlan)}>
                 다시 시도
               </Button>
             }
@@ -198,20 +230,30 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
           </p>
         ) : null}
 
-        <div className="fac-viewtabs" role="tablist" aria-label="그래프 렌즈">
-          {LENS_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              role="tab"
-              aria-selected={lens === option.id}
-              className="fac-viewtab"
-              data-active={lens === option.id || undefined}
-              onClick={() => setLens(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="fac-graph__toolbar">
+          <div className="fac-viewtabs" role="tablist" aria-label="그래프 렌즈">
+            {LENS_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                role="tab"
+                aria-selected={lens === option.id}
+                className="fac-viewtab"
+                data-active={lens === option.id || undefined}
+                onClick={() => setLens(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <label className="fac-plantoggle">
+            <input
+              type="checkbox"
+              checked={includePlan}
+              onChange={(event) => setIncludePlan(event.target.checked)}
+            />
+            평면도 표시
+          </label>
         </div>
 
         <form className="fac-graph__search" role="search" onSubmit={handleSearch}>
@@ -274,10 +316,32 @@ export function FacilityGraphView({ onSwitchToList }: FacilityGraphViewProps) {
                   {entry.label}
                 </li>
               ))}
+              {LOCATION_LEGEND.map((entry) => (
+                <li key={entry.label} className="fac-graph__legend-item">
+                  <span
+                    className="fac-graph__legend-swatch fac-graph__legend-swatch--lg"
+                    style={{ backgroundColor: `var(${entry.colorVar})` }}
+                    aria-hidden="true"
+                  />
+                  {entry.label}
+                </li>
+              ))}
+              {includePlan
+                ? PLAN_LEGEND.map((entry) => (
+                    <li key={entry.label} className="fac-graph__legend-item">
+                      <span
+                        className="fac-graph__legend-swatch"
+                        style={{ backgroundColor: `var(${entry.colorVar})` }}
+                        aria-hidden="true"
+                      />
+                      {entry.label}
+                    </li>
+                  ))
+                : null}
             </ul>
           </section>
 
-          <FacilityGraphPanel facilityId={selectedFacilityId} />
+          <FacilityGraphPanel selection={selection} nodes={nodes} links={links} />
         </div>
       </div>
     </>

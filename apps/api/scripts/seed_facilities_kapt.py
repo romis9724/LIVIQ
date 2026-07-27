@@ -101,7 +101,10 @@ async def _run(tenant_id: uuid.UUID) -> None:
     factory = create_session_factory(engine)
     try:
         async with factory() as session, session.begin():
-            if await session.scalar(select(Tenant.id).where(Tenant.id == tenant_id)) is None:
+            complex_name = await session.scalar(
+                select(Tenant.name).where(Tenant.id == tenant_id)
+            )
+            if complex_name is None:
                 raise SystemExit(f"단지를 찾을 수 없습니다: {tenant_id}")
             await session.execute(
                 text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
@@ -117,7 +120,7 @@ async def _run(tenant_id: uuid.UUID) -> None:
                     aggregate_type="facility",
                     aggregate_id=facility.id,
                     event_type="created" if is_new else "updated",
-                    payload=_facility_snapshot(facility),
+                    payload=_facility_snapshot(facility, complex_name),
                 )
                 created += is_new
                 updated += not is_new

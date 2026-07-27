@@ -1088,11 +1088,28 @@ export async function createMaintenance(
 }
 
 // ── 시설 그래프 (H13-1 · ADR-0022 — Neo4j 파생 읽기, 미가용 시 PG 축약 폴백) ──
+// location·floor_plan·plan_device 는 H13-7 추가 — 위치(동/실)·평면도·평면도 마커 노드.
+// complex 는 H13-7 확장 — 단지 노드(tenant당 1개). PART_OF 로 location·floor_plan 이 연결된다
+// (floor_plan→complex 는 include_plan=true 일 때만 응답에 포함).
 
-export type GraphNodeLabel = "facility" | "incident" | "maintenance";
-export type GraphLinkKind = "HAS_INCIDENT" | "HAS_MAINTENANCE";
+export type GraphNodeLabel =
+  | "facility"
+  | "incident"
+  | "maintenance"
+  | "location"
+  | "floor_plan"
+  | "plan_device"
+  | "complex";
+export type GraphLinkKind =
+  | "HAS_INCIDENT"
+  | "HAS_MAINTENANCE"
+  | "LOCATED_IN"
+  | "HAS_DEVICE"
+  | "LINKED_TO"
+  | "PART_OF";
 
-/** 그래프 노드. 라벨별로 채워지는 필드가 다르다(시설=type·status, 장애=at·resolved). */
+/** 그래프 노드. 라벨별로 채워지는 필드가 다르다(시설=type·status, 장애=at·resolved,
+ *  location=name 이 위치 문자열, floor_plan=name 이 평형명, plan_device=name 이 종류(+방)). */
 export interface GraphNode {
   pgId: string;
   label: GraphNodeLabel;
@@ -1141,8 +1158,11 @@ function toGraphNode(raw: RawGraphNode): GraphNode {
   };
 }
 
-export async function getFacilityGraph(): Promise<FacilityGraph> {
-  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph`, {
+/** includePlan=true 면 평면도·마커(floor_plan·plan_device)도 함께 싣는다(H13-7, opt-in —
+ *  도면당 마커 수십개라 기본은 제외). location·LOCATED_IN 은 includePlan 과 무관하게 항상 온다. */
+export async function getFacilityGraph(includePlan = false): Promise<FacilityGraph> {
+  const query = includePlan ? "?include_plan=true" : "";
+  const response = await apiFetch(`${API_BASE_URL}/admin/facilities/graph${query}`, {
     headers: DEV_HEADERS,
   });
   await ensureOk(response);
