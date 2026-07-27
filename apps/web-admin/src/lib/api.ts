@@ -2346,3 +2346,163 @@ export async function listParkingVehicles(): Promise<ParkingVehicle[]> {
     isEv: v.is_ev,
   }));
 }
+
+// ── 평면도(H13-4, docs/05 평면도 절 · MANAGER) ─────────────────────────────────
+// 좌표는 원본 이미지 픽셀. 마커 편집은 로컬에 쌓았다가 PUT 전체 교체(자동저장 아님).
+
+export interface AdminFloorPlanItem {
+  id: string;
+  unitTypeName: string;
+  imageUrl: string;
+  imageWidth: number;
+  imageHeight: number;
+  deviceCount: number;
+  updatedAt: string;
+}
+
+export interface AdminFloorPlanDevice {
+  id: string;
+  deviceType: string;
+  x: number;
+  y: number;
+  room: string | null;
+  dir: string | null;
+  label: string | null;
+  memo: string | null;
+  facilityId: string | null;
+}
+
+export interface AdminFloorPlanDetail {
+  plan: AdminFloorPlanItem;
+  devices: AdminFloorPlanDevice[];
+}
+
+/** 마커 저장 입력 — PUT은 전체 교체라 id 없이 내용만 보낸다. */
+export interface FloorPlanDeviceInput {
+  deviceType: string;
+  x: number;
+  y: number;
+  room?: string;
+  dir?: string;
+  label?: string;
+  memo?: string;
+  facilityId?: string;
+}
+
+export interface UploadFloorPlanInput {
+  unitTypeName: string;
+  image: File;
+  imageWidth: number;
+  imageHeight: number;
+}
+
+interface RawAdminFloorPlan {
+  id: string;
+  unit_type_name: string;
+  image_url: string;
+  image_width: number;
+  image_height: number;
+  device_count: number;
+  updated_at: string;
+}
+
+interface RawAdminFloorPlanDevice {
+  id: string;
+  device_type: string;
+  x: number;
+  y: number;
+  room: string | null;
+  dir: string | null;
+  label: string | null;
+  memo: string | null;
+  facility_id: string | null;
+}
+
+function toAdminFloorPlanItem(raw: RawAdminFloorPlan): AdminFloorPlanItem {
+  return {
+    id: raw.id,
+    unitTypeName: raw.unit_type_name,
+    imageUrl: raw.image_url,
+    imageWidth: raw.image_width,
+    imageHeight: raw.image_height,
+    deviceCount: raw.device_count,
+    updatedAt: raw.updated_at,
+  };
+}
+
+function toAdminFloorPlanDevice(raw: RawAdminFloorPlanDevice): AdminFloorPlanDevice {
+  return {
+    id: raw.id,
+    deviceType: raw.device_type,
+    x: raw.x,
+    y: raw.y,
+    room: raw.room,
+    dir: raw.dir,
+    label: raw.label,
+    memo: raw.memo,
+    facilityId: raw.facility_id,
+  };
+}
+
+/** 평면도 목록(타입별 1건). */
+export async function listFloorPlans(): Promise<AdminFloorPlanItem[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/floor-plans`, { headers: DEV_HEADERS });
+  await ensureOk(response);
+  const body = await response.json();
+  return (body.items as RawAdminFloorPlan[]).map(toAdminFloorPlanItem);
+}
+
+/** 평면도 상세 + 마커. 404=없음(null). */
+export async function getFloorPlan(id: string): Promise<AdminFloorPlanDetail | null> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/floor-plans/${id}`, {
+    headers: DEV_HEADERS,
+  });
+  if (response.status === 404) return null;
+  await ensureOk(response);
+  const body = await response.json();
+  return {
+    plan: toAdminFloorPlanItem(body.plan as RawAdminFloorPlan),
+    devices: (body.devices as RawAdminFloorPlanDevice[]).map(toAdminFloorPlanDevice),
+  };
+}
+
+/** 도면 업로드 — multipart(unit_type_name, image, image_width, image_height). */
+export async function uploadFloorPlan(input: UploadFloorPlanInput): Promise<AdminFloorPlanItem> {
+  const form = new FormData();
+  form.set("unit_type_name", input.unitTypeName);
+  form.set("image", input.image);
+  form.set("image_width", String(input.imageWidth));
+  form.set("image_height", String(input.imageHeight));
+  // Content-Type 는 브라우저가 multipart boundary 와 함께 설정 — 직접 지정하지 않음.
+  const response = await apiFetch(`${API_BASE_URL}/admin/floor-plans`, {
+    method: "POST",
+    headers: DEV_HEADERS,
+    body: form,
+  });
+  await ensureOk(response);
+  return toAdminFloorPlanItem(await response.json());
+}
+
+/** 마커 전체 교체 저장. */
+export async function saveFloorPlanDevices(
+  id: string,
+  devices: readonly FloorPlanDeviceInput[],
+): Promise<void> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/floor-plans/${id}/devices`, {
+    method: "PUT",
+    headers: { ...DEV_HEADERS, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      devices: devices.map((d) => ({
+        device_type: d.deviceType,
+        x: d.x,
+        y: d.y,
+        room: d.room ?? null,
+        dir: d.dir ?? null,
+        label: d.label ?? null,
+        memo: d.memo ?? null,
+        facility_id: d.facilityId ?? null,
+      })),
+    }),
+  });
+  await ensureOk(response);
+}

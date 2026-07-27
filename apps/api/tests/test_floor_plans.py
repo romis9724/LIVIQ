@@ -1,8 +1,9 @@
-"""floor_plans 라우터 통합 — 실 PG (H13-3).
+"""floor_plans 라우터 통합 — 실 PG (H13-3 입주민 조회 + H13-4 관리자 편집).
 
 본인 세대 직행(라벨 정규화 매칭 → unit_type → floor_plan → base 장치)·소유권 격리
 (CRITICAL — 타 세대·타 tenant 미노출)·인가(RESIDENT 전용)·404 분기(세대 없음·geometry
-없음·라벨 매칭 실패·도면 없음)를 본다.
+없음·라벨 매칭 실패·도면 없음)를 본다. 관리자 편집(MANAGER 전용) 3표면 — 인가·tenant
+격리(CRITICAL)·devices 전체교체 검증·업로드 업서트를 본다.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from liviq_db.models import (
     Building,
+    Facility,
     FloorPlan,
     Household,
     HouseholdGeometry,
@@ -377,3 +379,217 @@ async def test_cross_tenant_same_unit_type_name_isolated(
         resp = await c.get("/me/floor-plan")
     assert resp.status_code == 200
     assert len(resp.json()["devices"]) == 7  # 단지A(2개)가 아니라 단지B(7개) 것만
+
+
+# ── 관리자 평면도 편집(H13-4, MANAGER 전용) ───────────────────────────────────
+
+
+def _manager_client(db_session: AsyncSession, storage: FakeStorage) -> httpx.AsyncClient:
+    return _client(
+        db_session, storage, roles=("MANAGER",), user_id=MANAGER_USER_ID
+    )
+
+
+async def test_admin_endpoints_forbidden_for_staff_and_resident(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    """세 admin 엔드포인트 모두 STAFF·RESIDENT 403(CRITICAL)."""
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=1)
+    for role in ("STAFF", "RESIDENT"):
+        async with _client(db_session, FakeStorage(), roles=(role,)) as c:
+            resp = await c.get("/admin/floor-plans")
+            assert resp.status_code == 403
+            resp = await c.get(f"/admin/floor-plans/{plan.id}")
+            assert resp.status_code == 403
+            resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json={"devices": []})
+            assert resp.status_code == 403
+
+
+async def test_admin_get_cross_tenant_404(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    """타 tenant 도면 id 조회는 404(CRITICAL — 존재 비노출)."""
+    db_session.add(Tenant(id=TENANT_B_ID, name="단지B", status="active"))
+    await db_session.flush()
+    plan_b = await _seed_plan(
+        db_session, tenant_id=TENANT_B_ID, unit_type_name="84M", room_devices=1
+    )
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.get(f"/admin/floor-plans/{plan_b.id}")
+    assert resp.status_code == 404
+
+
+async def test_admin_devices_put_cross_tenant_404(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    """타 tenant 도면 id로 devices PUT도 404(CRITICAL)."""
+    db_session.add(Tenant(id=TENANT_B_ID, name="단지B", status="active"))
+    await db_session.flush()
+    plan_b = await _seed_plan(
+        db_session, tenant_id=TENANT_B_ID, unit_type_name="84M", room_devices=1
+    )
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan_b.id}/devices", json={"devices": []})
+    assert resp.status_code == 404
+
+
+async def test_admin_list_floor_plans(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    await _seed_plan(db_session, unit_type_name="84M", room_devices=3)
+    await _seed_plan(db_session, unit_type_name="59C", room_devices=1)
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.get("/admin/floor-plans")
+    assert resp.status_code == 200, resp.text
+    items = {item["unit_type_name"]: item for item in resp.json()["items"]}
+    assert items["84M"]["device_count"] == 3
+    assert items["59C"]["device_count"] == 1
+    assert items["84M"]["image_url"].startswith("fake-signed://")
+
+
+async def test_admin_get_floor_plan_detail(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=2)
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.get(f"/admin/floor-plans/{plan.id}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["plan"]["unit_type_name"] == "84M"
+    assert len(body["devices"]) == 2
+    assert {"id", "label", "memo", "facility_id"} <= body["devices"][0].keys()
+
+
+async def test_admin_replace_devices_full_replace_idempotent(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=3)
+    payload = {
+        "devices": [
+            {"device_type": "콘센트", "x": 10, "y": 20, "room": "거실", "dir": "up", "label": "L1"},
+            {"device_type": "스위치", "x": 30, "y": 40, "dir": None},
+        ]
+    }
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()["devices"]) == 2  # 기존 3개(room) → 새 2개로 완전 교체
+
+        # 재실행해도 개수가 늘지 않는다(멱등).
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+        assert resp.status_code == 200
+        assert len(resp.json()["devices"]) == 2
+
+
+async def test_admin_replace_devices_rejects_out_of_range_coords(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    payload = {"devices": [{"device_type": "콘센트", "x": 99999, "y": 20}]}
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_admin_replace_devices_rejects_unknown_dir(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    payload = {"devices": [{"device_type": "콘센트", "x": 10, "y": 20, "dir": "diagonal"}]}
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_admin_replace_devices_rejects_cross_tenant_facility_id(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    db_session.add(Tenant(id=TENANT_B_ID, name="단지B", status="active"))
+    await db_session.flush()
+    other_facility_id = uuid.uuid4()
+    db_session.add(
+        Facility(id=other_facility_id, tenant_id=TENANT_B_ID, name="타단지시설", status="normal")
+    )
+    await db_session.flush()
+    payload = {
+        "devices": [
+            {"device_type": "센서", "x": 10, "y": 20, "facility_id": str(other_facility_id)}
+        ]
+    }
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_admin_replace_devices_accepts_same_tenant_facility_id(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=0)
+    facility_id = uuid.uuid4()
+    db_session.add(Facility(id=facility_id, tenant_id=TENANT_ID, name="정수기", status="normal"))
+    await db_session.flush()
+    payload = {
+        "devices": [{"device_type": "센서", "x": 10, "y": 20, "facility_id": str(facility_id)}]
+    }
+
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.put(f"/admin/floor-plans/{plan.id}/devices", json=payload)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["devices"][0]["facility_id"] == str(facility_id)
+
+
+async def test_admin_upload_creates_new_plan_type(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.post(
+            "/admin/floor-plans",
+            data={"unit_type_name": "72A", "image_width": "800", "image_height": "600"},
+            files={"image": ("plan.jpg", b"fake-jpg-bytes", "image/jpeg")},
+        )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["unit_type_name"] == "72A"
+    assert body["image_width"] == 800
+    assert body["image_height"] == 600
+    assert body["device_count"] == 0
+
+
+async def test_admin_upload_replaces_image_and_preserves_devices(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    plan = await _seed_plan(db_session, unit_type_name="84M", room_devices=3)
+    storage = FakeStorage()
+
+    async with _manager_client(db_session, storage) as c:
+        resp = await c.post(
+            "/admin/floor-plans",
+            data={"unit_type_name": "84M", "image_width": "999", "image_height": "888"},
+            files={"image": ("new.png", b"fake-png-bytes", "image/png")},
+        )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == str(plan.id)  # 새 도면이 아니라 기존 행 갱신
+    assert body["image_width"] == 999
+    assert body["device_count"] == 3  # 기존 devices 보존
+
+
+async def test_admin_upload_rejects_non_image_file(
+    households: dict[tuple[int, int], uuid.UUID], db_session: AsyncSession
+) -> None:
+    async with _manager_client(db_session, FakeStorage()) as c:
+        resp = await c.post(
+            "/admin/floor-plans",
+            data={"unit_type_name": "84M", "image_width": "800", "image_height": "600"},
+            files={"image": ("plan.txt", b"not an image", "text/plain")},
+        )
+    assert resp.status_code == 422

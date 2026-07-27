@@ -576,6 +576,53 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* 세대 평면도(H13-4) — 읽기 전용 미니 뷰. 기본 접힘(details/summary)이라 패널이 커지지 않는다. */
+.twin-plan__summary {
+  cursor: pointer;
+  list-style: none;
+}
+.twin-plan__summary::-webkit-details-marker {
+  display: none;
+}
+.twin-plan__summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: var(--space-2);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+details[open] > .twin-plan__summary::before {
+  transform: rotate(90deg);
+}
+.twin-plan__body {
+  margin-top: var(--space-3);
+}
+.twin-plan__canvas {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  background: var(--color-surface-sunken);
+}
+.twin-plan__image {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.twin-plan__marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+
 /* 배지 — 역할·상태(중립 칩) / 민원 상태(accent pill). */
 .twin-chip {
   display: inline-flex;

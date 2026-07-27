@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type SyntheticEvent } from "react";
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
+  getFloorPlan,
+  listFloorPlans,
   getTwinHouseholdDetail,
+  type AdminFloorPlanDetail,
   type TwinHouseholdDetail,
   type TwinOpenInquiry,
 } from "@/lib/api";
 import { formatWon } from "@/features/fee-upload/logic";
+import {
+  markerLabel,
+  normalizeUnitType,
+  toPercent,
+} from "@/features/facilities/floor-plan-admin-data";
 
 // 표시용 라벨 — 서버 코드값이 아니면 원문을 그대로 노출(폴백).
 const ROLE_LABELS: Record<string, string> = {
@@ -173,6 +181,7 @@ function TwinDetailContent({ state, onClose, onRetry }: TwinDetailContentProps) 
         <MembersSection members={detail.members} />
         <InquiriesSection inquiries={detail.openInquiries} />
         <FeeSection fee={detail.currentFee} />
+        <FloorPlanSection unitTypeLabel={detail.unitTypeLabel} />
       </div>
     </>
   );
@@ -242,5 +251,89 @@ function FeeSection({ fee }: { fee: TwinHouseholdDetail["currentFee"] }) {
         <p className="twin-detail__empty">부과 내역 없음</p>
       )}
     </section>
+  );
+}
+
+type PlanLoadState =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "ready"; detail: AdminFloorPlanDetail | null };
+
+/**
+ * 세대 평면도 — 읽기 전용, 기본 접힘(패널이 커지지 않게). unitTypeLabel("84M(공공임대)")을
+ * 정규화("84M")해 평면도 목록과 매칭한다. 처음 펼칠 때만 불러온다(닫힌 채면 호출 없음).
+ */
+function FloorPlanSection({ unitTypeLabel }: { unitTypeLabel: string | null }) {
+  const [state, setState] = useState<PlanLoadState>({ kind: "idle" });
+
+  const handleToggle = useCallback(
+    (event: SyntheticEvent<HTMLDetailsElement>) => {
+      if (!event.currentTarget.open || state.kind !== "idle") return;
+      const key = normalizeUnitType(unitTypeLabel);
+      if (!key) {
+        setState({ kind: "ready", detail: null });
+        return;
+      }
+      setState({ kind: "loading" });
+      (async () => {
+        const plans = await listFloorPlans();
+        const matched = plans.find((p) => normalizeUnitType(p.unitTypeName) === key);
+        if (!matched) return { kind: "ready" as const, detail: null };
+        return { kind: "ready" as const, detail: await getFloorPlan(matched.id) };
+      })()
+        .then(setState)
+        .catch((err) => setState({ kind: "error", message: errorMessage(err) }));
+    },
+    [state.kind, unitTypeLabel],
+  );
+
+  return (
+    <details className="twin-detail__section" onToggle={handleToggle}>
+      <summary className="twin-detail__section-title twin-plan__summary">평면도</summary>
+      <div className="twin-plan__body">
+        {state.kind === "idle" ? null : state.kind === "loading" ? (
+          <Skeleton height="10rem" />
+        ) : state.kind === "error" ? (
+          <p className="twin-detail__empty">평면도를 불러오지 못했습니다. {state.message}</p>
+        ) : !state.detail ? (
+          <p className="twin-detail__empty">평면도 없음</p>
+        ) : (
+          <ReadOnlyFloorPlan detail={state.detail} />
+        )}
+      </div>
+    </details>
+  );
+}
+
+function ReadOnlyFloorPlan({ detail }: { detail: AdminFloorPlanDetail }) {
+  const { plan, devices } = detail;
+  return (
+    <div className="twin-plan__canvas">
+      {/* eslint-disable-next-line @next/next/no-img-element -- 서명 URL(외부 오리진) — 읽기 전용 미니 뷰 */}
+      <img
+        src={plan.imageUrl}
+        alt={`${plan.unitTypeName} 평면도`}
+        className="twin-plan__image"
+        width={plan.imageWidth}
+        height={plan.imageHeight}
+      />
+      {devices.map((d) => {
+        const label = markerLabel({ room: d.room, deviceType: d.deviceType, label: d.label });
+        return (
+          <button
+            key={d.id}
+            type="button"
+            className="twin-plan__marker"
+            title={label}
+            aria-label={label}
+            style={{
+              left: `${toPercent(d.x, plan.imageWidth)}%`,
+              top: `${toPercent(d.y, plan.imageHeight)}%`,
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }

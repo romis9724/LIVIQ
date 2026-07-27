@@ -1,12 +1,28 @@
-"""평면도 계약 — 입주민 본인 세대 평면도 조회 (docs/01 §13, docs/03 §4.8, H13-3)."""
+"""평면도 계약 — 입주민 본인 세대 평면도 조회(H13-3) + 관리자 편집(H13-4, docs/01 §13,
+docs/03 §4.8)."""
 
 from __future__ import annotations
 
+import datetime
 import uuid
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-__all__ = ["FloorPlanOut", "MyFloorPlanOut", "PlanDeviceOut"]
+__all__ = [
+    "MAX_PLAN_DEVICES",
+    "AdminFloorPlanDetailOut",
+    "AdminFloorPlanListItemOut",
+    "AdminFloorPlanListOut",
+    "AdminPlanDeviceIn",
+    "AdminPlanDevicesReplaceIn",
+    "FloorPlanOut",
+    "MyFloorPlanOut",
+    "PlanDeviceOut",
+]
+
+MAX_PLAN_DEVICES = 500  # 도면 1건당 장치 상한(무한 업로드 방지)
+_Dir = Literal["up", "down", "left", "right"]
 
 
 class FloorPlanOut(BaseModel):
@@ -36,3 +52,43 @@ class PlanDeviceOut(BaseModel):
 class MyFloorPlanOut(BaseModel):
     plan: FloorPlanOut
     devices: list[PlanDeviceOut]
+
+
+class AdminFloorPlanListItemOut(BaseModel):
+    """관리자 평면도 목록 1건 — unit_type당 1행."""
+
+    id: uuid.UUID
+    unit_type_name: str
+    image_url: str
+    image_width: int | None
+    image_height: int | None
+    device_count: int
+    updated_at: datetime.datetime
+
+
+class AdminFloorPlanListOut(BaseModel):
+    items: list[AdminFloorPlanListItemOut]
+
+
+class AdminFloorPlanDetailOut(BaseModel):
+    """관리자 도면 1건 상세 — devices는 PUT이 교체하는 것과 동일 범위(action=base)."""
+
+    plan: FloorPlanOut
+    devices: list[PlanDeviceOut]
+
+
+class AdminPlanDeviceIn(BaseModel):
+    """장치 전체교체 입력 1건 — action='base'·household_id=NULL 고정(오버라이드 미구현)."""
+
+    device_type: str = Field(min_length=1, max_length=50)
+    x: float = Field(ge=0)
+    y: float = Field(ge=0)
+    room: str | None = None
+    dir: _Dir | None = None
+    label: str | None = Field(default=None, max_length=200)
+    memo: str | None = Field(default=None, max_length=2000)
+    facility_id: uuid.UUID | None = None
+
+
+class AdminPlanDevicesReplaceIn(BaseModel):
+    devices: list[AdminPlanDeviceIn] = Field(max_length=MAX_PLAN_DEVICES)
