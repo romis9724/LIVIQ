@@ -26,14 +26,14 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실): **H12-2 진행** — H10 컨테이너 배포(GHCR 게시·롤백 실연) · H11 감사 로그·문서 정합 · H12 사내 GitLab 배포는 러너·호스트 준비 완료 + **브랜치 파이프라인 실측 그린**(빌드→기동→스모크, 컨테이너 9개 200)이고 main 파이프라인·롤백 실연이 남았다. 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
+현재 구현된 것(현실): **H12 완료** — H10 컨테이너 배포(GHCR 게시·롤백 실연) · H11 감사 로그·문서 정합 · H12 사내 GitLab 배포는 **실호스트 운영 중**(외부 기기 main push → WSL Docker 자동 배포, 외부 포트 접속 200, Nexus 게시, 롤백 1회 실연). 남은 항목은 WSL 부팅 자동 시작(관리자 권한). 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
 워크스페이스 구성은 `ls`·[docs/02](docs/02-directory-structure.md)·[ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
 인증: Redis 세션+**자체 이메일+비밀번호**(Argon2id·검증 메일·auth_tokens — H7-1, [ADR-0014](docs/adr/0014-local-email-auth.md))+역할 가드 — 웹은 세션 쿠키 1차(credentials CORS), dev 헤더(`X-Dev-*`)는 api의 local 보조(evals용). E2E는 시드 계정 API 로그인 + 전 여정(설치→단지→초대→명부→가입→승인→AI, H7-4). 다음 단계·백로그: [docs/09 §8.8·§8.3](docs/09-implementation-harness.md).
 DB 접속 롤은 프로세스마다 다르다 — 마이그레이션만 owner, api는 `liviq_app`, ai-worker는 `liviq_worker`(RLS 이중 방어 2층의 성립 조건 — H10-2, [docs/03 §5.1](docs/03-database-design.md)). 운영 스크립트는 owner 접속이 필요해 compose에서 `migrate` 서비스로 실행한다.
 로컬 인프라는 `infra/docker-compose.yml`(pg16+pgvector·redis·minio·neo4j — 호스트 포트는 파일 상단 주석), env 계약은 `.env.example`.
-배포 형상은 **둘** — 컨테이너 이미지 4종(api·ai-worker·web 2종) + `infra/compose.prod.yml` profiles 공용. ①3-tier VM + GHCR + GitHub Actions([ADR-0020](docs/adr/0020-container-deploy-3tier-vm.md)) ②사내 단일 호스트(Windows Server WSL2 Docker) + GitLab CI([ADR-0021](docs/adr/0021-gitlab-ci-single-host-wsl.md) — 러너가 대상 호스트 **안**이라 인바운드 개방 0·배포 키 없음. 기동은 로컬 빌드 이미지, 레지스트리 게시는 스모크 뒤 이력용). env 계약은 `infra/env.prod.example`, 절차는 ①[docs/12](docs/12-deployment-runbook.md) ②[docs/13](docs/13-gitlab-wsl-deploy.md)(공용 진입점 `infra/deploy-wsl.sh`).
+배포 형상은 **둘** — 컨테이너 이미지 4종(api·ai-worker·web 2종) + `infra/compose.prod.yml` profiles 공용. ①3-tier VM + GHCR + GitHub Actions([ADR-0020](docs/adr/0020-container-deploy-3tier-vm.md)) ②사내 단일 호스트(Windows Server WSL2 Docker) + GitLab CI([ADR-0021](docs/adr/0021-gitlab-ci-single-host-wsl.md) — 러너가 대상 호스트 **안**이라 인바운드 개방 0·배포 키 없음. 기동은 로컬 빌드 이미지, 게시는 스모크 뒤 **사내 Nexus**로 — GitLab 컨테이너 레지스트리는 포트 미노출로 사용 불가). env 계약은 `infra/env.prod.example`, 절차는 ①[docs/12](docs/12-deployment-runbook.md) ②[docs/13](docs/13-gitlab-wsl-deploy.md)(공용 진입점 `infra/deploy-wsl.sh`).
 
 ## 자주 쓰는 명령
 
