@@ -100,7 +100,8 @@ export function DocumentManager() {
   );
 
   // 전량 로드 후 클라이언트 페이징 — 필터·검색이 바뀌면 1페이지로 되돌린다.
-  const paging = usePaging(visibleDocs);
+  // 문서는 행이 두꺼워 10건/페이지(사용자 지시) — 다른 목록 화면은 공용 기본값 유지.
+  const paging = usePaging(visibleDocs, 10);
   const { reset: resetPage } = paging;
 
   const applySearch = (event: FormEvent<HTMLFormElement>) => {

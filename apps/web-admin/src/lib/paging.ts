@@ -6,8 +6,8 @@ import { useState } from "react";
 export const PAGE_SIZE = 20;
 
 /** 항상 1 이상 — 항목이 없어도 "1 / 1 페이지"로 표기가 깨지지 않게. */
-export function pageCount(total: number): number {
-  return Math.max(1, Math.ceil(total / PAGE_SIZE));
+export function pageCount(total: number, pageSize: number = PAGE_SIZE): number {
+  return Math.max(1, Math.ceil(total / pageSize));
 }
 
 export interface Paging<T> {
@@ -24,16 +24,17 @@ export interface Paging<T> {
 /**
  * 필터링까지 끝난 목록 전체를 받아 현재 페이지 조각을 돌려준다.
  * 목록이 줄어 현재 페이지가 사라지면 마지막 페이지로 당긴다(빈 화면 방지).
+ * pageSize 미지정 시 공용 기본값(PAGE_SIZE).
  */
-export function usePaging<T>(items: readonly T[]): Paging<T> {
+export function usePaging<T>(items: readonly T[], pageSize: number = PAGE_SIZE): Paging<T> {
   const [page, setPage] = useState(1);
-  const totalPages = pageCount(items.length);
+  const totalPages = pageCount(items.length, pageSize);
   const current = Math.min(Math.max(page, 1), totalPages);
-  const start = (current - 1) * PAGE_SIZE;
+  const start = (current - 1) * pageSize;
   return {
     page: current,
     totalPages,
-    rows: items.slice(start, start + PAGE_SIZE),
+    rows: items.slice(start, start + pageSize),
     setPage,
     reset: () => setPage(1),
   };
