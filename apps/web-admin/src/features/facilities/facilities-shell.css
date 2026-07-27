@@ -3,6 +3,8 @@
    토큰만 사용(하드코딩 금지) · 좁은 화면에선 패널이 겹치지 않도록 상단/하단으로 분리한다. */
 
 .fac-screen {
+  /* 좌측 컬럼(도구 버튼 행 + 시설 현황 패널)의 공유 폭 — 두 요소의 옆 라인을 맞춘다. */
+  --fac-left-col: 24rem;
   position: relative;
   flex: 1;
   min-height: 0;
@@ -41,7 +43,7 @@
 .fac-float--left {
   top: calc(var(--space-4) + var(--tap-min) + var(--space-2));
   left: var(--space-4);
-  width: 20rem;
+  width: var(--fac-left-col);
   max-height: calc(100% - var(--tap-min) - var(--space-8) - var(--space-2));
 }
 .fac-float--right {
@@ -145,22 +147,26 @@
   font-size: var(--text-sm);
 }
 
-/* ── 도구 버튼(목록·평면도·AI) — "시설 현황" 패널 바로 위(좌상단) ────────── */
+/* ── 도구 버튼(목록·평면도·AI) — "시설 현황" 패널 바로 위(좌상단), 패널과 폭 정렬 ── */
 .fac-dock {
   position: absolute;
   z-index: 3;
   top: var(--space-4);
   left: var(--space-4);
+  width: var(--fac-left-col);
   display: flex;
   flex-wrap: nowrap;
   gap: var(--space-2);
 }
 .fac-dock__btn {
+  flex: 1 1 0;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   min-height: var(--tap-min);
-  padding: 8px 16px;
+  padding: 8px 8px;
   border-radius: 999px;
   font-size: var(--text-sm);
   font-weight: 600;
