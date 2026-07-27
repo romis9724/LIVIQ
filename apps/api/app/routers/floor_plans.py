@@ -16,18 +16,23 @@ version+1), 없으면 신규 생성. 이미지 크기(width/height)는 Pillow �
 의존성이 없어 **클라이언트가 폼 필드로 제출**한다(계약 확정 — 브리프 조사 결과). devices는
 PUT으로 항상 **전체 교체**(delete-then-insert, 시드와 동일 멱등 패턴) — action='base'·
 household_id=NULL 고정(세대 오버라이드는 미구현 범위 밖).
+
+업로드·devices PUT 성공 시 도면+마커 스냅샷을 `outbox_events(aggregate_type='floor_plan')`에
+도메인 행과 한 트랜잭션으로 기록한다(H13-6, 그래프 반영은 ai-worker가 폴링 — §13.3 관례).
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from collections.abc import Sequence
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import RequestContext, Storage, get_storage, get_tenant_session, require_roles
+from app.outbox import record_outbox
 from app.schemas.floor_plans import (
     AdminFloorPlanDetailOut,
     AdminFloorPlanListItemOut,
@@ -125,6 +130,33 @@ def _base_devices_stmt(tenant_id: uuid.UUID, floor_plan_id: uuid.UUID) -> Select
         )
         .order_by(PlanDevice.created_at)
     )
+
+
+def _floor_plan_snapshot(
+    unit_type_name: str, plan: FloorPlan, devices: Sequence[PlanDevice]
+) -> dict[str, Any]:
+    """graph-sync 워커가 payload만으로 Neo4j MERGE하도록 도면+마커 스냅샷 전부 담는다(§4.9).
+
+    memo·photo_key는 표시용이라 싣지 않는다(그래프는 위치 렌즈 목적, 규칙 7).
+    """
+    return {
+        "unit_type_name": unit_type_name,
+        "image_width": plan.image_width,
+        "image_height": plan.image_height,
+        "devices": [
+            {
+                "pg_id": d.id,
+                "device_type": d.device_type,
+                "x": d.x,
+                "y": d.y,
+                "room": d.room,
+                "dir": d.dir,
+                "label": d.label,
+                "facility_id": d.facility_id,
+            }
+            for d in devices
+        ],
+    }
 
 
 def _plan_device_out(d: PlanDevice) -> PlanDeviceOut:
@@ -269,6 +301,7 @@ async def upsert_admin_floor_plan(
             FloorPlan.unit_type_id == unit_type.id,
         )
     )
+    is_new = plan is None
     version = (plan.version + 1) if plan is not None else 1
     image_key = f"{ctx.tenant_id}/floor-plans/{unit_type.name}/v{version}{suffix}"
     await storage.put(image_key, data)
@@ -292,11 +325,17 @@ async def upsert_admin_floor_plan(
     await session.flush()
     await session.refresh(plan)
 
-    device_count = await session.scalar(
-        select(func.count(PlanDevice.id)).where(
-            PlanDevice.tenant_id == ctx.tenant_id, PlanDevice.floor_plan_id == plan.id
-        )
+    devices = list(await session.scalars(_base_devices_stmt(ctx.tenant_id, plan.id)))
+    await record_outbox(
+        session,
+        tenant_id=ctx.tenant_id,
+        aggregate_type="floor_plan",
+        aggregate_id=plan.id,
+        event_type="created" if is_new else "updated",
+        payload=_floor_plan_snapshot(unit_type.name, plan, devices),
     )
+
+    device_count = len(devices)
     return AdminFloorPlanListItemOut(
         id=plan.id,
         unit_type_name=unit_type.name,
@@ -378,7 +417,15 @@ async def replace_admin_plan_devices(
             UnitType.tenant_id == ctx.tenant_id, UnitType.id == plan.unit_type_id
         )
     )
-    devices = await session.scalars(_base_devices_stmt(ctx.tenant_id, plan.id))
+    devices = list(await session.scalars(_base_devices_stmt(ctx.tenant_id, plan.id)))
+    await record_outbox(
+        session,
+        tenant_id=ctx.tenant_id,
+        aggregate_type="floor_plan",
+        aggregate_id=plan.id,
+        event_type="updated",
+        payload=_floor_plan_snapshot(unit_type_name or "", plan, devices),
+    )
     return AdminFloorPlanDetailOut(
         plan=FloorPlanOut(
             id=plan.id,

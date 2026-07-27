@@ -42,8 +42,9 @@ class GraphNode:
     """
 
     pg_id: str
-    label: str  # facility | incident | maintenance
-    name: str | None = None  # facility.name | incident.symptom | maintenance.work
+    label: str  # facility | incident | maintenance | floor_plan | plan_device (H13-6)
+    name: str | None = None  # facility.name | incident.symptom | maintenance.work |
+    # floor_plan.unit_type_name | plan_device.device_type(+room)
     type: str | None = None  # facility.type (계통 렌즈)
     location: str | None = None  # facility.location (위치 렌즈, H13-2)
     status: str | None = None  # facility.status
@@ -53,9 +54,9 @@ class GraphNode:
 
 @dataclass(frozen=True)
 class GraphLink:
-    source: str  # facility pg_id
-    target: str  # incident | maintenance pg_id
-    kind: str  # HAS_INCIDENT | HAS_MAINTENANCE
+    source: str  # facility | floor_plan pg_id
+    target: str  # incident | maintenance | plan_device | facility pg_id
+    kind: str  # HAS_INCIDENT | HAS_MAINTENANCE | HAS_DEVICE | LINKED_TO (H13-6)
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,7 @@ class GraphClient:
 
     async def ensure_constraints_and_index(self) -> None:
         """노드별 (pg_id, tenant_id) 유니크 제약 + incident 벡터 인덱스. 멱등(IF NOT EXISTS)."""
-        for label in ("Facility", "Incident", "MaintenanceLog"):
+        for label in ("Facility", "Incident", "MaintenanceLog", "FloorPlan", "PlanDevice"):
             await self._run(
                 f"CREATE CONSTRAINT {label.lower()}_pg_tenant IF NOT EXISTS "
                 f"FOR (n:{label}) REQUIRE (n.pg_id, n.tenant_id) IS UNIQUE",
@@ -125,6 +126,16 @@ class GraphClient:
     async def merge_facility(
         self, *, tenant_id: str, pg_id: str, props: Mapping[str, Any], version: int
     ) -> None:
+        """시설 upsert. `props.deleted_at`이 truthy면 tombstone — 노드를 관계까지 완전 삭제한다
+        (facilities.py의 소프트 삭제 스냅샷 계약, H13-6). 삭제는 순서 역전 가드 없이 즉시 반영
+        — 삭제 후 재작성 레이스는 이 파일럿 범위 밖
+        (ponytail: 재정렬 필요해지면 version 가드 추가)."""
+        if props.get("deleted_at"):
+            await self._run(
+                "MATCH (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) DETACH DELETE f",
+                {"pg_id": pg_id, "tenant": tenant_id},
+            )
+            return
         await self._run(
             "MERGE (f:Facility {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET f.last_applied_version = -1 "
@@ -215,6 +226,47 @@ class GraphClient:
             },
         )
 
+    async def replace_floor_plan(
+        self, *, tenant_id: str, pg_id: str, props: Mapping[str, Any], version: int
+    ) -> None:
+        """평면도 도면 upsert + 마커(`PlanDevice`) 전체 교체(H13-6, docs/03 §4.9 floor_plan 스냅샷).
+
+        PG `plan_devices`는 항상 delete-then-insert 전체교체라 그래프도 동일 정책 —
+        기존 `HAS_DEVICE` 대상 전부 detach delete 후 스냅샷으로 재생성한다. `facility_id`가
+        있는 마커는 `LINKED_TO`로 Facility에 연결(merge_incident 관례와 동일 stub 허용).
+        """
+        devices = [dict(d) for d in props.get("devices") or []]
+        await self._run(
+            "MERGE (fp:FloorPlan {pg_id: $pg_id, tenant_id: $tenant}) "
+            "ON CREATE SET fp.last_applied_version = -1 "
+            "WITH fp WHERE $version > fp.last_applied_version "
+            "SET fp.unit_type_name = $unit_type_name, fp.image_width = $image_width, "
+            "    fp.image_height = $image_height, fp.last_applied_version = $version "
+            "WITH fp "
+            "OPTIONAL MATCH (fp)-[:HAS_DEVICE]->(old:PlanDevice) "
+            "DETACH DELETE old "
+            "WITH DISTINCT fp "
+            "UNWIND $devices AS device "
+            "CREATE (d:PlanDevice {pg_id: device.pg_id, tenant_id: $tenant}) "
+            "SET d.device_type = device.device_type, d.x = device.x, d.y = device.y, "
+            "    d.room = device.room, d.dir = device.dir, d.label = device.label "
+            "MERGE (fp)-[:HAS_DEVICE]->(d) "
+            "WITH d, device "
+            "FOREACH (_ IN CASE WHEN device.facility_id IS NULL THEN [] ELSE [1] END | "
+            "    MERGE (f:Facility {pg_id: device.facility_id, tenant_id: $tenant}) "
+            "    ON CREATE SET f.last_applied_version = -1 "
+            "    MERGE (d)-[:LINKED_TO]->(f))",
+            {
+                "pg_id": pg_id,
+                "tenant": tenant_id,
+                "version": version,
+                "unit_type_name": props.get("unit_type_name"),
+                "image_width": props.get("image_width"),
+                "image_height": props.get("image_height"),
+                "devices": devices,
+            },
+        )
+
     # ── 검색 (H3-3 재사용, 이번엔 격리 테스트용) ────────────────────────
 
     async def search_incidents(
@@ -266,11 +318,16 @@ class GraphClient:
 
     # ── 화면 조회 (H13-1 — 시설 그래프 메인의 유일한 읽기 경로) ─────────────
 
-    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
+    async def fetch_facility_graph(
+        self, *, tenant_id: str, include_plan: bool = False
+    ) -> FacilityGraph:
         """단지 시설 그래프 전체(노드 + 관계). 관계 0인 고아 시설도 노드로 포함.
 
         tenant는 시설·이웃 양쪽에 강제한다. 반환 프로퍼티는 열거식 —
         `embedding`은 결과에 들어갈 수 없다(페이로드 폭발 방지, ADR-0022).
+
+        `include_plan=True`면 평면도·마커(FloorPlan·PlanDevice)도 실어 반환한다(H13-6) —
+        마커가 단지 전체 시설 대비 훨씬 많아(도면당 수십개) 기본은 제외, 화면이 opt-in.
         """
         records = await self._run(
             "MATCH (f:Facility {tenant_id: $tenant}) "
@@ -304,7 +361,42 @@ class GraphClient:
             if node_id not in nodes:
                 nodes[node_id] = _neighbor_node(kind, node_id, r)
             links.append(GraphLink(source=facility_id, target=node_id, kind=kind))
+
+        if include_plan:
+            await self._merge_plan_graph(tenant_id=tenant_id, nodes=nodes, links=links)
+
         return FacilityGraph(nodes=tuple(nodes.values()), links=tuple(links))
+
+    async def _merge_plan_graph(
+        self, *, tenant_id: str, nodes: dict[str, GraphNode], links: list[GraphLink]
+    ) -> None:
+        """평면도·마커 노드/관계를 fetch_facility_graph 결과에 덧붙인다(include_plan=True 전용)."""
+        records = await self._run(
+            "MATCH (fp:FloorPlan {tenant_id: $tenant}) "
+            "OPTIONAL MATCH (fp)-[:HAS_DEVICE]->(d:PlanDevice) "
+            "OPTIONAL MATCH (d)-[:LINKED_TO]->(f:Facility {tenant_id: $tenant}) "
+            "RETURN fp.pg_id AS plan_id, fp.unit_type_name AS unit_type_name, "
+            "       d.pg_id AS device_id, d.device_type AS device_type, d.room AS room, "
+            "       f.pg_id AS facility_id "
+            "ORDER BY unit_type_name, device_id",
+            {"tenant": tenant_id},
+        )
+        for r in records:
+            plan_id = r["plan_id"]
+            if plan_id not in nodes:
+                nodes[plan_id] = GraphNode(
+                    pg_id=plan_id, label="floor_plan", name=r["unit_type_name"]
+                )
+            device_id = r["device_id"]
+            if device_id is None:  # 마커 0개인 도면
+                continue
+            if device_id not in nodes:
+                name = r["device_type"] if not r["room"] else f"{r['device_type']}({r['room']})"
+                nodes[device_id] = GraphNode(pg_id=device_id, label="plan_device", name=name)
+            links.append(GraphLink(source=plan_id, target=device_id, kind="HAS_DEVICE"))
+            facility_id = r["facility_id"]
+            if facility_id is not None:
+                links.append(GraphLink(source=device_id, target=facility_id, kind="LINKED_TO"))
 
 
 def _neighbor_node(kind: str, node_id: str, record: Any) -> GraphNode:

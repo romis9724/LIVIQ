@@ -42,9 +42,13 @@ class StubGraph:
         self.result = result or FacilityGraph(nodes=(), links=())
         self.error = error
         self.calls: list[str] = []
+        self.include_plan_calls: list[bool] = []
 
-    async def fetch_facility_graph(self, *, tenant_id: str) -> FacilityGraph:
+    async def fetch_facility_graph(
+        self, *, tenant_id: str, include_plan: bool = False
+    ) -> FacilityGraph:
         self.calls.append(tenant_id)
+        self.include_plan_calls.append(include_plan)
         if self.error is not None:
             raise self.error
         return self.result
@@ -161,6 +165,7 @@ async def test_create_records_outbox_snapshot(seeded: AsyncSession) -> None:
         "location": "1203동",
         "type": "elevator",
         "status": "fault",
+        "deleted_at": None,
     }
 
 
@@ -271,6 +276,15 @@ async def test_graph_returns_nodes_and_links_without_extra_fields(seeded: AsyncS
         "resolved",
     }
     assert body["nodes"][1]["resolved"] is True
+
+
+async def test_graph_include_plan_defaults_false_and_opts_in(seeded: AsyncSession) -> None:
+    """평면도 마커 과밀 방지(H13-6) — 기본 제외, `?include_plan=true`로만 opt-in."""
+    stub = StubGraph()
+    async with _make_client(seeded, graph=stub) as c:
+        await c.get("/admin/facilities/graph")
+        await c.get("/admin/facilities/graph", params={"include_plan": "true"})
+    assert stub.include_plan_calls == [False, True]
 
 
 async def test_graph_scopes_query_to_caller_tenant(seeded: AsyncSession) -> None:

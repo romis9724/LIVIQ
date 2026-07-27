@@ -38,6 +38,9 @@ class SpyGraph:
     async def merge_maintenance(self, **kw: Any) -> None:
         self.calls.append({"kind": "maintenance", **kw})
 
+    async def replace_floor_plan(self, **kw: Any) -> None:
+        self.calls.append({"kind": "floor_plan", **kw})
+
 
 class FailingGraph:
     async def merge_facility(self, **kw: Any) -> None:
@@ -193,6 +196,38 @@ async def test_incident_embedding_invoked(pg_dsn: str) -> None:
         await sync_outbox_task(ctx)
         assert len(spy_llm.embed_calls) == 1
         assert graph.calls[0]["embedding"] is not None
+    finally:
+        await _cleanup(factory, tenant_id)
+        await engine.dispose()
+
+
+async def test_floor_plan_event_dispatches_to_replace_floor_plan(
+    pg_dsn: str, fake_llm: LlmClient
+) -> None:
+    engine, factory = _factory(pg_dsn)
+
+    def events(tid: uuid.UUID) -> list[OutboxEvent]:
+        return [
+            _outbox(
+                tid,
+                aggregate_type="floor_plan",
+                payload={
+                    "unit_type_name": "84M",
+                    "image_width": 923,
+                    "image_height": 676,
+                    "devices": [{"pg_id": str(uuid.uuid4()), "device_type": "room"}],
+                },
+            )
+        ]
+
+    tenant_id = await _seed(factory, events)
+    graph = SpyGraph()
+    ctx = {"session_factory": factory, "graph": graph, "llm": fake_llm}
+    try:
+        result = await sync_outbox_task(ctx)
+        assert result["processed"] == 1
+        assert graph.calls[0]["kind"] == "floor_plan"
+        assert graph.calls[0]["props"]["unit_type_name"] == "84M"
     finally:
         await _cleanup(factory, tenant_id)
         await engine.dispose()

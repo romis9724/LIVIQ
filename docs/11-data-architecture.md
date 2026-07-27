@@ -16,7 +16,7 @@
 > 쓰기(outbox→graph_sync)만 가동됐고 읽기는 시설 AI 도우미 도구뿐이었다. H13-1의 `GET /admin/facilities/graph`
 > (MANAGER · `GraphClient` typed 조회 · Neo4j 미가용 시 PG `facilities` 축약 폴백 + `degraded`)가 그래프를
 > **화면에서 직접 읽는 첫 경로**다 — 동기화 품질(노드 누락·관계 결손·tombstone)을 눈으로 검증하는 수단이기도 하다.
-> 커버리지는 H13-3 이후 평면도 마커(`plan_devices`)·방·평형까지 확장하되(FR-FAC-06) **SoR은 PG 불변**(§5) —
+> 커버리지는 **H13-6에서 평면도 도면·마커까지 확장**(FR-FAC-06 채택 — `floor_plan` 스냅샷 이벤트)하되 **SoR은 PG 불변**(§5) —
 > 확장은 outbox 이벤트 종류를 늘리는 일이지 원천을 옮기는 일이 아니다.
 
 ## 2. 데이터 배치 결정표

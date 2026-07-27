@@ -278,6 +278,9 @@ export interface paths {
          *
          *     Neo4j 미가용은 503이 아니다 — PG `facilities`로 노드만 채운 축약 그래프에
          *     `degraded=True`를 실어 화면이 한계를 표시하게 한다(docs/01 §10 장애 격리).
+         *
+         *     `include_plan`은 기본 false — 평면도 마커까지 실으면 도면당 수십개라 과밀(H13-6),
+         *     opt-in 화면에서만 true로 요청한다.
          */
         get: operations["get_facility_graph_admin_facilities_graph_get"];
         put?: never;
@@ -2688,7 +2691,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE";
+            kind: "HAS_INCIDENT" | "HAS_MAINTENANCE" | "HAS_DEVICE" | "LINKED_TO";
             /** Source */
             source: string;
             /** Target */
@@ -2705,7 +2708,7 @@ export interface components {
              * Label
              * @enum {string}
              */
-            label: "facility" | "incident" | "maintenance";
+            label: "facility" | "incident" | "maintenance" | "floor_plan" | "plan_device";
             /** Location */
             location?: string | null;
             /** Name */
@@ -4426,7 +4429,9 @@ export interface operations {
     };
     get_facility_graph_admin_facilities_graph_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_plan?: boolean;
+            };
             header?: {
                 "x-dev-tenant-id"?: string | null;
                 "x-dev-user-id"?: string | null;
