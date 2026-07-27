@@ -80,7 +80,8 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
-  padding: var(--space-6);
+  /* §5A 카드 내부 리듬 — 화면마다 24/16px 혼재하던 것을 16px 단일화(H14-5, simplistic). */
+  padding: var(--space-4);
 }
 
 /* ============ CitationCard ============ */

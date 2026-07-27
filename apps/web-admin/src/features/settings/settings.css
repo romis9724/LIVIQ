@@ -3,7 +3,7 @@
 .codes-layout__grid {
   display: grid;
   grid-template-columns: minmax(240px, 320px) 1fr;
-  gap: var(--space-5);
+  gap: var(--space-4);
   align-items: start;
 }
 @media (max-width: 860px) {
@@ -44,13 +44,14 @@
   color: var(--color-text-muted);
   background: var(--color-surface-sunken);
   padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
+  /* 칩·배지는 full radius (docs/05 §5A radius 3종). */
+  border-radius: 999px;
 }
 
 .codes-empty {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-  padding: var(--space-4) 0;
+  padding: var(--space-3) 0;
 }
 
 .codes-note {
@@ -70,7 +71,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
 }
 
 .codes-groups__list {
@@ -146,9 +147,9 @@
 }
 
 .codes-detail__codes {
-  margin-top: var(--space-5);
+  margin-top: var(--space-4);
   border-top: 1px solid var(--color-border);
-  padding-top: var(--space-5);
+  padding-top: var(--space-4);
 }
 
 /* ---- 코드 트리 ---- */
@@ -160,7 +161,7 @@
 }
 .codes-tree--child {
   margin-top: var(--space-2);
-  margin-left: var(--space-5);
+  margin-left: var(--space-4);
   padding-left: var(--space-3);
   border-left: 2px solid var(--color-border);
 }
@@ -191,7 +192,7 @@
   color: var(--color-text-muted);
   background: var(--color-surface-sunken);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   padding: 0 var(--space-2);
 }
 .codes-row__code {
@@ -217,7 +218,7 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
@@ -266,7 +267,8 @@
   color: var(--color-text);
   background: var(--color-surface);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
+  /* 입력·버튼은 md radius (docs/05 §5A radius 3종). */
+  border-radius: var(--radius-md);
 }
 .codes-field__input--mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
