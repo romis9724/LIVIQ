@@ -425,6 +425,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/floor-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Admin Floor Plans */
+        get: operations["list_admin_floor_plans_admin_floor_plans_get"];
+        put?: never;
+        /**
+         * Upsert Admin Floor Plan
+         * @description unit_type_name get-or-create 후 도면 업서트 — 기존 타입이면 이미지만 교체(devices 보존,
+         *     version+1), 신규 타입이면 새 도면 생성(devices 0건).
+         */
+        post: operations["upsert_admin_floor_plan_admin_floor_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/floor-plans/{floor_plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Floor Plan */
+        get: operations["get_admin_floor_plan_admin_floor_plans__floor_plan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/floor-plans/{floor_plan_id}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace Admin Plan Devices */
+        put: operations["replace_admin_plan_devices_admin_floor_plans__floor_plan_id__devices_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/households/{household_id}": {
         parameters: {
             query?: never;
@@ -1807,6 +1863,73 @@ export interface components {
             /** Unit No */
             unit_no: number;
         };
+        /**
+         * AdminFloorPlanDetailOut
+         * @description 관리자 도면 1건 상세 — devices는 PUT이 교체하는 것과 동일 범위(action=base).
+         */
+        AdminFloorPlanDetailOut: {
+            /** Devices */
+            devices: components["schemas"]["PlanDeviceOut"][];
+            plan: components["schemas"]["FloorPlanOut"];
+        };
+        /**
+         * AdminFloorPlanListItemOut
+         * @description 관리자 평면도 목록 1건 — unit_type당 1행.
+         */
+        AdminFloorPlanListItemOut: {
+            /** Device Count */
+            device_count: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Image Height */
+            image_height: number | null;
+            /** Image Url */
+            image_url: string;
+            /** Image Width */
+            image_width: number | null;
+            /** Unit Type Name */
+            unit_type_name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** AdminFloorPlanListOut */
+        AdminFloorPlanListOut: {
+            /** Items */
+            items: components["schemas"]["AdminFloorPlanListItemOut"][];
+        };
+        /**
+         * AdminPlanDeviceIn
+         * @description 장치 전체교체 입력 1건 — action='base'·household_id=NULL 고정(오버라이드 미구현).
+         */
+        AdminPlanDeviceIn: {
+            /** Device Type */
+            device_type: string;
+            /** Dir */
+            dir?: ("up" | "down" | "left" | "right") | null;
+            /** Facility Id */
+            facility_id?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Memo */
+            memo?: string | null;
+            /** Room */
+            room?: string | null;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /** AdminPlanDevicesReplaceIn */
+        AdminPlanDevicesReplaceIn: {
+            /** Devices */
+            devices: components["schemas"]["AdminPlanDeviceIn"][];
+        };
         /** AiStats */
         AiStats: {
             /** Answer Rate */
@@ -1927,6 +2050,17 @@ export interface components {
         Body_upload_roster_admin_roster_upload_post: {
             /** File */
             file: string;
+        };
+        /** Body_upsert_admin_floor_plan_admin_floor_plans_post */
+        Body_upsert_admin_floor_plan_admin_floor_plans_post: {
+            /** Image */
+            image: string;
+            /** Image Height */
+            image_height: number;
+            /** Image Width */
+            image_width: number;
+            /** Unit Type Name */
+            unit_type_name: string;
         };
         /**
          * BreakdownRow
@@ -4655,6 +4789,154 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AdminFeeDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_admin_floor_plans_admin_floor_plans_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFloorPlanListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_admin_floor_plan_admin_floor_plans_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upsert_admin_floor_plan_admin_floor_plans_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFloorPlanListItemOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_floor_plan_admin_floor_plans__floor_plan_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                floor_plan_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFloorPlanDetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    replace_admin_plan_devices_admin_floor_plans__floor_plan_id__devices_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path: {
+                floor_plan_id: string;
+            };
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPlanDevicesReplaceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFloorPlanDetailOut"];
                 };
             };
             /** @description Validation Error */
