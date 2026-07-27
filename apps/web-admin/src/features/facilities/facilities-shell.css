@@ -263,6 +263,7 @@
     top: var(--space-3);
     left: var(--space-3);
     right: var(--space-3);
+    width: auto; /* 고정폭(--fac-left-col)이 375px 를 넘어 잘리는 것 방지 */
   }
   /* 375px 에서도 도구 버튼이 한 줄에 들어가야 상세 시트를 가리지 않는다 — 아이콘은 뺀다. */
   .fac-dock__btn {
