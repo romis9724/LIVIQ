@@ -201,7 +201,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈 · H13 시설 그래프)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -311,10 +311,11 @@
 | `GET /admin/review-queue` | MANAGER | `messages.review_status=needs_review` 목록(질문·답변·인용·신뢰도) |
 | `POST /admin/review-queue/{message_id}/decide` | MANAGER | `approve`/`reject`(+메모) → `reviewed_by/at` 기록. **사후 검수** — 이미 전달된 답변 회수 없음, 골든셋 후보로 축적([07 §5](07-testing-strategy.md)). 반려 시 정정 알림은 백로그 |
 
-**시설** (H3-1·H3-4 · [ADR-0009](adr/0009-neo4j-in-mvp.md), 화면: 관리자 시설 관리·AI 도우미. 그래프 모델·동기화: [11 §3.5·§4](11-data-architecture.md))
+**시설** (H3-1·H3-4 · [ADR-0009](adr/0009-neo4j-in-mvp.md) · H13-1 그래프 · [ADR-0022](adr/0022-facility-graph-dashboard.md), 화면: 관리자 시설 관리(그래프 메인·목록 보조)·AI 도우미. 그래프 모델·동기화: [11 §3.5·§4](11-data-architecture.md))
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
+| `GET /admin/facilities/graph` | MANAGER | 시설 그래프 조회(H13-1) — Neo4j **파생 그래프**의 노드(`Facility`·`Incident`·`Maintenance`)·관계(`HAS_INCIDENT`·`HAS_MAINTENANCE`)를 `{nodes, links}`로. `GraphClient` typed 조회(**raw Cypher 금지**·tenant 필터 강제, [11 §4](11-data-architecture.md)). **Neo4j 미가용 시 503이 아니라 PG `facilities` 축약 그래프**(노드만·관계 없음) + `degraded` 플래그(§10 장애 격리) |
 | `GET /admin/facilities` | MANAGER | 설비 목록(상태·유형 필터) |
 | `POST /admin/facilities` | MANAGER | 설비 등록 — **도메인 행 + `outbox_events` 원자 기록**([03 §4.9](03-database-design.md), 이중 쓰기 금지) |
 | `GET /admin/facilities/{id}` | MANAGER | 상세 + 장애·정비 이력 |
@@ -324,6 +325,8 @@
 | `POST /admin/facilities/assistant` | MANAGER | AI 도우미(SSE 4이벤트) — 도구 에이전트 경로([ADR-0007](adr/0007-readonly-tool-agent.md)), 유사 장애→**원인 후보 제시(단정 금지**, FR-FAC-02). Neo4j 미가용 시 그래프 도구 제외 폴백 |
 
 > Neo4j에 직접 쓰는 엔드포인트는 없다 — 모든 시설 쓰기는 PG 트랜잭션+outbox 한 경로, 그래프 반영은 ai-worker 단독([11 §3.5](11-data-architecture.md)).
+> `graph`는 **읽기 전용**이며 노드 상세는 기존 `GET /admin/facilities/{id}`(FacilityDetail)를 재사용한다 — 그래프 응답에 상세 필드를 중복하지 않는다.
+> H13-2에서 `inquiries.facility_id`(nullable FK)가 추가되며, **LLM 추천은 후보 제시까지**이고 정식 연결은 담당자 승인 액션 엔드포인트만 수행한다(§13.3 불변식 1·규칙 8).
 
 **운영 대시보드** (H4 — FR-ADM-06 · [09 §8.5](09-implementation-harness.md), 화면: 관리자 대시보드)
 

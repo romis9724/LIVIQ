@@ -297,6 +297,7 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 | H10. 컨테이너 배포 | 앱 4종 이미지(GHCR)·3-tier VM `compose.prod.yml` profiles(data/app/web)·리버스 프록시 same-origin(`/api`)·CI 릴리스 | 로컬 전체 스택 스모크 그린 + 이미지 GHCR 게시 + 배포·롤백 절차 문서화 | ✅ 완료 (2026-07-26, §8.13) |
 | H11. 운영 정합 | 감사 로그 실배선(보안 핵심 행위)·문서·스키마 드리프트 정정 | 감사 행위별 기록 테스트(CRITICAL — 개인정보 비저장 포함) + 문서와 실제 스키마 일치 | ✅ 완료 (2026-07-26, §8.14) |
 | H12. 사내 GitLab 배포 | GitLab CI 파이프라인(빌드·배포·스모크·게시)·단일 호스트(WSL Docker) 형상·이미지 좌표 규약 변경 | main push로 대상 호스트 배포 그린(Caddy 경유 스모크) + 롤백 실연. 레지스트리 게시는 서버 `external_url` 미해결로 `allow_failure` | 🚧 진행 (§8.15) |
+| H13. 시설 그래프·평면도 | 시설관리 메인을 3D 시설 그래프로(계통/위치 렌즈·검색 fly-to·상세 패널)·민원-시설 연결 3단·세대 평면도(데이터·입주민 뷰·편집·어시스턴트 도구) | tenant 격리·MANAGER 인가·**LLM 추천 승인 게이트**(CRITICAL) + Neo4j 미가용 폴백 + 게이트 그린 + 시각 실측 | 🚧 진행 (§8.16) — [ADR-0022](adr/0022-facility-graph-dashboard.md) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -561,6 +562,34 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 > **의도적 제외**: 무중단 배포·다중 호스트·중앙 로그 수집은 H12 범위 밖(ADR-0021 재검토 신호에 조건 명시).
 > 멀티아치 이미지도 제외 — 러너·대상 모두 amd64(§8.13 H10-3 실측).
+
+### 8.16 H13 체크리스트 (시설 그래프 대시보드 · 세대 평면도)
+
+> 근거: 사용자 인터뷰 확정(2026-07-27, [ADR-0022](adr/0022-facility-graph-dashboard.md)) — 시설관리 메뉴 메인을
+> **3D force-directed 시설 그래프**로 개편(레퍼런스: careerhackeralex.vercel.app/memory — 3D 별자리·렌즈·클릭 패널).
+> **데이터 현황**: Neo4j 시설 그래프는 H3부터 **쓰기만 가동** 중이다 — PG(SoR) → `outbox_events` →
+> [`graph_sync`](../apps/ai-worker/src/ai_worker/graph_sync.py)(15초 arq cron) → Neo4j MERGE, 접근은
+> [`GraphClient`](../packages/ai-core/src/ai_core/graph/client.py) typed 레이어만(**raw Cypher 금지**).
+> 지금까지 이 그래프를 **읽는 화면이 없었다** — H13-1이 첫 읽기 소비자라 파생 그래프 end-to-end 검증 가치가 함께 있다.
+> **불변**: PG SoR·Neo4j 파생([11 §5](11-data-architecture.md)) · LLM 출력이 부수효과를 직접 트리거하지 않음(규칙 8) ·
+> 마스킹 fail-closed(규칙 2) · tenant 격리 이중 방어(규칙 3).
+> 근거 설계: [00 §3.5](00-requirements.md) FR-FAC-04~06 · [01 §13](01-architecture.md) 시설 표 · [04](04-menu-structure.md) 메뉴·여정 ·
+> [05 §5·§7](05-ui-ux-design.md) · [11 §1·§2](11-data-architecture.md) · [ADR-0022](adr/0022-facility-graph-dashboard.md).
+> 각 작업 단위는 §3.1 사이클(설계 갱신 → 구현 → 현행화 → PR)을 따르고, 머지는 단위별 사용자 확인 후 진행.
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H13-0 | 설계 갱신 | [ADR-0022](adr/0022-facility-graph-dashboard.md) 신설 + [adr/README](adr/README.md) 목록 · [00 §3.5](00-requirements.md)(FR-FAC-04~06) · [01 §13](01-architecture.md)(`GET /admin/facilities/graph`) · [04](04-menu-structure.md)(시설 관리 하위 개편·매트릭스·여정) · [05 §5·§7](05-ui-ux-design.md)(그래프 UX·접근성 대체 수단·번들 예외) · [11 §1·§2](11-data-architecture.md)(첫 화면 소비자·커버리지 확장 주석) · 본 문서 §8 단계 표·§8.16 | 설계 문서 PR 머지(구현 착수 전) | ✅ 완료 (PR 머지 후 확정) |
+| H13-1 | 3D 그래프 메인 | `GraphClient` typed 조회 메서드 신설(예 `fetch_facility_graph(tenant_id)` — **tenant 필터 강제**, raw Cypher 미노출) · `GET /admin/facilities/graph`(MANAGER · `{nodes, links}` — `Facility`·`Incident`·`Maintenance` + `HAS_INCIDENT`·`HAS_MAINTENANCE` · **Neo4j 미가용 시 PG `facilities` 축약 그래프(노드만·관계 없음) + `degraded`**) · web-admin 시설관리 **메인 교체**(react-force-graph-3d `dynamic import` `ssr:false` 격리 · **계통 렌즈**(`facilities.type` 계통색·포스 그룹핑, 가상 허브 노드 없음) · **검색→카메라 fly-to 강조** · 옆 패널은 기존 `GET /admin/facilities/{id}`(FacilityDetail) 재사용 · 관련 민원은 **위치 추정 + "추정" 배지**만 · 기존 FacilityManager는 **목록 보조 뷰 토글**로 유지) · `packages/api-types` 재생성 | tenant 격리·MANAGER 인가 테스트(**CRITICAL** — 타 tenant 노드 0건) + **Neo4j 미가용 폴백 테스트**(503 아님·`degraded=true`·노드만) + 게이트 그린(pytest cov 80·vitest·build·api-types drift) + 시각 실측(1280·375px·콘솔 0 — 그래프↔목록 토글·검색 fly-to·상세 패널) | ⬜ 예정 |
+| H13-2 | 위치 렌즈 + 민원 정식 연결 | **위치 렌즈**(`facilities.location` 동 단위 그룹핑 — 렌즈 토글 2종 완성) · `inquiries.facility_id` **nullable FK 마이그레이션**(composite FK + 표준 tenant RLS 경로 확인 — [03 §5](03-database-design.md)) · **담당자 지정 UI**(민원 상세에서 설비 선택 → 정식 연결) · **LLM 추천**(마스킹 후 후보 추출 — [ADR-0002](adr/0002-mask-before-external-llm.md) fail-closed, **승인 전 DB 쓰기·부수효과 0**, 원클릭 승인 액션 엔드포인트만 FK를 쓴다) · 상세 패널 민원의 **정식/추정 배지 구분** | **승인 게이트 테스트**(**CRITICAL** — 추천 호출만으로 `facility_id`·감사·알림 어느 것도 변하지 않음) + 마스킹 fail-closed 테스트 + tenant 격리·인가 테스트(**CRITICAL** — 타 tenant 설비로 연결 거부) + 게이트 그린 + 시각 실측 | ⬜ 예정 |
+| H13-3 | 평면도 데이터 + 입주민 뷰 | (별도 인터뷰 확정 — apt-facility-finder 포팅) 죽은 스키마 기동(`floor_plans`·`plan_devices`·`unit_types` — 초기 마이그레이션 `d5422d3f35d5`에 **실존·0행**, [03 §4.8](03-database-design.md) 계약 재사용) · `plan_devices`에 `room`·`dir` **nullable 컬럼 2개** 추가 · 세대 오버라이드 미구현(`action='base'`만) · 입주민 홈 "우리집 평면도" 카드 → **본인 세대 직행**(동·호 선택 없음 — [06:11](06-security-privacy.md) 소유권 계약 유지) · **상세 설계 갱신(00·03 §4.8·05·06 본문)은 H13-3 자체 ①설계 커밋에서** 수행(H13-0은 본 표 요약 행까지) | 소유권 격리 테스트(**CRITICAL** — 타 세대 평면도 접근 거부) + 마이그레이션 회귀(기존 0행 테이블 살리기·단일 head) + 게이트 그린 + 시각 실측 | ⬜ 예정 |
+| H13-4 | 평면도 편집 + 트윈 상세 평면도 탭 | 시설관리 안의 편집 UI(배경 이미지·마커 좌표 배치·방/방향 지정) · 트윈 세대 상세 패널에 **평면도 탭** 추가(기존 세대 상세 계약 재사용) | 편집 인가·tenant 격리(**CRITICAL**) + 좌표 저장 왕복 + 게이트 그린 + 시각 실측 | ⬜ 예정 |
+| H13-5 | 평면도 어시스턴트 도구 | 자연어 질의("우리집 공유기 어디?")를 **읽기 전용 도구**로([ADR-0007](adr/0007-readonly-tool-agent.md)) — **규칙 파서 1차(0ms·LLM 미호출)** + 실패 시 LLM 보조 spec 추출. 도구는 본인 세대 범위만 조회하고 쓰기 없음 | 규칙 파서 우선 경로 테스트(LLM 호출 0) + 소유권·마스킹 테스트(**CRITICAL**) + 게이트 그린 | ⬜ 예정 |
+
+> **백로그(수요 확인 후)**: 그래프 **커버리지 확장**(FR-FAC-06 — 평면도 마커·방·평형 노드 편입, outbox 이벤트 종류 추가. SoR은 PG 불변) ·
+> **부품/증상 유사도 렌즈**(`Part`·`SAME_MODEL` 관계와 Incident 임베딩 활용 — [11 §4](11-data-architecture.md) 모델엔 있으나 현재 미동기화) ·
+> **3D 성능 재검토**(설비 500+ 노드에서 프레임·상호작용 저하 시 렌즈 필터 기본 적용 → 2D/클러스터 축약, [ADR-0022](adr/0022-facility-graph-dashboard.md) 재검토 신호) ·
+> 평면도 **세대 오버라이드**(`action='override'`) · 그래프 노드에서 민원·정비 **바로 등록**(현재는 조회 전용).
 
 ## 9. 정의: "완료(Done)"
 

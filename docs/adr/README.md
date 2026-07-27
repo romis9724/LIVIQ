@@ -31,3 +31,4 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0019](0019-complex-twin-3d.md) | 단지 3D 트윈 — deck.gl + JSONB geometry, 기존 세대·명부 재사용 | Accepted |
 | [0020](0020-container-deploy-3tier-vm.md) | 컨테이너 배포 — 이미지 4개·3-tier VM·compose profiles 단일 파일 | Accepted |
 | [0021](0021-gitlab-ci-single-host-wsl.md) | 사내 단일 호스트 배포 — GitLab CI + WSL Docker(0020 형상에 추가) | Accepted |
+| [0022](0022-facility-graph-dashboard.md) | 시설관리 메인 = 3D 시설 그래프 — Neo4j 파생 그래프의 첫 읽기 소비자 | Accepted |

@@ -12,6 +12,13 @@
 | **Redis** | 응답 캐시(정확/의미)·세션·arq 큐 | 영속 원천 데이터 | 키 프리픽스 `tenant:{id}:` |
 | **S3 호환** | 원본 파일(문서)·평면도 이미지·업로드 엑셀 | 정형/관계 데이터·임베딩 | 키 프리픽스 `{tenant_id}/`, 서명 URL |
 
+> **파생 그래프의 첫 화면 소비자(H13-1 · [ADR-0022](adr/0022-facility-graph-dashboard.md))**: Neo4j는 H3부터
+> 쓰기(outbox→graph_sync)만 가동됐고 읽기는 시설 AI 도우미 도구뿐이었다. H13-1의 `GET /admin/facilities/graph`
+> (MANAGER · `GraphClient` typed 조회 · Neo4j 미가용 시 PG `facilities` 축약 폴백 + `degraded`)가 그래프를
+> **화면에서 직접 읽는 첫 경로**다 — 동기화 품질(노드 누락·관계 결손·tombstone)을 눈으로 검증하는 수단이기도 하다.
+> 커버리지는 H13-3 이후 평면도 마커(`plan_devices`)·방·평형까지 확장하되(FR-FAC-06) **SoR은 PG 불변**(§5) —
+> 확장은 outbox 이벤트 종류를 늘리는 일이지 원천을 옮기는 일이 아니다.
+
 ## 2. 데이터 배치 결정표
 
 | 데이터 | 저장 위치 | 임베딩 | 근거 |
@@ -22,7 +29,7 @@
 | 첨부(추출 텍스트) | PG `document_chunks`, 원본 S3 | pgvector | 문서와 동일 파이프라인 |
 | 시설 이력(설비·장애·조치·부품) | PG(SoR) → Neo4j(파생) | **Neo4j 노드 벡터만** | 그래프 확장 + 증상 유사도 |
 | 관리비 | PG `fees` | **없음(정형, SQL 조회)** | AI는 설명만, 계산·검색 불필요 |
-| 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities` | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 |
+| 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities` | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 · **그래프 노드 편입 예정**(H13-3+ — 평면도 마커·방·평형을 outbox 경유로 Neo4j에 투영, FR-FAC-06. **SoR은 PG 유지**) |
 | 명부·계정 | PG `users`·`pii_vault` | **없음** | 정형·PII 분리 저장 |
 | 주차 배치도·등록 차량 | PG `parking_layouts`·`parking_vehicles`(번호판 암호문) | **없음(정형, SQL 조회)** | 면 좌표·차량은 정형 질의, 번호판은 LLM 미노출(§3.4.2) |
 

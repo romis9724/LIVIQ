@@ -86,8 +86,13 @@ MVP는 **입주민 반응형 웹/PWA + 관리자 웹 + AI 코어**를 동시에 
 | FR-FAC-01 | 설비·유지보수 이력 등록·검색 | M | 중 | |
 | FR-FAC-02 | 시설 AI 도우미: 유사 장애·이력·매뉴얼 검색 → **가능 원인 후보 제시** | M | 중 | Neo4j MVP 포함 결정([ADR-0009](adr/0009-neo4j-in-mvp.md)) |
 | FR-FAC-03 | 점검 기한·상태 조회 | S | 하 | |
+| FR-FAC-04 | **시설 그래프 대시보드**: 시설관리 메인을 3D force-directed 그래프로 — 계통/위치 **렌즈 2종**, 검색→카메라 **fly-to 강조**, 노드 클릭 시 상세 패널(현황·정비 이력·고장 이력·관련 민원). 목록 뷰는 토글 가능한 **보조 뷰로 유지**(접근성 대체 수단) | M | 중 | [ADR-0022](adr/0022-facility-graph-dashboard.md) — Neo4j 파생 그래프의 첫 읽기 소비자(SoR은 PG 불변) |
+| FR-FAC-05 | **민원-시설 연결 3단**: ①담당자 지정=**정식 연결**(`inquiries.facility_id`) ②LLM 추천(마스킹 후 후보 제시 — **담당자 승인 후에만 정식 연결**) ③미연결 민원은 위치 문자열 추정 + **"추정" 배지** | M | 중 | 절대 규칙 8 승인 게이트 · [ADR-0022](adr/0022-facility-graph-dashboard.md) |
+| FR-FAC-06 | **그래프 커버리지 확장**: 평면도 마커(`plan_devices`)·방·평형을 outbox 경유로 그래프 노드에 편입 | S | 하 | H13-3 이후([09 §8.16](09-implementation-harness.md)) — SoR은 PG 유지 |
 
 > 시설 기능 접근은 파일럿에서 **MANAGER 전용**(`FACILITY` 역할은 Phase 2 — §2 역할표). 기능 자체는 유지.
+> FR-FAC-05의 LLM 추천은 **사람 승인이 필수**다 — LLM 출력이 FK 쓰기 등 부수효과를 직접 트리거하지 않는다(절대 규칙 8).
+> 추천 호출 전 개인정보 마스킹은 fail-closed(규칙 2, [ADR-0002](adr/0002-mask-before-external-llm.md)).
 
 ### 3.6 공통/플랫폼 (FR-CMN)
 
