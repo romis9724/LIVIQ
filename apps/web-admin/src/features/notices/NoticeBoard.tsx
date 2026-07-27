@@ -1,11 +1,28 @@
 "use client";
 
-import { Button, EmptyState, FilterChips, PageToolbar, Skeleton } from "@liviq/ui";
+import {
+  Button,
+  EmptyState,
+  FilterChips,
+  PageToolbar,
+  Pagination,
+  SearchField,
+  Skeleton,
+} from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { ApiError, listCodeGroups, listNotices, type Notice } from "@/lib/api";
 import { NOTICE_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
+import { usePaging } from "@/lib/paging";
 import { STATUS_META, shortDate, shortDateTime, sortNotices } from "./data";
 import "./notices.css";
 
@@ -29,6 +46,9 @@ export function NoticeBoard() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [categoryLabels, setCategoryLabels] = useState<Map<string, string>>(new Map());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // 검색은 문서 관리와 동일 UX — uncontrolled(한글 IME) + 검색 버튼/Enter 제출 시 적용.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [appliedQuery, setAppliedQuery] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -65,10 +85,25 @@ export function NoticeBoard() {
       })),
     [rows],
   );
-  const visibleRows = useMemo(
-    () => (statusFilter === "all" ? rows : rows.filter((n) => n.status === statusFilter)),
-    [rows, statusFilter],
-  );
+  const visibleRows = useMemo(() => {
+    const q = appliedQuery.trim().toLowerCase();
+    return rows.filter((n) => {
+      if (statusFilter !== "all" && n.status !== statusFilter) return false;
+      // 제목·공지 내용 모두 검색(민원 관리와 같은 패턴).
+      if (q && !n.title.toLowerCase().includes(q) && !n.body.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [rows, statusFilter, appliedQuery]);
+
+  // 전량 로드 후 클라이언트 페이징 — 필터·검색이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visibleRows);
+  const { reset: resetPage } = paging;
+
+  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAppliedQuery(searchRef.current?.value ?? "");
+    resetPage();
+  };
 
   return (
     <>
@@ -84,26 +119,48 @@ export function NoticeBoard() {
             <FilterChips
               items={chips}
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={(id) => {
+                setStatusFilter(id);
+                resetPage();
+              }}
               label="상태 필터"
             />
           }
           end={
-            <Link href="/notices/new" className="btn btn--primary">
-              새 공지 작성
-            </Link>
+            <>
+              <form className="notice-searchform" onSubmit={applySearch}>
+                <SearchField ref={searchRef} label="공지 검색" placeholder="제목·내용 검색" />
+                <Button type="submit" variant="secondary">
+                  검색
+                </Button>
+              </form>
+              <Link href="/notices/new" className="btn btn--primary">
+                새 공지 작성
+              </Link>
+            </>
           }
         />
         <NoticeBoardBody
           loading={loading}
           loadError={loadError}
-          rows={visibleRows}
-          filtered={statusFilter !== "all"}
+          rows={paging.rows}
+          filtered={statusFilter !== "all" || appliedQuery.trim() !== ""}
           categoryLabels={categoryLabels}
           onRetry={() => {
             setLoading(true);
             void load();
           }}
+          pager={
+            paging.totalPages > 1 ? (
+              <Pagination
+                page={paging.page}
+                totalPages={paging.totalPages}
+                totalCount={visibleRows.length}
+                onPage={paging.setPage}
+                label="공지 목록 페이지"
+              />
+            ) : null
+          }
         />
       </main>
     </>
@@ -113,11 +170,14 @@ export function NoticeBoard() {
 interface BodyProps {
   loading: boolean;
   loadError: string | null;
+  /** 현재 페이지 분량만 받는다(페이징은 부모가 계산). */
   rows: readonly Notice[];
   /** 상태 필터가 걸린 상태 — 빈 목록 문구를 구분한다(docs/05 §9). */
   filtered: boolean;
   categoryLabels: Map<string, string>;
   onRetry: () => void;
+  /** 표 카드 하단 페이저 — 1페이지뿐이면 null. */
+  pager: ReactNode;
 }
 
 function NoticeBoardBody({
@@ -127,6 +187,7 @@ function NoticeBoardBody({
   filtered,
   categoryLabels,
   onRetry,
+  pager,
 }: BodyProps) {
   if (loading) {
     return (
@@ -151,8 +212,8 @@ function NoticeBoardBody({
     return filtered ? (
       <EmptyState
         icon="📢"
-        title="해당 상태의 공지가 없습니다"
-        description="다른 상태를 선택해 보세요."
+        title="조건에 맞는 공지가 없습니다"
+        description="다른 상태나 검색어로 다시 시도해 보세요."
       />
     ) : (
       <EmptyState
@@ -163,9 +224,9 @@ function NoticeBoardBody({
     );
   }
   return (
-    <div className="surface-card notice-tablecard">
-      <div className="notice-table__scroll">
-        <table className="notice-table">
+    <div className="surface-card admin-tablecard">
+      <div className="admin-table__scroll">
+        <table className="admin-table notice-table">
           <thead>
             <tr>
               <th scope="col">상태</th>
@@ -217,6 +278,7 @@ function NoticeBoardBody({
           </tbody>
         </table>
       </div>
+      {pager}
     </div>
   );
 }

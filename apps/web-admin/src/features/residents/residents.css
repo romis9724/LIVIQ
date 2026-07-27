@@ -148,7 +148,25 @@
   color: var(--color-text-muted);
 }
 
-/* ---- 가입 대기 목록 ---- */
+/* ---- 가입 대기 목록(모달) ---- */
+.apv-modal__panel--wide {
+  width: min(720px, 100%);
+}
+.apv-modal__close {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.apv-modal__close:hover {
+  background: var(--color-surface-sunken);
+}
+
 .apv-queue__head {
   display: flex;
   align-items: center;
@@ -293,6 +311,8 @@
 }
 .apv-modal__panel {
   width: min(480px, 100%);
+  max-height: min(80vh, 900px);
+  overflow-y: auto;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -372,62 +392,71 @@
 .apv-roster {
   margin-bottom: var(--space-6);
 }
-/* 명부 툴바는 페이지 레벨(현황 → 툴바 → 목록, docs/05 §5A) — 카드 안에는 제목과 표만. */
-.apv-roster__heading {
-  margin-bottom: var(--space-4);
-}
-.apv-roster__search {
+/* 표 사양은 공용 .admin-table(@liviq/ui, 기준: 문서 관리) — 세대 묶음 표현만 로컬. */
+.apv-searchform {
   display: flex;
   align-items: center;
   gap: var(--space-2);
 }
-/* 좁은 화면(375px)에서 열이 늘어도 레이아웃이 깨지지 않게 가로 스크롤로 흘린다. */
-.apv-roster__scroll {
-  overflow-x: auto;
-}
-.apv-roster__table {
-  width: 100%;
-  border-collapse: collapse;
+/* 네이티브 select는 min-height를 무시하고 자체 높이로 렌더(문서 관리 .doc-select와 동일 처리)
+   — appearance:none으로 일반 박스화해 옆 검색 input과 높이를 맞추고 커스텀 chevron을 쓴다. */
+.apv-searchform__building {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-6) 0 var(--space-3);
+  font-family: inherit;
   font-size: var(--text-sm);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right var(--space-3) center;
+  color: var(--color-text);
 }
 .apv-roster__vehicles {
   color: var(--color-text-muted);
   overflow-wrap: anywhere;
 }
-.apv-roster__table th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border-strong);
-}
 .apv-roster__table td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
   font-variant-numeric: tabular-nums;
 }
-/* 세대 묶음: 같은 세대의 두 번째 행부터는 경계선을 지워 한 덩어리로 읽히게 한다. */
-.apv-roster__table tbody tr[data-cont] td {
+/* 세대 묶음: 같은 세대의 두 번째 행부터는 경계선을 지워 한 덩어리로 읽히게 한다
+   (공용 .admin-table 이 tr 상단 보더를 그린다 — 여기서 tr 단위로만 덮어쓴다). */
+.apv-roster__table tbody tr[data-cont] {
   border-top: 0;
 }
 .apv-roster__table tbody tr:not([data-cont]) td {
-  border-top: 1px solid var(--color-border);
   padding-top: var(--space-4); /* 세대 묶음이 시작되는 행에 여백을 줘 그룹 경계를 만든다 */
 }
-.apv-roster__table tbody tr[data-cont] + tr:not([data-cont]) td {
-  border-top-color: var(--color-border-strong);
+/* 같은 세대의 연속 행은 촘촘하게 — 2명 이상 세대가 세로로 늘어지지 않게(사용자 지시).
+   행 높이의 실질 하한은 행 안 버튼이라 액션 버튼도 함께 낮춘다. */
+.apv-roster__table tbody tr[data-cont] td {
+  padding-top: 2px;
+  padding-bottom: 2px;
 }
-.apv-roster__table tbody tr td {
-  border-bottom: 0;
+/* 아래 간격 축소는 뒤에 연속 행이 붙는(2명 이상) 시작 행만 — 1명 세대는 위아래 대칭 유지. */
+.apv-roster__table tbody tr:not([data-cont]):has(+ tr[data-cont]) td {
+  padding-bottom: 2px;
+}
+/* 세대의 마지막 사람 행은 아래에도 그룹 여백 — 시작 행의 위 여백과 대칭. */
+.apv-roster__table tbody tr[data-cont]:not(:has(+ tr[data-cont])) td {
+  padding-bottom: var(--space-3);
+}
+.apv-roster__actions .btn--sm {
+  min-height: 26px;
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+}
+.apv-roster__table tbody tr[data-cont] + tr:not([data-cont]) {
+  border-top-color: var(--color-border-strong);
 }
 .apv-roster__unit {
   font-weight: 600;
 }
 .apv-roster__name {
   color: var(--color-text);
-}
-.apv-roster__table tbody tr:hover {
-  background: var(--color-surface-sunken);
 }
 .apv-state {
   font-size: var(--text-xs);
@@ -459,17 +488,8 @@
 .apv-roster__actions > * + * {
   margin-left: var(--space-2);
 }
-.apv-roster__pager {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  justify-content: flex-end;
-  margin-top: var(--space-3);
-}
-.apv-roster__page {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
+.apv-roster > :not(.admin-table__scroll):not(.apv-roster__pager) {
+  margin: var(--space-4);
 }
 
 /* 행 삭제 — 전 행 빨간 버튼의 시각 소음을 줄인다(텍스트만 위험색, 확인은 Dialog가 담당). */

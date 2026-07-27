@@ -95,39 +95,8 @@
   z-index: 50;
 }
 
-.doc-tablecard {
-  padding: 0;
-  overflow: hidden;
-}
-.doc-table__scroll {
-  overflow-x: auto;
-}
 .doc-table {
-  width: 100%;
-  border-collapse: collapse;
-  min-width: 920px;
-  font-size: var(--text-sm);
-}
-.doc-table thead tr {
-  background: var(--color-surface-sunken);
-  text-align: left;
-  color: var(--color-text);
-}
-.doc-table th {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.doc-table td {
-  padding: var(--space-3) var(--space-4);
-  vertical-align: middle;
-}
-.doc-table tbody tr {
-  border-top: 1px solid var(--color-border);
-}
-.doc-table tbody tr:hover {
-  background: var(--color-surface-sunken);
+  min-width: 920px; /* 나머지 사양은 공용 .admin-table(@liviq/ui) — 기준 화면 */
 }
 .doc-nowrap {
   white-space: nowrap;

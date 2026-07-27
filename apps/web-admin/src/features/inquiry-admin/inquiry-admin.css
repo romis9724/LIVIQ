@@ -1,34 +1,12 @@
 /* 관리자 민원 관리 — 데이터테이블·상세 패널. */
 /* 상단 툴바(상태 필터 + 검색)는 @liviq/ui PageToolbar·FilterChips·SearchField(docs/05 §5A). */
-.ia-tablecard {
-  padding: 0;
-  overflow: hidden;
-}
-.ia-table__scroll {
-  overflow-x: auto;
-}
+/* 표 사양은 공용 .admin-table(@liviq/ui, 기준: 문서 관리) — 여기는 폭 하한만. */
 .ia-table {
-  width: 100%;
-  border-collapse: collapse;
   min-width: 980px;
-  font-size: var(--text-sm);
 }
-.ia-table thead tr {
-  background: var(--color-surface-sunken);
-  text-align: left;
-  color: var(--color-text-muted);
-}
-.ia-table th {
-  padding: var(--space-3) var(--space-4);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.ia-table td {
-  padding: var(--space-3) var(--space-4);
-  vertical-align: middle;
-}
-.ia-table tbody tr {
-  border-top: 1px solid var(--color-border);
+.ia-searchform {
+  display: flex;
+  gap: var(--space-2);
 }
 .ia-nowrap {
   white-space: nowrap;

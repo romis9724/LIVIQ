@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Button,
+  Pagination,
   Dialog,
   EmptyState,
   FileDropzone,
@@ -17,6 +18,8 @@ import {
 import type { FilterChipItem, ToastTone } from "@liviq/ui";
 import {
   ApiError,
+  listBuildings,
+  type Building,
   ROSTER_TEMPLATE_URL,
   approveSignup,
   deleteRosterRow,
@@ -77,12 +80,16 @@ export function Residents() {
   // 검색 input은 uncontrolled(ref) — controlled는 한글 IME 조합이 리렌더로 깨진다.
   const searchRef = useRef<HTMLInputElement>(null);
   const [appliedQuery, setAppliedQuery] = useState("");
+  const [building, setBuilding] = useState("");
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [stateFilter, setStateFilter] = useState<RosterStateFilter>("");
   const [page, setPage] = useState(1);
   // 업로드 패널 열림 — 최초 로드 때 한 번만 결정(명부 없으면 펼침), 이후엔 사용자 조작만 반영.
   // 리로드마다 counts로 다시 계산하면 업로드 직후 패널이 저절로 접혀 결과가 숨는다.
   const [uploadOpen, setUploadOpen] = useState<boolean | null>(null);
   const [rosterDeleteTarget, setRosterDeleteTarget] = useState<RosterEntry | null>(null);
+  // 회원 대기자 명단 — 하단 상시 섹션 대신 '승인 대기' 카드의 버튼으로 여는 모달(사용자 지시).
+  const [queueOpen, setQueueOpen] = useState(false);
 
   const showToast = useCallback((message: string, tone: ToastTone = "success") => {
     setToast({ message, tone });
@@ -104,6 +111,7 @@ export function Residents() {
     try {
       const next = await listRoster({
         q: appliedQuery,
+        building,
         state: stateFilter,
         page,
         size: PAGE_SIZE,
@@ -115,7 +123,7 @@ export function Residents() {
       setRosterError(errorMessage(err));
       setRoster(null);
     }
-  }, [appliedQuery, stateFilter, page]);
+  }, [appliedQuery, building, stateFilter, page]);
 
   useEffect(() => {
     void load();
@@ -124,6 +132,17 @@ export function Residents() {
   useEffect(() => {
     void loadRoster();
   }, [loadRoster]);
+
+  // 동 선택 옵션 — 동/호수 관리와 같은 목록 재사용(실패 시 select 없이 검색만).
+  useEffect(() => {
+    void (async () => {
+      try {
+        setBuildings(await listBuildings());
+      } catch {
+        // 무시 — 동 select 미표시.
+      }
+    })();
+  }, []);
 
   useEffect(
     () => () => {
@@ -238,6 +257,11 @@ export function Residents() {
               label="승인 대기"
               value={waiting.toLocaleString()}
               tone={waiting > 0 ? "warning" : "default"}
+              action={
+                <Button variant="ghost" size="sm" onClick={() => setQueueOpen(true)}>
+                  대기자 명단
+                </Button>
+              }
             />
           </StatGrid>
         ) : null}
@@ -257,19 +281,36 @@ export function Residents() {
           }
           end={
             <form
-              className="apv-roster__search"
+              className="apv-searchform"
               onSubmit={(e) => {
                 e.preventDefault();
                 setPage(1);
                 setAppliedQuery(searchRef.current?.value.trim() ?? "");
               }}
             >
+              {buildings.length > 0 ? (
+                <select
+                  className="apv-searchform__building"
+                  aria-label="동 선택"
+                  value={building}
+                  onChange={(e) => {
+                    setPage(1);
+                    setBuilding(e.target.value);
+                  }}
+                >
+                  <option value="">전체 동</option>
+                  {buildings.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}동
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               <SearchField
                 ref={searchRef}
                 label="명부 검색"
                 defaultValue=""
-                placeholder="동 또는 호수 검색 (예: 401, 201)"
-                inputMode="numeric"
+                placeholder="호·성함·차량번호 검색"
               />
               <Button type="submit" variant="secondary">
                 검색
@@ -296,41 +337,57 @@ export function Residents() {
           onToggle={setUploadOpen}
         />
 
-        {/* 대기 0건이 평시라 목록 뒤로 내린다 — 대기 건수 신호는 위 '승인 대기' 카드가 준다. */}
-        <section className="apv-queue" aria-labelledby="apv-queue-h">
-          <div className="apv-queue__head">
-            <h2 id="apv-queue-h" className="apv-queue__title">
-              회원 대기자 명단
-            </h2>
-            <span className="apv-count">{waiting}건 대기</span>
-          </div>
-
-          {loadError ? (
-            <EmptyState icon="⚠" title="목록을 불러오지 못했습니다" description={loadError} />
-          ) : signups === null ? (
-            <div className="apv-list">
-              <Skeleton height="96px" />
-            </div>
-          ) : waiting === 0 ? (
-            <p className="apv-queue__empty">
-              대기 중인 가입 신청이 없습니다. 새 신청이 접수되면 명부 대조 결과와 함께 이곳에
-              모입니다.
-            </p>
-          ) : (
-            <ul className="apv-list">
-              {signups.map((signup) => (
-                <SignupCard
-                  key={signup.userId}
-                  signup={signup}
-                  busy={busyId === signup.userId}
-                  onApprove={approve}
-                  onReject={setRejectId}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
       </main>
+
+      {queueOpen ? (
+        <div className="apv-modal" role="presentation" onClick={() => setQueueOpen(false)}>
+          <div
+            className="apv-modal__panel apv-modal__panel--wide"
+            role="dialog"
+            aria-modal="true"
+            aria-label="회원 대기자 명단"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="apv-queue__head">
+              <h2 className="apv-queue__title">회원 대기자 명단</h2>
+              <span className="apv-count">{waiting}건 대기</span>
+              <button
+                type="button"
+                className="apv-modal__close"
+                aria-label="닫기"
+                onClick={() => setQueueOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {loadError ? (
+              <EmptyState icon="⚠" title="목록을 불러오지 못했습니다" description={loadError} />
+            ) : signups === null ? (
+              <div className="apv-list">
+                <Skeleton height="96px" />
+              </div>
+            ) : waiting === 0 ? (
+              <p className="apv-queue__empty">
+                대기 중인 가입 신청이 없습니다. 새 신청이 접수되면 명부 대조 결과와 함께 이곳에
+                모입니다.
+              </p>
+            ) : (
+              <ul className="apv-list">
+                {signups.map((signup) => (
+                  <SignupCard
+                    key={signup.userId}
+                    signup={signup}
+                    busy={busyId === signup.userId}
+                    onApprove={approve}
+                    onReject={setRejectId}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {rejectTarget ? (
         <RejectDialog
@@ -393,10 +450,7 @@ function RosterTable({
   const totalPages = roster ? Math.max(1, Math.ceil(roster.total / PAGE_SIZE)) : 1;
 
   return (
-    <section className="surface-card apv-roster" aria-labelledby="apv-roster-h">
-      <h2 id="apv-roster-h" className="apv-queue__title apv-roster__heading">
-        주민 명부
-      </h2>
+    <section className="surface-card admin-tablecard apv-roster" aria-label="주민 명부">
 
       {error ? (
         <EmptyState icon="⚠" title="명부를 불러오지 못했습니다" description={error} />
@@ -412,8 +466,8 @@ function RosterTable({
         <EmptyState icon="🔍" title="조건에 맞는 세대가 없습니다" description="검색어·필터를 확인해 주세요." />
       ) : (
         <>
-          <div className="apv-roster__scroll">
-            <table className="apv-roster__table">
+          <div className="admin-table__scroll">
+            <table className="admin-table apv-roster__table">
               <thead>
                 <tr>
                   <th scope="col">동</th>
@@ -493,27 +547,13 @@ function RosterTable({
               </tbody>
             </table>
           </div>
-          <div className="apv-roster__pager">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => onPage(page - 1)}
-            >
-              이전
-            </Button>
-            <span className="apv-roster__page">
-              {page} / {totalPages} 페이지 · {roster.total.toLocaleString()}건
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => onPage(page + 1)}
-            >
-              다음
-            </Button>
-          </div>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalCount={roster.total}
+            onPage={onPage}
+            label="명부 페이지 이동"
+          />
         </>
       )}
     </section>

@@ -47,6 +47,9 @@ export type { FilterChipsProps, FilterChipItem } from "./components/filter-chips
 export { SearchField } from "./components/search-field/SearchField";
 export type { SearchFieldProps } from "./components/search-field/SearchField";
 
+export { Pagination } from "./components/pagination/Pagination";
+export type { PaginationProps } from "./components/pagination/Pagination";
+
 export { Skeleton } from "./components/skeleton/Skeleton";
 export type { SkeletonProps } from "./components/skeleton/Skeleton";
 

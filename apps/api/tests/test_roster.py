@@ -306,6 +306,33 @@ async def test_roster_list_search_filter_and_pagination(
     assert page1["total"] == 3 and len(page1["items"]) == 2 and len(page2["items"]) == 1
 
 
+async def test_roster_list_building_and_name_plate_search(db_session: AsyncSession) -> None:
+    """동 선택(building) + q 성함·차량번호 부분 일치(H14). 응답 성함은 여전히 마스킹."""
+    mapping = await seed_tenant(db_session)
+    app = _build_app(db_session, FakeStorage())
+    data = _xlsx(
+        [
+            ("김일동", "1990-01-01", "101", 3, 301),
+            ("박이호", "1985-05-05", "101", 3, 302),
+        ]
+    )
+    assert (await _upload(app, data)).status_code == 200
+    await _add_vehicle(db_session, mapping[(3, 301)], plate="205고9167")
+
+    # 동 선택 일치 / 불일치.
+    assert (await _get_roster(app, {"building": "101"})).json()["total"] == 2
+    assert (await _get_roster(app, {"building": "999"})).json()["total"] == 0
+    # 성함 부분 일치 — 응답은 마스킹 유지(평문 미노출).
+    body = (await _get_roster(app, {"q": "김일"})).json()
+    assert [i["unit_no"] for i in body["items"]] == [301]
+    assert "김일동" not in str(body)
+    # 차량번호 부분 일치(세대 단위 — 301 세대만).
+    body = (await _get_roster(app, {"q": "9167"})).json()
+    assert [i["unit_no"] for i in body["items"]] == [301]
+    # 불일치.
+    assert (await _get_roster(app, {"q": "없는사람"})).json()["items"] == []
+
+
 async def test_roster_list_requires_manager(seeded: None, db_session: AsyncSession) -> None:
     app = _build_app(db_session, FakeStorage(), roles=("STAFF",))
     assert (await _get_roster(app)).status_code == 403

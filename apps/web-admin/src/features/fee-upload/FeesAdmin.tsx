@@ -5,6 +5,7 @@ import {
   Button,
   EmptyState,
   PageToolbar,
+  Pagination,
   SearchField,
   Skeleton,
   StatCard,
@@ -17,6 +18,7 @@ import {
   type AdminFeeDetail,
   type AdminFeeList,
 } from "@/lib/api";
+import { usePaging } from "@/lib/paging";
 import { UploadWizard } from "./UploadWizard";
 import { FeeInvoice } from "./FeeInvoice";
 import { formatWon, monthLabel, unitLabel } from "./logic";
@@ -71,6 +73,9 @@ export function FeesAdmin() {
     if (view === "list") void load();
   }, [view, load]);
 
+  // 조회 결과 전량을 받아 클라이언트 페이징 — 조회 조건이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(data?.households ?? []);
+
   async function openDetail(householdId: string, label: string) {
     setDetail(null);
     setDetailError(null);
@@ -89,6 +94,7 @@ export function FeesAdmin() {
     const nextUnit = unitRef.current?.value.trim() ?? "";
     setBuilding(nextBuilding);
     setUnit(nextUnit);
+    paging.reset();
     if (nextBuilding === building && nextUnit === unit) void load();
   }
 
@@ -116,15 +122,16 @@ export function FeesAdmin() {
           start={
             view === "list" ? (
               <form className="fu-filters" onSubmit={onSearch}>
-                <label className="fu-filter" htmlFor="fu-month">
-                  <span className="fu-filter__label">조회 월</span>
-                  <input
-                    id="fu-month"
-                    type="month"
-                    value={period}
-                    onChange={(e) => setPeriod(e.target.value)}
-                  />
-                </label>
+                <input
+                  id="fu-month"
+                  type="month"
+                  aria-label="조회 월"
+                  value={period}
+                  onChange={(e) => {
+                    setPeriod(e.target.value);
+                    paging.reset();
+                  }}
+                />
                 <SearchField
                   ref={buildingRef}
                   label="동 검색"
@@ -172,7 +179,7 @@ export function FeesAdmin() {
               caption={`${detail.buildingName}동 ${unitLabel(detail.floor, detail.unitNo)} · ${monthLabel(detail.period)}`}
             />
           ) : (
-            <div className="surface-card fu-tablecard fu-loading">
+            <div className="surface-card admin-tablecard fu-loading">
               <Skeleton height="1.5rem" />
               <Skeleton height="1.5rem" />
               <Skeleton height="1.5rem" />
@@ -181,7 +188,7 @@ export function FeesAdmin() {
         ) : (
           <div className="fu-status">
             {loading ? (
-              <div className="surface-card fu-tablecard fu-loading">
+              <div className="surface-card admin-tablecard fu-loading">
                 <Skeleton height="1.5rem" />
                 <Skeleton height="1.5rem" />
                 <Skeleton height="1.5rem" />
@@ -200,12 +207,9 @@ export function FeesAdmin() {
                 description={`${monthLabel(period)} 관리비가 아직 없거나 검색 조건에 맞는 세대가 없습니다. 엑셀 등록으로 반영하세요.`}
               />
             ) : (
-              <section aria-labelledby="fu-lookup-title">
-                <h2 id="fu-lookup-title" className="fu-section__title">
-                  동/호별 관리비
-                </h2>
-                <div className="surface-card fu-tablecard">
-                  <table className="fu-table">
+              <section aria-label="동/호별 관리비">
+                <div className="surface-card admin-tablecard">
+                  <table className="admin-table fu-table">
                     <thead>
                       <tr>
                         <th scope="col">동</th>
@@ -219,7 +223,7 @@ export function FeesAdmin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {data.households.map((h) => (
+                      {paging.rows.map((h) => (
                         <tr key={h.householdId}>
                           <td>{h.buildingName}</td>
                           <td>{unitLabel(h.floor, h.unitNo)}</td>
@@ -242,6 +246,15 @@ export function FeesAdmin() {
                       ))}
                     </tbody>
                   </table>
+                  {paging.totalPages > 1 ? (
+                    <Pagination
+                      page={paging.page}
+                      totalPages={paging.totalPages}
+                      totalCount={data.households.length}
+                      onPage={paging.setPage}
+                      label="세대 목록 페이지"
+                    />
+                  ) : null}
                 </div>
               </section>
             )}

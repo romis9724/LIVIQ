@@ -1271,12 +1271,13 @@ export interface RosterList {
   lastUpload: { uploadedAt: string; rowCount: number; errorCount: number } | null;
 }
 
-/** 명부 목록(MANAGER) — 검색(q=동·호)·상태 필터·페이지네이션. */
+/** 명부 목록(MANAGER) — 동 선택(building) + 검색(q=호·성함·차량번호)·상태 필터·페이지네이션. */
 export async function listRoster(
-  params: { q?: string; state?: string; page?: number; size?: number } = {},
+  params: { q?: string; building?: string; state?: string; page?: number; size?: number } = {},
 ): Promise<RosterList> {
   const search = new URLSearchParams();
   if (params.q) search.set("q", params.q);
+  if (params.building) search.set("building", params.building);
   if (params.state) search.set("state", params.state);
   if (params.page) search.set("page", String(params.page));
   if (params.size) search.set("size", String(params.size));

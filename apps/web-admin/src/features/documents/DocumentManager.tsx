@@ -5,16 +5,26 @@ import {
   EmptyState,
   FilterChips,
   PageToolbar,
+  Pagination,
   SearchField,
   Skeleton,
   StatCard,
   StatGrid,
 } from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import { ApiError, listCodeGroups, listDocuments, type DocumentItem } from "@/lib/api";
 import { DOC_CATEGORY_GROUP, codeLabelMap } from "@/lib/codes";
+import { usePaging } from "@/lib/paging";
 import { DocumentTable } from "./DocumentTable";
 import {
   STATUS_FILTERS,
@@ -89,10 +99,15 @@ export function DocumentManager() {
     [docs, statusFilter, appliedQuery, appliedCategory],
   );
 
+  // 전량 로드 후 클라이언트 페이징 — 필터·검색이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visibleDocs);
+  const { reset: resetPage } = paging;
+
   const applySearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAppliedQuery(searchRef.current?.value ?? "");
     setAppliedCategory(category);
+    resetPage();
   };
 
   return (
@@ -125,7 +140,10 @@ export function DocumentManager() {
             <FilterChips
               items={STATUS_FILTERS}
               value={statusFilter}
-              onChange={setStatusFilter}
+              onChange={(id) => {
+                setStatusFilter(id);
+                resetPage();
+              }}
               label="색인 상태 필터"
             />
           }
@@ -161,12 +179,23 @@ export function DocumentManager() {
           loading={loading}
           loadError={loadError}
           docs={docs}
-          visibleDocs={visibleDocs}
+          visibleDocs={paging.rows}
           categoryLabels={categoryLabels}
           onRetry={() => {
             setLoading(true);
             void load();
           }}
+          pager={
+            paging.totalPages > 1 ? (
+              <Pagination
+                page={paging.page}
+                totalPages={paging.totalPages}
+                totalCount={visibleDocs.length}
+                onPage={paging.setPage}
+                label="문서 목록 페이지"
+              />
+            ) : null
+          }
         />
       </main>
     </>
@@ -177,9 +206,12 @@ interface DocumentsBodyProps {
   loading: boolean;
   loadError: string | null;
   docs: readonly DocumentItem[];
+  /** 현재 페이지 분량만 받는다(페이징은 부모가 계산). */
   visibleDocs: readonly DocumentItem[];
   categoryLabels: Map<string, string>;
   onRetry: () => void;
+  /** 표 카드 하단 페이저 — 1페이지뿐이면 null. */
+  pager: ReactNode;
 }
 
 function DocumentsBody({
@@ -189,10 +221,11 @@ function DocumentsBody({
   visibleDocs,
   categoryLabels,
   onRetry,
+  pager,
 }: DocumentsBodyProps) {
   if (loading) {
     return (
-      <div className="surface-card doc-tablecard doc-loading">
+      <div className="surface-card admin-tablecard doc-loading">
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
@@ -232,5 +265,5 @@ function DocumentsBody({
       />
     );
   }
-  return <DocumentTable docs={visibleDocs} categoryLabels={categoryLabels} />;
+  return <DocumentTable docs={visibleDocs} categoryLabels={categoryLabels} pager={pager} />;
 }

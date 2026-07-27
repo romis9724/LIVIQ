@@ -5,12 +5,21 @@ import {
   EmptyState,
   FilterChips,
   PageToolbar,
+  Pagination,
   SearchField,
   Skeleton,
   Toast,
 } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 import {
   ApiError,
@@ -32,6 +41,7 @@ import {
   type StaffMember,
 } from "@/lib/api";
 import { INQUIRY_CATEGORY_GROUP, codeLabelMap, codeOptions, type CodeOption } from "@/lib/codes";
+import { usePaging } from "@/lib/paging";
 import { InquiryFacilityLink } from "./InquiryFacilityLink";
 import {
   FILTERS,
@@ -73,7 +83,9 @@ export function InquiryAdmin() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterId>("all");
-  const [search, setSearch] = useState("");
+  // 검색은 문서 관리와 동일 UX — uncontrolled(한글 IME) + 검색 버튼/Enter 제출 시 적용.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [appliedQuery, setAppliedQuery] = useState("");
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -146,13 +158,25 @@ export function InquiryAdmin() {
     [counts],
   );
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = appliedQuery.trim().toLowerCase();
     return inquiries.filter((inquiry) => {
       if (filter !== "all" && inquiry.status !== filter) return false;
-      if (q && !inquiry.title.toLowerCase().includes(q)) return false;
+      // 제목·민원 내용 모두 검색(사용자 지시).
+      if (q && !inquiry.title.toLowerCase().includes(q) && !inquiry.body.toLowerCase().includes(q))
+        return false;
       return true;
     });
-  }, [inquiries, filter, search]);
+  }, [inquiries, filter, appliedQuery]);
+
+  // 전량 로드 후 클라이언트 페이징 — 필터·검색이 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visible);
+  const { reset: resetPage } = paging;
+
+  const applySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAppliedQuery(searchRef.current?.value ?? "");
+    resetPage();
+  };
 
   const selected = useMemo(
     () => inquiries.find((it) => it.id === selectedId) ?? null,
@@ -174,15 +198,23 @@ export function InquiryAdmin() {
       <main className="admin-page__main">
         <PageToolbar
           start={
-            <FilterChips items={filterItems} value={filter} onChange={setFilter} label="상태 필터" />
+            <FilterChips
+              items={filterItems}
+              value={filter}
+              onChange={(id) => {
+                setFilter(id);
+                resetPage();
+              }}
+              label="상태 필터"
+            />
           }
           end={
-            // uncontrolled — value 를 되돌리지 않아야 한글 IME 조합이 끊기지 않는다.
-            <SearchField
-              label="민원 검색"
-              placeholder="제목 검색"
-              onChange={(e) => setSearch(e.currentTarget.value)}
-            />
+            <form className="ia-searchform" onSubmit={applySearch}>
+              <SearchField ref={searchRef} label="민원 검색" placeholder="제목·내용 검색" />
+              <Button type="submit" variant="secondary">
+                검색
+              </Button>
+            </form>
           }
         />
 
@@ -190,7 +222,7 @@ export function InquiryAdmin() {
           loading={loading}
           loadError={loadError}
           inquiries={inquiries}
-          visible={visible}
+          visible={paging.rows}
           categoryMap={categoryMap}
           staffMap={staffMap}
           onRetry={() => {
@@ -198,6 +230,17 @@ export function InquiryAdmin() {
             void load();
           }}
           onOpen={setSelectedId}
+          pager={
+            paging.totalPages > 1 ? (
+              <Pagination
+                page={paging.page}
+                totalPages={paging.totalPages}
+                totalCount={visible.length}
+                onPage={paging.setPage}
+                label="민원 목록 페이지"
+              />
+            ) : null
+          }
         />
       </main>
 
@@ -228,11 +271,14 @@ interface InquiryBodyProps {
   loading: boolean;
   loadError: string | null;
   inquiries: readonly Inquiry[];
+  /** 현재 페이지 분량만 받는다(페이징은 부모가 계산). */
   visible: readonly Inquiry[];
   categoryMap: Map<string, string>;
   staffMap: Map<string, string>;
   onRetry: () => void;
   onOpen: (id: string) => void;
+  /** 표 카드 하단 페이저 — 1페이지뿐이면 null. */
+  pager: ReactNode;
 }
 
 function InquiryBody({
@@ -244,10 +290,11 @@ function InquiryBody({
   staffMap,
   onRetry,
   onOpen,
+  pager,
 }: InquiryBodyProps) {
   if (loading) {
     return (
-      <div className="surface-card ia-tablecard ia-loading">
+      <div className="surface-card admin-tablecard ia-loading">
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
         <Skeleton height="1.5rem" />
@@ -283,9 +330,9 @@ function InquiryBody({
     );
   }
   return (
-    <div className="surface-card ia-tablecard">
-      <div className="ia-table__scroll">
-        <table className="ia-table">
+    <div className="surface-card admin-tablecard">
+      <div className="admin-table__scroll">
+        <table className="admin-table ia-table">
           <thead>
             <tr>
               <th scope="col">접수번호</th>
@@ -310,6 +357,7 @@ function InquiryBody({
           </tbody>
         </table>
       </div>
+      {pager}
     </div>
   );
 }

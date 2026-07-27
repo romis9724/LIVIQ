@@ -38,39 +38,13 @@
   gap: var(--space-3);
 }
 
-.notice-tablecard {
-  padding: 0;
-  overflow: hidden;
-}
-.notice-table__scroll {
-  overflow-x: auto;
-}
+/* 표 사양은 공용 .admin-table(@liviq/ui, 기준: 문서 관리) — 여기는 폭 하한만. */
 .notice-table {
-  width: 100%;
-  border-collapse: collapse;
   min-width: 720px;
-  font-size: var(--text-sm);
 }
-.notice-table thead tr {
-  background: var(--color-surface-sunken);
-  text-align: left;
-  color: var(--color-text-muted);
-}
-.notice-table th {
-  padding: var(--space-3) var(--space-4);
-  font-weight: 600;
-  white-space: nowrap;
-}
-.notice-table td {
-  padding: var(--space-3) var(--space-4);
-  vertical-align: middle;
-}
-.notice-table tbody tr {
-  border-top: 1px solid var(--color-border);
-  transition: background var(--duration-fast) var(--ease-out);
-}
-.notice-table tbody tr:hover {
-  background: var(--color-surface-sunken);
+.notice-searchform {
+  display: flex;
+  gap: var(--space-2);
 }
 
 .notice-title-link {

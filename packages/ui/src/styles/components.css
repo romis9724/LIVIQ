@@ -406,6 +406,19 @@
   font-weight: 600;
   color: var(--color-text-muted);
 }
+.stat-card__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.stat-card__action {
+  flex: none;
+}
+.stat-card__action .btn--sm {
+  min-height: 32px; /* 카드 안 보조 액션 — 카드 높이를 키우지 않게 낮춘다 */
+  padding: 0 var(--space-3);
+}
 
 /* ============ PageToolbar (docs/05 §5A) ============ */
 .page-toolbar {
@@ -493,6 +506,57 @@
 }
 .search-field:focus-visible {
   border-color: var(--color-accent);
+}
+
+/* ============ 관리자 표(.admin-table — docs/05 §5A 목록 2형 중 ①, 기준: 문서 관리) ============ */
+/* 카드 안 표: <div class="surface-card admin-tablecard"><div class="admin-table__scroll"><table class="admin-table"> */
+.admin-tablecard {
+  padding: 0;
+  overflow: hidden;
+}
+.admin-table__scroll {
+  overflow-x: auto;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.admin-table thead tr {
+  background: var(--color-surface-sunken);
+  text-align: left;
+  color: var(--color-text);
+}
+.admin-table th {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-base);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-table td {
+  padding: var(--space-3) var(--space-4);
+  vertical-align: middle;
+}
+.admin-table tbody tr {
+  border-top: 1px solid var(--color-border);
+}
+.admin-table tbody tr:hover {
+  background: var(--color-surface-sunken);
+}
+
+/* 표 카드 하단 페이저 — 카드가 padding 0(admin-tablecard)이라 자체 여백을 가진다. */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.pagination__status {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============ 선택형 카드 리스트(.data-list — docs/05 §5A 목록 2형 중 ②) ============ */

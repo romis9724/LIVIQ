@@ -11,7 +11,7 @@ from __future__ import annotations
 import datetime
 import io
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from openpyxl import Workbook, load_workbook
@@ -133,6 +133,7 @@ async def list_roster(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
     q: str = "",
+    building: str = "",
     state: str = "",
     page: int = 1,
     size: int = 50,
@@ -140,7 +141,9 @@ async def list_roster(
     """명부 목록(H7-9) — 동·호·성함(마스킹)·상태 + 총계 + 마지막 업로드 요약.
 
     명부 행 = 명부 출신 사용자(login_id 없음·PII 참조 보유·pre_registered/inactive).
-    q는 동 이름 또는 호수 일치 검색. 생년월일은 반환하지 않는다(운영자 결정, H7-9).
+    building은 동 이름 일치, q는 호수 일치 **또는 성함·차량번호 부분 일치**(H14 — 검색이
+    있을 때만 대상 행의 성함·해당 세대 차량을 복호해 대조한다. 응답의 성함은 여전히 마스킹).
+    생년월일은 반환하지 않는다(운영자 결정, H7-9).
     """
     page = max(page, 1)
     size = min(max(size, 1), MAX_PAGE_SIZE)
@@ -179,17 +182,48 @@ async def list_roster(
         else:
             counts.moved_out += 1
 
-    query = q.strip()
-    filtered = [
+    building_query = building.strip()
+    candidates = [
         row
         for row in all_rows
         if (not state or _entry_state(row.status, row.deleted_at is not None) == state)
-        and (
-            not query
-            or row.building_name == query
-            or (row.unit_no is not None and str(row.unit_no) == query)
-        )
+        and (not building_query or row.building_name == building_query)
     ]
+
+    query = q.strip()
+    if query:
+        # 호수 일치 또는 성함·차량번호 부분 일치(H14). 성함·차량은 암호화 저장이라 후보 행만
+        # 복호해 대조한다 — 파일럿 규모(수백 행)에서 허용, 응답의 성함은 여전히 마스킹.
+        dek_for_search = await crypto.get_dek(session, ctx.tenant_id)
+        search_vehicles = await _load_household_vehicles(
+            session,
+            crypto,
+            dek_for_search,
+            ctx.tenant_id,
+            {row.household_id for row in candidates if row.household_id is not None},
+        )
+
+        def name_matches(row: Any) -> bool:
+            if row.name_enc is None:
+                return False
+            try:
+                return query in crypto.decrypt(dek_for_search, row.name_enc)
+            except Exception:  # noqa: BLE001 — 복호 실패 행은 검색 불일치로만 취급
+                return False
+
+        def vehicle_matches(row: Any) -> bool:
+            plates = search_vehicles.get(row.household_id, []) if row.household_id else []
+            return any(query in plate for plate in plates)
+
+        filtered = [
+            row
+            for row in candidates
+            if (row.unit_no is not None and str(row.unit_no) == query)
+            or name_matches(row)
+            or vehicle_matches(row)
+        ]
+    else:
+        filtered = candidates
     filtered.sort(key=lambda r: (r.building_name or "", r.floor or 0, r.unit_no or 0, r.status))
     page_rows = filtered[(page - 1) * size : page * size]
 

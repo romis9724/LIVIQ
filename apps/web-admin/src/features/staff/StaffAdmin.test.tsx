@@ -68,11 +68,37 @@ describe("StaffAdmin 직원 목록", () => {
     expect(screen.getAllByRole("button", { name: "삭제" }).length).toBe(1);
   });
 
-  // e2e(signup-journey)가 /staff 진입 즉시 초대 폼을 채우므로 기본 펼침을 고정한다.
-  it("초대 폼은 기본 펼침이다(소장의 첫 할 일)", async () => {
-    const { container } = render(<StaffAdmin />);
+  // e2e(signup-journey)가 /staff 진입 즉시 초대 폼을 채우므로 상시 노출을 고정한다.
+  it("초대 폼은 접기 토글 없이 항상 노출된다", async () => {
+    render(<StaffAdmin />);
     await screen.findByLabelText("직원 이름");
-    expect(container.querySelector("#sf-invite")?.hasAttribute("hidden")).toBe(false);
-    expect(screen.getByRole("button", { name: "초대 폼 닫기" })).toBeDefined();
+
+    expect(screen.getByRole("region", { name: "직원 초대" })).toBeDefined();
+    // "직원 초대" 버튼은 폼 제출 1개뿐 — 토글 버튼은 없다.
+    expect(screen.getAllByRole("button", { name: "직원 초대" }).length).toBe(1);
+    expect(screen.queryByRole("button", { name: "초대 폼 닫기" })).toBeNull();
+  });
+
+  it("1페이지뿐이면 페이저를 숨긴다", async () => {
+    render(<StaffAdmin />);
+    await screen.findByText("박직원");
+
+    expect(screen.queryByRole("navigation", { name: "직원 목록 페이지" })).toBeNull();
+  });
+
+  it("20건을 넘으면 첫 페이지 20건만 렌더하고 페이저를 보인다", async () => {
+    const many = Array.from({ length: 21 }, (_, i) => ({
+      ...STAFF[1],
+      userId: `u-${i}`,
+      name: `직원${String(i).padStart(2, "0")}`,
+      email: `staff${i}@example.com`,
+    }));
+    listStaff.mockResolvedValue(many);
+    render(<StaffAdmin />);
+    await screen.findByText("직원00");
+
+    expect(screen.getByRole("navigation", { name: "직원 목록 페이지" })).toBeDefined();
+    expect(screen.getByText("1 / 2 페이지 · 21건")).toBeDefined();
+    expect(screen.queryByText("직원20")).toBeNull();
   });
 });

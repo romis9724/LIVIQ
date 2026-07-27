@@ -8,6 +8,7 @@ import {
   FilterChips,
   FormField,
   PageToolbar,
+  Pagination,
   Skeleton,
   Toast,
 } from "@liviq/ui";
@@ -21,6 +22,7 @@ import {
   listStaff,
   type StaffMember,
 } from "@/lib/api";
+import { usePaging } from "@/lib/paging";
 import "./staff.css";
 
 const TOAST_DURATION_MS = 3200;
@@ -67,8 +69,6 @@ export function StaffAdmin() {
   const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-  // 초대 폼은 툴바의 주요 액션으로 접고 펼친다. 기본은 펼침(소장의 첫 할 일).
-  const [inviteOpen, setInviteOpen] = useState(true);
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | undefined>(undefined);
   const [name, setName] = useState("");
@@ -175,6 +175,8 @@ export function StaffAdmin() {
     [staff],
   );
   const visibleStaff = staff?.filter((member) => matchesRole(member, roleFilter)) ?? null;
+  // 전량 로드 후 클라이언트 페이징 — 역할 필터가 바뀌면 1페이지로 되돌린다.
+  const paging = usePaging(visibleStaff ?? []);
 
   return (
     <>
@@ -185,36 +187,8 @@ export function StaffAdmin() {
       </header>
 
       <main className="admin-page__main">
-        <PageToolbar
-          start={
-            <FilterChips
-              items={roleFilters}
-              value={roleFilter}
-              onChange={setRoleFilter}
-              label="직원 역할 필터"
-            />
-          }
-          end={
-            <Button
-              variant="primary"
-              aria-expanded={inviteOpen}
-              aria-controls="sf-invite"
-              onClick={() => setInviteOpen(!inviteOpen)}
-            >
-              {inviteOpen ? "초대 폼 닫기" : "직원 초대"}
-            </Button>
-          }
-        />
-
-        <section
-          id="sf-invite"
-          className="surface-card sf-invite"
-          aria-labelledby="sf-invite-h"
-          hidden={!inviteOpen}
-        >
-          <h2 id="sf-invite-h" className="sf-section__title">
-            직원 초대
-          </h2>
+        {/* 입력 → 툴바 → 목록 순서(docs/05 §5A) — 초대 폼은 접지 않고 항상 노출한다. */}
+        <section className="surface-card sf-invite" aria-label="직원 초대">
           <form
             className="sf-invite__form"
             onSubmit={(e) => {
@@ -250,11 +224,21 @@ export function StaffAdmin() {
           </form>
         </section>
 
-        <section className="sf-list" aria-labelledby="sf-list-h">
-          <h2 id="sf-list-h" className="sf-section__title">
-            직원 목록
-          </h2>
+        <PageToolbar
+          start={
+            <FilterChips
+              items={roleFilters}
+              value={roleFilter}
+              onChange={(id) => {
+                setRoleFilter(id);
+                paging.reset();
+              }}
+              label="직원 역할 필터"
+            />
+          }
+        />
 
+        <section className="sf-list" aria-label="직원 목록">
           {loadError ? (
             <EmptyState icon="⚠" title="목록을 불러오지 못했습니다" description={loadError} />
           ) : visibleStaff === null ? (
@@ -288,7 +272,7 @@ export function StaffAdmin() {
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleStaff.map((member) => (
+                    {paging.rows.map((member) => (
                       <tr key={member.userId}>
                         <td className="sf-row__name">{member.name ?? "이름 미기록"}</td>
                         <td className="sf-row__email">{member.email ?? "이메일 미기록"}</td>
@@ -327,6 +311,15 @@ export function StaffAdmin() {
                   </tbody>
                 </table>
               </div>
+              {paging.totalPages > 1 ? (
+                <Pagination
+                  page={paging.page}
+                  totalPages={paging.totalPages}
+                  totalCount={visibleStaff.length}
+                  onPage={paging.setPage}
+                  label="직원 목록 페이지"
+                />
+              ) : null}
             </div>
           )}
         </section>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import type { DocumentItem } from "@/lib/api";
 import { INDEX_META, VISIBILITY_META, shortDate } from "./data";
@@ -8,14 +9,16 @@ import { INDEX_META, VISIBILITY_META, shortDate } from "./data";
 interface DocumentTableProps {
   docs: readonly DocumentItem[];
   categoryLabels: Map<string, string>;
+  /** 표 카드 하단 페이저 — 1페이지뿐이면 null. */
+  pager?: ReactNode;
 }
 
 /** 문서 게시판 목록 — 행 클릭(제목 링크)으로 상세/수정. 편집·재색인은 상세에서. */
-export function DocumentTable({ docs, categoryLabels }: DocumentTableProps) {
+export function DocumentTable({ docs, categoryLabels, pager }: DocumentTableProps) {
   return (
-    <div className="surface-card doc-tablecard">
-      <div className="doc-table__scroll">
-        <table className="doc-table">
+    <div className="surface-card admin-tablecard">
+      <div className="admin-table__scroll">
+        <table className="admin-table doc-table">
           <thead>
             <tr>
               <th scope="col">제목</th>
@@ -65,6 +68,7 @@ export function DocumentTable({ docs, categoryLabels }: DocumentTableProps) {
           </tbody>
         </table>
       </div>
+      {pager}
     </div>
   );
 }
