@@ -15,7 +15,6 @@ import {
   SPOT_H_M,
   SPOT_W_M,
   cruiseRoutes,
-  entryShot,
   floorSize,
   outlineToShape,
   overviewShot,
@@ -83,7 +82,6 @@ const CAMERA_FAR_RATIO = 4;
 const MIN_REACH_M = 60; // 바닥 폭 하한(카메라 far·최대거리 계산의 0 방지)
 const MAX_DISTANCE_RATIO = 2;
 const FLY_MS = 1800;
-const ENTRY_FLY_MS = 2600;
 const MAX_PIXEL_RATIO = 2;
 const CLICK_MOVE_PX = 6;
 const CLICK_MS = 400;
@@ -201,7 +199,8 @@ export class ParkingScene3D {
     this.cabinMesh = cabinMesh;
     this.buildCruisers(layout.spots);
 
-    this.applyShot(entryShot(this.size));
+    // 진입 스윕 없이 바로 전체 부감(사용자 지시) — 이동 애니메이션은 면 클로즈업·'전체 보기'에서만.
+    this.applyShot(overviewShot(this.size));
     this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
     this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -411,9 +410,9 @@ export class ParkingScene3D {
   }
 
   // ── 카메라 ─────────────────────────────────────────────────────────────────
-  /** 진입 스윕(램프 저공 → 전체 부감). instant 면 트윈 없이 바로 부감으로 간다. */
+  /** 전체 부감으로 이동('전체 보기' 버튼). instant 면 트윈 없이 즉시. */
   flyOverview(instant: boolean): void {
-    this.flyTo(overviewShot(this.size), instant ? 0 : ENTRY_FLY_MS);
+    this.flyTo(overviewShot(this.size), instant ? 0 : FLY_MS);
   }
 
   /** 선택한 면 클로즈업. 없는 면 번호는 무시한다. */

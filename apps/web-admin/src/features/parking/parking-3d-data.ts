@@ -50,9 +50,6 @@ export interface SceneState {
  *  (원본 값은 세로 여백이 크게 남았다 — 더 보려면 OrbitControls 로 물러나면 된다). */
 const OVERVIEW_HEIGHT_RATIO = 0.36;
 const OVERVIEW_BACK_RATIO = 0.17;
-/** 진입 스윕 시작 지점 — 램프 쪽(좌하단) 저공. */
-const ENTRY_HEIGHT_M = 2.5;
-const ENTRY_SIDE_RATIO = 0.05;
 /** 선택한 면 클로즈업 — 차 한 대가 화면을 채우지 않을 정도의 거리. */
 const SPOT_FOCUS_HEIGHT_M = 16;
 const SPOT_FOCUS_BACK_M = 22;
@@ -112,15 +109,7 @@ function spotTone(
   return car.external ? "external" : "resident";
 }
 
-/** 진입 스윕 시작 — 램프 부근 저공에서 안쪽을 본다. */
-export function entryShot(size: { w: number; h: number }): CameraShot {
-  return {
-    position: { x: size.w * ENTRY_SIDE_RATIO, y: ENTRY_HEIGHT_M, z: size.h - 4 },
-    target: { x: size.w / 2, y: 0, z: size.h / 2 + 6 },
-  };
-}
-
-/** 전체 부감 — 스윕 종료 지점이자 "전체 보기" 버튼 목적지. */
+/** 전체 부감 — 3D 진입 초기 시점(스윕 없이 즉시, 사용자 지시)이자 "전체 보기" 버튼 목적지. */
 export function overviewShot(size: { w: number; h: number }): CameraShot {
   return {
     position: {

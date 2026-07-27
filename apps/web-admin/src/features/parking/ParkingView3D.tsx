@@ -77,7 +77,6 @@ export function ParkingView3D({
     });
     sceneRef.current = scene;
     scene.setActive(!document.hidden);
-    scene.flyOverview(prefersReducedMotion());
     return () => {
       sceneRef.current = null;
       scene.dispose();

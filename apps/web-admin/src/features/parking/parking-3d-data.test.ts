@@ -3,7 +3,6 @@ import type { ParkingSpot } from "@/lib/api";
 import { PX_TO_M, SPOT_H, SPOT_W, type ParkedCar } from "./parking-sim";
 import {
   cruiseRoutes,
-  entryShot,
   floorSize,
   pathLength,
   pointAlongPath,
@@ -135,20 +134,12 @@ describe("sceneState", () => {
 describe("camera shots", () => {
   const size = { w: 232, h: 83 };
 
-  it("ends the entry sweep above and behind the whole floor", () => {
+  it("frames the whole floor from above and behind", () => {
     const shot = overviewShot(size);
 
     expect(shot.position.x).toBeCloseTo(size.w / 2, 6);
-    expect(shot.position.y).toBeGreaterThan(entryShot(size).position.y);
     expect(shot.position.z).toBeGreaterThan(size.h);
     expect(shot.target).toEqual({ x: size.w / 2, y: 0, z: size.h / 2 });
-  });
-
-  it("starts the entry sweep low near the ramp side", () => {
-    const shot = entryShot(size);
-
-    expect(shot.position.y).toBeLessThan(overviewShot(size).position.y);
-    expect(shot.position.x).toBeLessThan(size.w / 2);
   });
 
   it("frames the selected spot from just in front of it", () => {
