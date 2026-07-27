@@ -1,4 +1,4 @@
-"""도구 구현 6종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용.
+"""도구 구현 5종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from ai_core.graph import IncidentContext, IncidentHit
 from ai_core.llm.client import LlmError
+from ai_core.tools.floor_plan import find_in_floor_plan_tool
 from ai_core.tools.registry import (
     Tool,
     ToolCard,
@@ -273,9 +274,10 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 6종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출."""
+    """운영 도구 7종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출."""
     return ToolRegistry(
         [
+            find_in_floor_plan_tool(),
             Tool(
                 name="search_documents",
                 description="공지·규약·회의록 등 단지 문서에서 근거를 검색한다.",
