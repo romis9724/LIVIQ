@@ -46,6 +46,16 @@ describe("usePaging", () => {
     expect(result.current.rows).toEqual([21]);
   });
 
+  it("pageSize를 넘기면 그 크기로 자른다 (문서관리 10건/페이지)", () => {
+    const { result } = renderHook(() => usePaging(items(34), 10));
+
+    expect(result.current.totalPages).toBe(4);
+    expect(result.current.rows).toEqual(items(10));
+
+    act(() => result.current.setPage(4));
+    expect(result.current.rows).toEqual([31, 32, 33, 34]);
+  });
+
   it("reset은 1페이지로 되돌린다", () => {
     const { result } = renderHook(() => usePaging(items(45)));
     act(() => result.current.setPage(3));
