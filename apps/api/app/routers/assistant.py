@@ -30,6 +30,7 @@ from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROM
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
 from app import answer_cache
+from app.ai_backend import backend_id
 from app.deps import (
     RequestContext,
     get_context,
@@ -127,10 +128,14 @@ async def _assistant_response(
         roles=ctx.roles,
         visibilities=ctx.visibilities,
     )
+    # 캐시 키의 백엔드 세그먼트 — 런타임에 바뀐 백엔드의 답변이 섞이지 않게(H15-1).
+    backend = backend_id(llm.settings)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         # 캐시 히트면 LLM 호출 0으로 재생, 미스면 정상 스트림(완료 후 저장).
-        cached = await answer_cache.lookup(redis, ctx=tool_ctx, question=body.question)
+        cached = await answer_cache.lookup(
+            redis, ctx=tool_ctx, question=body.question, backend=backend
+        )
         if cached is not None:
             events: AsyncIterator[object] = answer_cache.replay(cached, tenant_id=ctx.tenant_id)
         else:
@@ -177,7 +182,11 @@ async def _assistant_response(
                     )
                     if cached is None:  # 정상 경로만 저장(재생은 재저장 금지)
                         await answer_cache.store(
-                            redis, ctx=tool_ctx, question=body.question, done=done
+                            redis,
+                            ctx=tool_ctx,
+                            question=body.question,
+                            done=done,
+                            backend=backend,
                         )
                     yield {
                         "event": "done",

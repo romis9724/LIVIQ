@@ -68,6 +68,7 @@ def _image_path(floor_plan_id: uuid.UUID) -> str:
     """
     return f"/floor-plans/{floor_plan_id}/image"
 
+
 ALLOWED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB — 도면 이미지 상한
 
@@ -170,9 +171,7 @@ async def get_floor_plan_image(
     """도면 이미지 스트리밍 — presign 대체(_image_path 참조). 인가는 역할별:
     MANAGER는 tenant 내 전부, RESIDENT는 본인 세대 평형의 도면만."""
     plan = await session.scalar(
-        select(FloorPlan).where(
-            FloorPlan.tenant_id == ctx.tenant_id, FloorPlan.id == floor_plan_id
-        )
+        select(FloorPlan).where(FloorPlan.tenant_id == ctx.tenant_id, FloorPlan.id == floor_plan_id)
     )
     if plan is None:
         raise HTTPException(status_code=404, detail="평면도를 찾을 수 없습니다")

@@ -41,6 +41,8 @@ if TYPE_CHECKING:
     from fakeredis.aioredis import FakeRedis
 
 QUESTION = "이번 달 관리비 알려줘"
+# 활성 백엔드 식별자(`model@host`) — 키의 백엔드 세그먼트(H15-1). fake_llm 설정과 동일.
+BACKEND = "test@llm.test"
 TENANT_B = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 USER_B = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
@@ -95,34 +97,81 @@ async def test_personal_answer_not_served_to_other_user(fake_redis: FakeRedis) -
     """개인 도구(get_fees) 경로 답변은 user 스코프 키 — 같은 tenant·다른 user는 히트 금지."""
     ctx_a = _ctx(user=USER_ID)
     await answer_cache.store(
-        fake_redis, ctx=ctx_a, question=QUESTION, done=_done(tool_path=("get_fees",))
+        fake_redis,
+        ctx=ctx_a,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("get_fees",)),
     )
 
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_a, question=QUESTION) is not None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_a, question=QUESTION, backend=BACKEND)
+        is not None
+    )
     ctx_b = _ctx(user=USER_B)
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_b, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_b, question=QUESTION, backend=BACKEND) is None
+    )
 
 
 async def test_no_cross_tenant_propagation(fake_redis: FakeRedis) -> None:
     """다른 단지로 캐시가 새지 않는다 — 키의 tenant 세그먼트가 분리."""
     ctx_a = _ctx(tenant=TENANT_ID)
     await answer_cache.store(
-        fake_redis, ctx=ctx_a, question=QUESTION, done=_done(tool_path=("search_documents",))
+        fake_redis,
+        ctx=ctx_a,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("search_documents",)),
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_a, question=QUESTION) is not None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_a, question=QUESTION, backend=BACKEND)
+        is not None
+    )
     ctx_other = _ctx(tenant=TENANT_B)
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_other, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_other, question=QUESTION, backend=BACKEND)
+        is None
+    )
 
 
 async def test_no_role_visibility_propagation(fake_redis: FakeRedis) -> None:
     """tenant 스코프 키는 roles·visibilities로 분리 — 공개범위 다르면 히트 금지."""
     ctx_res = _ctx(roles=("RESIDENT",), visibilities=("ALL", "RESIDENT"))
     await answer_cache.store(
-        fake_redis, ctx=ctx_res, question=QUESTION, done=_done(tool_path=("search_documents",))
+        fake_redis,
+        ctx=ctx_res,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("search_documents",)),
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_res, question=QUESTION) is not None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_res, question=QUESTION, backend=BACKEND)
+        is not None
+    )
     ctx_mgr = _ctx(roles=("MANAGER",), visibilities=("ALL", "RESIDENT", "ADMIN"))
-    assert await answer_cache.lookup(fake_redis, ctx=ctx_mgr, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_mgr, question=QUESTION, backend=BACKEND)
+        is None
+    )
+
+
+async def test_same_model_on_other_backend_does_not_hit(fake_redis: FakeRedis) -> None:
+    """같은 모델명·다른 엔드포인트는 다른 키 — ollama·vLLM 답변이 섞이지 않는다(H15-1)."""
+    ctx = _ctx()
+    ollama, vllm = "llama3.1:8b@ollama.test", "llama3.1:8b@vllm.test"
+    await answer_cache.store(
+        fake_redis,
+        ctx=ctx,
+        question=QUESTION,
+        backend=ollama,
+        done=_done(tool_path=("search_documents",)),
+    )
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=ollama)
+        is not None
+    )
+    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=vllm) is None
 
 
 # ── 무효화·저장 정책 ────────────────────────────────────────────────────
@@ -132,24 +181,41 @@ async def test_reindex_bumps_generation_causes_miss(fake_redis: FakeRedis) -> No
     """세대 증가(재색인·visibility 변경) 후 이전 키는 자연 미스."""
     ctx = _ctx()
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=("get_fees",))
+        fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION) is not None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND)
+        is not None
+    )
     await answer_cache.bump_generation(fake_redis, ctx.tenant_id)
-    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
 
 
 async def test_fallback_and_needs_review_not_cached(fake_redis: FakeRedis) -> None:
     """폴백·검수 대상은 캐시하지 않는다(규칙 1·6)."""
     ctx = _ctx()
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=(), status="fallback")
+        fake_redis,
+        ctx=ctx,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=(), status="fallback"),
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=(), needs_review=True)
+        fake_redis,
+        ctx=ctx,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=(), needs_review=True),
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
 
 
 async def test_ttl_zero_disables_cache(
@@ -159,9 +225,11 @@ async def test_ttl_zero_disables_cache(
     monkeypatch.setattr(answer_cache, "_ttl", lambda: 0)
     ctx = _ctx()
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=("get_fees",))
+        fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
-    assert await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION) is None
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
 
 
 async def test_redis_failure_fail_open() -> None:
@@ -179,9 +247,9 @@ async def test_redis_failure_fail_open() -> None:
 
     broken = cast(Redis, _BrokenRedis())
     ctx = _ctx()
-    assert await answer_cache.lookup(broken, ctx=ctx, question=QUESTION) is None
+    assert await answer_cache.lookup(broken, ctx=ctx, question=QUESTION, backend=BACKEND) is None
     await answer_cache.store(
-        broken, ctx=ctx, question=QUESTION, done=_done(tool_path=("get_fees",))
+        broken, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
     await answer_cache.bump_generation(broken, ctx.tenant_id)
 
@@ -193,9 +261,9 @@ async def test_replay_yields_events_in_order_with_zero_tokens(fake_redis: FakeRe
     """히트 재생은 정상 경로와 동일한 이벤트 순서, done.usage 토큰 0(LLM 호출 없음)."""
     ctx = _ctx()
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=("get_fees",))
+        fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
-    cached = await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION)
+    cached = await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND)
     assert cached is not None
 
     events = [e async for e in answer_cache.replay(cached, tenant_id=ctx.tenant_id)]
@@ -216,9 +284,9 @@ async def test_replay_rejects_tenant_mismatch(fake_redis: FakeRedis) -> None:
     """재생 직전 tenant 불일치는 거부(격리 방어선, fail-closed)."""
     ctx = _ctx()
     await answer_cache.store(
-        fake_redis, ctx=ctx, question=QUESTION, done=_done(tool_path=("get_fees",))
+        fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
-    cached = await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION)
+    cached = await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND)
     assert cached is not None
     with pytest.raises(answer_cache.CacheIsolationError):
         _ = [e async for e in answer_cache.replay(cached, tenant_id=TENANT_B)]

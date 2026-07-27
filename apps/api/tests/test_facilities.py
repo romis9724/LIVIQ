@@ -232,9 +232,7 @@ async def test_code_is_unique_per_tenant_not_globally(seeded: AsyncSession) -> N
         mine = await _create_facility(owner, name="1203동 승강기")
     async with _make_client(seeded, tenant_id=OTHER_TENANT_ID) as other:
         theirs = await _create_facility(other, name="1203동 승강기")
-        found = (
-            await other.get("/admin/facilities", params={"code": str(mine["code"])})
-        ).json()
+        found = (await other.get("/admin/facilities", params={"code": str(mine["code"])})).json()
 
     assert mine["code"] == theirs["code"] == "EL-1203-01"  # 단지 스코프 연번
     assert mine["id"] != theirs["id"]

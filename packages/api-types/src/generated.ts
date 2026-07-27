@@ -1830,6 +1830,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system/ai-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Ai Config
+         * @description 현재 유효 설정 — 행이 없으면 env 값을 source="env"로 보여준다.
+         */
+        get: operations["get_ai_config_system_ai_config_get"];
+        /**
+         * Put Ai Config
+         * @description 전역 단일 행 upsert(id=1). 다음 요청부터 새 백엔드가 쓰인다.
+         */
+        put: operations["put_ai_config_system_ai_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/ai-config/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Connection Test
+         * @description 저장 전 스모크 — 후보 백엔드에 짧은 chat 1회. 실패도 200(ok=false)로 요약 반환.
+         */
+        post: operations["run_connection_test_system_ai_config_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1961,6 +2005,72 @@ export interface components {
         AdminPlanDevicesReplaceIn: {
             /** Devices */
             devices: components["schemas"]["AdminPlanDeviceIn"][];
+        };
+        /**
+         * AiConfigIn
+         * @description 저장 요청. api_key: 생략=기존 유지 · 빈 문자열=삭제(env 폴백으로 복귀).
+         */
+        AiConfigIn: {
+            /** Api Key */
+            api_key?: string | null;
+            /**
+             * Base Url
+             * Format: uri
+             */
+            base_url: string;
+            /** Model */
+            model: string;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+        };
+        /**
+         * AiConfigOut
+         * @description 현재 유효 설정. configured=false면 값은 env `LLM_*` 폴백을 보여준다.
+         */
+        AiConfigOut: {
+            /** Api Key Masked */
+            api_key_masked?: string | null;
+            /** Base Url */
+            base_url: string;
+            /** Configured */
+            configured: boolean;
+            /** Model */
+            model: string;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "db" | "env";
+        };
+        /**
+         * AiConfigTestIn
+         * @description 저장 전 연결 테스트 — 전 필드 optional, 미지정은 저장값→env 순으로 병합.
+         */
+        AiConfigTestIn: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Base Url */
+            base_url?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Reasoning Effort */
+            reasoning_effort?: string | null;
+        };
+        /**
+         * AiConfigTestOut
+         * @description 스모크 결과. error는 요약 메시지만(스택·시크릿 없음).
+         */
+        AiConfigTestOut: {
+            /** Error */
+            error?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Ok */
+            ok: boolean;
         };
         /** AiStats */
         AiStats: {
@@ -7749,6 +7859,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_config_system_ai_config_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_ai_config_system_ai_config_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiConfigIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConfigOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_connection_test_system_ai_config_test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiConfigTestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiConfigTestOut"];
                 };
             };
             /** @description Validation Error */

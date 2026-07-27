@@ -70,6 +70,15 @@ class LlmClient:
         self._transport = transport
         self._retry_backoff_s = retry_backoff_s
 
+    @property
+    def settings(self) -> AiCoreSettings:
+        """이 클라이언트가 실제로 쓰는 설정 — 호출자가 활성 백엔드를 식별할 때만 사용.
+
+        런타임 전환(H15-1)에서 주입된 설정이 무엇인지 알아야 캐시 키를 백엔드별로 분리할
+        수 있다. 시크릿이 들어 있으니 프로세스 밖으로 내보내지 말 것(응답·로그 금지).
+        """
+        return self._settings
+
     # ── 내부 공통 ───────────────────────────────────────────────────────
 
     def _client(self, base_url: str, api_key: str | None) -> httpx.AsyncClient:

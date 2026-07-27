@@ -1,0 +1,68 @@
+/* AI 설정(SYS_ADMIN) — LLM 엔드포인트 폼 + 연결 테스트 결과. 토큰만 사용. */
+
+.ai-cfg {
+  max-width: 640px;
+}
+.ai-cfg__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ai-cfg__lede {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* env 기본값 안내 — 저장 전이라는 사실을 폼보다 먼저 읽히게 한다. */
+.ai-cfg__notice {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 30%, var(--color-border));
+  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.ai-cfg__form {
+  margin-top: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ai-cfg__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* 연결 테스트 결과 — 성공/실패를 색이 아니라 문구로도 구분한다(WCAG). */
+.ai-cfg__result {
+  margin: 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.ai-cfg__result--ok {
+  background: color-mix(in oklch, var(--color-success) 12%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+}
+.ai-cfg__result--fail {
+  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
+  color: color-mix(in oklch, var(--color-danger) 65%, var(--color-text));
+}
+
+.ai-cfg__loading {
+  max-width: 640px;
+}
+
+.ai-cfg__toast {
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: 20;
+}

@@ -30,6 +30,8 @@ from liviq_db.facility_systems import (
 )
 
 _DB_ROOT = Path(__file__).resolve().parent.parent
+# c5d6e7f8a9b0(facility_codes)의 down_revision — 왕복 대상 하한.
+_FACILITY_CODES_PARENT = "b3c4d5e6f7a8"
 
 
 # ── 부여 규칙(순수 함수) ─────────────────────────────────────────────────────
@@ -151,12 +153,15 @@ async def _code_column_exists(dsn: str) -> bool:
 
 
 def test_facility_code_migration_roundtrip(pg_dsn: str) -> None:
-    """downgrade → upgrade 왕복. 다른 테스트가 쓰는 세션 DB라 반드시 head로 되돌린다."""
+    """downgrade → upgrade 왕복. 다른 테스트가 쓰는 세션 DB라 반드시 head로 되돌린다.
+
+    대상 리비전은 명시한다 — `-1`은 새 마이그레이션이 붙을 때마다 다른 것을 되돌린다.
+    """
     os.environ["DATABASE_URL"] = pg_dsn
     cfg = Config()
     cfg.set_main_option("script_location", str(_DB_ROOT / "alembic"))
     try:
-        command.downgrade(cfg, "-1")
+        command.downgrade(cfg, _FACILITY_CODES_PARENT)
         assert not asyncio.run(_code_column_exists(pg_dsn))
     finally:
         command.upgrade(cfg, "head")

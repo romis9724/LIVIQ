@@ -13,7 +13,7 @@ from .facilities import Facility, Incident, MaintenanceLog
 from .fees import ExcelUpload, Fee
 from .inquiries import Inquiry, InquiryEvent
 from .notices import Notice, NoticeAttachment, Notification
-from .ops import AiEvalGolden, AuditLog, Job, OutboxEvent
+from .ops import AiBackendConfig, AiEvalGolden, AuditLog, Job, OutboxEvent
 from .parking import ParkingLayout, ParkingVehicle
 from .plans import FloorPlan, HouseholdGeometry, PlanDevice
 from .tenants import Building, Household, Tenant, UnitType
@@ -26,11 +26,13 @@ SOFT_DELETE_TABLES = frozenset({"documents", "notices", "inquiries", "facilities
 
 # tenant_id 격리 표준에서 제외되는 테이블(docs/03 §5)
 #  - tenants: tenant_id 없음(단지 자체)
+#  - ai_backend_config: 전역 LLM 백엔드 설정 단일 행(단지 데이터 아님, H15-1)
 #  - ai_eval_golden: tenant_id NULL 허용(공용 골든셋)
-TENANTLESS_TABLES = frozenset({"tenants"})
+TENANTLESS_TABLES = frozenset({"tenants", "ai_backend_config"})
 NULLABLE_TENANT_TABLES = frozenset({"ai_eval_golden"})
 
 __all__ = [
+    "AiBackendConfig",
     "AiEvalGolden",
     "AiFeedback",
     "AuditLog",
