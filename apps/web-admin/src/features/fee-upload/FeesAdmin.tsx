@@ -93,6 +93,8 @@ export function FeesAdmin() {
   }
 
   const isEmpty = data !== null && data.householdCount === 0;
+  // 현황 → 조회 조건 → 목록 순서(docs/05 §5A) — 목록 뷰에서 결과가 있을 때만 현황을 얹는다.
+  const showSummary = view === "list" && !loading && !loadError && data !== null && !isEmpty;
 
   return (
     <>
@@ -103,6 +105,13 @@ export function FeesAdmin() {
       </header>
 
       <main className="admin-page__main">
+        {showSummary && data ? (
+          <StatGrid className="fu-stats">
+            <StatCard label="세대 수" value={data.householdCount} unit="세대" />
+            <StatCard label="합계" value={formatWon(data.totalSum)} />
+          </StatGrid>
+        ) : null}
+
         <PageToolbar
           start={
             view === "list" ? (
@@ -191,57 +200,50 @@ export function FeesAdmin() {
                 description={`${monthLabel(period)} 관리비가 아직 없거나 검색 조건에 맞는 세대가 없습니다. 엑셀 등록으로 반영하세요.`}
               />
             ) : (
-              <>
-                <StatGrid>
-                  <StatCard label="세대 수" value={data.householdCount} unit="세대" />
-                  <StatCard label="합계" value={formatWon(data.totalSum)} />
-                </StatGrid>
-
-                <section aria-labelledby="fu-lookup-title">
-                  <h2 id="fu-lookup-title" className="fu-section__title">
-                    동/호별 관리비
-                  </h2>
-                  <div className="surface-card fu-tablecard">
-                    <table className="fu-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">동</th>
-                          <th scope="col">호</th>
-                          <th scope="col" className="fu-num">
-                            당월 고지금액
-                          </th>
-                          <th scope="col">
-                            <span className="sr-only">고지서</span>
-                          </th>
+              <section aria-labelledby="fu-lookup-title">
+                <h2 id="fu-lookup-title" className="fu-section__title">
+                  동/호별 관리비
+                </h2>
+                <div className="surface-card fu-tablecard">
+                  <table className="fu-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">동</th>
+                        <th scope="col">호</th>
+                        <th scope="col" className="fu-num">
+                          당월 고지금액
+                        </th>
+                        <th scope="col">
+                          <span className="sr-only">고지서</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.households.map((h) => (
+                        <tr key={h.householdId}>
+                          <td>{h.buildingName}</td>
+                          <td>{unitLabel(h.floor, h.unitNo)}</td>
+                          <td className="fu-num">{formatWon(h.total)}</td>
+                          <td className="fu-num">
+                            <button
+                              type="button"
+                              className="fu-link"
+                              onClick={() =>
+                                void openDetail(
+                                  h.householdId,
+                                  `${h.buildingName}동 ${unitLabel(h.floor, h.unitNo)}`,
+                                )
+                              }
+                            >
+                              고지서 →
+                            </button>
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {data.households.map((h) => (
-                          <tr key={h.householdId}>
-                            <td>{h.buildingName}</td>
-                            <td>{unitLabel(h.floor, h.unitNo)}</td>
-                            <td className="fu-num">{formatWon(h.total)}</td>
-                            <td className="fu-num">
-                              <button
-                                type="button"
-                                className="fu-link"
-                                onClick={() =>
-                                  void openDetail(
-                                    h.householdId,
-                                    `${h.buildingName}동 ${unitLabel(h.floor, h.unitNo)}`,
-                                  )
-                                }
-                              >
-                                고지서 →
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              </>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             )}
           </div>
         )}

@@ -4,7 +4,6 @@ import {
   Button,
   EmptyState,
   FilterChips,
-  PageToolbar,
   Skeleton,
   StatCard,
   StatGrid,
@@ -12,7 +11,7 @@ import {
   type StatTone,
 } from "@liviq/ui";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import {
   ApiError,
@@ -74,10 +73,7 @@ export function Dashboard() {
       </header>
 
       <main className="admin-page__main dash-main">
-        <PageToolbar
-          end={<FilterChips items={PERIODS} value={period} onChange={setPeriod} label="기간" />}
-        />
-
+        {/* 기간 칩은 '오늘 할 일' 제목 줄 오른쪽에 붙인다 — 툴바 한 줄을 없애 세로 공간 절약. */}
         {loading ? (
           <DashboardSkeleton />
         ) : loadError ? (
@@ -88,7 +84,12 @@ export function Dashboard() {
             action={<Button onClick={() => void load(Number(period))}>다시 시도</Button>}
           />
         ) : stats ? (
-          <DashboardContent stats={stats} />
+          <DashboardContent
+            stats={stats}
+            periodChips={
+              <FilterChips items={PERIODS} value={period} onChange={setPeriod} label="기간" />
+            }
+          />
         ) : null}
       </main>
     </>
@@ -129,12 +130,21 @@ const ACTION_ITEMS: readonly ActionItem[] = [
   { key: "noticesScheduled", label: "예약 발행 예정", href: "/notices" },
 ];
 
-function ActionQueue({ actions }: { actions: DashboardActionQueue }) {
+function ActionQueue({
+  actions,
+  periodChips,
+}: {
+  actions: DashboardActionQueue;
+  periodChips: ReactNode;
+}) {
   return (
     <section aria-labelledby="dash-actions-title">
-      <h2 id="dash-actions-title" className="dash-section__title">
-        오늘 할 일
-      </h2>
+      <div className="dash-section__head">
+        <h2 id="dash-actions-title" className="dash-section__title dash-section__title--flush">
+          오늘 할 일
+        </h2>
+        {periodChips}
+      </div>
       <StatGrid>
         {ACTION_ITEMS.map((item) => {
           const count = actions[item.key];
@@ -154,12 +164,18 @@ function ActionQueue({ actions }: { actions: DashboardActionQueue }) {
   );
 }
 
-function DashboardContent({ stats }: { stats: DashboardStats }) {
+function DashboardContent({
+  stats,
+  periodChips,
+}: {
+  stats: DashboardStats;
+  periodChips: ReactNode;
+}) {
   const { actions, ai, cache, budget, inquiries, facilities } = stats;
 
   return (
     <>
-      <ActionQueue actions={actions} />
+      <ActionQueue actions={actions} periodChips={periodChips} />
 
       <div className="dash-charts">
         <StatusDistribution

@@ -33,7 +33,7 @@ export interface StatGridProps {
   className?: string;
 }
 
-/** StatCard 배치용 한 행 grid — `auto-fit minmax(9rem, 1fr)`. */
+/** StatCard 배치용 grid — 한 줄 최대 5칸·빈 트랙 유지(auto-fill, docs/05 §5A). */
 export function StatGrid({ children, className }: StatGridProps) {
   return <div className={cx("stat-grid", className)}>{children}</div>;
 }

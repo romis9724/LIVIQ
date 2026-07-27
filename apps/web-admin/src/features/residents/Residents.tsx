@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   Button,
   Dialog,
@@ -242,6 +242,61 @@ export function Residents() {
           </StatGrid>
         ) : null}
 
+        {/* 현황 → 툴바(필터·검색) → 목록 순서(docs/05 §5A). 명부 툴바는 페이지 레벨. */}
+        <PageToolbar
+          start={
+            <FilterChips
+              items={STATE_FILTERS}
+              value={stateFilter}
+              onChange={(next) => {
+                setPage(1);
+                setStateFilter(next);
+              }}
+              label="명부 상태 필터"
+            />
+          }
+          end={
+            <form
+              className="apv-roster__search"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setPage(1);
+                setAppliedQuery(searchRef.current?.value.trim() ?? "");
+              }}
+            >
+              <SearchField
+                ref={searchRef}
+                label="명부 검색"
+                defaultValue=""
+                placeholder="동 또는 호수 검색 (예: 401, 201)"
+                inputMode="numeric"
+              />
+              <Button type="submit" variant="secondary">
+                검색
+              </Button>
+            </form>
+          }
+        />
+
+        <RosterTable
+          roster={roster}
+          error={rosterError}
+          page={page}
+          onPage={setPage}
+          busyId={busyId}
+          onChangeState={changeRosterState}
+          onDelete={setRosterDeleteTarget}
+        />
+
+        <RosterPanel
+          upload={upload}
+          onFile={handleFile}
+          lastUpload={roster?.lastUpload ?? null}
+          open={uploadOpen ?? false}
+          onToggle={setUploadOpen}
+        />
+
+        {/* 대기 0건이 평시라 목록 뒤로 내린다 — 대기 건수 신호는 위 '승인 대기' 카드가 준다. */}
         <section className="apv-queue" aria-labelledby="apv-queue-h">
           <div className="apv-queue__head">
             <h2 id="apv-queue-h" className="apv-queue__title">
@@ -275,34 +330,6 @@ export function Residents() {
             </ul>
           )}
         </section>
-
-        <RosterTable
-          roster={roster}
-          error={rosterError}
-          searchRef={searchRef}
-          onSearch={() => {
-            setPage(1);
-            setAppliedQuery(searchRef.current?.value.trim() ?? "");
-          }}
-          stateFilter={stateFilter}
-          onStateFilter={(next) => {
-            setPage(1);
-            setStateFilter(next);
-          }}
-          page={page}
-          onPage={setPage}
-          busyId={busyId}
-          onChangeState={changeRosterState}
-          onDelete={setRosterDeleteTarget}
-        />
-
-        <RosterPanel
-          upload={upload}
-          onFile={handleFile}
-          lastUpload={roster?.lastUpload ?? null}
-          open={uploadOpen ?? false}
-          onToggle={setUploadOpen}
-        />
       </main>
 
       {rejectTarget ? (
@@ -337,10 +364,6 @@ export function Residents() {
 interface RosterTableProps {
   roster: RosterList | null;
   error: string | null;
-  searchRef: RefObject<HTMLInputElement | null>;
-  onSearch: () => void;
-  stateFilter: RosterStateFilter;
-  onStateFilter: (value: RosterStateFilter) => void;
   page: number;
   onPage: (value: number) => void;
   busyId: string | null;
@@ -361,10 +384,6 @@ const STATE_FILTERS: readonly FilterChipItem<RosterStateFilter>[] = [
 function RosterTable({
   roster,
   error,
-  searchRef,
-  onSearch,
-  stateFilter,
-  onStateFilter,
   page,
   onPage,
   busyId,
@@ -375,42 +394,9 @@ function RosterTable({
 
   return (
     <section className="surface-card apv-roster" aria-labelledby="apv-roster-h">
-      <h2 id="apv-roster-h" className="apv-queue__title">
+      <h2 id="apv-roster-h" className="apv-queue__title apv-roster__heading">
         주민 명부
       </h2>
-
-      {/* 상태 필터 + 검색 — 공통 툴바 패턴(docs/05 §5A). */}
-      <PageToolbar
-        start={
-          <FilterChips
-            items={STATE_FILTERS}
-            value={stateFilter}
-            onChange={onStateFilter}
-            label="명부 상태 필터"
-          />
-        }
-        end={
-          <form
-            className="apv-roster__search"
-            onSubmit={(e) => {
-              e.preventDefault();
-              onSearch();
-            }}
-          >
-            <SearchField
-              ref={searchRef}
-              label="명부 검색"
-              defaultValue=""
-              placeholder="동 또는 호수 검색 (예: 401, 201)"
-              inputMode="numeric"
-            />
-            <Button type="submit" variant="secondary">
-              검색
-            </Button>
-          </form>
-        }
-      />
-
 
       {error ? (
         <EmptyState icon="⚠" title="명부를 불러오지 못했습니다" description={error} />

@@ -271,42 +271,63 @@ export function StaffAdmin() {
               }
             />
           ) : (
-            <ul className="data-list sf-rows">
-              {visibleStaff.map((member) => (
-                <li key={member.userId} className="data-list__item sf-row">
-                  <div className="sf-row__main">
-                    <span className="sf-row__name">{member.name ?? "이름 미기록"}</span>
-                    <span className="sf-row__email">{member.email ?? "이메일 미기록"}</span>
-                    <span className="sf-row__roles">{roleText(member.roles)}</span>
-                    <span className={`sf-status sf-status--${member.status}`}>
-                      {STATUS_LABEL[member.status] ?? member.status}
-                    </span>
-                  </div>
-                  <span className="sf-row__date">초대 {member.invitedAt.slice(0, 10)}</span>
-                  {canDeactivate(member) ? (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={busyId === member.userId}
-                      onClick={() => setDeactivateTarget(member)}
-                    >
-                      비활성화
-                    </Button>
-                  ) : null}
-                  {member.userId !== meId ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="sf-row__delete"
-                      disabled={busyId === member.userId}
-                      onClick={() => setDeleteTarget(member)}
-                    >
-                      삭제
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            /* 문서 관리와 같은 열 있는 표(docs/05 §5A 목록 ①형) — 행은 선택 대상이 아니다. */
+            <div className="surface-card sf-tablecard">
+              <div className="sf-table__scroll">
+                <table className="sf-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">이름</th>
+                      <th scope="col">이메일</th>
+                      <th scope="col">역할</th>
+                      <th scope="col">상태</th>
+                      <th scope="col">초대일</th>
+                      <th scope="col" className="sf-table__actions-col">
+                        관리
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleStaff.map((member) => (
+                      <tr key={member.userId}>
+                        <td className="sf-row__name">{member.name ?? "이름 미기록"}</td>
+                        <td className="sf-row__email">{member.email ?? "이메일 미기록"}</td>
+                        <td className="sf-row__roles">{roleText(member.roles)}</td>
+                        <td>
+                          <span className={`sf-status sf-status--${member.status}`}>
+                            {STATUS_LABEL[member.status] ?? member.status}
+                          </span>
+                        </td>
+                        <td className="sf-row__date">{member.invitedAt.slice(0, 10)}</td>
+                        <td className="sf-row__actions">
+                          {canDeactivate(member) ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busyId === member.userId}
+                              onClick={() => setDeactivateTarget(member)}
+                            >
+                              비활성화
+                            </Button>
+                          ) : null}
+                          {member.userId !== meId ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="sf-row__delete"
+                              disabled={busyId === member.userId}
+                              onClick={() => setDeleteTarget(member)}
+                            >
+                              삭제
+                            </Button>
+                          ) : null}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           )}
         </section>
       </main>

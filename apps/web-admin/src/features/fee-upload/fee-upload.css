@@ -64,6 +64,7 @@
 .fu-card__title {
   font-size: var(--text-lg);
   font-weight: 700;
+  letter-spacing: -0.01em;
   margin-bottom: var(--space-2);
 }
 .fu-card__lede {
@@ -243,9 +244,15 @@
 .fu-filters__q {
   width: 9rem;
 }
+/* 섹션 h2 — 전 관리 메뉴 공통 수치(docs/05 §5A: --text-lg/700). */
 .fu-section__title {
   font-size: var(--text-lg);
   font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-4);
+}
+/* 현황 카드는 툴바 위 — 툴바 자체 margin-bottom과 리듬을 맞춘다. */
+.fu-stats {
   margin-bottom: var(--space-4);
 }
 

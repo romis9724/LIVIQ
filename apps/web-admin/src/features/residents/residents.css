@@ -155,6 +155,7 @@
   gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
+/* 섹션 h2 — 전 관리 메뉴 공통 수치(docs/05 §5A: --text-lg/700). */
 .apv-queue__title {
   font-size: var(--text-lg);
   font-weight: 700;
@@ -371,9 +372,9 @@
 .apv-roster {
   margin-bottom: var(--space-6);
 }
-/* 툴바 본체는 공통 .page-toolbar — 섹션 제목과의 간격만 여기서 준다. */
-.apv-roster .page-toolbar {
-  margin-top: var(--space-4);
+/* 명부 툴바는 페이지 레벨(현황 → 툴바 → 목록, docs/05 §5A) — 카드 안에는 제목과 표만. */
+.apv-roster__heading {
+  margin-bottom: var(--space-4);
 }
 .apv-roster__search {
   display: flex;

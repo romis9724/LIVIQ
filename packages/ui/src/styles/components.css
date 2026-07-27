@@ -366,7 +366,10 @@
 /* ============ StatCard / StatGrid (docs/05 §5A) ============ */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  /* 한 줄 최대 5칸(트랙 하한 = 20% - gap) + auto-fill — 카드가 2~3장뿐이어도 빈 트랙이 남아
+     한 장이 화면 폭을 다 먹지 않는다(auto-fit이면 빈 트랙이 접혀 다시 늘어난다).
+     좁은 화면은 max()의 9rem이 하한으로 걸려 칸 수가 자연히 준다. */
+  grid-template-columns: repeat(auto-fill, minmax(max(9rem, calc(20% - var(--space-3))), 1fr));
   gap: var(--space-3);
 }
 .stat-card {

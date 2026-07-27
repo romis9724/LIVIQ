@@ -154,9 +154,13 @@
 
 - **타이포 위계(강제)**: 페이지 h1 `--text-2xl`/700 > 섹션 h2 `--text-lg`/700 > 본문 `--text-base` > 메타 `--text-sm`.
   **h1이 본문·수치보다 작으면 안 된다**(접근성 지적 사항). 페이지당 h1 1개(`id="main"`).
-- **페이지 골격**: `h1 한 줄 헤더` → `.page-toolbar`(필터·검색·주요 액션 1개) → 콘텐츠. 헤더에 버튼·설명 금지.
+- **페이지 골격(순서 강제)**: `h1 한 줄 헤더` → ①**현황(StatGrid) 또는 주요 입력** → ②`.page-toolbar`(필터·검색·주요 액션 1개)
+  → ③목록. 헤더에 버튼·설명 금지. 기준 화면은 **문서 관리**(`documents/DocumentManager.tsx`) — 새 화면은 이 순서를 그대로 따른다.
+  현황이 없는 화면(공지·민원)은 ①을 건너뛰고 ②→③. 부수 패널(업로드·대기 큐 등)은 ③ 뒤로 내린다.
 - **현황 카드(StatCard)**: 단일 패턴 — 위 라벨(`--text-sm` muted)·아래 값(`--text-2xl`/700, `font-variant-numeric: tabular-nums`).
-  카드 배경은 surface 고정, 상태 강조는 **값 색만**(배경 칠·테두리 색 남발 금지). 한 행 grid `auto-fit minmax(9rem, 1fr)`.
+  카드 배경은 surface 고정, 상태 강조는 **값 색만**(배경 칠·테두리 색 남발 금지).
+  grid `auto-fill minmax(max(9rem, calc(20% - gap)), 1fr)` — **한 줄 최대 5칸**, 카드가 2~3장뿐이면 빈 트랙이 남아
+  한 장이 화면 폭을 다 먹지 않는다(H14-5 사용자 지적). 좁은 화면은 9rem 하한이 걸려 칸 수가 자연히 준다.
 - **툴바(.page-toolbar)**: 좌측 필터 칩(tablist·`aria-selected`·radius-full), 우측 검색 input(높이 44px)+주요 버튼 1개.
   페이지당 1개. 검색은 uncontrolled(한글 IME).
 - **목록 2형만 허용**: ①`DataTable`(행 데이터 — th scope·행 hover 토큰) ②선택형 카드 리스트(마스터-디테일 —

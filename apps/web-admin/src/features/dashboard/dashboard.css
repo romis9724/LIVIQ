@@ -1,5 +1,5 @@
 /* 관리자 대시보드 — 오늘 할 일·민원/시설 현황·AI 도우미 현황.
-   현황 수치는 공통 StatCard/StatGrid, 기간 토글은 PageToolbar+FilterChips(docs/05 §5A). */
+   현황 수치는 공통 StatCard/StatGrid, 기간 토글은 '오늘 할 일' 제목 줄의 FilterChips(docs/05 §5A). */
 
 .dash-main {
   display: flex;
@@ -14,9 +14,18 @@
   letter-spacing: -0.01em;
   margin-bottom: var(--space-4);
 }
-/* 부모(.dash-ai)가 gap 을 주는 자리에서는 제목 아래 여백 제거 */
+/* 부모(.dash-ai·.dash-section__head)가 gap 을 주는 자리에서는 제목 아래 여백 제거 */
 .dash-section__title--flush {
   margin-bottom: 0;
+}
+/* 제목 줄 — 좌 제목 · 우 기간 칩(툴바 한 줄을 없애 세로 공간 절약). */
+.dash-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
 }
 
 /* 오늘 할 일 — StatCard 를 감싼 딥링크. 링크는 hover/focus 만 담당. */
