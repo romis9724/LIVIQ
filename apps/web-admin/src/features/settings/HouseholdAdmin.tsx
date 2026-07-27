@@ -167,10 +167,6 @@ export function HouseholdAdmin() {
         <h1 id="main" className="admin-page__title">
           동/호수 관리
         </h1>
-        <p className="admin-page__lede">
-          단지의 동과 세대를 관리합니다. 세대는 층·호 범위로 한 번에 만들 수 있고, 입주민·명부·민원·관리비가
-          연결된 세대는 삭제할 수 없습니다.
-        </p>
       </header>
 
       <main className="admin-page__main">

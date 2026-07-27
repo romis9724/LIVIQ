@@ -50,22 +50,18 @@ export function NoticeBoard() {
 
   return (
     <>
-      <header className="admin-page__header notice-head">
-        <div className="notice-head__text">
-          <h1 id="main" className="admin-page__title">
-            공지사항
-          </h1>
-          <p className="admin-page__lede">
-            공지를 작성해 임시저장·즉시 발행·예약 발행할 수 있습니다. 발행된 공지는 입주민에게
-            공개됩니다.
-          </p>
-        </div>
-        <Link href="/notices/new" className="btn btn--primary">
-          새 공지 작성
-        </Link>
+      <header className="admin-page__header">
+        <h1 id="main" className="admin-page__title">
+          공지사항
+        </h1>
       </header>
 
       <main className="admin-page__main">
+        <div className="notice-toolbar">
+          <Link href="/notices/new" className="btn btn--primary">
+            새 공지 작성
+          </Link>
+        </div>
         <NoticeBoardBody
           loading={loading}
           loadError={loadError}

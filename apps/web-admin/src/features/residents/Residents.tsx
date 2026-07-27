@@ -203,10 +203,6 @@ export function Residents() {
         <h1 id="main" className="admin-page__title">
           주민 관리
         </h1>
-        <p className="admin-page__lede">
-          단지 명부를 관리하고 가입 신청을 명부와 대조해 승인·거절합니다. 명부 엑셀 재업로드는
-          신규 세대만 추가합니다(diff 병합).
-        </p>
       </header>
 
       <main className="admin-page__main">

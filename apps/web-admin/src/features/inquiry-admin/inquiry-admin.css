@@ -1,9 +1,11 @@
 /* 관리자 민원 관리 — 검색·필터·데이터테이블·페이지네이션. */
+/* 콘텐츠 상단 툴바(상태 필터 + 검색) — 헤더에서 내렸다. H14-2. */
 .ia-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  flex-wrap: wrap;
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
 .ia-search {

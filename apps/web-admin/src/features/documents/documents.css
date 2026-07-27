@@ -299,19 +299,6 @@
   color: var(--color-danger);
 }
 
-/* ── 목록 헤더(제목 + 새 문서 버튼) ─────────────────────────────────────── */
-.doc-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-}
-.doc-head__text {
-  flex: 1;
-  min-width: 260px;
-}
-
 /* ── 작성·수정 폼 ──────────────────────────────────────────────────────── */
 .doc-form {
   display: flex;
@@ -361,16 +348,18 @@
   flex-direction: column;
   gap: var(--space-5);
 }
+/* 상세 헤더 한 줄 — 뒤로가기 + 제목 + 색인 배지(오른쪽 끝). H14-2. */
 .doc-detail__head {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
+  align-items: center;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
+.doc-detail__head .doc-idx {
+  margin-left: auto;
+}
 .doc-back {
-  display: inline-block;
-  margin-bottom: var(--space-2);
+  flex: none;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-muted);
@@ -385,7 +374,8 @@
   border-radius: var(--radius-sm);
 }
 .doc-detail__submeta {
-  margin: var(--space-1) 0 0;
+  flex: none;
+  margin: 0;
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }

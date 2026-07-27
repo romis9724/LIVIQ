@@ -150,10 +150,6 @@ export function StaffAdmin() {
         <h1 id="main" className="admin-page__title">
           직원 관리
         </h1>
-        <p className="admin-page__lede">
-          단지 직원을 초대하고 관리합니다. 초대 메일의 링크로 직원이 비밀번호를 설정하면 계정이
-          활성화됩니다.
-        </p>
       </header>
 
       <main className="admin-page__main">

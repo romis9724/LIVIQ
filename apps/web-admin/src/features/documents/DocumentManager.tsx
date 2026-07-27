@@ -91,19 +91,10 @@ export function DocumentManager() {
 
   return (
     <>
-      <header className="admin-page__header doc-head">
-        <div className="doc-head__text">
-          <h1 id="main" className="admin-page__title">
-            문서 관리
-          </h1>
-          <p className="admin-page__lede">
-            관리규약·회의록·지침을 게시글로 관리합니다. 첨부 문서가 색인되면 AI가 출처로 인용하며,
-            개정판을 올리면 최신본을 따라갑니다.
-          </p>
-        </div>
-        <Link href="/documents/new" className="btn btn--primary">
-          새 문서
-        </Link>
+      <header className="admin-page__header">
+        <h1 id="main" className="admin-page__title">
+          문서 관리
+        </h1>
       </header>
 
       <main className="admin-page__main doc-main">
@@ -174,6 +165,9 @@ export function DocumentManager() {
               검색
             </Button>
           </form>
+          <Link href="/documents/new" className="btn btn--primary">
+            새 문서
+          </Link>
         </div>
 
         <DocumentsBody

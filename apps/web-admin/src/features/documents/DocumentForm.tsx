@@ -84,10 +84,6 @@ export function DocumentForm() {
         <h1 id="main" className="admin-page__title">
           새 문서
         </h1>
-        <p className="admin-page__lede">
-          첨부 문서가 색인되면 AI가 출처로 인용합니다. 본문(설명)은 색인되지 않으니 참고 메모로만
-          쓰세요.
-        </p>
       </header>
 
       <main className="admin-page__main">

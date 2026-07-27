@@ -134,10 +134,6 @@ export function CodeRegistry() {
         <h1 id="main" className="admin-page__title">
           코드 관리
         </h1>
-        <p className="admin-page__lede">
-          관리비 항목·시설 유형처럼 여러 화면에서 공통으로 쓰는 선택지를 그룹으로 묶어 관리합니다.
-          🔒 시스템 그룹은 삭제·키 변경이 잠겨 있고, 그 안의 코드만 다듬을 수 있습니다.
-        </p>
       </header>
 
       <main className="admin-page__main codes-layout">

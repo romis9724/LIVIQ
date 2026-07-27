@@ -191,18 +191,19 @@
   font-size: var(--text-sm);
 }
 
-/* 페이지 공통 크롬 — 헤더(고정) + 본문(스크롤) */
+/* 페이지 공통 크롬 — 헤더(고정, 타이틀 한 줄) + 본문(스크롤).
+   액션 버튼·필터는 헤더가 아니라 본문 상단 툴바에 둔다 — H14-2. */
 .admin-page__header {
   flex: none;
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-3) var(--space-8);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
 .admin-page__title {
-  font-size: var(--text-title);
+  font-size: var(--text-xl);
   font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
 }
 .admin-page__lede {
   margin-top: var(--space-2);

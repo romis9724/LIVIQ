@@ -1,9 +1,8 @@
 /* 관리자 대시보드 — 오늘 할 일 액션 큐·민원/시설 현황·AI 도우미 현황(토큰/캐시). */
-.dash-head {
+/* 기간 토글 줄 — 헤더에서 콘텐츠 상단으로 내렸다(H14-2). */
+.dash-toolbar {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-4);
+  justify-content: flex-end;
 }
 /* 기간 세그먼트 컨트롤 (7일/30일 토글) — native select 대체 */
 .dash-period {

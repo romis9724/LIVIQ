@@ -81,10 +81,13 @@ export function FeesAdmin() {
   return (
     <>
       <header className="admin-page__header">
+        <h1 id="main" className="admin-page__title">
+          관리비 관리
+        </h1>
+      </header>
+
+      <main className="admin-page__main">
         <div className="fu-head-row">
-          <h1 id="main" className="admin-page__title">
-            관리비 관리
-          </h1>
           {view === "list" ? (
             <Button variant="primary" onClick={() => setView("upload")}>
               엑셀 등록
@@ -95,13 +98,7 @@ export function FeesAdmin() {
             </Button>
           )}
         </div>
-        <p className="admin-page__lede">
-          단지 총액 엑셀을 세대수(574)로 균등분배해 동/호별로 조회합니다. AI는 설명만 하며 계산·부과에
-          관여하지 않습니다.
-        </p>
-      </header>
 
-      <main className="admin-page__main">
         {view === "upload" ? (
           <UploadWizard onApplied={() => setView("list")} />
         ) : view === "detail" ? (

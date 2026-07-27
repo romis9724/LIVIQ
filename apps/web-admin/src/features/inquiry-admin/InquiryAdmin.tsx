@@ -154,14 +154,27 @@ export function InquiryAdmin() {
   return (
     <>
       <header className="admin-page__header">
+        <h1 id="main" className="admin-page__title">
+          민원 관리
+        </h1>
+      </header>
+
+      <main className="admin-page__main">
         <div className="ia-head">
-          <div>
-            <h1 id="main" className="admin-page__title">
-              민원 관리
-            </h1>
-            <p className="admin-page__lede">
-              접수된 민원을 담당자에게 배정하고 답변·처리 상태를 관리합니다.
-            </p>
+          <div className="ia-filters" role="tablist" aria-label="상태 필터">
+            {FILTERS.map((f) => (
+              <button
+                key={f.id}
+                role="tab"
+                aria-selected={filter === f.id}
+                className="ia-filter"
+                data-active={filter === f.id || undefined}
+                onClick={() => setFilter(f.id)}
+              >
+                {f.label}
+                <span className="ia-filter__count">{counts[f.id]}</span>
+              </button>
+            ))}
           </div>
           <input
             type="search"
@@ -172,24 +185,7 @@ export function InquiryAdmin() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="ia-filters" role="tablist" aria-label="상태 필터">
-          {FILTERS.map((f) => (
-            <button
-              key={f.id}
-              role="tab"
-              aria-selected={filter === f.id}
-              className="ia-filter"
-              data-active={filter === f.id || undefined}
-              onClick={() => setFilter(f.id)}
-            >
-              {f.label}
-              <span className="ia-filter__count">{counts[f.id]}</span>
-            </button>
-          ))}
-        </div>
-      </header>
 
-      <main className="admin-page__main">
         <InquiryBody
           loading={loading}
           loadError={loadError}
