@@ -33,6 +33,15 @@ class LlmUnavailableError(LlmError):
     """엔드포인트 미가용(연결·타임아웃·5xx 소진) — 상위에서 발췌 폴백 판단(docs/01 §10)."""
 
 
+class EmbeddingDimensionError(LlmError):
+    """임베딩 차원이 스키마와 다름 — 실측 차원을 담아 올린다(H15-3 저장 거부·연결 테스트용)."""
+
+    def __init__(self, expected: int, actual: int) -> None:
+        super().__init__(f"임베딩 차원 불일치: expected={expected} got={actual}")
+        self.expected = expected
+        self.actual = actual
+
+
 @dataclass(frozen=True)
 class ChatUsage:
     input_tokens: int
@@ -78,6 +87,13 @@ class LlmClient:
         수 있다. 시크릿이 들어 있으니 프로세스 밖으로 내보내지 말 것(응답·로그 금지).
         """
         return self._settings
+
+    def with_settings(self, settings: AiCoreSettings) -> LlmClient:
+        """설정만 바꾼 새 클라이언트(전송·재시도 정책 유지, 불변).
+
+        요청·잡 단위 백엔드 전환(H15-3 ai-worker 인제스트)에서 주입된 transport를 잃지 않는다.
+        """
+        return LlmClient(settings, transport=self._transport, retry_backoff_s=self._retry_backoff_s)
 
     # ── 내부 공통 ───────────────────────────────────────────────────────
 
@@ -223,7 +239,7 @@ class LlmClient:
         expected = self._settings.embedding_dimensions
         for vector in vectors:
             if len(vector) != expected:
-                raise LlmError(f"임베딩 차원 불일치: expected={expected} got={len(vector)}")
+                raise EmbeddingDimensionError(expected, len(vector))
         return vectors
 
 

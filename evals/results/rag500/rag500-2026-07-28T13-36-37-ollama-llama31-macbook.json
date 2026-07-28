@@ -1,0 +1,2788 @@
+{
+  "label": "ollama-llama31-macbook",
+  "set": "smoke",
+  "case_ids": [],
+  "limit": null,
+  "api_url": "http://localhost:8000",
+  "ran_at": "2026-07-28T13:36:37.565Z",
+  "auth": "dev",
+  "meta": {
+    "auth": "dev headers (X-Dev-*) — 역할은 DEV_ROLES 고정, 케이스 role 컬럼 미반영",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 이전 턴을 LLM에 넣지 않음(독립 질의)",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)"
+  },
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 50,
+      "pass": 23,
+      "citation_scored": 50,
+      "citation_hit": 33,
+      "citation_hit_rate": 0.66,
+      "fallback_scored": 50,
+      "fallback_ok": 27,
+      "fallback_accuracy": 0.54,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "total_p50_ms": 15569,
+      "total_p95_ms": 41532,
+      "ttft_p50_ms": 28,
+      "ttft_p95_ms": 52,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "관리규약·공지·생활 안내",
+        "n": 50,
+        "pass": 23,
+        "citation_scored": 50,
+        "citation_hit": 33,
+        "citation_hit_rate": 0.66,
+        "fallback_scored": 50,
+        "fallback_ok": 27,
+        "fallback_accuracy": 0.54,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "total_p50_ms": 15569,
+        "total_p95_ms": 41532,
+        "ttft_p50_ms": 28,
+        "ttft_p95_ms": 52
+      }
+    ]
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "QA-0001",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-001-V2 | 제18조 | 문서 본문 | rev 2 | A-RULE-001-V2 | 제27조 | 문서 본문 | rev 2",
+        "document_ids": [
+          "A-RULE-001-V2"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다. | 반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 183
+      },
+      "latency": {
+        "ttft_ms": 53,
+        "total_ms": 45787,
+        "turns": [
+          {
+            "ttft_ms": 53,
+            "total_ms": 16897
+          },
+          {
+            "ttft_ms": 34,
+            "total_ms": 17489
+          },
+          {
+            "ttft_ms": 33,
+            "total_ms": 11401
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0002",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 94
+      },
+      "latency": {
+        "ttft_ms": 28,
+        "total_ms": 13660,
+        "turns": [
+          {
+            "ttft_ms": 28,
+            "total_ms": 13660
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-RULE-002"
+      ]
+    },
+    {
+      "case_id": "QA-0003",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-003 | 제6조 | p.1 | rev 1 | A-RULE-003 | 제12조 | p.1 | rev 1",
+        "document_ids": [
+          "A-RULE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다. | 커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "공동생활 소음 및 시설 이용규정",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 92
+      },
+      "latency": {
+        "ttft_ms": 31,
+        "total_ms": 36221,
+        "turns": [
+          {
+            "ttft_ms": 31,
+            "total_ms": 16075
+          },
+          {
+            "ttft_ms": 29,
+            "total_ms": 20146
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0004",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-001 | 일정 | 문서 본문 | rev 1 | A-NOTICE-001 | 준비 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다. | 입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 35
+      },
+      "latency": {
+        "ttft_ms": 29,
+        "total_ms": 41532,
+        "turns": [
+          {
+            "ttft_ms": 29,
+            "total_ms": 9457
+          },
+          {
+            "ttft_ms": 38,
+            "total_ms": 17490
+          },
+          {
+            "ttft_ms": 33,
+            "total_ms": 14585
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0005",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-002 | 점검시간 | 문서 본문 | rev 1 | A-NOTICE-002 | 이용안내 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다. | 점검 중에는 403동 2호기를 이용한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.818,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "a74b8251-a40a-5224-91ec-1d992d5a01fe",
+          "8e90d080-4078-556a-9c5d-47cd128aa6c8",
+          "39b38555-432c-50d6-9cbc-95370b4daca3"
+        ],
+        "citation_titles": [
+          "엘리베이터 정기점검 안내",
+          "화재 발생 시 행동요령",
+          "엘리베이터 부품 관계 설명서"
+        ],
+        "answer_chars": 239
+      },
+      "latency": {
+        "ttft_ms": 42,
+        "total_ms": 29798,
+        "turns": [
+          {
+            "ttft_ms": 42,
+            "total_ms": 29798
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0006",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-003 | Event | p.1 | rev 1 | A-NOTICE-003 | Registration | p.1 | rev 1",
+        "document_ids": [
+          "A-NOTICE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00. | Residents must register in the management-office application by July 20."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.677,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 95
+      },
+      "latency": {
+        "ttft_ms": 52,
+        "total_ms": 18198,
+        "turns": [
+          {
+            "ttft_ms": 52,
+            "total_ms": 18198
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0007",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-001 | 예약 | 문서 본문 | rev 1 | A-GUIDE-001 | 가능시간 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다. | 이사 가능 시간은 매일 09:00부터 17:00까지다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 81
+      },
+      "latency": {
+        "ttft_ms": 41,
+        "total_ms": 19186,
+        "turns": [
+          {
+            "ttft_ms": 41,
+            "total_ms": 19186
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-GUIDE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0008",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-002 | 등록 | 문서 본문 | rev 1 | A-GUIDE-002 | 추가차량 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다. | 추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 92
+      },
+      "latency": {
+        "ttft_ms": 41,
+        "total_ms": 14593,
+        "turns": [
+          {
+            "ttft_ms": 41,
+            "total_ms": 14593
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-GUIDE-002"
+      ]
+    },
+    {
+      "case_id": "QA-0009",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-003 | Procedure | p.1 | rev 1 | A-GUIDE-003 | Time | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Attach the district-issued disposal label before placing bulky waste in the designated area. | Disposal is permitted on Wednesdays from 18:00 to 21:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "97bacca1-f139-5cf4-bbed-e955654486ba"
+        ],
+        "citation_titles": [
+          "Bulky Waste Disposal Guide"
+        ],
+        "answer_chars": 183
+      },
+      "latency": {
+        "ttft_ms": 59,
+        "total_ms": 18434,
+        "turns": [
+          {
+            "ttft_ms": 59,
+            "total_ms": 18434
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0010",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-004 | 게스트룸 | p.1 | rev 1 | A-GUIDE-004 | 회의실 | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-004"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다. | 회의실은 회당 최대 3시간 예약할 수 있다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.806,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139"
+        ],
+        "citation_titles": [
+          "공용시설 예약 안내"
+        ],
+        "answer_chars": 184
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 19066,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 19066
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0011",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-001-V2 | 제18조 | 문서 본문 | rev 2 | A-RULE-001-V2 | 제27조 | 문서 본문 | rev 2",
+        "document_ids": [
+          "A-RULE-001-V2"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다. | 반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 159
+      },
+      "latency": {
+        "ttft_ms": 41,
+        "total_ms": 46,
+        "turns": [
+          {
+            "ttft_ms": 41,
+            "total_ms": 46
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0012",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.74,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "189b8efe-48ca-555a-840e-9a87684eeeb7",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "Parking and Waste Operations Policy",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 87
+      },
+      "latency": {
+        "ttft_ms": 28,
+        "total_ms": 20809,
+        "turns": [
+          {
+            "ttft_ms": 28,
+            "total_ms": 20809
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0013",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-003 | 제6조 | p.1 | rev 1 | A-RULE-003 | 제12조 | p.1 | rev 1",
+        "document_ids": [
+          "A-RULE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다. | 커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "공동생활 소음 및 시설 이용규정",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 108
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 60378,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 21754
+          },
+          {
+            "ttft_ms": 32,
+            "total_ms": 22983
+          },
+          {
+            "ttft_ms": 32,
+            "total_ms": 15641
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0014",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-001 | 일정 | 문서 본문 | rev 1 | A-NOTICE-001 | 준비 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다. | 입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 22802,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 22802
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0015",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-002 | 점검시간 | 문서 본문 | rev 1 | A-NOTICE-002 | 이용안내 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다. | 점검 중에는 403동 2호기를 이용한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "a74b8251-a40a-5224-91ec-1d992d5a01fe",
+          "8e90d080-4078-556a-9c5d-47cd128aa6c8",
+          "39b38555-432c-50d6-9cbc-95370b4daca3"
+        ],
+        "citation_titles": [
+          "엘리베이터 정기점검 안내",
+          "화재 발생 시 행동요령",
+          "엘리베이터 부품 관계 설명서"
+        ],
+        "answer_chars": 251
+      },
+      "latency": {
+        "ttft_ms": 21,
+        "total_ms": 15569,
+        "turns": [
+          {
+            "ttft_ms": 21,
+            "total_ms": 27
+          },
+          {
+            "ttft_ms": 27,
+            "total_ms": 15542
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0016",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-003 | Event | p.1 | rev 1 | A-NOTICE-003 | Registration | p.1 | rev 1",
+        "document_ids": [
+          "A-NOTICE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00. | Residents must register in the management-office application by July 20."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.677,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 95
+      },
+      "latency": {
+        "ttft_ms": 22,
+        "total_ms": 25,
+        "turns": [
+          {
+            "ttft_ms": 22,
+            "total_ms": 25
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0017",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-001 | 예약 | 문서 본문 | rev 1 | A-GUIDE-001 | 가능시간 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다. | 이사 가능 시간은 매일 09:00부터 17:00까지다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 59
+      },
+      "latency": {
+        "ttft_ms": 26,
+        "total_ms": 17932,
+        "turns": [
+          {
+            "ttft_ms": 26,
+            "total_ms": 17932
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-GUIDE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0018",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-002 | 등록 | 문서 본문 | rev 1 | A-GUIDE-002 | 추가차량 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다. | 추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "e92c0cd0-53eb-5491-93f5-548a22957c4d",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "차량 등록 안내",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 101
+      },
+      "latency": {
+        "ttft_ms": 30,
+        "total_ms": 28034,
+        "turns": [
+          {
+            "ttft_ms": 30,
+            "total_ms": 15620
+          },
+          {
+            "ttft_ms": 26,
+            "total_ms": 12414
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0019",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-003 | Procedure | p.1 | rev 1 | A-GUIDE-003 | Time | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Attach the district-issued disposal label before placing bulky waste in the designated area. | Disposal is permitted on Wednesdays from 18:00 to 21:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "97bacca1-f139-5cf4-bbed-e955654486ba"
+        ],
+        "citation_titles": [
+          "Bulky Waste Disposal Guide"
+        ],
+        "answer_chars": 183
+      },
+      "latency": {
+        "ttft_ms": 18,
+        "total_ms": 21,
+        "turns": [
+          {
+            "ttft_ms": 18,
+            "total_ms": 21
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0020",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-004 | 게스트룸 | p.1 | rev 1 | A-GUIDE-004 | 회의실 | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-004"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다. | 회의실은 회당 최대 3시간 예약할 수 있다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.806,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139"
+        ],
+        "citation_titles": [
+          "공용시설 예약 안내"
+        ],
+        "answer_chars": 184
+      },
+      "latency": {
+        "ttft_ms": 19,
+        "total_ms": 21,
+        "turns": [
+          {
+            "ttft_ms": 19,
+            "total_ms": 21
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0021",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-001-V2 | 제18조 | 문서 본문 | rev 2 | A-RULE-001-V2 | 제27조 | 문서 본문 | rev 2",
+        "document_ids": [
+          "A-RULE-001-V2"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다. | 반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 171
+      },
+      "latency": {
+        "ttft_ms": 17,
+        "total_ms": 21775,
+        "turns": [
+          {
+            "ttft_ms": 17,
+            "total_ms": 21
+          },
+          {
+            "ttft_ms": 25,
+            "total_ms": 21754
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0022",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.74,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "189b8efe-48ca-555a-840e-9a87684eeeb7",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "Parking and Waste Operations Policy",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 193
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 15909,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 15909
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0023",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-003 | 제6조 | p.1 | rev 1 | A-RULE-003 | 제12조 | p.1 | rev 1",
+        "document_ids": [
+          "A-RULE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다. | 커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.748,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "공동생활 소음 및 시설 이용규정",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 84
+      },
+      "latency": {
+        "ttft_ms": 24,
+        "total_ms": 28,
+        "turns": [
+          {
+            "ttft_ms": 24,
+            "total_ms": 28
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0024",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-001 | 일정 | 문서 본문 | rev 1 | A-NOTICE-001 | 준비 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다. | 입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 32,
+        "total_ms": 10125,
+        "turns": [
+          {
+            "ttft_ms": 32,
+            "total_ms": 10125
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0025",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-002 | 점검시간 | 문서 본문 | rev 1 | A-NOTICE-002 | 이용안내 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다. | 점검 중에는 403동 2호기를 이용한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "a74b8251-a40a-5224-91ec-1d992d5a01fe",
+          "8e90d080-4078-556a-9c5d-47cd128aa6c8",
+          "39b38555-432c-50d6-9cbc-95370b4daca3"
+        ],
+        "citation_titles": [
+          "엘리베이터 정기점검 안내",
+          "화재 발생 시 행동요령",
+          "엘리베이터 부품 관계 설명서"
+        ],
+        "answer_chars": 263
+      },
+      "latency": {
+        "ttft_ms": 28,
+        "total_ms": 38317,
+        "turns": [
+          {
+            "ttft_ms": 28,
+            "total_ms": 36
+          },
+          {
+            "ttft_ms": 28,
+            "total_ms": 23436
+          },
+          {
+            "ttft_ms": 67,
+            "total_ms": 14845
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0026",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-003 | Event | p.1 | rev 1 | A-NOTICE-003 | Registration | p.1 | rev 1",
+        "document_ids": [
+          "A-NOTICE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00. | Residents must register in the management-office application by July 20."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.677,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 95
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 48,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 48
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0027",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-001 | 예약 | 문서 본문 | rev 1 | A-GUIDE-001 | 가능시간 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다. | 이사 가능 시간은 매일 09:00부터 17:00까지다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 70
+      },
+      "latency": {
+        "ttft_ms": 30,
+        "total_ms": 17741,
+        "turns": [
+          {
+            "ttft_ms": 30,
+            "total_ms": 17741
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-GUIDE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0028",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-002 | 등록 | 문서 본문 | rev 1 | A-GUIDE-002 | 추가차량 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다. | 추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.802,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "e92c0cd0-53eb-5491-93f5-548a22957c4d"
+        ],
+        "citation_titles": [
+          "차량 등록 안내"
+        ],
+        "answer_chars": 101
+      },
+      "latency": {
+        "ttft_ms": 39,
+        "total_ms": 13745,
+        "turns": [
+          {
+            "ttft_ms": 39,
+            "total_ms": 13745
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0029",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-003 | Procedure | p.1 | rev 1 | A-GUIDE-003 | Time | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Attach the district-issued disposal label before placing bulky waste in the designated area. | Disposal is permitted on Wednesdays from 18:00 to 21:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "97bacca1-f139-5cf4-bbed-e955654486ba"
+        ],
+        "citation_titles": [
+          "Bulky Waste Disposal Guide"
+        ],
+        "answer_chars": 183
+      },
+      "latency": {
+        "ttft_ms": 23,
+        "total_ms": 27,
+        "turns": [
+          {
+            "ttft_ms": 23,
+            "total_ms": 27
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0030",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-004 | 게스트룸 | p.1 | rev 1 | A-GUIDE-004 | 회의실 | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-004"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다. | 회의실은 회당 최대 3시간 예약할 수 있다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139"
+        ],
+        "citation_titles": [
+          "공용시설 예약 안내"
+        ],
+        "answer_chars": 196
+      },
+      "latency": {
+        "ttft_ms": 20,
+        "total_ms": 19453,
+        "turns": [
+          {
+            "ttft_ms": 20,
+            "total_ms": 23
+          },
+          {
+            "ttft_ms": 29,
+            "total_ms": 19430
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0031",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-001-V2 | 제18조 | 문서 본문 | rev 2 | A-RULE-001-V2 | 제27조 | 문서 본문 | rev 2",
+        "document_ids": [
+          "A-RULE-001-V2"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다. | 반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 159
+      },
+      "latency": {
+        "ttft_ms": 25,
+        "total_ms": 31,
+        "turns": [
+          {
+            "ttft_ms": 25,
+            "total_ms": 31
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0032",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "189b8efe-48ca-555a-840e-9a87684eeeb7",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "Parking and Waste Operations Policy",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 99
+      },
+      "latency": {
+        "ttft_ms": 20,
+        "total_ms": 12657,
+        "turns": [
+          {
+            "ttft_ms": 20,
+            "total_ms": 25
+          },
+          {
+            "ttft_ms": 31,
+            "total_ms": 12632
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0033",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-003 | 제6조 | p.1 | rev 1 | A-RULE-003 | 제12조 | p.1 | rev 1",
+        "document_ids": [
+          "A-RULE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다. | 커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.756,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "공동생활 소음 및 시설 이용규정",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 80
+      },
+      "latency": {
+        "ttft_ms": 23,
+        "total_ms": 28,
+        "turns": [
+          {
+            "ttft_ms": 23,
+            "total_ms": 28
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0034",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-001 | 일정 | 문서 본문 | rev 1 | A-NOTICE-001 | 준비 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다. | 입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 28,
+        "total_ms": 20347,
+        "turns": [
+          {
+            "ttft_ms": 28,
+            "total_ms": 20347
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0035",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-002 | 점검시간 | 문서 본문 | rev 1 | A-NOTICE-002 | 이용안내 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다. | 점검 중에는 403동 2호기를 이용한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 32,
+        "total_ms": 16490,
+        "turns": [
+          {
+            "ttft_ms": 32,
+            "total_ms": 16490
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-002"
+      ]
+    },
+    {
+      "case_id": "QA-0036",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-003 | Event | p.1 | rev 1 | A-NOTICE-003 | Registration | p.1 | rev 1",
+        "document_ids": [
+          "A-NOTICE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00. | Residents must register in the management-office application by July 20."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 14137,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 14137
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0037",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-001 | 예약 | 문서 본문 | rev 1 | A-GUIDE-001 | 가능시간 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다. | 이사 가능 시간은 매일 09:00부터 17:00까지다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.753,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "75037d4c-aa57-5b15-ad81-50e3d07a9c6e",
+          "75037d4c-aa57-5b15-ad81-50e3d07a9c6e",
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "이사 예약 안내",
+          "이사 예약 안내",
+          "공용시설 예약 안내",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 210
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 17608,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 17608
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0038",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-002 | 등록 | 문서 본문 | rev 1 | A-GUIDE-002 | 추가차량 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다. | 추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.772,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "e92c0cd0-53eb-5491-93f5-548a22957c4d",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "차량 등록 안내",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 89
+      },
+      "latency": {
+        "ttft_ms": 22,
+        "total_ms": 27,
+        "turns": [
+          {
+            "ttft_ms": 22,
+            "total_ms": 27
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0039",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-003 | Procedure | p.1 | rev 1 | A-GUIDE-003 | Time | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Attach the district-issued disposal label before placing bulky waste in the designated area. | Disposal is permitted on Wednesdays from 18:00 to 21:00."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 145
+      },
+      "latency": {
+        "ttft_ms": 28,
+        "total_ms": 14727,
+        "turns": [
+          {
+            "ttft_ms": 28,
+            "total_ms": 14727
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-GUIDE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0040",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-004 | 게스트룸 | p.1 | rev 1 | A-GUIDE-004 | 회의실 | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-004"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다. | 회의실은 회당 최대 3시간 예약할 수 있다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.806,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139"
+        ],
+        "citation_titles": [
+          "공용시설 예약 안내"
+        ],
+        "answer_chars": 184
+      },
+      "latency": {
+        "ttft_ms": 16,
+        "total_ms": 18,
+        "turns": [
+          {
+            "ttft_ms": 16,
+            "total_ms": 18
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0041",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-001-V2 | 제18조 | 문서 본문 | rev 2 | A-RULE-001-V2 | 제27조 | 문서 본문 | rev 2",
+        "document_ids": [
+          "A-RULE-001-V2"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "세대 공사는 평일 09:00부터 18:00까지 가능하며 토요일은 사전 승인 시 10:00부터 16:00까지 가능하다. 일요일과 공휴일 공사는 금지한다. | 반려동물은 공용부에서 목줄을 착용하고 배설물을 즉시 수거해야 한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.703,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "해오름아파트 관리규약 현행판"
+        ],
+        "answer_chars": 159
+      },
+      "latency": {
+        "ttft_ms": 17,
+        "total_ms": 21,
+        "turns": [
+          {
+            "ttft_ms": 17,
+            "total_ms": 21
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0042",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.74,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "189b8efe-48ca-555a-840e-9a87684eeeb7",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "Parking and Waste Operations Policy",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 87
+      },
+      "latency": {
+        "ttft_ms": 16,
+        "total_ms": 19,
+        "turns": [
+          {
+            "ttft_ms": 16,
+            "total_ms": 19
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0043",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-003 | 제6조 | p.1 | rev 1 | A-RULE-003 | 제12조 | p.1 | rev 1",
+        "document_ids": [
+          "A-RULE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "생활소음 집중관리 시간은 22:00부터 다음 날 07:00까지다. | 커뮤니티실은 09:00부터 21:00까지 예약제로 운영한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.756,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "공동생활 소음 및 시설 이용규정",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 80
+      },
+      "latency": {
+        "ttft_ms": 14,
+        "total_ms": 17,
+        "turns": [
+          {
+            "ttft_ms": 14,
+            "total_ms": 17
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0044",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-001 | 일정 | 문서 본문 | rev 1 | A-NOTICE-001 | 준비 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 10일 13:00부터 16:00까지 401동과 402동에 급수가 중단된다. | 입주민은 필요한 생활용수를 미리 확보하고 수도꼭지를 잠가야 한다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 11
+      },
+      "latency": {
+        "ttft_ms": 20,
+        "total_ms": 26767,
+        "turns": [
+          {
+            "ttft_ms": 20,
+            "total_ms": 26767
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-001"
+      ]
+    },
+    {
+      "case_id": "QA-0045",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-002 | 점검시간 | 문서 본문 | rev 1 | A-NOTICE-002 | 이용안내 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-NOTICE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "2026년 7월 15일 10:00부터 12:00까지 403동 1호기를 점검한다. | 점검 중에는 403동 2호기를 이용한다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.818,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "a74b8251-a40a-5224-91ec-1d992d5a01fe",
+          "8e90d080-4078-556a-9c5d-47cd128aa6c8",
+          "39b38555-432c-50d6-9cbc-95370b4daca3"
+        ],
+        "citation_titles": [
+          "엘리베이터 정기점검 안내",
+          "화재 발생 시 행동요령",
+          "엘리베이터 부품 관계 설명서"
+        ],
+        "answer_chars": 239
+      },
+      "latency": {
+        "ttft_ms": 23,
+        "total_ms": 29,
+        "turns": [
+          {
+            "ttft_ms": 23,
+            "total_ms": 29
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0046",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-NOTICE-003 | Event | p.1 | rev 1 | A-NOTICE-003 | Registration | p.1 | rev 1",
+        "document_ids": [
+          "A-NOTICE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "The summer sharing event will be held at the central plaza on July 25, 2026, from 17:00. | Residents must register in the management-office application by July 20."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.69,
+        "tool_path": [
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8b0a2f0d-8077-5b09-9a1f-13ecc85beb76",
+          "fc9dfe73-8788-50f8-a517-17a01ef90130"
+        ],
+        "citation_titles": [
+          "해오름아파트 관리규약 현행판",
+          "관리비 조회 및 설명 기준"
+        ],
+        "answer_chars": 153
+      },
+      "latency": {
+        "ttft_ms": 20,
+        "total_ms": 27059,
+        "turns": [
+          {
+            "ttft_ms": 20,
+            "total_ms": 29
+          },
+          {
+            "ttft_ms": 29,
+            "total_ms": 17573
+          },
+          {
+            "ttft_ms": 30,
+            "total_ms": 9457
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-NOTICE-003"
+      ]
+    },
+    {
+      "case_id": "QA-0047",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-001 | 예약 | 문서 본문 | rev 1 | A-GUIDE-001 | 가능시간 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-001"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "이사는 최소 3영업일 전에 예약하고 엘리베이터 보호재 설치 시간을 협의한다. | 이사 가능 시간은 매일 09:00부터 17:00까지다."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "75037d4c-aa57-5b15-ad81-50e3d07a9c6e",
+          "75037d4c-aa57-5b15-ad81-50e3d07a9c6e",
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139",
+          "b3bf190a-0c0f-5205-a5da-7e59984840e0"
+        ],
+        "citation_titles": [
+          "이사 예약 안내",
+          "이사 예약 안내",
+          "공용시설 예약 안내",
+          "공동생활 소음 및 시설 이용규정"
+        ],
+        "answer_chars": 222
+      },
+      "latency": {
+        "ttft_ms": 23,
+        "total_ms": 21139,
+        "turns": [
+          {
+            "ttft_ms": 23,
+            "total_ms": 31
+          },
+          {
+            "ttft_ms": 28,
+            "total_ms": 21108
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0048",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-002 | 등록 | 문서 본문 | rev 1 | A-GUIDE-002 | 추가차량 | 문서 본문 | rev 1",
+        "document_ids": [
+          "A-GUIDE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "입주민 차량은 자동차등록증과 신분 확인 후 세대당 기본 1대를 등록한다. | 추가 차량은 관리사무소 승인과 월 이용료 납부가 필요하다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.782,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "e92c0cd0-53eb-5491-93f5-548a22957c4d"
+        ],
+        "citation_titles": [
+          "차량 등록 안내"
+        ],
+        "answer_chars": 80
+      },
+      "latency": {
+        "ttft_ms": 32,
+        "total_ms": 9807,
+        "turns": [
+          {
+            "ttft_ms": 32,
+            "total_ms": 9807
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0049",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-003 | Procedure | p.1 | rev 1 | A-GUIDE-003 | Time | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-003"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Attach the district-issued disposal label before placing bulky waste in the designated area. | Disposal is permitted on Wednesdays from 18:00 to 21:00."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.727,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "97bacca1-f139-5cf4-bbed-e955654486ba",
+          "189b8efe-48ca-555a-840e-9a87684eeeb7"
+        ],
+        "citation_titles": [
+          "Bulky Waste Disposal Guide",
+          "Parking and Waste Operations Policy"
+        ],
+        "answer_chars": 278
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 17972,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 17972
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "QA-0050",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-GUIDE-004 | 게스트룸 | p.1 | rev 1 | A-GUIDE-004 | 회의실 | p.1 | rev 1",
+        "document_ids": [
+          "A-GUIDE-004"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "게스트룸은 입실 14일 전부터 예약할 수 있고 최대 2박까지 이용한다. | 회의실은 회당 최대 3시간 예약할 수 있다."
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.806,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "4a45e9f6-6e2a-5bf3-bff0-a4657e484139"
+        ],
+        "citation_titles": [
+          "공용시설 예약 안내"
+        ],
+        "answer_chars": 184
+      },
+      "latency": {
+        "ttft_ms": 26,
+        "total_ms": 29,
+        "turns": [
+          {
+            "ttft_ms": 26,
+            "total_ms": 29
+          }
+        ]
+      },
+      "notes": []
+    }
+  ]
+}

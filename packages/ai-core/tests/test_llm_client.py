@@ -9,7 +9,12 @@ import httpx
 import pytest
 
 from ai_core.config import AiCoreSettings
-from ai_core.llm.client import LlmClient, LlmError, LlmUnavailableError
+from ai_core.llm.client import (
+    EmbeddingDimensionError,
+    LlmClient,
+    LlmError,
+    LlmUnavailableError,
+)
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -270,11 +275,33 @@ async def test_embed_returns_vectors_in_index_order(settings: AiCoreSettings) ->
 
 
 async def test_embed_rejects_dimension_mismatch(settings: AiCoreSettings) -> None:
+    """실측 차원을 예외에 담아 올린다 — 관리자 화면이 "몇 차원인지"를 보여줄 수 있어야 한다."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json={"data": [{"index": 0, "embedding": [0.1, 0.2]}]})
 
-    with pytest.raises(LlmError, match="차원 불일치"):
+    with pytest.raises(EmbeddingDimensionError, match="차원 불일치") as exc_info:
         await _client(settings, handler).embed(["a"])
+    assert exc_info.value.actual == 2
+    assert exc_info.value.expected == settings.embedding_dimensions
+    assert isinstance(exc_info.value, LlmError)  # 기존 호출자의 예외 처리 계약 유지
+
+
+async def test_with_settings_keeps_injected_transport(settings: AiCoreSettings) -> None:
+    """설정만 바꾼 클라이언트 — 주입된 transport·백오프를 잃지 않는다(잡 단위 전환, H15-3)."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(
+            200, json={"data": [{"index": 0, "embedding": [0.1] * settings.embedding_dimensions}]}
+        )
+
+    swapped = _client(settings, handler).with_settings(
+        settings.model_copy(update={"embedding_base_url": "http://other-embed.test/v1"})
+    )
+    await swapped.embed(["a"])
+    assert seen == ["http://other-embed.test/v1/embeddings"]
 
 
 async def test_embed_empty_input_short_circuits(settings: AiCoreSettings) -> None:

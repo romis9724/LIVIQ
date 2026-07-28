@@ -70,9 +70,13 @@ class CachedAnswer:
 # ── 설정·정규화 ────────────────────────────────────────────────────────
 
 
-def _ttl() -> int:
-    """캐시 TTL 초. 0 = 캐시 전체 비활성."""
-    return get_settings().answer_cache_ttl_s
+def _ttl(override: int | None) -> int:
+    """캐시 TTL 초. 0 = 캐시 전체 비활성.
+
+    override는 관리자 설정(`ai_backend_config.answer_cache_ttl_s`)의 해석값(H15-3) —
+    None이면 env `CACHE_TTL_S` 계약 그대로.
+    """
+    return get_settings().answer_cache_ttl_s if override is None else override
 
 
 def _normalize(question: str) -> str:
@@ -114,13 +118,18 @@ def _is_personal(tool_path: tuple[str, ...]) -> bool:
 
 
 async def lookup(
-    redis: Redis, *, ctx: ToolContext, question: str, backend: str
+    redis: Redis,
+    *,
+    ctx: ToolContext,
+    question: str,
+    backend: str,
+    ttl_override: int | None = None,
 ) -> CachedAnswer | None:
     """user 키 → tenant 키 순으로 조회. 히트/미스 카운터도 여기서 기록.
 
     Redis·디코드 실패는 삼켜 None(미스로 취급) — fail-open.
     """
-    ttl = _ttl()
+    ttl = _ttl(ttl_override)
     if ttl <= 0:  # 캐시 비활성 — 카운터도 남기지 않음
         return None
     qhash = _qhash(question)
@@ -139,13 +148,19 @@ async def lookup(
 
 
 async def store(
-    redis: Redis, *, ctx: ToolContext, question: str, done: DoneEvent, backend: str
+    redis: Redis,
+    *,
+    ctx: ToolContext,
+    question: str,
+    done: DoneEvent,
+    backend: str,
+    ttl_override: int | None = None,
 ) -> None:
     """스트림 완료 후 저장. answered·검수 불필요만 캐시(폴백·needs_review 캐시 금지).
 
     개인 도구 경로면 user 키, 아니면 tenant 키. Redis 장애는 삼킨다(fail-open).
     """
-    ttl = _ttl()
+    ttl = _ttl(ttl_override)
     if ttl <= 0:
         return
     if done.status != "answered" or done.needs_review:

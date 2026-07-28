@@ -124,7 +124,7 @@
     └── (Phase 2 — 민원 카테고리·SLA, ERP 연동 상태, 개인정보/보관정책)
 ```
 
-> **SYS_ADMIN 뷰(web-admin 내)**: SYS_ADMIN 로그인 시 위 소장 메뉴 대신 **단지 관리** 전용 뷰만 노출 — 단지 생성·소장 초대(단지당 1명)·소장 제거·빈 단지 삭제·단지 비활성화/재활성화(단지 콘텐츠 비열람, H7-6). **AI 설정**(H15-1): LLM 백엔드 접속 정보(base URL·모델·API 키·reasoning effort)를 UI에서 편집·저장·연결 테스트 — 전역 설정이라 SYS_ADMIN 전용([03 §4.7](03-database-design.md) `ai_backend_config`).
+> **SYS_ADMIN 뷰(web-admin 내)**: SYS_ADMIN 로그인 시 위 소장 메뉴 대신 **단지 관리** 전용 뷰만 노출 — 단지 생성·소장 초대(단지당 1명)·소장 제거·빈 단지 삭제·단지 비활성화/재활성화(단지 콘텐츠 비열람, H7-6). **AI 설정**(H15-1·H15-3): LLM 백엔드 접속 정보(base URL·모델·API 키·reasoning effort) + 임베딩 백엔드(차원 1024 고정·재색인 버튼) + 튜닝 노브(top_k·출력 상한·timeout·confidence·캐시 TTL)를 UI에서 편집·저장·연결 테스트 — 전역 설정이라 SYS_ADMIN 전용([03 §4.7](03-database-design.md) `ai_backend_config`).
 > **Phase 2**: 입대의·선관위 전용 게시판·안건은 Phase 2. MVP의 회의록은 문서 관리(DOC_CATEGORY 코드 "회의록")로 업로드·열람.
 
 ## 4. 역할별 메뉴 가시성 매트릭스

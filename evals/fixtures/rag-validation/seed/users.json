@@ -6,7 +6,7 @@
     "status": "active",
     "household_id": "A-HH-0101",
     "display_name": "합성사용자1",
-    "email": "synthetic1@example.invalid"
+    "email": "synthetic1@example.com"
   },
   {
     "user_id": "SYN-USER-002",
@@ -15,7 +15,7 @@
     "status": "active",
     "household_id": "A-HH-0102",
     "display_name": "합성사용자2",
-    "email": "synthetic2@example.invalid"
+    "email": "synthetic2@example.com"
   },
   {
     "user_id": "SYN-USER-003",
@@ -24,7 +24,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자3",
-    "email": "synthetic3@example.invalid"
+    "email": "synthetic3@example.com"
   },
   {
     "user_id": "SYN-USER-004",
@@ -33,7 +33,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자4",
-    "email": "synthetic4@example.invalid"
+    "email": "synthetic4@example.com"
   },
   {
     "user_id": "SYN-USER-005",
@@ -42,7 +42,7 @@
     "status": "pending",
     "household_id": "A-HH-0201",
     "display_name": "합성사용자5",
-    "email": "synthetic5@example.invalid"
+    "email": "synthetic5@example.com"
   },
   {
     "user_id": "SYN-USER-006",
@@ -51,7 +51,7 @@
     "status": "active",
     "household_id": "B-HH-0101",
     "display_name": "합성사용자6",
-    "email": "synthetic6@example.invalid"
+    "email": "synthetic6@example.com"
   },
   {
     "user_id": "SYN-USER-007",
@@ -60,7 +60,7 @@
     "status": "active",
     "household_id": "B-HH-0102",
     "display_name": "합성사용자7",
-    "email": "synthetic7@example.invalid"
+    "email": "synthetic7@example.com"
   },
   {
     "user_id": "SYN-USER-008",
@@ -69,7 +69,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자8",
-    "email": "synthetic8@example.invalid"
+    "email": "synthetic8@example.com"
   },
   {
     "user_id": "SYN-USER-009",
@@ -78,7 +78,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자9",
-    "email": "synthetic9@example.invalid"
+    "email": "synthetic9@example.com"
   },
   {
     "user_id": "SYN-USER-010",
@@ -87,7 +87,7 @@
     "status": "pending",
     "household_id": "B-HH-0201",
     "display_name": "합성사용자10",
-    "email": "synthetic10@example.invalid"
+    "email": "synthetic10@example.com"
   },
   {
     "user_id": "SYN-USER-011",
@@ -96,7 +96,7 @@
     "status": "active",
     "household_id": "C-HH-0101",
     "display_name": "합성사용자11",
-    "email": "synthetic11@example.invalid"
+    "email": "synthetic11@example.com"
   },
   {
     "user_id": "SYN-USER-012",
@@ -105,7 +105,7 @@
     "status": "active",
     "household_id": "C-HH-0102",
     "display_name": "합성사용자12",
-    "email": "synthetic12@example.invalid"
+    "email": "synthetic12@example.com"
   },
   {
     "user_id": "SYN-USER-013",
@@ -114,7 +114,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자13",
-    "email": "synthetic13@example.invalid"
+    "email": "synthetic13@example.com"
   },
   {
     "user_id": "SYN-USER-014",
@@ -123,7 +123,7 @@
     "status": "active",
     "household_id": null,
     "display_name": "합성사용자14",
-    "email": "synthetic14@example.invalid"
+    "email": "synthetic14@example.com"
   },
   {
     "user_id": "SYN-USER-015",
@@ -132,6 +132,6 @@
     "status": "pending",
     "household_id": "C-HH-0201",
     "display_name": "합성사용자15",
-    "email": "synthetic15@example.invalid"
+    "email": "synthetic15@example.com"
   }
 ]

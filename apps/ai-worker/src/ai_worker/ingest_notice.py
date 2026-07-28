@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
 from ai_core.masking import MaskingFailedError
-from ai_core.rag import chunk_text
+from ai_core.rag import CHUNK_MAX_TOKENS, chunk_text
 from ai_worker.ingest import Downloader, embed_chunks
 from ai_worker.parsing import SUPPORTED_SUFFIXES, extract_text
 from liviq_db.models import ContentChunk, Notice, NoticeAttachment
@@ -42,8 +42,11 @@ async def ingest_notice(
     download: Downloader,
     notice_id: uuid.UUID,
     tenant_id: uuid.UUID,
+    chunk_max_tokens: int = CHUNK_MAX_TOKENS,
 ) -> NoticeIngestResult:
-    """공지 1건 인제스트. published·미삭제가 아니면 청크 생성 없이 스킵(늦은 잡 방어)."""
+    """공지 1건 인제스트. published·미삭제가 아니면 청크 생성 없이 스킵(늦은 잡 방어).
+
+    chunk_max_tokens: 청킹 토큰 상한(관리자 노브 — 기본은 코드 상수, H15-3)."""
     notice = await session.scalar(
         select(Notice).where(
             Notice.id == notice_id,
@@ -74,7 +77,7 @@ async def ingest_notice(
         parts.append(extract_text(att.filename, raw))
 
     text = "\n\n".join(p for p in parts if p.strip())
-    chunks = chunk_text(text)
+    chunks = chunk_text(text, max_tokens=chunk_max_tokens)
 
     # 멱등 재색인: 기존 notice 청크 삭제 → 재삽입(chunk_index 연속).
     await session.execute(

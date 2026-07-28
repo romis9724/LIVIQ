@@ -18,10 +18,16 @@ LIVIQ의 **절대 규칙**([CLAUDE.md](../CLAUDE.md))을 AI 계층이 지키는�
 ## 구조
 
 ```text
-cases/          케이스 정의 (JSON). id · rule · input · expect (snake_case)
-run.mjs         러너 — 케이스 로드 → 어댑터 실행 → pass-rate 리포트
-adapter.mjs     AI 계층 연결 지점 (env 게이트 — 규칙 1·5·6 관측, 미설정 시 pending)
-results/        실행 결과 스냅샷 (pass-rate 추이)
+cases/                케이스 정의 (JSON). id · rule · input · expect (snake_case)
+run.mjs               러너 — 케이스 로드 → 어댑터 실행 → pass-rate 리포트
+adapter.mjs           AI 계층 연결 지점 (env 게이트 — 규칙 1·5·6 관측, 미설정 시 pending)
+sse.mjs               SSE 호출·파싱 공용 헬퍼 (adapter.mjs·rag500.mjs 공유)
+rag500.mjs            500 케이스 품질·지연 측정 러너 (H15-2)
+rag500-cases.mjs      quality-cases-500 CSV 로더 · fixture ID→UUID 규약
+rag500-score.mjs      자동 채점 · 집계
+rag500-selfcheck.mjs  rag500 로직 자기검사 (api 없이 실행)
+fixtures/             H15-2 케이스셋·합성 코퍼스·검수 스크립트
+results/              실행 결과 스냅샷 (pass-rate 추이) · results/rag500/ (백엔드별 측정)
 ```
 
 ## 실행
@@ -80,7 +86,49 @@ LIVIQ_EVAL_API_URL=http://localhost:8000 node evals/run.mjs --rule=5
 그 외 규칙(온보딩·인가 등)은 관측 키를 넣지 않아 **pending**으로 남는다 — 판정 불가를
 정직하게 표기하며, 해당 관측 지점이 생기는 단계에서 어댑터에 관측 키를 추가한다.
 
+## rag500 — 500 케이스 품질·지연 측정 (H15-2)
+
+`fixtures/rag-validation/quality-cases-500.csv`를 실제 api(`/assistant/ask`)에 투입해 자동
+채점하고 **백엔드(모델)별** 품질·지연을 같은 케이스셋으로 기록한다. H15-2 분석 보고서의 데이터
+수집기 — 하드룰 러너(`run.mjs`)와 별개다(규칙 회귀 ≠ 품질 측정).
+
+```bash
+# 사전: infra 기동 + api 실행 + fixture 시드(apps/api/scripts/seed_rag_validation.py)
+LIVIQ_EVAL_API_URL=http://localhost:8000 node evals/rag500.mjs --label=ollama-llama31
+  … --set=smoke|critical|full|all   # execution_set 라벨 (기본 smoke=50건, critical=180, full=270)
+  … --case=QA-0001,QA-0401          # 특정 케이스만
+  … --limit=5                       # 앞 N건만
+  … --auth=dev|session              # 기본 dev(헤더). 역할 민감 케이스는 session(케이스 계정 로그인)
+
+node evals/rag500-selfcheck.mjs     # api 없이 파싱·UUID 규약·채점 로직 자기검사
+```
+
+- **ID 규약**: fixture ID → DB UUID = `uuid5(NAMESPACE_URL, "liviq-rag-validation:" + fixtureId)`
+  (시드 스크립트와 공유). 문서 `-V1`은 독립 문서가 아니라 현행판 `-V2`의 구 버전 → 같은 UUID.
+- **자동 채점 4종**: `citation_hit`(기대 문서ID 집합 ⊆ 실제 인용 — **문서 단위**, 조항·revision은
+  미채점) · `fallback_ok`(폴백 필수 케이스는 폴백해야, 인용 필수 케이스는 폴백하면 fail) ·
+  `forbidden`(Hard Gate — 근거 없는 답·타 tenant 문서 인용·평문 PII·쓰기 도구·시스템 프롬프트
+  에코) · `completed`(done 수신 + 빈 응답 아님).
+- **검수 대상**: `다중 문서·Knowledge Graph`·`프롬프트 인젝션·적대적 질문` 카테고리는 기대사실이
+  행동 규정이라 자동 사실 채점 불가 → `needs_judge=true`(하드 게이트만 자동 판정). 기계 검출이
+  불가능한 `forbidden_content` 라벨(추측·재계산 등)도 케이스 `notes`에 남긴다.
+- **지연**: 케이스별 TTFT(첫 SSE 이벤트)·총 소요 ms, 집계는 p50/p95. 순차 실행이라 지연이
+  왜곡되지 않는다. 같은 백엔드를 재실행하면 답변 캐시(`cache:ans:*`) 재생으로 지연이 무의미해진다
+  — 다시 재려면 Redis에서 키를 비운다(백엔드가 다르면 키가 달라 오염 없음).
+- **결과**: `results/rag500/rag500-<timestamp>-<label>.json` — 케이스별 판정·기대값·실제 인용·
+  지연 + 카테고리별 집계(인용 hit율·폴백 정확도·hard fail·p50/p95). 콘솔에 같은 집계 표를 찍는다.
+  `run.mjs --trend`가 읽는 스냅샷(`results/*.json`)과 섞이지 않게 하위 디렉토리에 저장한다.
+- **한계**: `--auth=dev`의 dev 헤더는 역할이 `DEV_ROLES` 합집합 고정이라 케이스 `role`을 재현하지
+  못한다(역할 차단 케이스는 `--auth=session`). 서버는 `conversation_id`로 대화를 묶기만 하고 이전
+  턴을 LLM에 넣지 않으므로 다중 턴은 "같은 대화의 독립 질의" 측정이다. 두 한계는 결과 JSON
+  `meta`에도 기록된다.
+
+## 어댑터 dev 컨텍스트
+
 dev 컨텍스트는 `LIVIQ_EVAL_TENANT_ID`·`LIVIQ_EVAL_USER_ID`(기본값 = web dev 상수)로 시드와
 맞춘다. `tenant-02`(캐시 스코프)는 별도 tenant B가 필요하다 — `LIVIQ_EVAL_TENANT_B_ID`·
 `LIVIQ_EVAL_USER_B_ID`(기본값 = E2E 시드 `ee2e…`). tenant B가 DB에 없어도 RLS로 빈 결과→
 폴백이라 "A 답을 그대로 replay하는지"는 판정 가능하며, B 요청이 4xx/5xx면 pending으로 남는다.
+
+`rag500.mjs --auth=dev`도 같은 두 env를 인식한다 — 설정하면 ID 규약 대신 그 컨텍스트로 호출한다
+(fixture 미시드 상태에서 호출·채점 경로만 스모크할 때 쓴다).

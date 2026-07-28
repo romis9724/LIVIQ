@@ -222,13 +222,46 @@ async def test_ttl_zero_disables_cache(
     fake_redis: FakeRedis, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """CACHE_TTL_S=0 → 저장·조회 모두 no-op(캐시 전체 비활성)."""
-    monkeypatch.setattr(answer_cache, "_ttl", lambda: 0)
+    monkeypatch.setattr(answer_cache, "_ttl", lambda _override: 0)
     ctx = _ctx()
     await answer_cache.store(
         fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, done=_done(tool_path=("get_fees",))
     )
     assert (
         await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
+
+
+async def test_ttl_override_wins_over_env(fake_redis: FakeRedis) -> None:
+    """관리자 노브(H15-3)가 env TTL을 덮는다 — 0이면 저장·조회 모두 no-op."""
+    ctx = _ctx()
+    await answer_cache.store(
+        fake_redis,
+        ctx=ctx,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("get_fees",)),
+        ttl_override=0,
+    )
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND) is None
+    )
+
+    await answer_cache.store(
+        fake_redis,
+        ctx=ctx,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("get_fees",)),
+        ttl_override=120,
+    )
+    keys = await fake_redis.keys(f"{answer_cache._KEY_PREFIX}*")
+    assert keys and await fake_redis.ttl(keys[0]) <= 120  # 노브 값이 실제 TTL로 걸린다
+    assert (
+        await answer_cache.lookup(
+            fake_redis, ctx=ctx, question=QUESTION, backend=BACKEND, ttl_override=120
+        )
+        is not None
     )
 
 

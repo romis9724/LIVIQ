@@ -583,14 +583,23 @@ jobs(id, tenant_id, type,                                   -- ingest|ocr|reembe
      ref_id, status, attempts int, error text NULL,
      created_at, updated_at)
 
-ai_backend_config(id int PK CHECK (id = 1),                 -- 전역 단일 행 (H15-1)
+ai_backend_config(id int PK CHECK (id = 1),                 -- 전역 단일 행 (H15-1·H15-3)
                   base_url text, model text,
                   api_key text NULL,                        -- 응답에는 항상 마스킹
                   reasoning_effort text NULL,
+                  -- H15-3: 임베딩(위험 노브 — 변경 후 재색인 필수, 차원은 1024 고정)
+                  embedding_base_url text NULL, embedding_model text NULL,
+                  embedding_api_key text NULL,
+                  -- H15-3: 튜닝 노브(NULL = env/코드 기본값 폴백)
+                  chunk_max_tokens int NULL,                -- 재색인 필요(위험)
+                  retrieval_top_k int NULL,
+                  llm_max_output_tokens int NULL, llm_timeout_s float NULL,
+                  tool_confidence float NULL, answer_cache_ttl_s int NULL,
                   updated_at)
 ```
 
-> **`ai_backend_config`(H15-1)**: LLM 생성 백엔드(ollama·vLLM·OpenAI 등 OpenAI-호환)의 런타임 전환용 전역 설정. 테넌트 데이터가 아니므로 `tenant_id`·RLS 없음. 행이 없으면 env `LLM_*` 폴백(기존 계약 유지). **임베딩(`EMBED_*`)은 제외** — 임베딩 모델 교체는 기존 벡터 색인과 차원·공간 불일치를 낳으므로 env+재색인 절차로만 변경한다. api_key는 SYS_ADMIN이 UI로 입력하며 응답에는 끝 4자만 노출.
+> **`ai_backend_config`(H15-1·H15-3)**: LLM 생성·임베딩 백엔드와 RAG 튜닝 노브의 런타임 전환용 전역 설정. 테넌트 데이터가 아니므로 `tenant_id`·RLS 없음. NULL 컬럼은 env/코드 기본값 폴백(행 없음 = 전부 env, 기존 계약 유지). api_key류는 SYS_ADMIN이 UI로 입력하며 응답에는 끝 4자만 노출. **읽기 롤**: api(`liviq_app`)는 R/W, ai-worker(`liviq_worker`)는 SELECT만 — 인제스트(청킹·임베딩)가 활성 설정을 따르기 위함.
+> **위험 노브 규율(H15-3)**: `embedding_*`·`chunk_max_tokens` 변경은 기존 벡터 색인과 불일치를 낳는다 — UI가 저장 시 경고하고, 반영은 **명시적 재색인 트리거**(전 문서·공지 재인제스트 enqueue)로 완성한다. 임베딩 차원은 스키마 `Vector(1024)` 고정 — 연결 테스트가 실제 임베딩 호출로 차원을 실측해 1024가 아니면 저장을 거부한다(차원 변경은 스키마 마이그레이션 = UI 밖).
 
 > **`audit_logs` append-only 강제**: 런타임 DB role에 `INSERT`·`SELECT`만 `GRANT`, `UPDATE`·`DELETE`는 `REVOKE`(RLS와 동일한 Alembic custom migration 게이트에서 설정). 앱 코드 규율이 아니라 **권한으로 수정·삭제 차단**.
 

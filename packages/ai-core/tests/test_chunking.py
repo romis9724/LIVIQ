@@ -21,6 +21,17 @@ def test_article_markers_start_new_sections() -> None:
     assert "제2조" in chunks[1].content
 
 
+def test_bracketed_and_english_article_markers_start_new_sections() -> None:
+    text = (
+        "[제18조] 공사 시간\n세대 공사는 평일 09시부터.\n\n"
+        "Article 9 Quiet Hours\nQuiet hours run from 22:00."
+    )
+    chunks = chunk_text(text)
+    assert len(chunks) == 2
+    assert chunks[0].heading == "제18조 공사 시간"
+    assert chunks[1].heading == "Article 9 Quiet Hours"
+
+
 def test_markdown_heading_is_section_boundary() -> None:
     text = "## 주차 규정\n\n방문 차량은 등록해야 합니다.\n\n## 소음 규정\n\n야간 공사는 금지됩니다."
     chunks = chunk_text(text)

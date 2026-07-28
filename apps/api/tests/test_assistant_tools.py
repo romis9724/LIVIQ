@@ -21,9 +21,10 @@ from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.backend_config import CONFIG_ROW_ID
 from ai_core.config import AiCoreSettings
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Building, Citation, Fee, Household, Tenant, User
+from liviq_db.models import AiBackendConfig, Building, Citation, Fee, Household, Tenant, User
 
 HOUSEHOLD_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
@@ -111,7 +112,10 @@ async def _seed_fee(session: AsyncSession) -> None:
             tenant_id=TENANT_ID,
             household_id=HOUSEHOLD_ID,
             period="2026-06",
-            breakdown={"일반관리비": 80000, "청소비": 20000},
+            breakdown=[
+                {"name": "일반관리비", "level": 0, "amount": 80000},
+                {"name": "청소비", "level": 0, "amount": 20000},
+            ],
             total_amount=100000,
             source="excel",
         )
@@ -256,3 +260,32 @@ async def test_facility_assistant_returns_429_when_rate_limited(db_session: Asyn
     ) as c:
         response = await c.post("/admin/facilities/assistant", json={"question": "승강기?"})
     assert response.status_code == 429
+
+
+# ── 튜닝 노브 배선 (H15-3) ──────────────────────────────────────────────────────
+
+
+async def test_tool_confidence_knob_applies_to_ask(db_session: AsyncSession) -> None:
+    """`ai_backend_config.tool_confidence`가 요청 단위로 오케스트레이터에 전달된다.
+
+    도구 결과만으로 답한 경로의 done.confidence로 확인 — 관리자가 값을 바꾸면 재시작 없이
+    다음 요청부터 반영된다(H15-3).
+    """
+    await _seed_fee(db_session)
+    db_session.add(
+        AiBackendConfig(
+            id=CONFIG_ROW_ID,
+            base_url="http://llm.test/v1",
+            model="test",
+            tool_confidence=0.42,
+            answer_cache_ttl_s=0,  # 캐시 끔 — 신뢰도 관측이 캐시 재생에 가려지지 않게
+        )
+    )
+    await db_session.flush()
+
+    async with _client(db_session, _fee_agent_llm()) as c:
+        response = await c.post("/assistant/ask", json={"question": "이번 달 관리비 알려줘"})
+
+    done = _parse_sse(response.text)[-1]
+    assert done[0] == "done"
+    assert done[1]["confidence"] == 0.42

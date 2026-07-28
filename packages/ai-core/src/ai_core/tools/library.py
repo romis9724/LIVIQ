@@ -161,7 +161,7 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
     ).first()
     if fee is None or fee.total_amount is None:
         return ToolResult(note=f"{period} 관리비 내역이 없습니다.")
-    breakdown = {k: int(v) for k, v in (fee.breakdown or {}).items()}
+    breakdown = _breakdown_items(fee.breakdown)
     total = int(fee.total_amount)
 
     prev_period = _prev_period(period)
@@ -183,8 +183,29 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
     )
 
 
-def _fee_quote(period: str, breakdown: dict[str, int], total: int, prev_total: int | None) -> str:
-    top = ", ".join(f"{name} {amount:,}원" for name, amount in list(breakdown.items())[:3])
+def _breakdown_items(raw: object) -> list[tuple[str, int]]:
+    """fees.breakdown(H8-7 리스트 `[{name,level,amount}]`) → (항목명, 금액) 목록.
+
+    상위 항목(level 0)만, '합계'는 total과 중복이라 제외. 구 dict 포맷도 방어적으로 수용
+    (과거 시드·외부 적재 데이터가 남아 있을 수 있다).
+    """
+    if isinstance(raw, dict):
+        return [(str(k), int(v)) for k, v in raw.items()]
+    items: list[tuple[str, int]] = []
+    for entry in raw if isinstance(raw, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", ""))
+        if not name or name == "합계" or int(entry.get("level", 0)) != 0:
+            continue
+        items.append((name, int(entry.get("amount", 0))))
+    return items
+
+
+def _fee_quote(
+    period: str, breakdown: list[tuple[str, int]], total: int, prev_total: int | None
+) -> str:
+    top = ", ".join(f"{name} {amount:,}원" for name, amount in breakdown[:3])
     quote = f"{period} 합계 {total:,}원 (주요 항목: {top})"
     if prev_total is not None:
         diff = total - prev_total

@@ -61,9 +61,19 @@ async def _force_chunk(session: AsyncSession, tenant_id: uuid.UUID, notice_id: u
     await session.flush()
 
 
-async def _search(session: AsyncSession, llm: LlmClient, tenant_id: uuid.UUID) -> list:
+async def _search(
+    session: AsyncSession,
+    llm: LlmClient,
+    tenant_id: uuid.UUID,
+    *,
+    default_top_k: int | None = None,
+) -> list:
     query_vec = (await llm.embed([_QUERY]))[0]
-    retriever = PgVectorRetriever(session)
+    retriever = (
+        PgVectorRetriever(session)
+        if default_top_k is None
+        else PgVectorRetriever(session, default_top_k=default_top_k)
+    )
     return await retriever.search(
         query_vec, tenant_id=tenant_id, visibilities=["ALL", "RESIDENT", "ADMIN"]
     )
@@ -115,3 +125,17 @@ async def test_document_search_regression(session: AsyncSession, fake_llm: LlmCl
     doc_hits = [r for r in results if r.document_id == doc_id]
     assert doc_hits, "document 청크 검색이 회귀됨"
     assert doc_hits[0].document_title == "관리규약"
+
+
+async def test_default_top_k_limits_results(session: AsyncSession, fake_llm: LlmClient) -> None:
+    """검색 상한은 관리자 노브(H15-3) — 생성자 default_top_k가 LIMIT으로 반영된다."""
+    tenant_id, doc_id = await _seed_document(session, storage_key="t/topk.txt")
+    await ingest_document(
+        session,
+        llm=fake_llm,
+        download=_downloader(RULES_TEXT.encode()),
+        document_id=doc_id,
+        tenant_id=tenant_id,
+    )
+    assert len(await _search(session, fake_llm, tenant_id)) == 2  # 기본 상한(8) 안에 2청크
+    assert len(await _search(session, fake_llm, tenant_id, default_top_k=1)) == 1

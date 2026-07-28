@@ -26,7 +26,7 @@ LLM: OpenAI-호환 단일 엔드포인트(Ollama·vLLM·OpenAI 등, env 교체) 
 
 ## 구조 ([docs/02](docs/02-directory-structure.md) · 상세는 [ARCHITECTURE.md](ARCHITECTURE.md))
 
-현재 구현된 것(현실): **H15-1 완료** — 관리자 AI 설정(`/system/ai`, SYS_ADMIN): LLM 백엔드(base URL·모델·API 키)를 UI로 저장하면 재시작 없이 요청 단위 반영(`ai_backend_config` DB 우선·env `LLM_*` 폴백, answer_cache 키 `model@host` 분리). 그 이전 H14 완료 — 시설관리 전체화면 그래프+플로팅 패널(도면→방·종류→마커 계층, [ADR-0022](docs/adr/0022-facility-graph-dashboard.md)) · 시설 코드 체계(`EL-401-01` 서버 자동 부여·공통코드·민원 코드 연결) · 트윈 세대 평면도 자동 표시(@liviq/ui FloorPlanViewer 공용) · 주차장 3D(주행 차량) · 관리자 전 메뉴 UI 일관화([docs/05 §5A](docs/05-ui-ux-design.md) 패턴 가이드). 그 이전 H13: 3D 시설 그래프 첫 구축·민원-시설 연결 3단·세대 평면도 기동(입주민 뷰·편집·어시스턴트 파서 도구). 그 이전: H12 사내 GitLab 배포 **실호스트 운영 중**(main push → WSL 자동 배포·Nexus 게시·롤백 실연, 남은 항목 WSL 부팅 자동 시작). 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
+현재 구현된 것(현실): **H15-1·H15-3 완료** — 관리자 AI 설정(`/system/ai`, SYS_ADMIN): LLM·임베딩 백엔드와 튜닝 노브(top_k·출력 상한·timeout·confidence·캐시 TTL·청크 상한)를 UI로 저장하면 재시작 없이 반영(`ai_backend_config` DB 우선·env 폴백, 해석 단일 지점 `ai_core.backend_config` — api 요청·worker 잡 공유). 임베딩 변경은 차원 1024 실측 가드 + 명시적 재색인 버튼(전 문서·공지 재인제스트). 남은 것: H15-2 백엔드 성능 비교. 그 이전 H14 완료 — 시설관리 전체화면 그래프+플로팅 패널(도면→방·종류→마커 계층, [ADR-0022](docs/adr/0022-facility-graph-dashboard.md)) · 시설 코드 체계(`EL-401-01` 서버 자동 부여·공통코드·민원 코드 연결) · 트윈 세대 평면도 자동 표시(@liviq/ui FloorPlanViewer 공용) · 주차장 3D(주행 차량) · 관리자 전 메뉴 UI 일관화([docs/05 §5A](docs/05-ui-ux-design.md) 패턴 가이드). 그 이전 H13: 3D 시설 그래프 첫 구축·민원-시설 연결 3단·세대 평면도 기동(입주민 뷰·편집·어시스턴트 파서 도구). 그 이전: H12 사내 GitLab 배포 **실호스트 운영 중**(main push → WSL 자동 배포·Nexus 게시·롤백 실연, 남은 항목 WSL 부팅 자동 시작). 단계별 범위·상태는 [docs/09 §8](docs/09-implementation-harness.md)이 단일 출처.
 워크스페이스 구성은 `ls`·[docs/02](docs/02-directory-structure.md)·[ARCHITECTURE.md](ARCHITECTURE.md) 참조.
 
 Python은 uv workspace(루트 `pyproject.toml`) + 얇은 package.json으로 turbo 태스크 연결([ADR-0013](docs/adr/0013-python-backend.md)).
@@ -42,6 +42,8 @@ DB 접속 롤은 프로세스마다 다르다 — 마이그레이션만 owner, a
 pnpm test        # turbo run test — vitest(web 2종+ui) + pytest(Python 4종, cov 80 게이트)
 uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
 pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
+# 로컬 문서 벡터화·재색인은 arq worker가 있어야 처리됨 (apps/ai-worker에서, env 필요)
+uv run --no-sync arq ai_worker.worker.WorkerSettings
 pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
 pnpm e2e                  # Playwright 여정 (infra 기동 필요 — CI는 @llm 자동 제외)
 # 배포 이미지 스모크(1호스트 3프로필 = 배포 형상, 절차 전체는 docs/09 §2)

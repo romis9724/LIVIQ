@@ -57,5 +57,29 @@ def test_tenant_scope_table_count() -> None:
     H9-1(ADR-0019): household_geometries 신설(세대 3D 폴리곤) — +1.
     H9-5: parking_layouts·parking_vehicles 신설(지하주차장 배치도·차량) — +2.
     H15-1: ai_backend_config 신설(전역 LLM 백엔드 설정 단일 행) — +1.
+    H15-3: ai_backend_config 컬럼 확장만(테이블 순증감 0).
     """
     assert len(metadata.tables) == 39
+
+
+def test_ai_backend_config_optional_columns_are_nullable() -> None:
+    """H15-3 확장 컬럼은 전부 NULL 허용 — NULL이 곧 env/코드 기본값 폴백 계약이다(§4.7).
+
+    NOT NULL로 바뀌면 "설정 안 함"을 표현할 수 없어 폴백이 무너진다.
+    """
+    columns = metadata.tables["ai_backend_config"].columns
+    for name in (
+        "api_key",
+        "reasoning_effort",
+        "embedding_base_url",
+        "embedding_model",
+        "embedding_api_key",
+        "chunk_max_tokens",
+        "retrieval_top_k",
+        "llm_max_output_tokens",
+        "llm_timeout_s",
+        "tool_confidence",
+        "answer_cache_ttl_s",
+    ):
+        assert name in columns, f"ai_backend_config.{name} 누락(H15-3 §4.7)"
+        assert columns[name].nullable, f"ai_backend_config.{name}은 NULL 허용이어야 함(폴백 계약)"

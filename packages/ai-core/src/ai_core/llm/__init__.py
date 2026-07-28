@@ -3,6 +3,7 @@
 from ai_core.llm.client import (
     ChatResponse,
     ChatUsage,
+    EmbeddingDimensionError,
     LlmClient,
     LlmError,
     LlmUnavailableError,
@@ -12,6 +13,7 @@ from ai_core.llm.tokens import estimate_tokens
 __all__ = [
     "ChatResponse",
     "ChatUsage",
+    "EmbeddingDimensionError",
     "LlmClient",
     "LlmError",
     "LlmUnavailableError",

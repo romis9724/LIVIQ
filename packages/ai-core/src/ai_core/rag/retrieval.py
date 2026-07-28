@@ -15,7 +15,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # 벡터로 넉넉히 가져온 뒤 예산으로 절단(docs/08 §3). 리랭커는 후속 과제.
-DEFAULT_TOP_K = 8
+# 16 = H15-2 실측 근거(Critical 180 × 3회, k=8 vs 16 pass 범위 비겹침 91~96 vs 97~107).
+# 관리규약처럼 긴 문서는 조각이 많아(191청크) 8개로는 관련 조항이 잘린다 — 규약·공지 카테고리
+# 인용 적중 53%→80%. 대가는 컨텍스트 2배(총응답 p95 9.6s→14.5s·입력 토큰 증가).
+DEFAULT_TOP_K = 16
 # 이 유사도(cosine) 미만이면 근거로 취급하지 않는다 — 파일럿 보정 대상.
 MIN_SCORE = 0.35
 
@@ -75,10 +78,15 @@ _SEARCH_SQL = text(
 
 
 class PgVectorRetriever:
-    """pgvector cosine ANN. HNSW 인덱스는 초기 마이그레이션에서 생성됨."""
+    """pgvector cosine ANN. HNSW 인덱스는 초기 마이그레이션에서 생성됨.
 
-    def __init__(self, session: AsyncSession) -> None:
+    `default_top_k`는 호출자가 top_k를 지정하지 않을 때 쓰는 상한 — 관리자 설정
+    (`ai_backend_config.retrieval_top_k`)이 여기로 들어온다(H15-3).
+    """
+
+    def __init__(self, session: AsyncSession, *, default_top_k: int = DEFAULT_TOP_K) -> None:
         self._session = session
+        self._default_top_k = default_top_k
 
     async def search(
         self,
@@ -86,7 +94,7 @@ class PgVectorRetriever:
         *,
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
-        top_k: int = DEFAULT_TOP_K,
+        top_k: int | None = None,
     ) -> list[RetrievedChunk]:
         result = await self._session.execute(
             _SEARCH_SQL,
@@ -96,7 +104,7 @@ class PgVectorRetriever:
                 "query_embedding": _to_pgvector(query_embedding),
                 "tenant_id": tenant_id,
                 "visibilities": list(visibilities),
-                "top_k": top_k,
+                "top_k": top_k or self._default_top_k,
             },
         )
         return [

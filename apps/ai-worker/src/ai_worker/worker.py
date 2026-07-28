@@ -17,8 +17,10 @@ import boto3
 from arq import cron
 from arq.connections import RedisSettings
 from redis.exceptions import RedisError
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.backend_config import CONFIG_ROW_ID, AiTuning, merge_settings, merge_tuning
 from ai_core.graph import GraphClient
 from ai_core.llm.client import LlmClient
 from ai_worker.config import get_settings
@@ -27,9 +29,24 @@ from ai_worker.ingest import IngestResult, ingest_document
 from ai_worker.ingest_notice import NoticeIngestResult, ingest_notice
 from ai_worker.notices_publish import publish_due_notices
 from liviq_db.engine import create_engine, create_session_factory
+from liviq_db.models import AiBackendConfig
 from liviq_db.runtime_roles import RuntimeRoleError, assert_no_rls_bypass
 
 logger = logging.getLogger("ai_worker.worker")
+
+
+async def _job_runtime(session: AsyncSession, ctx: dict[str, Any]) -> tuple[LlmClient, AiTuning]:
+    """잡 실행 시점의 활성 임베딩 설정·튜닝 노브 해석 (H15-3, docs/03 §4.7).
+
+    관리자가 UI로 임베딩 백엔드·청킹 상한을 바꾸면 **다음 잡부터** 반영된다(워커 재시작
+    불필요). `ai_backend_config`는 전역 단일 행이고 `liviq_worker`는 SELECT만 가진다.
+    행이 없으면 기동 시 만든 env 기반 클라이언트를 그대로 쓴다(기존 계약).
+    """
+    base: LlmClient = ctx["llm"]
+    row = await session.scalar(select(AiBackendConfig).where(AiBackendConfig.id == CONFIG_ROW_ID))
+    if row is None:
+        return base, AiTuning()
+    return base.with_settings(merge_settings(row, env=base.settings)), merge_tuning(row)
 
 
 def _download_factory() -> Any:  # pragma: no cover — boto3 I/O 배선(통합 환경에서 검증)
@@ -58,17 +75,23 @@ async def ingest_document_task(
 ) -> dict[str, Any]:
     """문서 인제스트 태스크. 인프라 오류는 예외 전파(arq 재시도), 형식 오류는 failed 기록."""
     session_factory = ctx["session_factory"]
-    llm: LlmClient = ctx["llm"]
     download = ctx["download"]
     doc_id, ten_id = uuid.UUID(document_id), uuid.UUID(tenant_id)
 
     async with session_factory() as session, session.begin():
+        # 활성 설정은 tenant 컨텍스트와 무관한 전역 행 — 컨텍스트 설정 전에 읽는다.
+        llm, tuning = await _job_runtime(session, ctx)
         # tenant 컨텍스트 — RLS 이중 방어의 1층(docs/03 §5)
         await session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(ten_id))
         )
         result: IngestResult = await ingest_document(
-            session, llm=llm, download=download, document_id=doc_id, tenant_id=ten_id
+            session,
+            llm=llm,
+            download=download,
+            document_id=doc_id,
+            tenant_id=ten_id,
+            chunk_max_tokens=tuning.chunk_max_tokens,
         )
 
     # 색인 성공 시 캐시 세대 증가 → 이전 답변 캐시를 키 수준에서 무효화(H4-2, docs/08 §2.1).
@@ -86,17 +109,22 @@ async def ingest_document_task(
 async def ingest_notice_task(ctx: dict[str, Any], notice_id: str, tenant_id: str) -> dict[str, Any]:
     """공지 인제스트 태스크. published 공지만 색인, 미발행·삭제는 스킵(ingest_notice)."""
     session_factory = ctx["session_factory"]
-    llm: LlmClient = ctx["llm"]
     download = ctx["download"]
     nid, ten_id = uuid.UUID(notice_id), uuid.UUID(tenant_id)
 
     async with session_factory() as session, session.begin():
+        llm, tuning = await _job_runtime(session, ctx)  # 잡 단위 활성 설정(H15-3)
         # tenant 컨텍스트 — RLS 이중 방어의 1층(docs/03 §5)
         await session.execute(
             text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(ten_id))
         )
         result: NoticeIngestResult = await ingest_notice(
-            session, llm=llm, download=download, notice_id=nid, tenant_id=ten_id
+            session,
+            llm=llm,
+            download=download,
+            notice_id=nid,
+            tenant_id=ten_id,
+            chunk_max_tokens=tuning.chunk_max_tokens,
         )
 
     # 색인 시 캐시 세대 증가 → 이전 답변 캐시 무효화(H4-2, ingest_document_task와 동일). fail-open.
