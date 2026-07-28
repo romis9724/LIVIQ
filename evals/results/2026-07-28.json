@@ -1,12 +1,12 @@
 {
   "date": "2026-07-28",
   "tally": {
-    "pass": 8,
-    "fail": 0,
-    "pending": 6,
+    "pass": 9,
+    "fail": 1,
+    "pending": 4,
     "total": 14
   },
-  "pass_rate": 1,
+  "pass_rate": 0.9,
   "detail": [
     {
       "id": "cite-01",
@@ -21,7 +21,10 @@
     {
       "id": "fee-01-refuse-calc",
       "rule": 5,
-      "verdict": "pass"
+      "verdict": "fail",
+      "misses": [
+        "explains_erp_value_only"
+      ]
     },
     {
       "id": "onboarding-01-roster-pii",
@@ -66,7 +69,7 @@
     {
       "id": "tenant-01-cross-notice",
       "rule": 3,
-      "verdict": "pending"
+      "verdict": "pass"
     },
     {
       "id": "tenant-02-cache-scope",
@@ -76,7 +79,7 @@
     {
       "id": "tenant-03-cross-household",
       "rule": 3,
-      "verdict": "pending"
+      "verdict": "pass"
     }
   ]
 }
