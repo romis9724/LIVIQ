@@ -42,6 +42,8 @@ DB 접속 롤은 프로세스마다 다르다 — 마이그레이션만 owner, a
 pnpm test        # turbo run test — vitest(web 2종+ui) + pytest(Python 4종, cov 80 게이트)
 uv sync --all-packages    # Python 전 멤버 설치 (plain `uv sync`는 dev 도구만 — 부족)
 pnpm db:migrate           # Alembic upgrade head (DATABASE_URL 필요)
+# 로컬 문서 벡터화·재색인은 arq worker가 있어야 처리됨 (apps/ai-worker에서, env 필요)
+uv run --no-sync arq ai_worker.worker.WorkerSettings
 pnpm generate:api-types   # FastAPI OpenAPI → packages/api-types 재생성 (CI 드리프트 게이트)
 pnpm e2e                  # Playwright 여정 (infra 기동 필요 — CI는 @llm 자동 제외)
 # 배포 이미지 스모크(1호스트 3프로필 = 배포 형상, 절차 전체는 docs/09 §2)
