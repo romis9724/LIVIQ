@@ -154,7 +154,12 @@ describe("toAiConfig (GET 응답 매핑)", () => {
     expect(config.embeddingModel).toBe("");
     expect(config.embeddingApiKeyMasked).toBeNull();
     expect(config.embeddingSource).toBe("env");
-    expect(config.tuning).toEqual(TUNING);
+    // 폴백은 TUNING_KNOBS 표의 기본값 — 실측으로 바뀌는 값이라 표에서 파생해 비교한다
+    // (top_k 기본값은 H15-2 실측으로 8→16 변경, 상수 하드코딩은 드리프트를 만든다).
+    const tableDefaults = Object.fromEntries(
+      TUNING_KNOBS.map((spec) => [spec.key, spec.fallback]),
+    );
+    expect(config.tuning).toEqual(tableDefaults);
   });
 
   it("effort·마스킹 키 누락은 null로 접는다", () => {

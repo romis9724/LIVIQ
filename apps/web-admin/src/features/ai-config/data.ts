@@ -54,7 +54,7 @@ export const TUNING_KNOBS: readonly TuningKnobSpec[] = [
     min: 1,
     max: 50,
     step: 1,
-    fallback: 8,
+    fallback: 16,
   },
   {
     key: "llmMaxOutputTokens",

@@ -15,7 +15,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # 벡터로 넉넉히 가져온 뒤 예산으로 절단(docs/08 §3). 리랭커는 후속 과제.
-DEFAULT_TOP_K = 8
+# 16 = H15-2 실측 근거(Critical 180 × 3회, k=8 vs 16 pass 범위 비겹침 91~96 vs 97~107).
+# 관리규약처럼 긴 문서는 조각이 많아(191청크) 8개로는 관련 조항이 잘린다 — 규약·공지 카테고리
+# 인용 적중 53%→80%. 대가는 컨텍스트 2배(총응답 p95 9.6s→14.5s·입력 토큰 증가).
+DEFAULT_TOP_K = 16
 # 이 유사도(cosine) 미만이면 근거로 취급하지 않는다 — 파일럿 보정 대상.
 MIN_SCORE = 0.35
 
