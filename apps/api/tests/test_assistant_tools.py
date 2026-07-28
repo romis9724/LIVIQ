@@ -112,7 +112,10 @@ async def _seed_fee(session: AsyncSession) -> None:
             tenant_id=TENANT_ID,
             household_id=HOUSEHOLD_ID,
             period="2026-06",
-            breakdown={"일반관리비": 80000, "청소비": 20000},
+            breakdown=[
+                {"name": "일반관리비", "level": 0, "amount": 80000},
+                {"name": "청소비", "level": 0, "amount": 20000},
+            ],
             total_amount=100000,
             source="excel",
         )

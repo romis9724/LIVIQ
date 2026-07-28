@@ -17,7 +17,10 @@ from ai_core.llm.tokens import estimate_tokens
 CHUNK_MAX_TOKENS = 400
 
 # 섹션 경계: 마크다운 제목 또는 조항 마커로 시작하는 줄
-_SECTION_RE = re.compile(r"^(#{1,6}\s+.+|제\s?\d+\s?조[^\n]*)$", re.MULTILINE)
+# 조항 마커는 실문서 표기 변형 수용: `제18조` · `[제18조]`(대괄호) · `Article 9`(영문 규정)
+_SECTION_RE = re.compile(
+    r"^(#{1,6}\s+.+|\[?제\s?\d+\s?조[^\n]*|Article\s+\d+[^\n]*)$", re.MULTILINE
+)
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=다\.)\s+")
 
 
@@ -40,6 +43,7 @@ def _split_sections(text: str) -> list[tuple[str | None, str]]:
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         heading = m.group(0).lstrip("# ").strip()
+        heading = re.sub(r"^\[(제\s?\d+\s?조)\]", r"\1", heading)  # `[제18조]` → `제18조`
         sections.append((heading, text[m.end() : end]))
     return sections
 

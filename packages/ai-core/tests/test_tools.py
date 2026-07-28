@@ -223,9 +223,23 @@ def _fee_handler(sql: str, params: dict[str, Any]) -> list[Any]:
         return [row(period="2026-06")]
     if "from fees" in s:
         if params.get("period") == "2026-06":
-            return [row(breakdown={"일반관리비": 50000}, total_amount=100000)]
+            return [
+                row(
+                    breakdown=[
+                        {"name": "일반관리비", "level": 0, "amount": 50000},
+                        {"name": "청소비", "level": 1, "amount": 20000},
+                        {"name": "합계", "level": 0, "amount": 100000},
+                    ],
+                    total_amount=100000,
+                )
+            ]
         if params.get("period") == "2026-05":
-            return [row(breakdown={"일반관리비": 48000}, total_amount=90000)]
+            return [
+                row(
+                    breakdown=[{"name": "일반관리비", "level": 0, "amount": 48000}],
+                    total_amount=90000,
+                )
+            ]
     return []
 
 
