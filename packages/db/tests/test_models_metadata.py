@@ -56,5 +56,6 @@ def test_tenant_scope_table_count() -> None:
     H8-9(ADR-0018): inquiry_categories 폐기(코드 그룹 흡수) — -1.
     H9-1(ADR-0019): household_geometries 신설(세대 3D 폴리곤) — +1.
     H9-5: parking_layouts·parking_vehicles 신설(지하주차장 배치도·차량) — +2.
+    H15-1: ai_backend_config 신설(전역 LLM 백엔드 설정 단일 행) — +1.
     """
-    assert len(metadata.tables) == 38
+    assert len(metadata.tables) == 39

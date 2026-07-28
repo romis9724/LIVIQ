@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ai_core.llm.client import LlmClient
+from app.ai_backend import resolve_llm_settings
 from app.config import get_settings
 from app.session import SESSION_ABSOLUTE_TTL, SessionData, SessionStore, get_session_store
 from liviq_db.engine import create_engine, create_session_factory
@@ -325,8 +326,15 @@ def get_queue() -> Queue:  # pragma: no cover — arq 배선(테스트는 오버
     return ArqQueue()
 
 
-def get_llm() -> LlmClient:  # pragma: no cover — env 배선(테스트는 오버라이드)
-    return LlmClient()
+async def get_llm(  # pragma: no cover — 배선(테스트는 오버라이드, 해석은 ai_backend 단위 테스트)
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> LlmClient:
+    """요청 단위 LLM 클라이언트 — DB 설정(`ai_backend_config`) 우선·env `LLM_*` 폴백(H15-1).
+
+    관리자가 UI로 백엔드를 바꾸면 다음 요청부터 반영된다(재시작 불필요). 세션은 라우터가
+    이미 쓰는 것과 같은 요청 세션이다(FastAPI 의존성 캐시) — 추가 커넥션 없음.
+    """
+    return LlmClient(await resolve_llm_settings(session))
 
 
 async def get_graph() -> AsyncIterator[Any]:  # pragma: no cover — Neo4j 배선(테스트는 오버라이드)

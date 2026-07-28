@@ -1,4 +1,5 @@
-"""운영·AI 품질·큐 — audit_logs·ai_eval_golden·jobs·outbox_events (docs/03 §4.7·4.9)."""
+"""운영·AI 품질·큐 — audit_logs·ai_eval_golden·jobs·outbox_events·ai_backend_config
+(docs/03 §4.7·4.9)."""
 
 from __future__ import annotations
 
@@ -8,6 +9,7 @@ from typing import Any
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -15,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,6 +52,26 @@ class AiEvalGolden(IdMixin, CreatedAtMixin, Base):
     # 문서 삭제·재색인과 느슨하게 결합(FK 없음) — eval 메타
     expected_doc_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     tags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+
+
+class AiBackendConfig(Base):
+    """LLM 생성 백엔드 런타임 설정 — 전역 단일 행(id=1). tenant_id·RLS 없음(§4.7, H15-1).
+
+    행이 없으면 api가 env `LLM_*`로 폴백한다. 임베딩(`EMBEDDING_*`)은 여기 없다 —
+    모델 교체가 전량 재색인 이벤트라 env+절차로만 바꾼다(§8).
+    """
+
+    __tablename__ = "ai_backend_config"
+    __table_args__ = (CheckConstraint("id = 1", name="single_row"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    base_url: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)  # 응답에는 항상 마스킹
+    reasoning_effort: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Job(IdMixin, TenantMixin, TimestampMixin, Base):

@@ -7,11 +7,16 @@ function flatHrefs(groups: ReturnType<typeof navForRoles>): string[] {
 }
 
 describe("navForRoles", () => {
-  it("SYS_ADMIN에는 단지 관리 하나만 섹션 헤더 없이 노출한다", () => {
+  it("SYS_ADMIN에는 단지 관리·AI 설정만 섹션 헤더 없이 노출한다 (H15-1)", () => {
     const nav = navForRoles(["SYS_ADMIN"]);
     expect(nav).toHaveLength(1);
     expect(nav[0]?.title).toBeUndefined();
-    expect(flatHrefs(nav)).toEqual(["/system/tenants"]);
+    expect(flatHrefs(nav)).toEqual(["/system/tenants", "/system/ai"]);
+  });
+
+  it("AI 설정은 MANAGER·STAFF에 노출하지 않는다 (SYS_ADMIN 전용)", () => {
+    expect(flatHrefs(navForRoles(["MANAGER"]))).not.toContain("/system/ai");
+    expect(flatHrefs(navForRoles(["STAFF"]))).not.toContain("/system/ai");
   });
 
   it("STAFF(소장 아님)에는 민원·공지·문서만 섹션 헤더 없이 노출한다", () => {

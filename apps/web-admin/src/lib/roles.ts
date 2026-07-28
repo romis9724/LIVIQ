@@ -1,6 +1,6 @@
 // 역할별 내비·첫 진입 라우팅 (H7-2, ADR-0014).
 // 숨김은 보조일 뿐 — 실제 인가는 서버 403(콘텐츠 라우터의 require_roles)이 본체.
-// SYS_ADMIN은 단지 관리만, STAFF(소장 아님)는 민원·공지·문서만, MANAGER는 전체+직원 관리.
+// SYS_ADMIN은 단지 관리·AI 설정만, STAFF(소장 아님)는 민원·공지·문서만, MANAGER는 전체+직원 관리.
 
 export interface NavItem {
   href: string;
@@ -28,11 +28,12 @@ const STAFF_MGMT: NavItem = { href: "/staff", icon: "🪪", label: "직원 관�
 const SETTINGS_CODES: NavItem = { href: "/settings/codes", icon: "⚙️", label: "코드 관리" };
 const SETTINGS_HOUSEHOLDS: NavItem = { href: "/settings/households", icon: "🏠", label: "동/호수 관리" };
 const TENANTS: NavItem = { href: "/system/tenants", icon: "🏘", label: "단지 관리" };
+const SYSTEM_AI: NavItem = { href: "/system/ai", icon: "🤖", label: "AI 설정" };
 
 // STAFF는 민원·공지(초안)·문서만(대시보드·관리비·시설·승인 숨김) — 항목이 적어 그룹 없이 flat.
 const STAFF_NAV: readonly NavGroup[] = [{ items: [INQUIRIES, NOTICES, DOCUMENTS] }];
-// SYS_ADMIN은 단지 관리 하나만 — 어떤 단지 콘텐츠에도 접근하지 않는다(flat).
-const SYS_ADMIN_NAV: readonly NavGroup[] = [{ items: [TENANTS] }];
+// SYS_ADMIN은 단지 관리 + AI 설정(플랫폼 설정)만 — 어떤 단지 콘텐츠에도 접근하지 않는다(flat).
+const SYS_ADMIN_NAV: readonly NavGroup[] = [{ items: [TENANTS, SYSTEM_AI] }];
 // MANAGER(기본): 섹션 그룹화 — 대시보드·공지 단독, 입주민 관리·관리소 운영·설정 묶음.
 // 트윈 대시보드는 geometry 등록(hasTwin) 시에만 대시보드 바로 아래 같은 레벨로 노출(H9-4 — 확정 데이터 현황판).
 // 주차장 대시보드는 트윈 바로 다음에 항상 노출(H9-5 — 확정 데이터 현황판, geometry 불필요).

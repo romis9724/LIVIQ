@@ -299,6 +299,7 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 | H12. 사내 GitLab 배포 | GitLab CI 파이프라인(빌드·배포·스모크·게시)·단일 호스트(WSL Docker) 형상·이미지 좌표 규약 변경 | main push로 대상 호스트 배포 그린(Caddy 경유 스모크) + 롤백 실연. 레지스트리 게시는 서버 `external_url` 미해결로 `allow_failure` | 🚧 진행 (§8.15) |
 | H13. 시설 그래프·평면도 | 시설관리 메인을 3D 시설 그래프로(계통/위치 렌즈·검색 fly-to·상세 패널)·민원-시설 연결 3단·세대 평면도(데이터·입주민 뷰·편집·어시스턴트 도구) | tenant 격리·MANAGER 인가·**LLM 추천 승인 게이트**(CRITICAL) + Neo4j 미가용 폴백 + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-27, §8.16 — PR #94~#98 스택, 머지 대기) — [ADR-0022](adr/0022-facility-graph-dashboard.md) |
 | H14. 시설관리 UX 개편·코드 체계 | 시설관리 탭 폐지→전체화면 그래프+플로팅 패널(도면→방·종류→마커 계층)·시설 코드 체계(계통-위치-연번)·평면도 공통코드·트윈 평면도 동일화·주차장 3D(주행 차량)·관리자 전 메뉴 UI 일관화(§5A 가이드) | 코드 자동부여 유일성·tenant 격리(CRITICAL) + FloorPlan 잔존 노드 재발 방지 + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-28, §8.17 — 단일 브랜치 PR, 머지 대기) |
+| H15. LLM 백엔드 런타임 전환 | SYS_ADMIN AI 설정 UI(base URL·모델·API 키·연결 테스트)·`ai_backend_config` 전역 테이블·요청 단위 즉시 반영(env 폴백)·백엔드 비교 측정(ollama vs vLLM vs OpenAI) | SYS_ADMIN 인가(CRITICAL)·API 키 마스킹 응답 + 캐시 키 백엔드 분리 + 게이트 그린 + 시각 실측 | 🚧 진행 (§8.18 — H15-1 ✅, H15-2 대기) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -610,6 +611,20 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H14-3 | 트윈 UX 2건 | ①설비 상태 목록 길어지면 **스크롤**(고정 높이) ②세대 상세의 평면도를 상세 아래가 아니라 **왼쪽 영역 전체 오버레이**(뒤 건물 3D 반투명 노출) | 게이트 그린 + 시각 실측(설비 스크롤·세대 클릭→평면도 오버레이·닫기 왕복) | ✅ 완료 — 설비 목록 min(32vh,22rem) 스크롤. **사용자 재지시로 강화**: 버튼 없이 세대 상세 열리면 딤 영역 전체에 평면도 자동 표시 + 입주민 뷰와 기능 동일(FloorPlanViewer를 @liviq/ui로 공용화 — 칩·방라벨·방향 마커·팝오버 플립·목록 표, 입주민 FloorPlanView 287→70줄). 실측: 세대 클릭→즉시 평면도·칩 토글·팝오버·콘솔 0 |
 | H14-4 | 주차장 3D | 프로토타입 `parking_view3d.js`(AI_digitaltwin_apartment 커밋 700fd04·b77e154 — three.js InstancedMesh 442면·raycast 픽킹·카메라 플라이) 이식 — 주차장 대시보드 2D 배치도에 **3D 토글**(dynamic import ssr:false·2D 폴백 유지) | 게이트 그린 + 시각 실측(3D 렌더·픽킹→상세·2D 폴백·콘솔 0) | ✅ 완료 — ParkingScene3D(InstancedMesh·raycast·카메라, 색 CSS 변수·WebGL 폴백·reduced-motion·dispose). /parking First Load 116kB(three 지연 청크). 이식 중 실버그 3건 수정(boundingSphere 컬링·라벨·조명). **사용자 추가 지시 2건**: 주행 차량 5대(통로 경로 파생·픽킹 제외·2프레임 이동 실증) · 진입 스윕 제거(즉시 전체 부감). 장식(비콘·팔레트)은 YAGNI 제외 |
 | H14-5 | 관리자 UI 일관화 | (사용자 피드백 2026-07-27 — "가이드 없이 마음대로 만든 느낌, 30점" · 헤더가 본문보다 작음) [05 §5A](05-ui-ux-design.md) **공통 패턴 가이드** 신설(타이포 위계 강제·StatCard·page-toolbar·목록 2형·radius/간격/색 규율) → ⓐ기반: admin-shell 타이포 h1>본문 복구 + `@liviq/ui` StatCard/StatGrid·공통 툴바/목록 CSS ⓑ메뉴별 적용(대시보드·공지·주민·관리비·민원·직원·문서 — 병렬) ⓒ접근성 패스(focus-visible 전수·대비·tablist·th scope) | 7개 메뉴가 §5A 패턴만 사용 + h1 위계 복구 + 게이트 그린 + 시각 실측(7개 메뉴 데스크톱·375px·콘솔 0) | ✅ 완료 — ⓐ기반(@liviq/ui StatCard/StatGrid·PageToolbar·FilterChips·SearchField·.data-list, h1 --text-2xl 복구) ⓑ7메뉴 적용(죽은 CSS 대량 삭제 — dashboard 355→141줄 등, residents controlled 검색 IME 버그 수정) ⓑ'나머지 메뉴 폴리시+카드 패딩 16px 단일화 + 보완(순서 강제 §5A 개정: 현황→툴바→목록·StatGrid 한 줄 최대 5칸·직원 thead 표·기간 칩 제목 라인·섹션 h2 통일·트윈/주차장 헤더 1줄). 실측: 대시보드·민원·주민·관리비·동호수(직접)+직원·문서·375px(Worker 스크린샷) 콘솔 0. 잔여: 직원 초대 폼 위치(순서 강제 시 토글 상시화 필요 — 사용자 결정 대기) |
+
+### 8.18 H15 체크리스트 (LLM 백엔드 런타임 전환 · 성능 비교)
+
+> 근거: 사용자 요청(2026-07-28) — 로컬 ollama·내부 vLLM·외부 OpenAI API 성능 비교, **env 아닌 관리자 UI에서
+> AI 접속 정보 직접 설정·교체**. 인터뷰 확정: 목적=운영 백엔드 선정 · ollama/vLLM은 동일 모델(llama3.1:8b)로
+> 순수 서빙 비교, OpenAI는 mini급 1종 별도 축 · 선정 기준=evals 전 케이스 pass 게이트 + 지연(TTFT·총응답)·동시처리,
+> 비용은 참고치 · 골든셋 비교는 기존 `evals/run.mjs` 재사용(H5-1 선례, 신규 러너 금지).
+> **불변**: 마스킹 게이트는 호출자 경로라 백엔드 무관 자동 적용(규칙 2 — OpenAI 외부 전송도 동일 경로) ·
+> 설정 변경은 서버 인가(규칙 4) · 임베딩은 전환 제외([03 §4.7](03-database-design.md) — 색인 정합).
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H15-1 | 관리자 AI 설정 | `ai_backend_config` 전역 단일 행 테이블(마이그레이션·liviq_app grant·RLS 없음) · API `GET/PUT /system/ai-config`+`POST /system/ai-config/test`(SYS_ADMIN — GET은 api_key 끝 4자 마스킹, PUT은 api_key 생략 시 기존 유지, test는 1회 chat 스모크+지연 ms 반환) · `get_llm()`이 DB 설정 우선·env `LLM_*` 폴백(요청 단위 — 재시작 불필요) · answer_cache 키를 env 모델명 대신 활성 백엔드(`model@host`)로 분리 · web-admin `/system/ai` 페이지(§5A 패턴 — 폼+저장+연결 테스트, SYS_ADMIN 네비 추가) | 비 SYS_ADMIN 403·api_key 원문 미노출(CRITICAL) + env 폴백·백엔드 전환 캐시 분리 테스트 + 게이트 그린 + 시각 실측 | ✅ 완료 — 마이그레이션 `e9f0a1b2c3d4`. NULL 컬럼(api_key·reasoning_effort)은 env 폴백(키를 비워 저장해도 env 키 유지 — UI가 원문을 되돌릴 수 없어 조용한 401 방지, `app.ai_backend.merge_settings` 단일 지점). 테스트 api 432·db 160·ai-core 161·web 328 그린(cov 95.6/98.3/94.5%). 시각 실측: 연결 테스트 성공(로컬 ollama 230ms)·실패(미가용 요약)·저장→DB 우선 전환·375px·콘솔 0 |
+| H15-2 | 백엔드 성능 비교 | H15-1 UI로 3개 백엔드 교체하며 실측: ①evals 골든셋 pass-rate(백엔드별 전 케이스) ②지연 TTFT·총응답 ③동시 1·5·10 처리 · 결과 표+선정 근거 문서화(ADR) | 3개 백엔드 실측 표 + 운영 백엔드 확정 기록 | ⏳ 대기 |
 
 ## 9. 정의: "완료(Done)"
 

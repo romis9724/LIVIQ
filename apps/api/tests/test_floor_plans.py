@@ -305,9 +305,7 @@ async def test_image_cross_tenant_404(
     storage = FakeStorage()
     storage.objects[plan.image_key] = b"jpeg-bytes"
 
-    async with _client(
-        db_session, storage, roles=("MANAGER",), tenant_id=uuid.uuid4()
-    ) as c:
+    async with _client(db_session, storage, roles=("MANAGER",), tenant_id=uuid.uuid4()) as c:
         resp = await c.get(f"/floor-plans/{plan.id}/image")
     assert resp.status_code == 404
 

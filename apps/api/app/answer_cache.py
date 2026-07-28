@@ -1,8 +1,12 @@
 """AI 질의 정확 캐시 — Redis 얇은 래퍼 (docs/08 §2.0·2.1, docs/09 §8.5 H4-2).
 
 캐시 격리가 최우선(CRITICAL). 키에 tenant·(user 또는 roles·visibilities)·인제스트
-세대(gen)·모델·정규화 질의 해시를 모두 넣어 다른 사용자/역할/단지로 히트가 전파되지
+세대(gen)·백엔드·정규화 질의 해시를 모두 넣어 다른 사용자/역할/단지로 히트가 전파되지
 않게 한다. 히트 시 저장된 페이로드로 SSE 이벤트를 재생 → LLM 호출 0.
+
+- 백엔드 세그먼트는 호출자가 넘기는 활성 백엔드 식별자 `model@host`(app.ai_backend, H15-1)
+  — 같은 모델명이라도 다른 엔드포인트(ollama vs vLLM)의 답변이 섞이지 않는다. 관리자가
+  런타임에 백엔드를 바꾸면 키가 바뀌어 자연 무효화된다.
 
 - 개인 데이터 도구(get_fees·get_my_inquiries) 경로 답변은 **user 스코프** 키에만 저장.
   그 외는 tenant 스코프(roles·visibilities 분리) 키.
@@ -16,7 +20,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -72,15 +75,6 @@ def _ttl() -> int:
     return get_settings().answer_cache_ttl_s
 
 
-def current_model() -> str:
-    """캐시 키용 LLM 모델명 — env(LLM_MODEL) 직접. 모델 교체 시 키가 바뀌어 자연 무효화.
-
-    ponytail: env 미노출(.env 파일로만 주입) 배포에선 ""로 수렴해 모델 교체 무효화가
-    약해진다 — 운영은 실 env var 사용이라 무해. 강화 필요 시 ai_core 설정 주입으로 승급.
-    """
-    return os.environ.get("LLM_MODEL", "")
-
-
 def _normalize(question: str) -> str:
     """보수적 정규화 — 공백 압축·소문자만(과도한 정규화는 다른 질문을 같은 키로 만든다)."""
     return " ".join(question.split()).lower()
@@ -93,14 +87,14 @@ def _qhash(question: str) -> str:
 # ── 키 ─────────────────────────────────────────────────────────────────
 
 
-def _user_key(ctx: ToolContext, gen: int, model: str, qhash: str) -> str:
-    return f"{_KEY_PREFIX}u:{ctx.tenant_id}:{ctx.user_id}:{gen}:{model}:{qhash}"
+def _user_key(ctx: ToolContext, gen: int, backend: str, qhash: str) -> str:
+    return f"{_KEY_PREFIX}u:{ctx.tenant_id}:{ctx.user_id}:{gen}:{backend}:{qhash}"
 
 
-def _tenant_key(ctx: ToolContext, gen: int, model: str, qhash: str) -> str:
+def _tenant_key(ctx: ToolContext, gen: int, backend: str, qhash: str) -> str:
     roles = ",".join(sorted(ctx.roles))
     visibilities = ",".join(sorted(ctx.visibilities))
-    return f"{_KEY_PREFIX}t:{ctx.tenant_id}:{roles}:{visibilities}:{gen}:{model}:{qhash}"
+    return f"{_KEY_PREFIX}t:{ctx.tenant_id}:{roles}:{visibilities}:{gen}:{backend}:{qhash}"
 
 
 def _gen_key(tenant_id: uuid.UUID) -> str:
@@ -119,7 +113,9 @@ def _is_personal(tool_path: tuple[str, ...]) -> bool:
 # ── 조회·저장 ──────────────────────────────────────────────────────────
 
 
-async def lookup(redis: Redis, *, ctx: ToolContext, question: str) -> CachedAnswer | None:
+async def lookup(
+    redis: Redis, *, ctx: ToolContext, question: str, backend: str
+) -> CachedAnswer | None:
     """user 키 → tenant 키 순으로 조회. 히트/미스 카운터도 여기서 기록.
 
     Redis·디코드 실패는 삼켜 None(미스로 취급) — fail-open.
@@ -127,11 +123,10 @@ async def lookup(redis: Redis, *, ctx: ToolContext, question: str) -> CachedAnsw
     ttl = _ttl()
     if ttl <= 0:  # 캐시 비활성 — 카운터도 남기지 않음
         return None
-    model = current_model()
     qhash = _qhash(question)
     try:
         gen = await _generation(redis, ctx.tenant_id)
-        for key in (_user_key(ctx, gen, model, qhash), _tenant_key(ctx, gen, model, qhash)):
+        for key in (_user_key(ctx, gen, backend, qhash), _tenant_key(ctx, gen, backend, qhash)):
             raw = await redis.get(key)
             if raw is not None:
                 await redis.incr(f"cache:hits:{ctx.tenant_id}")
@@ -143,7 +138,9 @@ async def lookup(redis: Redis, *, ctx: ToolContext, question: str) -> CachedAnsw
         return None
 
 
-async def store(redis: Redis, *, ctx: ToolContext, question: str, done: DoneEvent) -> None:
+async def store(
+    redis: Redis, *, ctx: ToolContext, question: str, done: DoneEvent, backend: str
+) -> None:
     """스트림 완료 후 저장. answered·검수 불필요만 캐시(폴백·needs_review 캐시 금지).
 
     개인 도구 경로면 user 키, 아니면 tenant 키. Redis 장애는 삼킨다(fail-open).
@@ -153,14 +150,13 @@ async def store(redis: Redis, *, ctx: ToolContext, question: str, done: DoneEven
         return
     if done.status != "answered" or done.needs_review:
         return
-    model = current_model()
     qhash = _qhash(question)
     try:
         gen = await _generation(redis, ctx.tenant_id)
         key = (
-            _user_key(ctx, gen, model, qhash)
+            _user_key(ctx, gen, backend, qhash)
             if _is_personal(done.tool_path)
-            else _tenant_key(ctx, gen, model, qhash)
+            else _tenant_key(ctx, gen, backend, qhash)
         )
         await redis.set(key, _encode(done, ctx.tenant_id), ex=ttl)
     except RedisError as exc:

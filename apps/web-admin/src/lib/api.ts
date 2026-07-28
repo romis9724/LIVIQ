@@ -154,7 +154,8 @@ function toVersion(raw: RawVersion): DocumentVersion {
   };
 }
 
-async function ensureOk(response: Response): Promise<void> {
+/** 비-2xx면 서버 detail(있으면)을 담은 ApiError로 던진다. 기능 모듈도 재사용(features/ai-config). */
+export async function ensureOk(response: Response): Promise<void> {
   if (response.ok) return;
   let detail = `요청 실패 (${response.status})`;
   try {
