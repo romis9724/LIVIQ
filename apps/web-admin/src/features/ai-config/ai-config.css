@@ -19,16 +19,37 @@
   margin-top: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  border: 1px solid color-mix(in oklch, var(--color-accent) 30%, var(--color-border));
-  background: color-mix(in oklch, var(--color-accent) 8%, var(--color-surface));
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
   color: var(--color-text);
   font-size: var(--text-sm);
 }
 
+/* 위험 노브(임베딩·청킹) 경고 — 상시 노출, 색만으로 구분하지 않는다(WCAG). */
+.ai-cfg__notice--warn {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface));
+}
+
+/* 섹션 스택 = 저장 폼(LLM·임베딩·튜닝) + 폼 밖 재색인 카드. */
+.ai-cfg__sections,
 .ai-cfg__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ai-cfg__fields {
   margin-top: var(--space-5);
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 노브 6종 — 좁은 폭에서는 1열로 접힌다. */
+.ai-cfg__fields--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-4);
 }
 
@@ -47,6 +68,18 @@
   gap: var(--space-2);
   justify-content: flex-end;
 }
+/* 페이지 저장 버튼 — 섹션 카드 밖(폼 단위 1개). */
+.ai-cfg__actions--page {
+  max-width: 640px;
+}
+
+/* 색인 현황 카운트 — 숫자 대비를 위해 본문색 유지. */
+.ai-cfg__status {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
 
 /* 연결 테스트 결과 — 성공/실패를 색이 아니라 문구로도 구분한다(WCAG). */
 .ai-cfg__result {
@@ -58,12 +91,12 @@
   overflow-wrap: anywhere;
 }
 .ai-cfg__result--ok {
-  background: color-mix(in oklch, var(--color-success) 12%, var(--color-surface));
-  color: color-mix(in oklch, var(--color-success) 60%, var(--color-text));
+  background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-success) 60%, var(--color-text));
 }
 .ai-cfg__result--fail {
-  background: color-mix(in oklch, var(--color-danger) 10%, var(--color-surface));
-  color: color-mix(in oklch, var(--color-danger) 65%, var(--color-text));
+  background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface));
+  color: color-mix(in srgb, var(--color-danger) 65%, var(--color-text));
 }
 
 .ai-cfg__loading {

@@ -15,6 +15,7 @@ H9-1: twin(단지 트윈 — units.json geometry 업로드·조회 + occupancy �
 H9-5: parking(주차장 대시보드 — 지하주차장 배치도·입주민 차량 조회, MANAGER 전용).
 H13-3: floor_plans(입주민 본인 세대 평면도 조회 — 동·호 선택 없음, RESIDENT 전용).
 H15-1: ai_config(LLM 백엔드 런타임 설정 — 조회·저장·연결 테스트, SYS_ADMIN 전용).
+H15-3: ai_reindex(임베딩·청킹 변경 반영 — 전 단지 재색인 트리거·진행 조회, SYS_ADMIN 전용).
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from app.deps import verify_db_role
 from app.routers import (
     admin_tenants,
     ai_config,
+    ai_reindex,
     approvals,
     assistant,
     auth,
@@ -89,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(approvals.router)
     app.include_router(admin_tenants.router)
     app.include_router(ai_config.router)
+    app.include_router(ai_reindex.router)
     app.include_router(staff.router)
     app.include_router(roster.router)
     app.include_router(documents.router)

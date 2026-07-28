@@ -11,6 +11,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -55,10 +56,11 @@ class AiEvalGolden(IdMixin, CreatedAtMixin, Base):
 
 
 class AiBackendConfig(Base):
-    """LLM 생성 백엔드 런타임 설정 — 전역 단일 행(id=1). tenant_id·RLS 없음(§4.7, H15-1).
+    """AI 백엔드·튜닝 런타임 설정 — 전역 단일 행(id=1). tenant_id·RLS 없음(§4.7, H15-1·H15-3).
 
-    행이 없으면 api가 env `LLM_*`로 폴백한다. 임베딩(`EMBEDDING_*`)은 여기 없다 —
-    모델 교체가 전량 재색인 이벤트라 env+절차로만 바꾼다(§8).
+    NULL 컬럼은 env/코드 기본값 폴백(행 없음 = 전부 env — 기존 배포 무변화). 해석 규칙은
+    `ai_core.backend_config`가 단일 지점(api는 요청 단위, ai-worker는 잡 단위로 소비).
+    임베딩·chunk_max_tokens는 **위험 노브** — 변경은 재색인으로만 완성된다(§4.7 규율).
     """
 
     __tablename__ = "ai_backend_config"
@@ -69,6 +71,17 @@ class AiBackendConfig(Base):
     model: Mapped[str] = mapped_column(Text, nullable=False)
     api_key: Mapped[str | None] = mapped_column(Text, nullable=True)  # 응답에는 항상 마스킹
     reasoning_effort: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 임베딩 백엔드(H15-3) — 차원은 스키마 Vector(1024) 고정, 저장 전 실측 검증(§4.7).
+    embedding_base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)  # 항상 마스킹
+    # 튜닝 노브(H15-3) — NULL = env/코드 기본값.
+    chunk_max_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 재색인 필요
+    retrieval_top_k: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_max_output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tool_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    answer_cache_ttl_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

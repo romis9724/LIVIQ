@@ -18,8 +18,9 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from ai_core.backend_config import AiTuning
 from ai_core.llm.client import LlmClient
-from app.ai_backend import resolve_llm_settings
+from app.ai_backend import resolve_llm_settings, resolve_tuning
 from app.config import get_settings
 from app.session import SESSION_ABSOLUTE_TTL, SessionData, SessionStore, get_session_store
 from liviq_db.engine import create_engine, create_session_factory
@@ -335,6 +336,16 @@ async def get_llm(  # pragma: no cover — 배선(테스트는 오버라이드, 
     이미 쓰는 것과 같은 요청 세션이다(FastAPI 의존성 캐시) — 추가 커넥션 없음.
     """
     return LlmClient(await resolve_llm_settings(session))
+
+
+async def get_tuning(
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> AiTuning:
+    """요청 단위 RAG 튜닝 노브 — DB 설정 우선·코드/env 기본값 폴백(H15-3).
+
+    top_k·도구 신뢰도·캐시 TTL은 라우터가 이 값으로 검색기·오케스트레이터·캐시를 구성한다.
+    """
+    return await resolve_tuning(session)
 
 
 async def get_graph() -> AsyncIterator[Any]:  # pragma: no cover — Neo4j 배선(테스트는 오버라이드)

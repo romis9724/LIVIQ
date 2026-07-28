@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
+from ai_core.backend_config import AiTuning
 from ai_core.graph import GraphClient
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import (
@@ -37,6 +38,7 @@ from app.deps import (
     get_graph,
     get_llm,
     get_tenant_session,
+    get_tuning,
     require_roles,
 )
 from app.rate_limit import enforce_rate_limit
@@ -69,8 +71,11 @@ async def ask(
     llm: Annotated[LlmClient, Depends(get_llm)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
     redis: Annotated[Redis, Depends(get_redis)],
+    tuning: Annotated[AiTuning, Depends(get_tuning)],
 ) -> EventSourceResponse:
-    return await _assistant_response(body, ctx, session, llm, graph, redis, channel="resident")
+    return await _assistant_response(
+        body, ctx, session, llm, graph, redis, tuning, channel="resident"
+    )
 
 
 @facility_router.post("/assistant", dependencies=[Depends(enforce_rate_limit)])
@@ -81,6 +86,7 @@ async def facility_assistant(
     llm: Annotated[LlmClient, Depends(get_llm)],
     graph: Annotated[GraphClient | None, Depends(get_graph)],
     redis: Annotated[Redis, Depends(get_redis)],
+    tuning: Annotated[AiTuning, Depends(get_tuning)],
 ) -> EventSourceResponse:
     """시설 AI 도우미(FR-FAC-02) — 유사 장애·이력 근거로 가능 원인 후보 제시(단정 금지).
 
@@ -94,6 +100,7 @@ async def facility_assistant(
         llm,
         graph,
         redis,
+        tuning,
         channel="admin",
         answer_prompt=FACILITY_ANSWER_SYSTEM_PROMPT,
     )
@@ -106,6 +113,7 @@ async def _assistant_response(
     llm: LlmClient,
     graph: GraphClient | None,
     redis: Redis,
+    tuning: AiTuning,
     *,
     channel: str,
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
@@ -121,7 +129,13 @@ async def _assistant_response(
         )
     )
     await session.flush()
-    deps = ToolDeps(session=session, llm=llm, retriever=PgVectorRetriever(session), graph=graph)
+    # 검색 상한·도구 신뢰도·캐시 TTL은 관리자 설정의 해석값(H15-3, NULL=코드/env 기본값).
+    deps = ToolDeps(
+        session=session,
+        llm=llm,
+        retriever=PgVectorRetriever(session, default_top_k=tuning.retrieval_top_k),
+        graph=graph,
+    )
     tool_ctx = ToolContext(
         tenant_id=ctx.tenant_id,
         user_id=ctx.user_id,
@@ -134,7 +148,11 @@ async def _assistant_response(
     async def stream() -> AsyncIterator[dict[str, str]]:
         # 캐시 히트면 LLM 호출 0으로 재생, 미스면 정상 스트림(완료 후 저장).
         cached = await answer_cache.lookup(
-            redis, ctx=tool_ctx, question=body.question, backend=backend
+            redis,
+            ctx=tool_ctx,
+            question=body.question,
+            backend=backend,
+            ttl_override=tuning.answer_cache_ttl_s,
         )
         if cached is not None:
             events: AsyncIterator[object] = answer_cache.replay(cached, tenant_id=ctx.tenant_id)
@@ -145,6 +163,7 @@ async def _assistant_response(
                 deps=deps,
                 ctx=tool_ctx,
                 answer_prompt=answer_prompt,
+                tool_confidence=tuning.tool_confidence,
             )
         async for event in events:
             match event:
@@ -187,6 +206,7 @@ async def _assistant_response(
                             question=body.question,
                             done=done,
                             backend=backend,
+                            ttl_override=tuning.answer_cache_ttl_s,
                         )
                     yield {
                         "event": "done",

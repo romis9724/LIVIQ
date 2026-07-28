@@ -1844,9 +1844,51 @@ export interface paths {
         get: operations["get_ai_config_system_ai_config_get"];
         /**
          * Put Ai Config
-         * @description 전역 단일 행 upsert(id=1). 다음 요청부터 새 백엔드가 쓰인다.
+         * @description 전역 단일 행 upsert(id=1). 다음 요청부터 새 설정이 쓰인다.
+         *
+         *     임베딩 백엔드가 바뀌면 저장 전에 차원을 실측해 1024가 아니면 거부한다(422).
          */
         put: operations["put_ai_config_system_ai_config_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/ai-config/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Reindex
+         * @description 전 단지 문서·발행 공지 재인제스트 enqueue. 문서는 index_status를 pending으로 리셋.
+         */
+        post: operations["trigger_reindex_system_ai_config_reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/ai-config/reindex-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Reindex Status
+         * @description 전 단지 문서 색인 상태 집계(공지는 상태 컬럼이 없어 대상 아님).
+         */
+        get: operations["get_reindex_status_system_ai_config_reindex_status_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1868,6 +1910,26 @@ export interface paths {
          * @description 저장 전 스모크 — 후보 백엔드에 짧은 chat 1회. 실패도 200(ok=false)로 요약 반환.
          */
         post: operations["run_connection_test_system_ai_config_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system/ai-config/test-embedding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Embedding Test
+         * @description 임베딩 스모크 — 실측 차원까지 돌려준다(1024가 아니면 저장은 거부된다).
+         */
+        post: operations["run_embedding_test_system_ai_config_test_embedding_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2008,9 +2070,15 @@ export interface components {
         };
         /**
          * AiConfigIn
-         * @description 저장 요청. api_key: 생략=기존 유지 · 빈 문자열=삭제(env 폴백으로 복귀).
+         * @description 저장 요청.
+         *
+         *     - api_key·embedding_api_key: 생략=기존 유지 · 빈 문자열=삭제(env 폴백으로 복귀).
+         *     - embedding_base_url·embedding_model: 생략=기존 유지 · null=삭제(env 폴백).
+         *     - 노브 6종: null·생략=기본값 복귀(NULL 저장).
          */
         AiConfigIn: {
+            /** Answer Cache Ttl S */
+            answer_cache_ttl_s?: number | null;
             /** Api Key */
             api_key?: string | null;
             /**
@@ -2018,31 +2086,70 @@ export interface components {
              * Format: uri
              */
             base_url: string;
+            /** Chunk Max Tokens */
+            chunk_max_tokens?: number | null;
+            /** Embedding Api Key */
+            embedding_api_key?: string | null;
+            /** Embedding Base Url */
+            embedding_base_url?: string | null;
+            /** Embedding Model */
+            embedding_model?: string | null;
+            /** Llm Max Output Tokens */
+            llm_max_output_tokens?: number | null;
+            /** Llm Timeout S */
+            llm_timeout_s?: number | null;
             /** Model */
             model: string;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
+            /** Retrieval Top K */
+            retrieval_top_k?: number | null;
+            /** Tool Confidence */
+            tool_confidence?: number | null;
         };
         /**
          * AiConfigOut
-         * @description 현재 유효 설정. configured=false면 값은 env `LLM_*` 폴백을 보여준다.
+         * @description 현재 **유효** 설정(폴백 적용). configured=false면 값은 env `LLM_*` 폴백을 보여준다.
          */
         AiConfigOut: {
+            /** Answer Cache Ttl S */
+            answer_cache_ttl_s: number;
             /** Api Key Masked */
             api_key_masked?: string | null;
             /** Base Url */
             base_url: string;
+            /** Chunk Max Tokens */
+            chunk_max_tokens: number;
             /** Configured */
             configured: boolean;
+            /** Embedding Api Key Masked */
+            embedding_api_key_masked?: string | null;
+            /** Embedding Base Url */
+            embedding_base_url: string;
+            /** Embedding Model */
+            embedding_model: string;
+            /**
+             * Embedding Source
+             * @enum {string}
+             */
+            embedding_source: "db" | "env";
+            /** Llm Max Output Tokens */
+            llm_max_output_tokens: number;
+            /** Llm Timeout S */
+            llm_timeout_s: number;
             /** Model */
             model: string;
             /** Reasoning Effort */
             reasoning_effort?: string | null;
+            /** Retrieval Top K */
+            retrieval_top_k: number;
             /**
              * Source
              * @enum {string}
              */
             source: "db" | "env";
+            /** Tool Confidence */
+            tool_confidence: number;
         };
         /**
          * AiConfigTestIn
@@ -2063,6 +2170,34 @@ export interface components {
          * @description 스모크 결과. error는 요약 메시지만(스택·시크릿 없음).
          */
         AiConfigTestOut: {
+            /** Error */
+            error?: string | null;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Model */
+            model: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * AiEmbeddingTestIn
+         * @description 임베딩 연결 테스트 — 미지정은 저장값→env 병합.
+         */
+        AiEmbeddingTestIn: {
+            /** Embedding Api Key */
+            embedding_api_key?: string | null;
+            /** Embedding Base Url */
+            embedding_base_url?: string | null;
+            /** Embedding Model */
+            embedding_model?: string | null;
+        };
+        /**
+         * AiEmbeddingTestOut
+         * @description 임베딩 스모크 결과. dimensions는 실측 차원(불일치도 측정값을 돌려준다).
+         */
+        AiEmbeddingTestOut: {
+            /** Dimensions */
+            dimensions?: number | null;
             /** Error */
             error?: string | null;
             /** Latency Ms */
@@ -3566,6 +3701,32 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /**
+         * ReindexOut
+         * @description 재색인 트리거 결과 — 큐에 넣은 건수(실행은 ai-worker).
+         */
+        ReindexOut: {
+            /** Enqueued Documents */
+            enqueued_documents: number;
+            /** Enqueued Notices */
+            enqueued_notices: number;
+        };
+        /**
+         * ReindexStatusOut
+         * @description 전 단지 문서 색인 상태 집계(documents.index_status 어휘 그대로).
+         */
+        ReindexStatusOut: {
+            /** Failed */
+            failed: number;
+            /** Indexed */
+            indexed: number;
+            /** Indexing */
+            indexing: number;
+            /** Pending */
+            pending: number;
+            /** Total */
+            total: number;
         };
         /** RejectIn */
         RejectIn: {
@@ -7944,6 +8105,74 @@ export interface operations {
             };
         };
     };
+    trigger_reindex_system_ai_config_reindex_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReindexOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_reindex_status_system_ai_config_reindex_status_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReindexStatusOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     run_connection_test_system_ai_config_test_post: {
         parameters: {
             query?: never;
@@ -7969,6 +8198,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AiConfigTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_embedding_test_system_ai_config_test_embedding_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiEmbeddingTestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiEmbeddingTestOut"];
                 };
             };
             /** @description Validation Error */

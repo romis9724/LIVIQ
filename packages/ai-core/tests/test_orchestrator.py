@@ -164,12 +164,20 @@ def _calls_then_stop(*calls: dict[str, object]) -> Callable[[list[dict[str, Any]
 
 
 async def _run(
-    llm: LlmClient, retriever: FakeRetriever, *, ctx: ToolContext = CTX
+    llm: LlmClient,
+    retriever: FakeRetriever,
+    *,
+    ctx: ToolContext = CTX,
+    tool_confidence: float = TOOL_ONLY_CONFIDENCE,
 ) -> list[AssistantEvent]:
     return [
         event
         async for event in answer_question(
-            "주차장 언제 열어요?", registry=default_registry(), deps=_deps(retriever, llm), ctx=ctx
+            "주차장 언제 열어요?",
+            registry=default_registry(),
+            deps=_deps(retriever, llm),
+            ctx=ctx,
+            tool_confidence=tool_confidence,
         )
     ]
 
@@ -233,6 +241,15 @@ async def test_tool_only_answer_uses_fixed_confidence(settings: AiCoreSettings) 
     assert done.tool_citations[0].source_kind == "tool:get_fees"
     assert done.confidence == TOOL_ONLY_CONFIDENCE
     assert done.needs_review is False
+
+
+async def test_tool_only_confidence_is_configurable(settings: AiCoreSettings) -> None:
+    """도구 신뢰도는 관리자 노브(H15-3) — 주입값이 done.confidence로 그대로 나온다."""
+    llm = _agent_llm(
+        settings, _calls_then_stop(_tc("get_fees", {})), answer="이번 달 관리비는 100,000원입니다."
+    )
+    done = _done(await _run(llm, FakeRetriever([]), tool_confidence=0.42))
+    assert done.confidence == 0.42
 
 
 async def test_simple_doc_query_regression(settings: AiCoreSettings) -> None:

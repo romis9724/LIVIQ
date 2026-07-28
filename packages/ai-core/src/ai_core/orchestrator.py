@@ -22,6 +22,7 @@ import logging
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 
+from ai_core.backend_config import DEFAULT_TOOL_CONFIDENCE
 from ai_core.budget import ScoredChunk, fit_chunks
 from ai_core.citations import Citation, verify_citations
 from ai_core.confidence import assess
@@ -51,7 +52,8 @@ CONTEXT_BUDGET_TOKENS = 2400
 # 도구 결정 turn 상한(ADR-0007) — 초과 시 현재 근거로 답변/폴백.
 MAX_TOOL_STEPS = 3
 # 확정 데이터·도구 결과만으로 답할 때의 신뢰도(검색 점수 아님 — fee_explain와 동일 원칙).
-TOOL_ONLY_CONFIDENCE = 0.8
+# 정본은 backend_config(관리자 노브 `tool_confidence`의 기본값과 같은 값이어야 한다, H15-3).
+TOOL_ONLY_CONFIDENCE = DEFAULT_TOOL_CONFIDENCE
 
 
 # ── 이벤트 (SSE 계약과 1:1) ─────────────────────────────────────────────
@@ -117,11 +119,13 @@ async def answer_question(
     ctx: ToolContext,
     extra_names: Sequence[str] = (),
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
+    tool_confidence: float = TOOL_ONLY_CONFIDENCE,
 ) -> AsyncIterator[AssistantEvent]:
     """질의 1건 처리(도구 에이전트). 항상 마지막에 DoneEvent를 낸다.
 
     answer_prompt: 최종 답변 turn의 시스템 프롬프트(기본 = 일반 응대). 시설 도우미(H3-4)는
     FACILITY_ANSWER_SYSTEM_PROMPT를 주입해 원인 후보 형식을 강제한다 — 나머지 경로는 공유.
+    tool_confidence: 도구 결과만으로 답할 때의 신뢰도(관리자 노브, 기본=코드 상수 H15-3).
     """
     llm = deps.llm
     yield StatusEvent(stage="searching")
@@ -235,7 +239,7 @@ async def answer_question(
         should_fallback = verdict.should_fallback and not cards
     else:
         # 도구 카드만으로 답변(확정 SQL 데이터) — 검색 점수 없음, 폴백 안 함.
-        score = TOOL_ONLY_CONFIDENCE
+        score = tool_confidence
         needs_review = False
         should_fallback = False
 

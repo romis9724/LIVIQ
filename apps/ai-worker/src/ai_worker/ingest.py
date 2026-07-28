@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
 from ai_core.masking import MaskingFailedError, ensure_masked
-from ai_core.rag import Chunk, chunk_text
+from ai_core.rag import CHUNK_MAX_TOKENS, Chunk, chunk_text
 from ai_worker.parsing import UnsupportedFormatError, extract_text
 from liviq_db.models import ContentChunk, Document, DocumentVersion
 
@@ -45,9 +45,12 @@ async def ingest_document(
     download: Downloader,
     document_id: uuid.UUID,
     tenant_id: uuid.UUID,
+    chunk_max_tokens: int = CHUNK_MAX_TOKENS,
 ) -> IngestResult:
     """문서 1건 인제스트. 실패 시 index_status=failed 기록 후 결과 반환(예외 삼킴 금지 —
-    복구 불가 사유는 IngestResult.error로 노출, 인프라 오류는 그대로 전파해 arq 재시도)."""
+    복구 불가 사유는 IngestResult.error로 노출, 인프라 오류는 그대로 전파해 arq 재시도).
+
+    chunk_max_tokens: 청킹 토큰 상한(관리자 노브 — 기본은 코드 상수, H15-3)."""
     document = await session.scalar(
         select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
     )
@@ -73,7 +76,7 @@ async def ingest_document(
     try:
         raw = await download(version.storage_key)
         text = extract_text(version.storage_key, raw)
-        chunks = chunk_text(text)
+        chunks = chunk_text(text, max_tokens=chunk_max_tokens)
     except UnsupportedFormatError as exc:
         await _mark_failed(session, document_id)
         return IngestResult(document_id, 0, "failed", error=str(exc))
