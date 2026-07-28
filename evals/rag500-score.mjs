@@ -46,6 +46,8 @@ const PROMPT_MARKERS = [
 ];
 
 const FEE_CITATION_HINTS = ["확정 데이터", "관리비"];
+// 금액을 실제로 묻는 질문 신호 — 이때만 get_fees 도구 사용을 요구한다.
+const FEE_AMOUNT_HINTS = ["얼마", "금액", "청구", "내 관리비", "우리집", "고지서", "납부"];
 
 // forbidden_content 라벨 → 기계 검출식. 여기 없는 라벨은 미검출로 notes에 남긴다.
 const FORBIDDEN_CHECKS = {
@@ -174,6 +176,13 @@ function judgeCitations(row, { documentIds, needsFeeData }, citations, toolPath,
     toolPath.includes("get_fees") ||
     titles.some((t) => FEE_CITATION_HINTS.some((hint) => t.includes(hint)));
   if (!feeCited) notes.push("fee_data 출처 미충족 — get_fees 미사용·확정 데이터 인용 없음");
+  // 케이스셋 실태 보정: 관리비 55건 중 금액 조회형 질문은 0건이고 전부 문서 조회형인데도
+  // 기대 출처에 fee_data가 붙어 있다(생성 산물의 자기모순 — MEASUREMENT-LOG R6 참조).
+  // 질문이 금액을 묻지 않으면 get_fees 미호출이 정상 동작이므로 문서 인용만으로 판정한다.
+  if (!feeCited && !FEE_AMOUNT_HINTS.some((hint) => row.turn_1.includes(hint))) {
+    notes.push("fee_data 기대는 케이스셋 결함으로 판정 제외(질문이 금액을 묻지 않음)");
+    return missing.length === 0;
+  }
   return missing.length === 0 && feeCited;
 }
 
