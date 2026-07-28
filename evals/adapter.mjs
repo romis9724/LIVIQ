@@ -52,6 +52,7 @@ export const READ_TOOLS = new Set([
   "get_my_inquiries",
   "get_facilities",
   "get_overdue_checks",
+  "find_in_floor_plan", // 평면도 위치 질의 (H13, ai_core.tools.floor_plan — 읽기 전용)
 ]);
 // 에이전트 스텝 상한(ai-core MAX_TOOL_STEPS와 일치) — tool_path 길이 상한 관측.
 const STEP_CAP = 3;
