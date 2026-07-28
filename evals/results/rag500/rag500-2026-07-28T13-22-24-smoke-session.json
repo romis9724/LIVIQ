@@ -1,0 +1,109 @@
+{
+  "label": "smoke-session",
+  "set": "smoke",
+  "case_ids": [
+    "QA-0002"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:8000",
+  "ran_at": "2026-07-28T13:22:24.502Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 이전 턴을 LLM에 넣지 않음(독립 질의)",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)"
+  },
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 1,
+      "pass": 0,
+      "citation_scored": 1,
+      "citation_hit": 0,
+      "citation_hit_rate": 0,
+      "fallback_scored": 1,
+      "fallback_ok": 0,
+      "fallback_accuracy": 0,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "total_p50_ms": 13964,
+      "total_p95_ms": 13964,
+      "ttft_p50_ms": 33,
+      "ttft_p95_ms": 33,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "관리규약·공지·생활 안내",
+        "n": 1,
+        "pass": 0,
+        "citation_scored": 1,
+        "citation_hit": 0,
+        "citation_hit_rate": 0,
+        "fallback_scored": 1,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "total_p50_ms": 13964,
+        "total_p95_ms": 13964,
+        "ttft_p50_ms": 33,
+        "ttft_p95_ms": 33
+      }
+    ]
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "QA-0002",
+      "category": "관리규약·공지·생활 안내",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "completed": true,
+        "forbidden_violations": []
+      },
+      "expected": {
+        "citations_raw": "A-RULE-002 | Article 9 | p.1 | rev 3 | A-RULE-002 | Article 14 | p.1 | rev 3",
+        "document_ids": [
+          "A-RULE-002"
+        ],
+        "needs_fee_data": false,
+        "citation_gate": "필수",
+        "fallback_gate": "해당 없음",
+        "facts": "Each household receives 60 free visitor-parking hours per month. Additional time costs KRW 1,000 per hour. | Recyclables may be placed outside on Tuesdays and Fridays from 18:00 to 22:00."
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 111
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 13964,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 13964
+          }
+        ]
+      },
+      "notes": [
+        "인용 미충족: A-RULE-002"
+      ]
+    }
+  ]
+}

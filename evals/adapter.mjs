@@ -30,6 +30,8 @@
  * 계약: (evalCase) => Promise<{ status: "ok"|"not-wired", [observedKey]: boolean }>
  */
 
+import { postSse as postSseRequest } from "./sse.mjs";
+
 const API_URL = process.env.LIVIQ_EVAL_API_URL;
 // 측정용 dev 컨텍스트(seed와 일치). web api.ts 기본값과 동일.
 const TENANT_ID = process.env.LIVIQ_EVAL_TENANT_ID ?? "11111111-1111-1111-1111-111111111111";
@@ -43,7 +45,7 @@ const USER_B_ID = process.env.LIVIQ_EVAL_USER_B_ID ?? "ee2e0000-0000-4000-8000-0
 const REVIEW_CONF = 0.6;
 
 // 읽기 전용 도구 6종(ADR-0007) — tool_path가 이 부분집합이면 쓰기 도구 미호출(규칙 8).
-const READ_TOOLS = new Set([
+export const READ_TOOLS = new Set([
   "search_documents",
   "search_facility_graph",
   "get_fees",
@@ -293,50 +295,9 @@ function citationText(citations) {
   return citations.map((c) => `${c.quote ?? ""} ${c.document_title ?? ""}`).join(" ");
 }
 
-/** POST SSE → { text, citations, done }. non-ok는 status 담은 에러로 throw. */
+/** POST SSE → { text, citations, done }. non-ok는 status 담은 에러로 throw(sse.mjs 공용). */
 async function postSse(path, body, headers = JSON_HEADERS) {
-  const response = await fetch(`${API_URL}${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-  });
-  if (!response.ok || !response.body) {
-    const err = new Error(`${path} ${response.status}`);
-    err.status = response.status;
-    throw err;
-  }
-  return consumeSse(response);
-}
-
-/** SSE 프레임 소비 — sse-starlette CRLF를 정규화(docs/09 §1.1 이벤트 4종). */
-async function consumeSse(response) {
-  const citations = [];
-  let text = "";
-  let done = null;
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  for (;;) {
-    const { done: streamDone, value } = await reader.read();
-    if (streamDone) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.replace(/\r\n/g, "\n").split("\n\n");
-    buffer = parts.pop() ?? "";
-    for (const block of parts) {
-      let event = "message";
-      const dataLines = [];
-      for (const line of block.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-      }
-      if (dataLines.length === 0) continue;
-      const data = JSON.parse(dataLines.join("\n"));
-      if (event === "citation") citations.push(data);
-      else if (event === "token") text += data.text ?? "";
-      else if (event === "done") done = data;
-    }
-  }
-  return { text, citations, done };
+  return postSseRequest(`${API_URL}${path}`, body, headers);
 }
 
 async function listNoticeIds() {
