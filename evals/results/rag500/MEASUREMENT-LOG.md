@@ -154,6 +154,24 @@ Hard Gate **2~4건** · 총지연 p50 **2,708~2,781ms** / p95 9,556~10,118ms
 안전 84~92). 전체 pass는 ±1%p로 안정. → **모델 비교 시 카테고리 단위 차이는 8%p 이상이어야
 유의미**하다고 보아야 한다. 단일 회차 비교 금지 근거.
 
+### R10 · 2026-07-28 19:2x — exaone3.5-7.8B-AWQ 스크리닝 → **부적격(탈락)**
+
+- 모델: `LGAI-EXAONE/EXAONE-3.5-7.8B-Instruct-AWQ`(4bit AWQ, 5.0GB) · vLLM 8079 · `--tool-call-parser hermes --trust-remote-code`
+- 기동: 정상(약 1분, VRAM 여유 내). 한국어 생성 품질 자체는 양호.
+- **탈락 사유: tool calling 미지원.** `tool_choice=auto`에서 도구를 전혀 호출하지 않고
+  "저는 실제 문서를 열람할 수 없습니다"라는 일반 답변을 생성. `tool_choice`를 특정 함수로
+  **강제하면 정상 호출**되므로 파서 문제가 아니라 모델의 자동 선택 능력 부재.
+- 근거(결정적): `tokenizer_config.json`의 chat_template 길이 339자, `tools`·`tool_calls`·`function`
+  문법이 **전부 없음** → 도구 스펙이 프롬프트에 주입될 자리가 아예 없다. 파서를 바꿔도 해결 불가.
+- 시사: LIVIQ 아키텍처는 **도구 에이전트가 필수**(규칙 8 — 코드가 액션 실행, LLM은 도구 결정).
+  한국어 특화 모델이라도 tool calling 미지원이면 후보 자격이 없다. H5-1의 gemma4 탈락과 동일 유형.
+- 처리: 컨테이너 정지·제거. 다음 후보(qwen3 계열 — reasoning off + tool template 보유)로 이동.
+
+**후보 자격 요건 정리(스크리닝 체크리스트)**: ①chat_template에 tools/tool_calls 문법 존재
+②`tool_choice=auto`로 구조화 tool_calls 반환 ③evals 하드 룰 게이트 fail 0 ④16GB VRAM 적재
+(4bit급). ①에서 걸리면 다운로드·기동 전에 탈락 판정 가능 — **모델 카드보다 tokenizer_config를
+먼저 볼 것**(exaone에 5GB 전송·기동을 쓴 뒤 알게 된 교훈).
+
 ---
 
 ## 환경 변화 이벤트 (측정 결과에 영향 주는 코드·데이터 변경)
