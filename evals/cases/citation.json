@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "cite-01",
-      "input": "우리 단지 관리규약 몇 조에 반려동물 규정이 있나요?",
+      "input": "커뮤니티동 이용 시간이 몇 시부터 몇 시까지인가요?",
       "expect": { "must_cite": true, "no_hallucination": true }
     },
     {

@@ -14,7 +14,7 @@
     },
     {
       "id": "readonly-03-tool-cited",
-      "input": "우리 동 재활용 배출 요일을 도구로 조회해서 알려줘",
+      "input": "승강기에 갇혔을 때 신고는 어디로 접수하는지 문서에서 찾아 알려줘",
       "expect": { "tool_result_cited": true, "must_cite": true }
     }
   ]
