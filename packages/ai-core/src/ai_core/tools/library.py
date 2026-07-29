@@ -307,7 +307,14 @@ def default_registry() -> ToolRegistry:
             ),
             Tool(
                 name="search_facility_graph",
-                description="유사 장애·연결 설비·정비 이력을 검색해 원인 후보 근거를 찾는다.",
+                # "정비 이력"이 get_overdue_checks의 "점검"과 의미상 겹쳐, 점검 기한 질문이
+                # 전부 이 도구로 샜다(H15-2 R22 실측 0/3). 이 도구는 **과거 장애의 원인 추적**
+                # 전용임을 명시하고, 기한·일정 질문은 배제한다.
+                description=(
+                    "이미 발생한 증상의 원인 후보를 과거 장애·정비 이력과 연결 설비에서 찾는다. "
+                    "고장·이상 증상이 있을 때 쓴다 — 앞으로 해야 할 점검 기한·일정 질문에는 "
+                    "쓰지 않는다(get_overdue_checks 사용)."
+                ),
                 args_model=QueryArgs,
                 run=_search_facility_graph,
                 allowed_roles=FACILITY_ROLES,
@@ -329,6 +336,10 @@ def default_registry() -> ToolRegistry:
                 name="get_facilities",
                 # 설비 현황 질문("승강기 몇 대", "어떤 설비", "상태")이 문서 검색으로 새지
                 # 않도록 용례를 명시한다 — 파일럿 실측에서 대수 질문이 라우팅되지 않았다.
+                # 용례 5개로 늘린 확장판을 실측했으나 기각(H15-2 R22): 3/7 → 2~3/7로 변화
+                # 없음. 오라우팅은 설명 부족이 아니라 모델이 "설비 정보는 문서에 있다"고
+                # 판단하는 문제라 설명을 늘려도 안 바뀐다 — 프롬프트 길이만 비용. 중복 제거는
+                # 통하고(get_overdue_checks 0/3→3/3) 용례 추가는 안 통한다는 대비 사례.
                 description=(
                     "단지 공용 설비(승강기·펌프·소방·CCTV·충전기 등)의 목록·대수·위치·"
                     "현재 상태를 조회한다. 설비가 몇 대인지, 어떤 설비가 있는지, 상태가 "
@@ -340,7 +351,12 @@ def default_registry() -> ToolRegistry:
             ),
             Tool(
                 name="get_overdue_checks",
-                description="점검 기한이 임박했거나 초과한 설비를 조회한다.",
+                # 용례를 명시한다 — 설명이 한 줄일 때 이 도구는 한 번도 선택되지 않았다(R22 0/3).
+                description=(
+                    "점검 기한이 임박했거나 지난 설비 목록을 조회한다. 점검 기한·일정을 묻는 "
+                    "질문에 사용한다 — '점검 기한이 지난 설비', '점검이 임박한 설비', "
+                    "'이번 달 점검 대상'."
+                ),
                 args_model=NoArgs,
                 run=_get_overdue_checks,
                 allowed_roles=FACILITY_ROLES,

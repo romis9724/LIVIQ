@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "uv run --no-sync uvicorn app.main:app --reload --port 8000",
+    "dev": "uv run --no-sync uvicorn app.main:app --reload --reload-dir app --reload-dir ../../packages/ai-core/src --reload-dir ../../packages/db/src --port 8000",
     "lint": "uv run --no-sync ruff check .",
     "typecheck": "uv run --no-sync mypy app tests",
     "test": "uv run --no-sync pytest"
