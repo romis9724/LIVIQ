@@ -209,10 +209,22 @@ async def answer_question(
         {"role": "user", "content": masked_final.masked_text},
     ]
     parts: list[str] = []
+    # 마커 판정이 끝나기 전에는 토큰을 내보내지 않는다 — 아래 폴백 검사는 스트림이 끝난 뒤에야
+    # 돌기 때문에, 그때까지 흘려보낸 토큰은 이미 사용자 화면에 남는다(H15-2 #4 실측: 모델이
+    # "NO_EVIDENCE" 뒤에 답변을 이어 쓰면 내부 마커와 미검증 답변이 몇 초간 노출됐다).
+    streaming = False
     try:
         async for delta in llm.chat_stream(final_messages):
             parts.append(delta)
-            yield TokenEvent(text=delta)
+            if streaming:
+                yield TokenEvent(text=delta)
+                continue
+            gate = _no_evidence_gate(parts)
+            if gate == "fallback":
+                break
+            if gate == "flush":
+                streaming = True
+                yield TokenEvent(text="".join(parts))
     except LlmUnavailableError:
         async for event in _excerpt_fallback(evidence, cards, tool_path=path, usage=spent):
             yield event
@@ -303,6 +315,20 @@ def _fallback(
         fallback_reason=reason,
         tool_path=tuple(tool_path),
     )
+
+
+def _no_evidence_gate(parts: Sequence[str]) -> str:
+    """스트림 앞부분으로 NO_EVIDENCE 마커 여부를 판정 — `hold` | `fallback` | `flush`.
+
+    아직 마커일 수 있는 동안(마커의 접두사인 동안)은 hold로 토큰을 붙잡는다. 마커로 시작하면
+    폴백 확정이라 한 글자도 내보내지 않고, 마커와 갈라지면 flush로 그때까지 모은 것을 흘린다.
+    """
+    head = "".join(parts).lstrip()
+    if head.startswith(NO_EVIDENCE_MARKER):
+        return "fallback"
+    if NO_EVIDENCE_MARKER.startswith(head):  # 빈 문자열 포함 — 판정 유보
+        return "hold"
+    return "flush"
 
 
 def _sum_usage(turns: Sequence[ChatUsage]) -> ChatUsage | None:

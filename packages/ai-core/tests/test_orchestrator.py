@@ -130,6 +130,7 @@ def _agent_llm(
     decide: Callable[[list[dict[str, Any]]], dict[str, Any] | str],
     *,
     answer: str | None = "[1] 답변입니다.",
+    answer_deltas: Sequence[str] | None = None,
     embed_ok: bool = True,
 ) -> LlmClient:
     dims = settings.embedding_dimensions
@@ -145,9 +146,14 @@ def _agent_llm(
         if body.get("stream"):
             if answer is None:
                 return httpx.Response(503)
+            # answer_deltas가 있으면 여러 청크로 쪼개 보낸다(마커 판정이 청크 경계를 넘는 경우).
+            deltas = list(answer_deltas) if answer_deltas is not None else [answer]
             sse = "\n\n".join(
                 [
-                    f"data: {json.dumps({'choices': [{'delta': {'content': answer}}]})}",
+                    *(
+                        f"data: {json.dumps({'choices': [{'delta': {'content': d}}]})}"
+                        for d in deltas
+                    ),
                     "data: [DONE]",
                     "",
                 ]
@@ -389,6 +395,42 @@ async def test_no_tool_calls_falls_back_no_evidence(settings: AiCoreSettings) ->
     done = _done(events)
     assert done.fallback_reason == FALLBACK_NO_EVIDENCE
     assert not any(isinstance(e, TokenEvent) for e in events)
+
+
+async def test_no_evidence_marker_followed_by_answer_streams_nothing(
+    settings: AiCoreSettings,
+) -> None:
+    """모델이 마커 뒤에 답변을 이어 써도 토큰이 새면 안 된다(H15-2 #4 실측 결함).
+
+    스트림은 폴백 검사보다 먼저 흐르므로, 내보낸 토큰은 이미 사용자 화면에 남는다 —
+    내부 마커와 미검증 답변이 규칙 1을 우회해 노출됐다.
+    """
+    retriever = FakeRetriever([_chunk()])
+    llm = _agent_llm(
+        settings,
+        _calls_then_stop(_tc("search_documents", {"query": "주차"})),
+        answer="NO_EVIDENCE\n[1] 그래도 답을 만들어봤습니다.",
+    )
+    events = await _run(llm, retriever)
+    done = _done(events)
+    assert done.fallback_reason == FALLBACK_NO_EVIDENCE
+    assert not any(isinstance(e, TokenEvent) for e in events)
+
+
+async def test_marker_prefix_across_chunks_holds_then_streams(settings: AiCoreSettings) -> None:
+    """청크가 'NO'처럼 마커 접두사로 시작해도, 갈라지는 순간부터 정상 스트리밍한다."""
+    retriever = FakeRetriever([_chunk()])
+    llm = _agent_llm(
+        settings,
+        _calls_then_stop(_tc("search_documents", {"query": "주차"})),
+        answer_deltas=["NO", "쇼음", " 답변 [1]"],
+        answer="무시됨",
+    )
+    events = await _run(llm, retriever)
+    done = _done(events)
+    assert done.status == "answered"
+    streamed = "".join(e.text for e in events if isinstance(e, TokenEvent))
+    assert streamed == "NO쇼음 답변 [1]"  # 붙잡았던 앞부분까지 손실 없이 전달
 
 
 async def test_masking_failure_blocks_llm_call(settings: AiCoreSettings, monkeypatch: Any) -> None:

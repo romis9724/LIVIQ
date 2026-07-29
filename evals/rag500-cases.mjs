@@ -21,6 +21,10 @@ const ID_PREFIX = "liviq-rag-validation:";
 // 출처 토큰: 문서ID(A-RULE-001-V2 등) 또는 fee_data. 세대 id(A-HH-*)는 fee 그룹 속성이지 출처가 아니다.
 const SOURCE_RE = /^(?:[A-C]-(?!HH-)[A-Z]+-\d+(?:-V\d+)?|fee_data)$/;
 const NO_CITATION_GATES = new Set(["금지", "없음", "해당 없음", "n/a", "N/A"]);
+// 케이스셋 라벨 결함(질문 주제가 기대 출처 본문에 없음) — 파일 주석에 판정 근거가 있다.
+const LABEL_DEFECTS = JSON.parse(
+  readFileSync(join(FIXTURES, "citation-label-defects.json"), "utf8"),
+).defects;
 
 /** RFC4180 최소 파서 — 따옴표 필드·필드 내 개행·이스케이프("")·CRLF·BOM 처리. */
 export function parseCsv(text) {
@@ -130,7 +134,21 @@ export function expectedSources(row) {
     if (source === "fee_data") needsFeeData = true;
     else if (SOURCE_RE.test(source) && !documentIds.includes(source)) documentIds.push(source);
   }
-  return { documentIds, needsFeeData };
+  // 라벨 결함 보정 — 질문 주제가 본문에 없는 기대 출처는 인용이 불가능하고, 남겨두면
+  // 오답(급수 질문에 엘리베이터 문서 인용)을 정답화한다. 라벨이 다른 문서를 가리킨 경우는
+  // 정답 출처(add)로 교체해 테스트를 살린다. 근거는 문서 본문이며 목록·이유는
+  // fixtures/rag-validation/citation-label-defects.json(감사: audit_citation_labels.mjs).
+  const defect = LABEL_DEFECTS[row.case_id];
+  if (!defect) return { documentIds, needsFeeData, droppedIds: [], addedIds: [] };
+  const drop = defect.drop ?? [];
+  const add = (defect.add ?? []).filter((id) => !documentIds.includes(id));
+  const kept = [...documentIds.filter((id) => !drop.includes(id)), ...add];
+  return {
+    documentIds: kept,
+    needsFeeData,
+    droppedIds: documentIds.filter((id) => drop.includes(id)),
+    addedIds: add,
+  };
 }
 
 /** 케이스 로드 + 필터. set은 execution_set 라벨(smoke|critical|full) 또는 all. */
