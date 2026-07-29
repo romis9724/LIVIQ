@@ -82,12 +82,49 @@ def test_pdf_single_line_document_respects_token_limit() -> None:
     assert max(c.token_count for c in chunks) <= 500  # 제목 오버헤드 포함 여유분
 
 
-def test_toc_dot_leaders_are_dropped() -> None:
-    """목차 점선 리더는 조판 잔재라 색인하지 않는다(제목·본문 양쪽)."""
+def test_toc_line_is_dropped_entirely() -> None:
+    """점선 리더가 있는 줄은 목차다 — 리더만 지우면 목차 항목이 가짜 조항 섹션이 된다.
+
+    첫마을 관리규약 실측: 목차 6줄이 조항 90개를 담고 있어 조항마다 중복 섹션이 생겼다.
+    """
     text = "제24조(회의방청)" + "·" * 80 + "12\n\n회의는 공개한다."
     chunks = chunk_text(text)
-    assert all("···" not in c.content for c in chunks)
-    assert chunks[0].heading == "제24조(회의방청)"
+    assert [c.content for c in chunks] == ["회의는 공개한다."]
+    assert chunks[0].clause is None  # 목차의 조항 번호를 본문 근거로 쓰지 않는다
+
+
+def test_ellipsis_is_not_treated_as_toc() -> None:
+    """말줄임표를 목차로 오인하면 본문이 사라진다 — 마침표는 6개 이상만 리더로 본다."""
+    chunks = chunk_text("제3조(정의) 용어의 뜻은... 다음과 같다.")
+    assert chunks and "다음과 같다" in chunks[0].content
+
+
+def test_midline_clause_headings_split_sections() -> None:
+    """PDF 추출문은 조 사이에 개행이 없다 — 줄 중간 조항도 경계로 잡아야 한다.
+
+    줄머리만 보면 우연히 줄머리에 걸린 조항이 뒤따르는 청크의 제목을 가로채, 제1조 내용이
+    제64조로 인용된다(틀린 조항을 가리키므로 NULL보다 나쁘다 — H15-2 #3 실측).
+    """
+    text = (
+        "제9조(입주자 등의 자격) 소유자의 자격은 취득 시점부터다."
+        "제10조(권리) 입주자는 권리를 가진다."
+    )
+    chunks = chunk_text(text)
+    clauses = [c.clause for c in chunks]
+    assert clauses == ["제9조(입주자 등의 자격)", "제10조(권리)"]
+    # 각 청크의 조항 라벨은 그 청크 본문에 실제로 존재해야 한다.
+    for chunk in chunks:
+        assert chunk.clause is not None and chunk.clause.split("(")[0] in chunk.content
+
+
+def test_legal_reference_is_not_a_clause_heading() -> None:
+    """`법 제18조제2항` 같은 참조는 조항 제목이 아니다 — 섹션을 만들면 근거가 흐려진다."""
+    text = (
+        "제1조(목적) 이 규약은 「공동주택관리법」제18조제2항 및 "
+        "같은 법 시행령 제19조에 따라 정한다."
+    )
+    chunks = chunk_text(text)
+    assert [c.clause for c in chunks] == ["제1조(목적)"]
 
 
 def test_sentence_boundary_without_space_after_period() -> None:

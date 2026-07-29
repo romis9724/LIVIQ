@@ -35,8 +35,18 @@ _SECTION_RE = re.compile(
 # 문장 경계. PDF 추출문은 마침표 뒤 공백을 잃는다(`적용한다.2. [준칙]` — 실측 1,832곳)
 # → 종결어미 뒤에는 공백을 요구하지 않는다. 항번호(①②③)는 규약의 실제 구조 단위라 경계로 쓴다.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=[다함음됨임])\.\s*|(?=[①②③④⑤⑥⑦⑧⑨⑩])")
-# 목차의 점선 리더(`제24조(회의방청)·········`) — 구조가 아니라 조판 잔재라 색인 가치가 없다.
-_DOT_LEADER_RE = re.compile(r"[·.]{3,}")
+# 목차 줄 — 점선 리더(가운뎃점 3개 이상 또는 마침표 6개 이상)가 있으면 목차·색인이지 본문이
+# 아니다. **줄 전체를 버린다**: 리더만 지우면 목차 항목이 조항 제목으로 남아 가짜 섹션이 된다
+# (첫마을 관리규약 실측 — 목차가 6줄에 조항 90개를 담고 있어 조항마다 중복 섹션이 생겼다).
+# 마침표는 6개 이상만 본다 — 말줄임표(`...`)를 목차로 오인하면 본문이 사라진다.
+_TOC_LINE_RE = re.compile(r"^.*(?:·{3,}|\.{6,}).*$", re.MULTILINE)
+# 조항 제목은 **줄 중간에도** 온다 — PDF 추출문은 조 사이에 개행이 없다. 줄머리만 보면
+# 우연히 줄머리에 걸린 조항 하나가 뒤따르는 수십 개 청크의 제목을 가로챈다(제1조 내용이
+# 제64조로 라벨링됐다 — 인용이 틀린 조항을 가리키므로 NULL보다 나쁘다).
+_CLAUSE_ANYWHERE_RE = re.compile(r"제\s?\d+조(?:의\d+)?\s*\([^)\n]{0,60}\)")
+# 법령 참조(`법 제18조제2항`·`영 제19조`·`「공동주택관리법」제18조`)는 제목이 아니다.
+_LEGAL_REF_TAIL_RE = re.compile(r"(?:법|영|규칙|법률|」|조례)\s*$")
+_LEGAL_REF_LOOKBACK = 12
 # 조항 제목만 clause로 승격한다 — 마크다운·일반 문단 제목은 조항이 아니다.
 _CLAUSE_HEADING_RE = re.compile(r"^(?:제\s?\d+\s?조|Article\s+\d+)")
 
@@ -52,19 +62,42 @@ class Chunk:
     clause: str | None = None
 
 
+def _clean_heading(raw: str) -> str:
+    heading = raw.lstrip("# ").strip()
+    return re.sub(r"^\[(제\s?\d+\s?조)\]", r"\1", heading)  # `[제18조]` → `제18조`
+
+
+def _boundaries(text: str) -> list[tuple[int, int, str]]:
+    """(시작, 끝, 제목) 경계 목록 — 줄머리 제목 + 줄 중간 조항 제목."""
+    found: list[tuple[int, int, str]] = []
+    for m in _SECTION_RE.finditer(text):
+        found.append((m.start(), m.end(), _clean_heading(m.group(0))))
+    for m in _CLAUSE_ANYWHERE_RE.finditer(text):
+        before = text[max(0, m.start() - _LEGAL_REF_LOOKBACK) : m.start()]
+        if _LEGAL_REF_TAIL_RE.search(before):
+            continue
+        found.append((m.start(), m.end(), _clean_heading(m.group(0))))
+    # 겹치는 경계는 먼저 시작하는 것, 같은 위치면 더 긴 것을 택한다(줄머리 매치가 표제까지 담는다).
+    found.sort(key=lambda b: (b[0], -b[1]))
+    merged: list[tuple[int, int, str]] = []
+    for boundary in found:
+        if merged and boundary[0] < merged[-1][1]:
+            continue
+        merged.append(boundary)
+    return merged
+
+
 def _split_sections(text: str) -> list[tuple[str | None, str]]:
     """(제목, 본문) 섹션 목록. 첫 경계 이전 텍스트는 제목 None."""
     sections: list[tuple[str | None, str]] = []
-    matches = list(_SECTION_RE.finditer(text))
-    if not matches:
+    marks = _boundaries(text)
+    if not marks:
         return [(None, text)]
-    if matches[0].start() > 0:
-        sections.append((None, text[: matches[0].start()]))
-    for i, m in enumerate(matches):
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        heading = m.group(0).lstrip("# ").strip()
-        heading = re.sub(r"^\[(제\s?\d+\s?조)\]", r"\1", heading)  # `[제18조]` → `제18조`
-        sections.append((heading, text[m.end() : end]))
+    if marks[0][0] > 0:
+        sections.append((None, text[: marks[0][0]]))
+    for i, (_, end_of_heading, heading) in enumerate(marks):
+        end = marks[i + 1][0] if i + 1 < len(marks) else len(text)
+        sections.append((heading, text[end_of_heading:end]))
     return sections
 
 
@@ -91,7 +124,7 @@ def _split_oversized(paragraph: str, max_tokens: int) -> list[str]:
 def chunk_text(text: str, *, max_tokens: int = CHUNK_MAX_TOKENS) -> list[Chunk]:
     """텍스트를 구조 경계 우선으로 청킹. 빈 입력은 빈 목록."""
     chunks: list[Chunk] = []
-    text = _DOT_LEADER_RE.sub(" ", text)
+    text = _TOC_LINE_RE.sub("", text)
     for heading, body in _split_sections(text):
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
         pieces: list[str] = []
