@@ -1,0 +1,16 @@
+{
+  "tenant": "첫마을 4단지 푸르지오",
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "generated_at": "2026-07-29T16:24:36.557646+00:00",
+  "counts": {
+    "documents": 34,
+    "content_chunks": 426,
+    "fees": 1932,
+    "inquiries": 32,
+    "facilities": 37,
+    "plan_devices": 108,
+    "incidents": 1,
+    "notices": 6
+  },
+  "document_titles_sha256_16": "1c16bae50feabdbd"
+}
