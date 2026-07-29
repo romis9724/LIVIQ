@@ -63,3 +63,38 @@ def test_indices_are_sequential() -> None:
     text = "제1조 가\n내용1\n\n제2조 나\n내용2\n\n제3조 다\n내용3"
     chunks = chunk_text(text)
     assert [c.index for c in chunks] == list(range(len(chunks)))
+
+
+def test_pdf_single_line_document_respects_token_limit() -> None:
+    """PDF 추출문(개행 없는 장문 한 줄)에서도 청크가 상한을 지켜야 한다.
+
+    실측 결함(H15-2 #3): 섹션 제목 정규식이 줄 끝까지 삼켜 제목이 900토큰까지 커지고,
+    그 제목이 매 청크에 붙어 청크가 상한의 3배(평균 1,217/상한 400)가 됐다.
+    """
+    body = "이 조항은 관리 사항을 정한다." * 60  # 개행 없이 이어지는 한 줄
+    text = f"제48조(주택관리업자 선정방법) {body}"
+    chunks = chunk_text(text, max_tokens=400)
+
+    assert chunks[0].heading == "제48조(주택관리업자 선정방법)"
+    # 제목이 줄 전체를 삼키지 않는다 — 삼키면 아래 상한 검사가 무너진다.
+    assert all(len(c.heading or "") < 60 for c in chunks)
+    assert len(chunks) > 1  # 한 줄이라도 문장 경계로 쪼갠다
+    assert max(c.token_count for c in chunks) <= 500  # 제목 오버헤드 포함 여유분
+
+
+def test_toc_dot_leaders_are_dropped() -> None:
+    """목차 점선 리더는 조판 잔재라 색인하지 않는다(제목·본문 양쪽)."""
+    text = "제24조(회의방청)" + "·" * 80 + "12\n\n회의는 공개한다."
+    chunks = chunk_text(text)
+    assert all("···" not in c.content for c in chunks)
+    assert chunks[0].heading == "제24조(회의방청)"
+
+
+def test_sentence_boundary_without_space_after_period() -> None:
+    """PDF는 마침표 뒤 공백을 잃는다(`적용한다.2.`) — 그래도 문장 경계로 쪼갠다."""
+    # 마침표 바로 뒤에 다음 문장이 붙는다(공백 없음) — 실측된 PDF 추출 형태.
+    text = "".join(f"제{i}항은 다음과 같이 적용한다." for i in range(1, 40))
+    assert ". " not in text
+    chunks = chunk_text(text, max_tokens=100)
+    assert len(chunks) > 1
+    assert max(c.token_count for c in chunks) <= 150

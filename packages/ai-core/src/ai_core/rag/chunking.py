@@ -16,12 +16,27 @@ from ai_core.llm.tokens import estimate_tokens
 # 청크 토큰 상한(bge-m3 입력·컨텍스트 예산 균형 — 파일럿 보정 대상)
 CHUNK_MAX_TOKENS = 400
 
-# 섹션 경계: 마크다운 제목 또는 조항 마커로 시작하는 줄
-# 조항 마커는 실문서 표기 변형 수용: `제18조` · `[제18조]`(대괄호) · `Article 9`(영문 규정)
+# 섹션 경계: 마크다운 제목 또는 조항 마커로 시작하는 줄.
+# 조항 마커는 실문서 표기 변형 수용: `제18조` · `[제18조]`(대괄호) · `Article 9`(영문 규정).
+#
+# 제목은 **표제까지만** 잡는다 — 줄 끝까지(`[^\n]*`) 삼키면 안 된다. PDF 추출문은 한 줄이
+# 수천 자여서(첫마을 관리규약 실측: 줄 길이 중위 428자·최대 2,874자) 제목이 900토큰까지
+# 커지고, _make_chunk가 그 제목을 매 청크에 붙여 청크가 상한의 3배가 됐다
+# (실측 평균 1,217토큰 / 상한 400 — 188청크 중 186개 초과, H15-2 #3).
+# 조항 표제: 괄호형(`제48조(주택관리업자 선정방법)`) 또는 공백형(`제18조 공사 시간`).
+# 어느 쪽이든 **길이를 제한**한다 — 상한이 없던 것이 위 결함의 원인이다.
+_CLAUSE_TITLE = r"(?:\s*[(（【][^)）】\n]{0,60}[)）】]|[ \t]{1,3}[^\n.。①]{1,40})?"
 _SECTION_RE = re.compile(
-    r"^(#{1,6}\s+.+|\[?제\s?\d+\s?조[^\n]*|Article\s+\d+[^\n]*)$", re.MULTILINE
+    r"^(#{1,6}\s+[^\n]{1,120}"
+    rf"|\[?제\s?\d+\s?조\]?{_CLAUSE_TITLE}"
+    rf"|Article\s+\d+{_CLAUSE_TITLE})",
+    re.MULTILINE,
 )
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=다\.)\s+")
+# 문장 경계. PDF 추출문은 마침표 뒤 공백을 잃는다(`적용한다.2. [준칙]` — 실측 1,832곳)
+# → 종결어미 뒤에는 공백을 요구하지 않는다. 항번호(①②③)는 규약의 실제 구조 단위라 경계로 쓴다.
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=[다함음됨임])\.\s*|(?=[①②③④⑤⑥⑦⑧⑨⑩])")
+# 목차의 점선 리더(`제24조(회의방청)·········`) — 구조가 아니라 조판 잔재라 색인 가치가 없다.
+_DOT_LEADER_RE = re.compile(r"[·.]{3,}")
 
 
 @dataclass(frozen=True)
@@ -71,6 +86,7 @@ def _split_oversized(paragraph: str, max_tokens: int) -> list[str]:
 def chunk_text(text: str, *, max_tokens: int = CHUNK_MAX_TOKENS) -> list[Chunk]:
     """텍스트를 구조 경계 우선으로 청킹. 빈 입력은 빈 목록."""
     chunks: list[Chunk] = []
+    text = _DOT_LEADER_RE.sub(" ", text)
     for heading, body in _split_sections(text):
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", body) if p.strip()]
         pieces: list[str] = []
