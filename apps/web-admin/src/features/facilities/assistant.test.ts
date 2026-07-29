@@ -40,8 +40,26 @@ describe("toEvent (SSE → 도메인)", () => {
         needsReview: false,
         fallbackReason: null,
         toolPath: ["search_facility_graph", "get_facilities"],
+        answer: null,  // 서버 최종본 미제공 → 누적 토큰 텍스트가 정본(R21)
       },
     });
+  });
+
+  it("done의 answer(서버 최종본)를 매핑한다 — 인용 누락 재요청 결과 전달 경로", () => {
+    const event = toEvent({
+      event: "done",
+      data: JSON.stringify({
+        conversation_id: "c1",
+        status: "answered",
+        confidence: 0.8,
+        needs_review: false,
+        answer: "도어 센서 정렬 불량일 수 있습니다. [1]",
+      }),
+    });
+    expect(event?.type).toBe("done");
+    if (event?.type === "done") {
+      expect(event.result.answer).toBe("도어 센서 정렬 불량일 수 있습니다. [1]");
+    }
   });
 
   it("tool_path 누락 시 빈 배열로 방어한다", () => {

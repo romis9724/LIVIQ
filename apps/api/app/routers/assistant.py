@@ -221,6 +221,7 @@ async def _assistant_response(
                             token_input=done.usage.input_tokens if done.usage else None,
                             token_output=done.usage.output_tokens if done.usage else None,
                             token_estimated=done.usage.estimated if done.usage else False,
+                            answer=done.answer or None,
                         ).model_dump_json(),
                     }
 

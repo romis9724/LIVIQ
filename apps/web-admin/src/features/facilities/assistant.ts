@@ -22,6 +22,11 @@ export interface DoneResult {
   needsReview: boolean;
   fallbackReason: string | null;
   toolPath: string[];
+  /**
+   * 서버가 확정한 답변 본문. 있으면 누적 토큰 텍스트 대신 **이 값을 렌더한다.**
+   * 인용 누락 재요청(H15-2 R21) 결과는 스트리밍되지 않으므로 이 값이 최종본이다.
+   */
+  answer: string | null;
 }
 
 export type AssistantEvent =
@@ -88,6 +93,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
             needsReview: d.needs_review,
             fallbackReason: d.fallback_reason ?? null,
             toolPath: Array.isArray(d.tool_path) ? d.tool_path : [],
+            answer: d.answer ?? null,
           },
         };
       default:

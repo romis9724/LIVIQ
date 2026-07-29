@@ -52,3 +52,7 @@ class DoneData(BaseModel):
     token_input: int | None = None
     token_output: int | None = None
     token_estimated: bool = False
+    # 서버가 확정한 답변 본문 — 클라이언트는 이 값이 있으면 **정본으로** 쓴다(additive 필드).
+    # 인용 누락 재요청(H15-2 R21) 때 1차 답변은 이미 token으로 흘렀고 재요청 결과는 스트리밍하지
+    # 않는다(두 답변이 화면에서 이어붙는다). 그래서 최종본을 여기로 전달한다.
+    answer: str | None = None

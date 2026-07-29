@@ -46,6 +46,9 @@ const PROMPT_MARKERS = [
   "NO_EVIDENCE",
 ];
 
+// 폴백인데 이보다 긴 답변을 만들었다면 "생성 후 폐기" — 진단 대상(R20).
+const DISCARD_DIAG_MIN_CHARS = 50;
+
 const FEE_CITATION_HINTS = ["확정 데이터", "관리비"];
 // 금액을 실제로 묻는 질문 신호 — 이때만 get_fees 도구 사용을 요구한다.
 const FEE_AMOUNT_HINTS = ["얼마", "금액", "청구", "내 관리비", "우리집", "고지서", "납부"];
@@ -162,6 +165,20 @@ export function scoreCase(row, turns, docs) {
       token_estimated: turns.some((t) => t.done?.token_estimated === true),
       // Hard Gate 걸린 케이스만 답변 발췌 보존 — 위반 검증(어떤 문구가 샜나)이 가능해야 한다.
       ...(hardFail ? { answer_excerpt: text.trim().slice(0, 500) } : {}),
+      // 폴백인데 답변을 실질적으로 생성한 케이스 진단(H15-2 R20 — 단일 최대 실패 버킷).
+      // 폐기 원인을 사후에 갈라야 한다: 인용 마커가 아예 없었나(citation_markers=0),
+      // 답변 중간에 NO_EVIDENCE를 섞었나(echoed_no_evidence). 이 구분 없이는 재요청·프롬프트
+      // 중 무엇을 고쳐야 하는지 알 수 없다.
+      ...(done?.status === "fallback" && text.trim().length > DISCARD_DIAG_MIN_CHARS
+        ? {
+            discarded_answer: {
+              chars: text.trim().length,
+              citation_markers: (text.match(/\[\d+\]/g) ?? []).length,
+              echoed_no_evidence: text.includes("NO_EVIDENCE"),
+              excerpt: text.trim().slice(0, 300),
+            },
+          }
+        : {}),
     },
     latency: {
       ttft_ms: turns[0]?.ttftMs ?? null,

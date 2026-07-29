@@ -86,7 +86,13 @@ export function FacilityAssistantPanel() {
             break;
           case "done":
             conversationId.current = event.result.conversationId;
-            setState((s) => ({ ...s, status: "done", result: event.result }));
+            // 서버 최종본이 정본 — 인용 누락 재요청(R21) 결과는 스트리밍되지 않는다.
+            setState((s) => ({
+              ...s,
+              status: "done",
+              result: event.result,
+              text: event.result.answer ?? s.text,
+            }));
             break;
         }
       }

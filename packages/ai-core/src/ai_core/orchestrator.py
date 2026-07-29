@@ -19,19 +19,26 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from ai_core.backend_config import DEFAULT_TOOL_CONFIDENCE
 from ai_core.budget import ScoredChunk, fit_chunks
 from ai_core.citations import Citation, verify_citations
 from ai_core.confidence import assess
-from ai_core.llm.client import ChatUsage, LlmError, LlmUnavailableError, ToolCallRequest
+from ai_core.llm.client import (
+    ChatUsage,
+    LlmClient,
+    LlmError,
+    LlmUnavailableError,
+    ToolCallRequest,
+)
 from ai_core.llm.tokens import estimate_tokens
 from ai_core.masking import MaskingFailedError, ensure_masked, unmask
 from ai_core.rag.prompt import (
     AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
+    CITATION_RETRY_PROMPT,
     NO_EVIDENCE_MARKER,
     build_context_block,
 )
@@ -247,6 +254,20 @@ async def answer_question(
 
     check = verify_citations(answer, evidence)
     doc_citations = check.citations
+    if not doc_citations and not cards and evidence:
+        # 근거는 찾았는데 모델이 [n]을 붙이지 않은 경우 — 폐기하기 전에 **1회만** 귀속을 재요청한다.
+        # 실측(H15-2 R20): 이 유형이 Critical 180에서 31~37건(17~21%)이고, 정답을 정확히 쓰고도
+        # 마커가 없어 사용자에게 "담당자 연결"이 갔다. 프롬프트 강화로는 개선되지 않았다(R21 기각).
+        # 근거를 만들지 않고 귀속만 요구하므로 규칙 1을 우회하지 않는다 — 재요청도 실패하면 폴백.
+        retry = await _retry_for_citations(llm, final_messages, answer, masked_final.replacements)
+        if retry is not None:
+            retry_answer, retry_usage = retry
+            usage = _sum_usage([*usage_turns, final_turn, retry_usage])
+            retry_check = verify_citations(retry_answer, evidence)
+            if retry_check.citations:
+                answer = retry_answer
+                check = retry_check
+                doc_citations = retry_check.citations
     if not doc_citations and not cards:
         # 답변에 유효한 [n] 인용이 없고 도구 카드도 없다 → 근거 미검증(규칙 1).
         yield _fallback(FALLBACK_NO_EVIDENCE, usage=usage, tool_path=path)
@@ -315,6 +336,32 @@ def _fallback(
         fallback_reason=reason,
         tool_path=tuple(tool_path),
     )
+
+
+async def _retry_for_citations(
+    llm: LlmClient,
+    final_messages: Sequence[Mapping[str, object]],
+    answer: str,
+    replacements: Mapping[str, str],
+) -> tuple[str, ChatUsage] | None:
+    """인용 누락 답변에 [n] 귀속만 재요청(비스트리밍 1회). 실패·오류면 None.
+
+    스트리밍하지 않는다 — 1차 답변이 이미 사용자에게 흘렀으므로 토큰을 또 보내면 화면에서
+    두 답변이 이어붙는다. 재요청 결과는 DoneEvent.answer로 전달하고 클라이언트가 정본으로 쓴다.
+    """
+    messages = [
+        *final_messages,
+        {"role": "assistant", "content": answer},
+        {"role": "user", "content": CITATION_RETRY_PROMPT},
+    ]
+    try:
+        response = await llm.chat(messages)
+    except LlmError:  # LlmUnavailableError 포함 — 재요청 실패는 기존 폴백으로 흐른다
+        return None
+    text = unmask(response.text.strip(), replacements)
+    if not text or NO_EVIDENCE_MARKER in text:
+        return None
+    return text, response.usage
 
 
 def _no_evidence_gate(parts: Sequence[str]) -> str:

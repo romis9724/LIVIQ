@@ -21,6 +21,12 @@ export interface DoneResult {
   confidence: number;
   needsReview: boolean;
   fallbackReason: string | null;
+  /**
+   * 서버가 확정한 답변 본문. 있으면 누적 토큰 텍스트 대신 **이 값을 렌더한다.**
+   * 인용 누락 재요청(H15-2 R21) 때 1차 답변은 이미 token으로 흘렀고 재요청 결과는
+   * 스트리밍하지 않으므로, 이 값이 최종본이다. 없으면 누적 텍스트가 그대로 정본.
+   */
+  answer: string | null;
 }
 
 export type AssistantEvent =
@@ -87,6 +93,7 @@ function toEvent(frame: SseFrame): AssistantEvent | null {
             confidence: d.confidence,
             needsReview: d.needs_review,
             fallbackReason: d.fallback_reason ?? null,
+            answer: d.answer ?? null,
           },
         };
       default:

@@ -130,12 +130,20 @@ async function seedSysAdmin(client: Client): Promise<void> {
   // 고정 계정만 정리(다른 시스템 계정·토큰은 보존). auth_tokens는 users FK라 먼저.
   await client.query(`DELETE FROM auth_tokens WHERE user_id = $1`, [SYS.userId]);
   await client.query(`DELETE FROM user_roles WHERE user_id = $1`, [SYS.userId]);
-  await client.query(`DELETE FROM users WHERE id = $1`, [SYS.userId]);
-  // pii_ref는 NULL — 로그인은 login_id만 쓰므로 SYS_ADMIN은 pii_vault 없이 충분.
+  // users는 **삭제하지 않고 upsert**한다 — 이 계정이 감사 대상 작업(설정 변경·재색인 등)을
+  // 한 뒤에는 audit_logs.actor FK가 삭제를 막아 시드가 실패했다. 감사로그를 지워 통과시키는
+  // 것은 보안 기록을 훼손하므로 하지 않는다. pii_ref는 NULL — 로그인은 login_id만 쓴다.
   await client.query(
     `INSERT INTO users
        (id, tenant_id, status, login_id, password_hash, email_verified_at, must_change_password)
-     VALUES ($1, $2, 'active', $3, $4, NOW(), false)`,
+     VALUES ($1, $2, 'active', $3, $4, NOW(), false)
+     ON CONFLICT (id) DO UPDATE SET
+       tenant_id = EXCLUDED.tenant_id,
+       status = EXCLUDED.status,
+       login_id = EXCLUDED.login_id,
+       password_hash = EXCLUDED.password_hash,
+       email_verified_at = EXCLUDED.email_verified_at,
+       must_change_password = EXCLUDED.must_change_password`,
     [SYS.userId, SYS.tenantId, emailHash(SYS.email), PASSWORD_HASH],
   );
   await client.query(

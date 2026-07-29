@@ -76,7 +76,14 @@ export function useAssistantStream() {
               break;
             case "done":
               conversationId.current = event.result.conversationId;
-              updateAi(aiId, (m) => ({ ...m, status: "done", result: event.result }));
+              // 서버 최종본이 오면 그것을 정본으로 쓴다 — 인용 누락 재요청(R21) 결과는
+              // 스트리밍되지 않으므로 누적 텍스트에는 인용이 빠진 1차 답변만 있다.
+              updateAi(aiId, (m) => ({
+                ...m,
+                status: "done",
+                result: event.result,
+                text: event.result.answer ?? m.text,
+              }));
               break;
           }
         }
