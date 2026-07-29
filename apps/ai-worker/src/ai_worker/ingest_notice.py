@@ -103,6 +103,7 @@ async def ingest_notice(
             chunk_index=chunk.index,
             content=chunk.content,
             heading=chunk.heading,
+            clause=chunk.clause,
             token_count=chunk.token_count,
             embedding=vector,
         )

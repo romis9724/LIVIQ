@@ -98,3 +98,22 @@ def test_sentence_boundary_without_space_after_period() -> None:
     chunks = chunk_text(text, max_tokens=100)
     assert len(chunks) > 1
     assert max(c.token_count for c in chunks) <= 150
+
+
+def test_clause_is_derived_from_article_heading() -> None:
+    """조항 제목은 clause로 승격 — 인용 출처 줄에 조항 번호를 붙이기 위한 값이다."""
+    text = "제48조(주택관리업자 선정방법)\n입주자대표회의는 주택관리업자를 선정한다."
+    chunks = chunk_text(text)
+    assert chunks[0].clause == "제48조(주택관리업자 선정방법)"
+
+
+def test_non_article_heading_has_no_clause() -> None:
+    """마크다운·일반 제목은 조항이 아니다 — 조항인 척하면 인용 근거가 흐려진다."""
+    chunks = chunk_text("## 주차 규정\n\n방문 차량은 등록해야 합니다.")
+    assert chunks[0].heading == "주차 규정"
+    assert chunks[0].clause is None
+
+
+def test_english_article_heading_is_clause() -> None:
+    chunks = chunk_text("Article 9 Quiet Hours\nQuiet hours run from 22:00.")
+    assert chunks[0].clause == "Article 9 Quiet Hours"

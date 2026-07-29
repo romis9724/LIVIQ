@@ -47,6 +47,36 @@ async def test_ingest_creates_chunks_and_marks_indexed(
     assert count == 2
 
 
+async def test_clause_is_persisted_for_article_chunks(
+    session: AsyncSession, fake_llm: LlmClient
+) -> None:
+    """조항 청크는 clause 컬럼에 조항 번호가 남아야 한다.
+
+    이 배선이 없으면 prompt.build_context_block이 인용 출처 줄에 조항을 표시하지 못한다
+    (H15-2 #3에서 clause가 한 번도 기록되지 않아 항상 NULL이었다).
+    """
+    tenant_id, doc_id = await _seed_document(session, storage_key="t/clause.txt")
+    await ingest_document(
+        session,
+        llm=fake_llm,
+        download=_downloader(RULES_TEXT.encode()),  # type: ignore[arg-type]
+        document_id=doc_id,
+        tenant_id=tenant_id,
+    )
+    rows = (
+        (
+            await session.execute(
+                select(ContentChunk.clause)
+                .where(ContentChunk.document_id == doc_id)
+                .order_by(ContentChunk.chunk_index)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert list(rows) == ["제1조 목적", "제2조 주차"]
+
+
 async def test_embedding_payload_is_masked(
     session: AsyncSession, fake_llm: LlmClient, embed_payloads: list[str]
 ) -> None:

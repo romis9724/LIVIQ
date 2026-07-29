@@ -37,6 +37,8 @@ _SECTION_RE = re.compile(
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?。])\s+|(?<=[다함음됨임])\.\s*|(?=[①②③④⑤⑥⑦⑧⑨⑩])")
 # 목차의 점선 리더(`제24조(회의방청)·········`) — 구조가 아니라 조판 잔재라 색인 가치가 없다.
 _DOT_LEADER_RE = re.compile(r"[·.]{3,}")
+# 조항 제목만 clause로 승격한다 — 마크다운·일반 문단 제목은 조항이 아니다.
+_CLAUSE_HEADING_RE = re.compile(r"^(?:제\s?\d+\s?조|Article\s+\d+)")
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,9 @@ class Chunk:
     content: str
     heading: str | None
     token_count: int
+    # 조항 제목(`제48조(주택관리업자 선정방법)`). 인용 출처 줄에 조항 번호를 붙이는 값으로,
+    # 규칙 1이 요구하는 "문서 조항 인용"의 근거다(prompt.build_context_block).
+    clause: str | None = None
 
 
 def _split_sections(text: str) -> list[tuple[str | None, str]]:
@@ -108,4 +113,11 @@ def chunk_text(text: str, *, max_tokens: int = CHUNK_MAX_TOKENS) -> list[Chunk]:
 
 def _make_chunk(index: int, content: str, heading: str | None) -> Chunk:
     body = f"{heading}\n{content}" if heading else content
-    return Chunk(index=index, content=body, heading=heading, token_count=estimate_tokens(body))
+    clause = heading if heading and _CLAUSE_HEADING_RE.match(heading) else None
+    return Chunk(
+        index=index,
+        content=body,
+        heading=heading,
+        token_count=estimate_tokens(body),
+        clause=clause,
+    )
