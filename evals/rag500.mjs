@@ -5,9 +5,11 @@
  *
  * 사용:
  *   LIVIQ_EVAL_API_URL=http://localhost:8000 node evals/rag500.mjs --label=ollama-llama31
+ *   … --caseset=v2                   # v1(합성단지 회귀·기본) | v2(첫마을 실데이터 정본)
  *   … --set=critical|full|all        # execution_set 라벨 필터 (기본 smoke)
  *   … --case=QA-0001,QA-0401         # 특정 케이스만
  *   … --limit=5                      # 앞 N건만
+ *   … --as-of=2026-07-30             # v2 시간 의존 라벨 검증 기준일(기본 오늘)
  *   … --auth=session                 # 케이스 계정으로 /auth/login 세션(역할 민감 케이스 권장)
  *   LIVIQ_EVAL_PRICE_IN=0.15 LIVIQ_EVAL_PRICE_OUT=0.60 …   # 1M 토큰당 USD → 질의당 원가 집계
  *
@@ -32,7 +34,14 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { fixtureUuid, loadCases, loadManifest, loadUsers, turnsOf } from "./rag500-cases.mjs";
+import {
+  fixtureUuid,
+  loadCases,
+  loadCasesV2,
+  loadManifest,
+  loadUsers,
+  turnsOf,
+} from "./rag500-cases.mjs";
 import { isPriced, pricingFor } from "./rag500-pricing.mjs";
 import { aggregate, scoreCase } from "./rag500-score.mjs";
 import { postSse } from "./sse.mjs";
@@ -77,17 +86,32 @@ if (auth !== "dev" && auth !== "session") {
   process.exit(2);
 }
 
+// 케이스셋: v1(합성단지 회귀) | v2(첫마을 실데이터 정본). 채점 경로는 행의 expected_behavior로
+// 자동 분기되나, 로더는 여기서 고른다.
+const caseset = argOf("caseset", "v1");
+if (caseset !== "v1" && caseset !== "v2") {
+  console.error(`--caseset 값은 v1|v2 — 받은 값: ${caseset}`);
+  process.exit(2);
+}
+// 시간 의존 라벨(v2 as_of) 검증 기준 시각. 미지정 시 오늘(측정일).
+const asOf = argOf("as-of", new Date().toISOString().slice(0, 10));
+
 const docs = loadManifest();
 const users = auth === "session" ? loadUsers() : {};
 // 세션 쿠키는 계정당 1회만 발급(로그인 분당 상한 5회) — 이후 케이스는 재사용.
 const sessionCookies = new Map();
-const cases = loadCases({ set, caseIds, limit });
+const loader = caseset === "v2" ? loadCasesV2 : loadCases;
+const cases = loader({ set, caseIds, limit });
 if (cases.length === 0) {
   console.error(`대상 케이스 0건 — set=${set} case=${caseIds.join(",") || "-"} 필터 확인.`);
   process.exit(2);
 }
 
-console.log(`\nrag500 — ${cases.length}건 (set=${set}) · backend=${label} · api=${API_URL}\n`);
+console.log(
+  `\nrag500 — ${cases.length}건 (caseset=${caseset} set=${set}) · backend=${label} · api=${API_URL}` +
+    (caseset === "v2" ? ` · as_of=${asOf}` : "") +
+    "\n",
+);
 
 const results = [];
 const errors = [];
@@ -95,7 +119,7 @@ for (const [index, row] of cases.entries()) {
   const prefix = `  [${index + 1}/${cases.length}] ${row.case_id}`;
   try {
     const turns = await askTurns(row);
-    const scored = scoreCase(row, turns, docs);
+    const scored = scoreCase(row, turns, docs, { asOf });
     results.push(scored);
     const mark = scored.verdict === "pass" ? "✓" : "✗";
     const judge = scored.needs_judge ? " (검수)" : "";
