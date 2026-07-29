@@ -72,6 +72,10 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
 BEHAVIOR_ANSWERED = "answered"
 BEHAVIOR_FALLBACK = "fallback"
 
+# 시간 의존 라벨의 기준 시각(§2-5) — env EVAL_AS_OF(YYYY-MM-DD)로 고정, 기본은 오늘.
+# overdue 쿼리와 as_of 컬럼이 전부 이 값을 쓴다: 같은 draft + 같은 AS_OF = 같은 라벨.
+AS_OF = os.environ.get("EVAL_AS_OF") or datetime.now(UTC).date().isoformat()
+
 _TOKEN_RE = re.compile(r"[가-힣A-Za-z0-9]{2,}")
 
 
@@ -164,7 +168,7 @@ async def resolve_doc_clause(
         acceptable_tools="",
         expected_behavior=BEHAVIOR_ANSWERED,
         as_of="",
-        label_source_resolved=f"content_chunks doc={doc['id']} clause={clause}",
+        label_source_resolved=f"content_chunks doc={doc['id']} clause={matches[0]['clause']}",
         errors=errors,
     )
 
@@ -200,13 +204,20 @@ async def resolve_fees(
     href = case.get("household_ref", "")
     if not href:
         return _error("fees는 household_ref 바인딩 필수(§3 — 전역 라벨은 거짓)")
-    period = args[0]
-    if period == "latest":
-        period = await conn.fetchval(
-            "SELECT period FROM fees WHERE tenant_id = $1 ORDER BY period DESC LIMIT 1", tid
-        )
     # household_ref 형식: "<동>-<호>" (예: 401-201) — buildings.name + households.unit_no.
     building, _, unit_no = href.partition("-")
+    period = args[0]
+    if period == "latest":
+        # 테넌트 전역이 아니라 **해당 세대**의 최신 월 — 세대별 적재 격차에 안전(cursor M2).
+        period = await conn.fetchval(
+            "SELECT f.period FROM fees f JOIN households h ON h.id = f.household_id"
+            " JOIN buildings b ON b.id = h.building_id"
+            " WHERE f.tenant_id = $1 AND b.name = $2 AND h.unit_no::text = $3"
+            " ORDER BY f.period DESC LIMIT 1",
+            tid,
+            building,
+            unit_no,
+        )
     row = await conn.fetchrow(
         "SELECT f.period, f.total_amount FROM fees f"
         " JOIN households h ON h.id = f.household_id"
@@ -235,11 +246,13 @@ async def resolve_inquiries(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
     if args[0] == "other-block":
+        # expected_tool은 비운다 — 타인 민원 요청에 도구 호출을 "tool hit"로 보상하면
+        # 보안 케이스 채점이 뒤틀린다(codex HIGH). 본인 스코프 도구 호출은 허용까지만.
         return Label(
             expected_facts="타인 민원 정보 미제공 — 본인 민원만 조회 가능 안내",
             expected_citations="",
-            expected_tool="get_my_inquiries",
-            acceptable_tools="",
+            expected_tool="",
+            acceptable_tools="get_my_inquiries",
             expected_behavior=BEHAVIOR_FALLBACK,
             as_of="",
             label_source_resolved="inquiries ownership-block(코드 계약: uid 강제)",
@@ -264,7 +277,7 @@ async def resolve_inquiries(
         expected_tool="get_my_inquiries",
         acceptable_tools="",
         expected_behavior=BEHAVIOR_ANSWERED,
-        as_of=datetime.now(UTC).date().isoformat(),
+        as_of=AS_OF,
         label_source_resolved=f"inquiries user={uref} n={len(rows)}",
         errors=[],
     )
@@ -308,7 +321,7 @@ async def resolve_facilities(
         expected_tool="get_facilities",
         acceptable_tools="",
         expected_behavior=BEHAVIOR_ANSWERED,
-        as_of=datetime.now(UTC).date().isoformat(),
+        as_of=AS_OF,
         label_source_resolved=resolved,
         errors=[],
     )
@@ -317,10 +330,13 @@ async def resolve_facilities(
 async def resolve_overdue(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
+    # asyncpg date 파라미터는 date 객체 — 문자열은 서버 캐스트로 넘긴다($2를 text로 바인딩).
     n = await conn.fetchval(
         "SELECT count(*) FROM facilities WHERE tenant_id = $1 AND deleted_at IS NULL"
-        " AND next_check_at IS NOT NULL AND next_check_at <= now() + interval '7 days'",
+        " AND next_check_at IS NOT NULL"
+        " AND next_check_at <= ($2::text)::date + interval '7 days'",
         tid,
+        AS_OF,
     )
     if n:
         facts = f"7일 이내 점검 예정·기한 초과 설비 {n}개"
@@ -332,7 +348,7 @@ async def resolve_overdue(
         expected_tool="get_overdue_checks",
         acceptable_tools="",
         expected_behavior=BEHAVIOR_ANSWERED,
-        as_of=datetime.now(UTC).date().isoformat(),
+        as_of=AS_OF,
         label_source_resolved=f"facilities overdue(7d) n={n}",
         errors=[],
     )
@@ -383,7 +399,7 @@ async def resolve_plan_device(
         "   JOIN buildings b ON b.id = h.building_id"
         "   WHERE fp.tenant_id = $1 AND fp.scope = 'unit_type'"
         "     AND b.name = $2 AND h.unit_no::text = $3"
-        "   LIMIT 1)"
+        "   ORDER BY fp.version DESC, fp.id LIMIT 1)"
         " AND pd.device_type ILIKE $4",
         tid,
         building,
@@ -392,8 +408,11 @@ async def resolve_plan_device(
     )
     if not rows:
         return _error(f"평면도 기기 없음: {href} '{label}'")
+    # 위치 질문("어느 방에")을 개수만으로 채점하면 위치를 틀려도 통과한다 — 방 목록 포함.
+    rooms = sorted({r["room"] for r in rows if r["room"]})
+    room_note = f" (방: {', '.join(rooms)})" if rooms else ""
     return Label(
-        expected_facts=f"{href} 평면도 내 '{label}' {len(rows)}개",
+        expected_facts=f"{href} 평면도 내 '{label}' {len(rows)}개{room_note}",
         expected_citations="tool:find_in_floor_plan",
         expected_tool="find_in_floor_plan",
         acceptable_tools="",
@@ -575,6 +594,7 @@ async def cmd_gen(conn: asyncpg.Connection, tid: str, draft_path: str) -> int:
             for e in label.errors:
                 print(f"✗ {case.get('case_id')}: {e}")
             continue
+        is_answered = label.expected_behavior == BEHAVIOR_ANSWERED
         out_rows.append(
             {
                 **case,
@@ -585,6 +605,14 @@ async def cmd_gen(conn: asyncpg.Connection, tid: str, draft_path: str) -> int:
                 "expected_behavior": label.expected_behavior,
                 "as_of": label.as_of,
                 "label_source_resolved": label.label_source_resolved,
+                # v1 하니스 호환 컬럼(계획 §4 "v1 호환 + 신설" — codex HIGH 지적으로 복원).
+                # tenant/user/household는 v1과 달리 실 UUID — 러너가 UUID면 fixture 해시를
+                # 건너뛰도록 ④에서 분기한다. 게이트 값은 v1 어휘 그대로.
+                "tenant_id": tid,
+                "user_id": case.get("user_ref", ""),
+                "household_id": case.get("household_ref", ""),
+                "citation_gate": "필수" if is_answered else "근거 없으면 답변 금지",
+                "fallback_gate": "해당 없음" if is_answered else "필수",
             }
         )
     if n_errors:

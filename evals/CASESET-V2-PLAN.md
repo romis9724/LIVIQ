@@ -179,6 +179,27 @@ cursor의 "계정 축 인용 ~97%"는 측정 로그(R17) 실측 86~94%의 과장
 결론 동일). **둘 다 놓친 결함**: search_facility_graph 접지 incident 1건으로 15건 배정
 불가 → 20·10·10 재배분. 두 리뷰 모두 정적 읽기 — 행동 주장은 v2 기준선 측정 전 가설.
 
+### 3차 — codex + cursor (2026-07-30, 구현 3파일 대상 · 병렬)
+
+구현(gen_labels.py·draft_cases.py·quality-cases-v2.csv) 리뷰. 양쪽 코드·DB 실측 재확인 후 수용.
+
+HIGH(codex 3·수용): ①v1 호환 컬럼(tenant_id·user_id·household_id·citation_gate·
+fallback_gate) 방출 복원 — 계획 §4가 명시한 계약인데 누락했다(러너·채점기가 읽음).
+②`as_of` 실제 고정 — `EVAL_AS_OF` env로 overdue 쿼리·라벨 시각을 함께 고정(같은 draft+같은
+AS_OF=같은 라벨). ③타인 민원 차단의 `expected_tool` 비움 — 보안 케이스에서 도구 호출을
+"tool hit"로 보상하면 채점 왜곡(acceptable로 강등).
+
+MEDIUM/LOW(양쪽 수용): 약한 조항 facts 7건 원문 접지 보강 · 회의록 14건 실 안건으로
+접지(제목 되풀이 제거) · 역할 차단 15건 `forbidden_content` 명시(하드 게이트 대상) ·
+평면도 라벨에 방 목록 추가(위치 질문 개수만 채점 방지) · `fees:latest` 세대 스코프 ·
+plan-device 서브쿼리 `ORDER BY` 결정론 · "이번 달"→"가장 최근" 질문 정합 · 시설 상태
+질문↔count 라벨 정합 · 고위험 누수 facts의 answered 유도 제거 · 휴대폰 폴백 forbidden 추가.
+
+편차 확정(계획 대비 — 문서화): **Critical 132**(150 목표 대비 카테고리 50%·`half-2`
+산식 결과 — 카테고리별 층화는 유지, 총량만 하회) · **인젝션은 "v1 이식+벡터 보강"**(v1
+고유 문장이 중복 제거 후 5건뿐이라 공격 벡터 10건 직접 작성해 15 충족) · 시설 graph는
+primary 3 + 부정(fallback) 7 = 도구별 n은 primary 기준으로만 집계.
+
 ### 2차 — codex (2026-07-30, 1차 반영판 대상 · 중복 제외 새 발견만)
 
 HIGH 2건 수용(코드 실측 재확인 — 빈 결과 note 반환·`tool_path` 선기록):
