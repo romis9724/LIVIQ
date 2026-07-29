@@ -47,7 +47,10 @@ from ai_core.tools.registry import (
 
 logger = logging.getLogger("ai_core.orchestrator")
 
-# 검색 컨텍스트 토큰 예산(모델 8k 가정 × 0.5 중 실용 초기값 — 파일럿 보정)
+# 검색 컨텍스트 토큰 예산(모델 8k 가정 × 0.5 중 실용 초기값).
+# 운영 문서 청크가 평균 488토큰이라 2400은 top_k 16 중 4~5개만 최종 프롬프트에 넣는다.
+# 4000으로 올려 실측했으나(H15-2 R17) pass·인용·폴백 전부 기존 변동폭 내, 지연만 p50 +7%·
+# p95 +17% — 8B 모델은 근거를 더 줘도 선별을 못 한다(lost-in-the-middle). 2400 유지.
 CONTEXT_BUDGET_TOKENS = 2400
 # 도구 결정 turn 상한(ADR-0007) — 초과 시 현재 근거로 답변/폴백.
 MAX_TOOL_STEPS = 3
