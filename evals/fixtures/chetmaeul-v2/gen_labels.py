@@ -132,17 +132,30 @@ async def resolve_doc_clause(
         return _error(f"문서 없음: {title}")
     # clause 라벨은 "제5조(용어의 정의)" 형식 — bare "제5조" 스펙은 여는 괄호까지 접두
     # 매치("제5조(")로 잡는다. LIKE '제5조%'는 제50조를 오매치하므로 금지.
-    chunk = await conn.fetchrow(
-        "SELECT content, clause FROM content_chunks"
+    # 실측: 같은 조 번호가 본문·부칙·별첨 계약서에 중복된다(제1조가 3종) — bare 스펙이
+    # 여러 조항에 걸리면 모호하므로 생성을 거부하고 전체 라벨을 요구한다.
+    matches = await conn.fetch(
+        "SELECT DISTINCT clause FROM content_chunks"
         " WHERE tenant_id = $1 AND document_id = $2"
-        " AND (clause = $3 OR clause LIKE $3 || '(%')"
-        " ORDER BY chunk_index LIMIT 1",
+        " AND (clause = $3 OR clause LIKE $3 || '(%')",
         tid,
         str(doc["id"]),
         clause,
     )
-    if chunk is None:
+    if not matches:
         return _error(f"조항 청크 없음: {title} {clause} (재색인·조항 라벨 확인)")
+    if len(matches) > 1:
+        options = ", ".join(m["clause"] for m in matches[:5])
+        return _error(f"조항 모호: {title} {clause} → {options} — 전체 라벨로 지정")
+    chunk = await conn.fetchrow(
+        "SELECT content, clause FROM content_chunks"
+        " WHERE tenant_id = $1 AND document_id = $2 AND clause = $3"
+        " ORDER BY chunk_index LIMIT 1",
+        tid,
+        str(doc["id"]),
+        matches[0]["clause"],
+    )
+    assert chunk is not None  # matches가 있으므로 도달 불가
     errors = _check_facts_grounded(case.get("expected_facts", ""), chunk["content"])
     return Label(
         expected_facts=case.get("expected_facts", ""),
@@ -545,9 +558,11 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
     )
     probes: list[tuple[str, dict[str, str]]] = [
         (
-            "doc-clause:첫마을4단지 관리규약:제5조",
+            "doc-clause:첫마을4단지 관리규약:제5조(전용부분 및 공용부분의 범위)",
             {"role": "RESIDENT", "expected_facts": "전용부분 공용부분 범위"},
         ),
+        # bare 스펙 모호 — 거부돼야 정상(같은 조 번호가 본문·부칙·별첨에 중복)
+        ("doc-clause:첫마을4단지 관리규약:제5조", {"role": "RESIDENT", "expected_facts": "범위"}),
         ("fees:latest", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("inquiries:mine", {"role": "RESIDENT", "user_ref": inquiry_author or ""}),
         ("plan-device:콘센트", {"role": "RESIDENT", "household_ref": "401-201"}),
@@ -560,13 +575,16 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         # 역할 위반 — 거부돼야 정상
         ("facilities:count", {"role": "RESIDENT"}),
     ]
+    expect_reject_specs = {
+        "doc-clause:첫마을4단지 관리규약:제5조",  # 조항 모호(5중 중복)
+        "facilities:count",  # RESIDENT 역할 위반
+    }
     failures = 0
     for spec, case in probes:
         head, *args = spec.split(":")
         label = await RESOLVERS[head](conn, tid, dict(case, case_id=spec), args)
         label.errors.extend(_validate_role(dict(case), label))
-        expect_reject = spec == "facilities:count" and case["role"] == "RESIDENT"
-        ok = bool(label.errors) if expect_reject else not label.errors
+        ok = bool(label.errors) if spec in expect_reject_specs else not label.errors
         mark = "O" if ok else "X"
         detail = "; ".join(label.errors) if label.errors else label.expected_facts[:60]
         print(f"{mark} {spec} [{case['role']}] → {detail}")
