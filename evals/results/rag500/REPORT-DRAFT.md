@@ -1,6 +1,9 @@
-# LIVIQ RAG 성능·품질 분석 보고서 (초안)
+# LIVIQ RAG 성능·품질 분석 보고서 — 기술 상세
 
-> 작성 중. 원자료는 [MEASUREMENT-LOG.md](MEASUREMENT-LOG.md), 케이스셋은
+> **일반 독자용 보고서는 [REPORT.md](REPORT.md)** — 진행 과정·변경 내역·결정 근거를 전문 용어
+> 없이 정리했다. 이 문서는 그 근거가 되는 기술 상세본이다.
+>
+> 원자료는 [MEASUREMENT-LOG.md](MEASUREMENT-LOG.md)(R1~R21), 케이스셋은
 > [../../fixtures/rag-validation/](../../fixtures/rag-validation/). **확정 수치만 기재**하고
 > 진행 중 항목은 `(측정 중)`으로 남긴다.
 
