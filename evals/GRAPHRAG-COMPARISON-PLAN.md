@@ -92,8 +92,11 @@ household(동/호수) ─ unit_type ─→ FloorPlan ─ HAS_DEVICE ─→ PlanD
                                               └ HAS_MAINTENANCE ─→ MaintenanceLog
 ```
 
-- **신규 엣지 `SERVED_BY`**: PlanDevice → Facility. 세대 기기가 어느 공용 설비 계통에서
-  서비스되는지(콘센트→전기, 화재감지기→소방). `device_type` × 동(building)으로 결정.
+- **엣지 `LINKED_TO`(기존 재사용 — 리뷰 반영, SERVED_BY 신규 아님)**: PlanDevice → Facility.
+  `client.py:350·527`에 이미 있음. `plan_devices.facility_id`를 채우면 재색인이 자동 반영.
+- **인과 엣지 `CAUSED_BY`(신규 — 사용자 A 확정)**: Incident → Incident. 다단계 원인 추적의
+  GraphRAG 강점을 실측하려면 인과 관계가 그래프에 명시돼야 한다(암묵 시간순 추론은 약함).
+  스키마 self-FK + 그래프 클라이언트 + 재색인 확장. 상세 [SEED-PLAN §7](fixtures/chetmaeul-v2/SEED-PLAN.md).
 - **스코프 정정(실측)**: facility code 중 **동별은 EL(승강기)뿐**(`EL-401-01`). 나머지
   계통(FR·WT·HT·EC·SN)은 단지 공용 1세트라 code에 동번호가 없다. 따라서 세대 스코프는
   "이 입주민 세대 평면도의 기기 종류"로 **진입점**을 제한하는 것이고, 거기서 닿는 공용
