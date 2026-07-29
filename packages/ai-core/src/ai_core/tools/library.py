@@ -9,6 +9,7 @@ tenant_id·user_id는 항상 `ToolContext`에서 오며 LLM 인자로 받지 않
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
@@ -236,9 +237,11 @@ async def _get_my_inquiries(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -
             _INQUIRIES_SQL, {"tid": ctx.tenant_id, "uid": ctx.user_id, "lim": MAX_TOOL_ROWS}
         )
     ).all()
+    # DB가 확인한 "없음"은 확정 근거 — note면 인용 카드가 없어 폴백된다(R22 실측, v2 §6-⓪).
     if not rows:
-        return ToolResult(note="접수한 민원이 없습니다.")
-    quote = "; ".join(f"[{r.status}] {r.title}" for r in rows)
+        quote = "접수한 민원이 없습니다."
+    else:
+        quote = "; ".join(f"[{r.status}] {r.title}" for r in rows)
     return ToolResult(
         card=ToolCard(title="내 민원 내역", quote=quote, source_kind="tool:get_my_inquiries")
     )
@@ -249,16 +252,29 @@ async def _get_my_inquiries(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -
 
 async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
     a = cast(GetFacilitiesArgs, args)
-    sql = "SELECT name, status FROM facilities WHERE tenant_id = :tid AND deleted_at IS NULL"
-    params: dict[str, object] = {"tid": ctx.tenant_id, "lim": MAX_TOOL_ROWS}
+    # LIMIT 없이 전수 조회 — MAX_TOOL_ROWS(20) < 설비 수(첫마을 37)면 대수 집계가 틀린다
+    # (v2 §6-⓪, cursor HIGH). ponytail: 단지당 설비는 수백 규모라 메모리 집계로 충분,
+    # 수천 규모가 되면 SQL GROUP BY로 이관.
+    sql = "SELECT name, status, code FROM facilities WHERE tenant_id = :tid AND deleted_at IS NULL"
+    params: dict[str, object] = {"tid": ctx.tenant_id}
     if a.status:
         sql += " AND status = :status"
         params["status"] = a.status
-    sql += " ORDER BY name LIMIT :lim"
+    sql += " ORDER BY name"
     rows = (await deps.session.execute(text(sql), params)).all()
+    condition = f"상태={a.status} " if a.status else ""
     if not rows:
-        return ToolResult(note="설비 목록이 없습니다.")
-    quote = "; ".join(f"{r.name}({r.status})" for r in rows)
+        # DB가 확인한 "없음"은 확정 근거 — 조회 조건을 명시해 카드로 승격(v2 §6-⓪).
+        quote = f"{condition}설비가 없습니다."
+        return ToolResult(
+            card=ToolCard(title="설비 목록", quote=quote, source_kind="tool:get_facilities")
+        )
+    # 대수 질문의 근거: 총수 + 코드 접두(EL-401-01 → EL) 종류별 수. 나열은 상한으로 자른다.
+    kind_counts = Counter((r.code or "기타").split("-")[0] for r in rows)
+    counts = " ".join(f"{kind} {n}" for kind, n in kind_counts.most_common())
+    listed = "; ".join(f"{r.name}({r.status})" for r in rows[:MAX_TOOL_ROWS])
+    overflow = f" 외 {len(rows) - MAX_TOOL_ROWS}개" if len(rows) > MAX_TOOL_ROWS else ""
+    quote = f"{condition}총 {len(rows)}개 — 종류별: {counts}. {listed}{overflow}"
     return ToolResult(
         card=ToolCard(title="설비 목록", quote=quote, source_kind="tool:get_facilities")
     )
@@ -279,9 +295,11 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
             _OVERDUE_SQL, {"tid": ctx.tenant_id, "threshold": threshold, "lim": MAX_TOOL_ROWS}
         )
     ).all()
+    # DB가 확인한 "없음"은 확정 근거 — note면 인용 카드가 없어 폴백된다(R22 실측, v2 §6-⓪).
     if not rows:
-        return ToolResult(note="점검 기한이 임박하거나 초과된 설비가 없습니다.")
-    quote = "; ".join(f"{r.name}: {r.next_check_at:%Y-%m-%d}" for r in rows)
+        quote = f"{OVERDUE_WINDOW_DAYS}일 이내 점검 예정이거나 기한을 넘긴 설비가 없습니다."
+    else:
+        quote = "; ".join(f"{r.name}: {r.next_check_at:%Y-%m-%d}" for r in rows)
     return ToolResult(
         card=ToolCard(
             title="점검 기한 임박·초과 설비",
@@ -313,7 +331,7 @@ def default_registry() -> ToolRegistry:
                 description=(
                     "이미 발생한 증상의 원인 후보를 과거 장애·정비 이력과 연결 설비에서 찾는다. "
                     "고장·이상 증상이 있을 때 쓴다 — 앞으로 해야 할 점검 기한·일정 질문에는 "
-                    "쓰지 않는다(get_overdue_checks 사용)."
+                    "쓰지 않는다."
                 ),
                 args_model=QueryArgs,
                 run=_search_facility_graph,
@@ -341,7 +359,7 @@ def default_registry() -> ToolRegistry:
                 # 판단하는 문제라 설명을 늘려도 안 바뀐다 — 프롬프트 길이만 비용. 중복 제거는
                 # 통하고(get_overdue_checks 0/3→3/3) 용례 추가는 안 통한다는 대비 사례.
                 description=(
-                    "단지 공용 설비(승강기·펌프·소방·CCTV·충전기 등)의 목록·대수·위치·"
+                    "단지 공용 설비(승강기·펌프·소방·CCTV·충전기 등)의 목록·대수·"
                     "현재 상태를 조회한다. 설비가 몇 대인지, 어떤 설비가 있는지, 상태가 "
                     "어떤지 묻는 질문에 사용한다."
                 ),
@@ -352,10 +370,11 @@ def default_registry() -> ToolRegistry:
             Tool(
                 name="get_overdue_checks",
                 # 용례를 명시한다 — 설명이 한 줄일 때 이 도구는 한 번도 선택되지 않았다(R22 0/3).
+                # 윈도우는 7일 — "이번 달"을 약속하면 월말에 정답이 어긋난다(v2 §6-⓪).
                 description=(
-                    "점검 기한이 임박했거나 지난 설비 목록을 조회한다. 점검 기한·일정을 묻는 "
-                    "질문에 사용한다 — '점검 기한이 지난 설비', '점검이 임박한 설비', "
-                    "'이번 달 점검 대상'."
+                    "점검 기한이 지났거나 7일 이내로 임박한 설비 목록을 조회한다. 점검 "
+                    "기한·일정을 묻는 질문에 사용한다 — '점검 기한이 지난 설비', "
+                    "'점검이 임박한 설비'."
                 ),
                 args_model=NoArgs,
                 run=_get_overdue_checks,
