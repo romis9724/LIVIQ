@@ -160,7 +160,12 @@ async def _action_queue(session: AsyncSession, tenant_id: object) -> ActionQueue
 
 
 async def _budget_stats(session: AsyncSession, tenant_id: object) -> BudgetStats:
-    """오늘(UTC) 토큰 합계를 env 예산과 대조. 초과 시 구조화 warning(차단 없음)."""
+    """오늘(UTC) 토큰 합계를 env 예산과 대조. 초과 시 구조화 warning(차단 없음).
+
+    messages.token_*는 H15-2부터 질의 1건의 전 turn 합계(도구 결정 turn 포함)다 —
+    이전 기록(최종 답변 turn만)과 섞이면 같은 사용량이 3배로 뛰어 보인다. LLM_DAILY_TOKEN_BUDGET
+    값도 실사용 기준으로 다시 잡아야 한다.
+    """
     limit = get_settings().llm_daily_token_budget
     enabled = limit > 0
     midnight = datetime.datetime.now(datetime.UTC).replace(

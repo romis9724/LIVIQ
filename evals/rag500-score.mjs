@@ -23,6 +23,7 @@
 
 import { READ_TOOLS } from "./adapter.mjs";
 import { expectedSources } from "./rag500-cases.mjs";
+import { costUsd } from "./rag500-pricing.mjs";
 
 // 기대사실을 자동 채점할 수 없는 카테고리(행동 규정) — 자동 판정은 하드 게이트만.
 export const JUDGE_CATEGORIES = new Set([
@@ -63,6 +64,11 @@ const FORBIDDEN_CHECKS = {
 
 function uuidOf(citation) {
   return (citation.document_id ?? "").toLowerCase();
+}
+
+/** 턴별 토큰 합. usage 없는 턴(LLM 호출 0회 = 마스킹 실패 폴백·캐시 히트)은 0으로 센다. */
+function sumTokens(turns, field) {
+  return turns.reduce((sum, t) => sum + (t.done?.[field] ?? 0), 0);
 }
 
 /**
@@ -143,6 +149,11 @@ export function scoreCase(row, turns, docs) {
       citation_document_ids: citations.map(uuidOf).filter(Boolean),
       citation_titles: citations.map((c) => c.document_title ?? ""),
       answer_chars: text.trim().length,
+      // 토큰 usage(H15-2 원가 계량) — 서버가 질의 1건의 전 turn(도구 결정+최종 답변)을 합산해
+      // 주고, 여기서 케이스의 다중 턴을 다시 합산한다. estimated는 하나라도 추정이면 true.
+      token_input: sumTokens(turns, "token_input"),
+      token_output: sumTokens(turns, "token_output"),
+      token_estimated: turns.some((t) => t.done?.token_estimated === true),
       // Hard Gate 걸린 케이스만 답변 발췌 보존 — 위반 검증(어떤 문구가 샜나)이 가능해야 한다.
       ...(hardFail ? { answer_excerpt: text.trim().slice(0, 500) } : {}),
     },
@@ -202,14 +213,20 @@ function percentile(sorted, p) {
   return sorted[Math.max(0, idx)];
 }
 
-/** 카테고리별 + 전체 집계. errors는 호출 실패(측정 불가) 케이스. */
-export function aggregate(results, errors = []) {
+/**
+ * 카테고리별 + 전체 집계. errors는 호출 실패(측정 불가) 케이스.
+ * pricing(pricingFor 결과)이 있으면 토큰 합에서 원가·질의당 원가를 함께 낸다.
+ */
+export function aggregate(results, errors = [], pricing = null) {
   const rows = new Map();
   const bucket = (key) =>
     rows.get(key) ??
     rows.set(key, {
       key,
       n: 0,
+      token_input_sum: 0,
+      token_output_sum: 0,
+      token_estimated_cases: 0,
       citation_scored: 0,
       citation_hit: 0,
       fallback_scored: 0,
@@ -236,6 +253,9 @@ export function aggregate(results, errors = []) {
       if (r.hard_fail) b.hard_fail++;
       if (r.needs_judge) b.needs_judge++;
       if (r.verdict === "pass") b.pass++;
+      b.token_input_sum += r.actual.token_input ?? 0;
+      b.token_output_sum += r.actual.token_output ?? 0;
+      if (r.actual.token_estimated) b.token_estimated_cases++;
       b.totals.push(r.latency.total_ms);
       if (r.latency.ttft_ms !== null) b.ttfts.push(r.latency.ttft_ms);
     }
@@ -244,6 +264,7 @@ export function aggregate(results, errors = []) {
   const summarize = (b) => {
     const totals = [...b.totals].sort((a, x) => a - x);
     const ttfts = [...b.ttfts].sort((a, x) => a - x);
+    const cost = costUsd(pricing, b.token_input_sum, b.token_output_sum);
     return {
       key: b.key,
       n: b.n,
@@ -260,6 +281,16 @@ export function aggregate(results, errors = []) {
       total_p95_ms: percentile(totals, 95),
       ttft_p50_ms: percentile(ttfts, 50),
       ttft_p95_ms: percentile(ttfts, 95),
+      token_input_sum: b.token_input_sum,
+      token_output_sum: b.token_output_sum,
+      // 추정치가 섞인 케이스 수 — 0이 아니면 원가 수치는 참고값이다(보고서에 구분 필수).
+      token_estimated_cases: b.token_estimated_cases,
+      ...(cost === null
+        ? {}
+        : {
+            cost_usd: cost,
+            cost_per_query_usd: b.n === 0 ? null : Math.round((cost / b.n) * 1e6) / 1e6,
+          }),
     };
   };
 

@@ -18,6 +18,7 @@ import {
   turnsOf,
   uuid5,
 } from "./rag500-cases.mjs";
+import { costUsd, isPriced, pricingFor } from "./rag500-pricing.mjs";
 import { aggregate, scoreCase } from "./rag500-score.mjs";
 
 // uuid5 — RFC 4122 표준 벡터(DNS 네임스페이스 + "example.com").
@@ -166,5 +167,62 @@ assert.equal(agg.overall.citation_hit_rate, 2 / 3); // 폴백 1건만 인용 미
 assert.equal(agg.overall.total_p50_ms, 900);
 assert.equal(agg.overall.total_p95_ms, 1200);
 assert.equal(agg.overall.hard_fail, 1);
+// 단가 없으면 원가 열 자체가 없다(기존 결과 JSON 스키마 유지 + 토큰 합만 추가).
+assert.equal(agg.overall.token_input_sum, 0);
+assert.equal("cost_usd" in agg.overall, false);
+
+// ── 토큰 usage·원가(H15-2) ───────────────────────────────────────────────────
+const turnOf = (tokenIn, tokenOut, estimated) => ({
+  text: "답변입니다 [1]",
+  citations: [{ document_id: expectedDoc.uuid, document_title: expectedDoc.title, quote: "q" }],
+  done: {
+    status: "answered",
+    confidence: 0.8,
+    tool_path: ["search_documents"],
+    token_input: tokenIn,
+    token_output: tokenOut,
+    token_estimated: estimated,
+  },
+  ttftMs: 100,
+  totalMs: 900,
+});
+// 다중 턴은 합산, estimated는 한 턴이라도 추정이면 true.
+const costed = scoreCase(citeCase, [turnOf(1000, 200, false), turnOf(500, 100, true)], docs);
+assert.equal(costed.actual.token_input, 1500);
+assert.equal(costed.actual.token_output, 300);
+assert.equal(costed.actual.token_estimated, true);
+// usage 없는 done(근거 0 폴백)은 0으로 센다 — 필드 부재가 NaN이 되지 않게.
+const noUsage = scoreCase(citeCase, [turnOf(undefined, undefined, undefined)], docs);
+assert.equal(noUsage.actual.token_input, 0);
+assert.equal(noUsage.actual.token_estimated, false);
+
+// 단가: env 주입 우선 · 로컬 모델은 표에서 0(비용 열 미출력) · 미등록은 null.
+const envPricing = pricingFor("gpt-unknown", {
+  LIVIQ_EVAL_PRICE_IN: "0.15",
+  LIVIQ_EVAL_PRICE_OUT: "0.60",
+});
+assert.deepEqual(envPricing, {
+  inputPer1M: 0.15,
+  outputPer1M: 0.6,
+  currency: "USD",
+  source: "env",
+});
+assert.equal(isPriced(envPricing), true);
+assert.equal(isPriced(pricingFor("llama3.1-8b-awq", {})), false); // 로컬 = 단가 0
+assert.equal(pricingFor("gpt-unknown", {}), null);
+assert.throws(() => pricingFor("gpt-unknown", { LIVIQ_EVAL_PRICE_IN: "0.15" })); // 한쪽만 금지
+assert.throws(() => pricingFor("gpt-unknown", { LIVIQ_EVAL_PRICE_IN: "x", LIVIQ_EVAL_PRICE_OUT: "1" }));
+
+// 원가 = in/1e6*단가in + out/1e6*단가out (µ달러 반올림).
+assert.equal(costUsd(envPricing, 1_000_000, 1_000_000), 0.75);
+assert.equal(costUsd(null, 100, 100), null);
+
+const costAgg = aggregate([costed, costed], [], envPricing);
+assert.equal(costAgg.overall.token_input_sum, 3000);
+assert.equal(costAgg.overall.token_output_sum, 600);
+assert.equal(costAgg.overall.token_estimated_cases, 2);
+assert.equal(costAgg.overall.cost_usd, (3000 / 1e6) * 0.15 + (600 / 1e6) * 0.6);
+assert.equal(costAgg.overall.cost_per_query_usd, costAgg.overall.cost_usd / 2);
+assert.equal(costAgg.by_category[0].cost_usd, costAgg.overall.cost_usd); // 카테고리별도 산출
 
 console.log("rag500 selfcheck: ok");

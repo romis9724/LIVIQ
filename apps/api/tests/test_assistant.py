@@ -105,6 +105,10 @@ async def test_ask_streams_token_citation_done(
     done = events[-1][1]
     assert done["status"] == "answered"
     assert done["message_id"] is not None
+    # 토큰 usage 노출(H15-2 원가 계량) — 전 turn 합계. 가짜 LLM은 usage 미제공이라 추정치가 실린다.
+    assert isinstance(done["token_input"], int) and done["token_input"] > 0
+    assert isinstance(done["token_output"], int) and done["token_output"] > 0
+    assert done["token_estimated"] is True
 
     # 대화(user+assistant) + 인용 영속 확인
     msg_count = await db_session.scalar(select(func.count()).select_from(Message))
@@ -130,6 +134,9 @@ async def test_ask_without_evidence_falls_back(
     assert events[-1][0] == "done"
     assert done["status"] == "fallback"
     assert done["fallback_reason"] == "no_evidence"
+    # 근거 0 폴백도 도구 결정 turn 토큰은 이미 썼다 → 비용 기록에서 빠지지 않아야 한다(H15-2).
+    assert isinstance(done["token_input"], int) and done["token_input"] > 0
+    assert done["token_estimated"] is True
 
 
 async def test_ask_rejects_oversized_question(seeded_client: httpx.AsyncClient) -> None:

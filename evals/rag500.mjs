@@ -9,6 +9,7 @@
  *   … --case=QA-0001,QA-0401         # 특정 케이스만
  *   … --limit=5                      # 앞 N건만
  *   … --auth=session                 # 케이스 계정으로 /auth/login 세션(역할 민감 케이스 권장)
+ *   LIVIQ_EVAL_PRICE_IN=0.15 LIVIQ_EVAL_PRICE_OUT=0.60 …   # 1M 토큰당 USD → 질의당 원가 집계
  *
  * 게이트: `LIVIQ_EVAL_API_URL` 미설정 시 실행 거부(adapter.mjs와 같은 fail-safe — CI에서 안 돎).
  * 결과: evals/results/rag500/rag500-<timestamp>-<label>.json (run.mjs --trend 스냅샷과 분리).
@@ -19,7 +20,12 @@
  *   - 서버는 conversation_id로 대화를 묶기만 하고 이전 턴을 LLM에 넣지 않는다(orchestrator
  *     answer_question은 질문 1건만 받음) → 다중 턴은 "같은 대화의 독립 질의" 측정이다.
  *   - 답변 캐시(cache:ans:*)는 백엔드별 키라 백엔드 간 오염은 없지만, 같은 백엔드 재실행은
- *     캐시 재생으로 지연이 왜곡된다 — 지연을 다시 재려면 Redis에서 키를 비운다.
+ *     캐시 재생으로 지연이 왜곡된다 — 지연을 다시 재려면 Redis에서 키를 비운다(캐시 히트는
+ *     LLM 호출이 없어 토큰 0으로 기록되므로 원가도 같이 왜곡된다).
+ *   - 토큰은 서버 done 이벤트가 준 값 = 질의 1건의 **전 turn 합산**(도구 결정 turn + 최종
+ *     답변 turn, H15-2). 결정 turn이 입력 토큰의 대부분이라 예전처럼 최종 turn만 세면 원가가
+ *     3분의 1 수준 하한이 된다. 단, 최종 답변 turn은 스트리밍이라 프로바이더 usage가 없어
+ *     추정치가 섞인다 → token_estimated=true면 원가는 참고값(결과 meta·콘솔에 경고).
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -27,6 +33,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { fixtureUuid, loadCases, loadManifest, loadUsers, turnsOf } from "./rag500-cases.mjs";
+import { isPriced, pricingFor } from "./rag500-pricing.mjs";
 import { aggregate, scoreCase } from "./rag500-score.mjs";
 import { postSse } from "./sse.mjs";
 
@@ -177,6 +184,10 @@ function pct(value) {
   return value === null ? "     -" : `${(value * 100).toFixed(1).padStart(5)}%`;
 }
 
+function usd(value, digits) {
+  return value === null || value === undefined ? "-" : value.toFixed(digits);
+}
+
 /** 한글은 2칸으로 세어 표 정렬 — 콘솔 표가 카테고리명 때문에 어긋나지 않게. */
 function padDisplay(text, width) {
   let out = "";
@@ -194,7 +205,10 @@ function padDisplay(text, width) {
 
 // ── 리포트 ───────────────────────────────────────────────────────────────────
 
-const summary = aggregate(results, errors);
+const pricing = pricingFor(label);
+const costOn = isPriced(pricing);
+const summary = aggregate(results, errors, pricing);
+const estimatedCases = summary.overall?.token_estimated_cases ?? 0;
 const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 const snapshot = {
   label,
@@ -212,7 +226,13 @@ const snapshot = {
     multi_turn: "conversation_id 순차 호출 — 서버가 이전 턴을 LLM에 넣지 않음(독립 질의)",
     id_convention: "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
     citation_scoring: "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    token_usage:
+      "전 turn 합산(도구 결정 turn + 최종 답변 turn) — " +
+      (estimatedCases === 0
+        ? "전 건 프로바이더 실측"
+        : `추정 혼입 ${estimatedCases}/${summary.overall?.n ?? 0}건(최종 답변 turn은 스트리밍이라 usage 미제공 → 추정치), 원가는 참고값`),
   },
+  pricing, // 사용한 단가(null=원가 미산출). env 주입값이면 source=env.
   summary,
   errors,
   cases: results,
@@ -221,20 +241,41 @@ mkdirSync(RESULTS_DIR, { recursive: true });
 const outPath = join(RESULTS_DIR, `rag500-${stamp}-${label}.json`);
 writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + "\n");
 
-const header = `  ${padDisplay("카테고리", 24)}  n   pass  인용hit  폴백정확  hardfail  검수  p50ms   p95ms`;
-console.log(`\n${header}\n  ${"-".repeat(72)}`);
+// 토큰은 전 turn 합산 실측(추정 혼입은 아래 ⚠로 별도 표기).
+// 비용 열은 단가가 주입된 경우만(로컬 0단가에서 0.00 열이 지저분해지지 않게).
+const header =
+  `  ${padDisplay("카테고리", 24)}  n   pass  인용hit  폴백정확  hardfail  검수  p50ms   p95ms   토큰in  토큰out` +
+  (costOn ? "    원가USD  질의당USD" : "");
+console.log(`\n${header}\n  ${"-".repeat(costOn ? 110 : 88)}`);
 const overallRow = summary.overall ? [{ ...summary.overall, key: "전체" }] : [];
 for (const b of [...summary.by_category, ...overallRow]) {
   console.log(
     `  ${padDisplay(b.key, 26)}${String(b.n).padStart(3)} ${String(b.pass).padStart(5)}` +
       `  ${pct(b.citation_hit_rate)}   ${pct(b.fallback_accuracy)}  ${String(b.hard_fail).padStart(7)}` +
-      ` ${String(b.needs_judge).padStart(5)} ${String(b.total_p50_ms ?? "-").padStart(6)} ${String(b.total_p95_ms ?? "-").padStart(7)}`,
+      ` ${String(b.needs_judge).padStart(5)} ${String(b.total_p50_ms ?? "-").padStart(6)} ${String(b.total_p95_ms ?? "-").padStart(7)}` +
+      ` ${String(b.token_input_sum).padStart(8)} ${String(b.token_output_sum).padStart(7)}` +
+      (costOn
+        ? ` ${usd(b.cost_usd, 6).padStart(10)} ${usd(b.cost_per_query_usd, 6).padStart(10)}`
+        : ""),
   );
 }
 console.log(
   `\nTTFT p50 ${summary.overall?.ttft_p50_ms ?? "-"}ms · p95 ${summary.overall?.ttft_p95_ms ?? "-"}ms` +
-    ` · 측정 실패 ${errors.length}건\n결과: ${outPath}\n`,
+    ` · 측정 실패 ${errors.length}건`,
 );
+if (costOn) {
+  console.log(
+    `단가 ${pricing.source} — 입력 $${pricing.inputPer1M}/1M · 출력 $${pricing.outputPer1M}/1M` +
+      ` → 질의당 $${usd(summary.overall?.cost_per_query_usd, 6)}`,
+  );
+}
+if (estimatedCases > 0) {
+  console.log(
+    `⚠ 추정 혼입 ${estimatedCases}/${summary.overall?.n ?? 0}건 — 최종 답변 turn은 스트리밍이라` +
+      " usage 미제공(추정치). 결정 turn은 실측이므로 원가는 근사값이다",
+  );
+}
+console.log(`결과: ${outPath}\n`);
 
 // 채점 실패는 측정값이지 러너 오류가 아니다 — 호출 자체가 전부 실패한 경우만 비제로 종료.
 process.exit(results.length === 0 ? 1 : 0);

@@ -94,6 +94,8 @@ class DoneEvent:
     status: str  # answered | fallback
     confidence: float
     needs_review: bool
+    # 질의 1건의 **전 turn 합산**(도구 결정 turn + 최종 답변 turn, H15-2). LLM 호출 0회면 None.
+    # estimated=True면 추정치 혼입(최종 답변 turn은 스트리밍이라 프로바이더 usage가 없다).
     usage: ChatUsage | None
     fallback_reason: str | None = None
     citations: tuple[Citation, ...] = field(default_factory=tuple)
@@ -148,6 +150,9 @@ async def answer_question(
     cards: list[ToolCard] = []
     tool_path: list[str] = []
     llm_down = False
+    # turn별 usage — 도구 결정 turn이 비용의 대부분(도구 결과가 다음 turn에 재전송된다).
+    # 최종 답변만 세면 원가가 3분의 1 수준 하한으로 나온다(H15-2 실측).
+    usage_turns: list[ChatUsage] = []
 
     # ── 도구 결정 루프(스텝 상한) ──────────────────────────────────────
     for _step in range(MAX_TOOL_STEPS):
@@ -158,6 +163,7 @@ async def answer_question(
             break
         except LlmError:
             break
+        usage_turns.append(decision.usage)
         if not decision.tool_calls:
             break
         messages.append(_assistant_tool_calls_message(decision.tool_calls))
@@ -174,21 +180,23 @@ async def answer_question(
     )
 
     path = tuple(tool_path)
+    # 폴백도 결정 루프 토큰을 이미 썼다 — 비용 기록에서 빠지면 원가가 새어나간다.
+    spent = _sum_usage(usage_turns)
     if llm_down and not doc_chunks and not cards:
-        yield _fallback(FALLBACK_LLM_UNAVAILABLE, tool_path=path)
+        yield _fallback(FALLBACK_LLM_UNAVAILABLE, usage=spent, tool_path=path)
         return
 
     # ── 근거 조립 ──────────────────────────────────────────────────────
     evidence = _fit(doc_chunks)
     if not evidence and not cards:
-        yield _fallback(FALLBACK_NO_EVIDENCE, tool_path=path)
+        yield _fallback(FALLBACK_NO_EVIDENCE, usage=spent, tool_path=path)
         return
 
     final_user = _build_final_user_message(question, evidence, cards)
     try:
         masked_final = ensure_masked(final_user, extra_names=extra_names)
     except MaskingFailedError:
-        yield _fallback(FALLBACK_MASKING, needs_review=True, tool_path=path)
+        yield _fallback(FALLBACK_MASKING, needs_review=True, usage=spent, tool_path=path)
         return
 
     # ── 최종 답변(스트리밍) ────────────────────────────────────────────
@@ -203,16 +211,18 @@ async def answer_question(
             parts.append(delta)
             yield TokenEvent(text=delta)
     except LlmUnavailableError:
-        async for event in _excerpt_fallback(evidence, cards, tool_path=path):
+        async for event in _excerpt_fallback(evidence, cards, tool_path=path, usage=spent):
             yield event
         return
 
     answer = unmask("".join(parts).strip(), masked_final.replacements)
-    usage = ChatUsage(
+    # 최종 답변 turn은 스트리밍이라 프로바이더 usage가 없다 → 추정치(estimated=True 전파).
+    final_turn = ChatUsage(
         input_tokens=sum(estimate_tokens(str(m["content"])) for m in final_messages),
         output_tokens=estimate_tokens(answer),
         estimated=True,
     )
+    usage = _sum_usage([*usage_turns, final_turn])
 
     # ── 인용검증·신뢰도 ────────────────────────────────────────────────
     yield StatusEvent(stage="verifying")
@@ -289,6 +299,21 @@ def _fallback(
         usage=usage,
         fallback_reason=reason,
         tool_path=tuple(tool_path),
+    )
+
+
+def _sum_usage(turns: Sequence[ChatUsage]) -> ChatUsage | None:
+    """질의 1건의 turn별 usage 합계(도구 결정 turn + 최종 답변 turn).
+
+    LLM 호출이 없었으면 None(0 토큰과 구분 — 캐시 히트만 0이다).
+    estimated는 OR 집계 — 한 turn이라도 추정이면 합계도 추정치다(원가 신뢰도 표기용).
+    """
+    if not turns:
+        return None
+    return ChatUsage(
+        input_tokens=sum(u.input_tokens for u in turns),
+        output_tokens=sum(u.output_tokens for u in turns),
+        estimated=any(u.estimated for u in turns),
     )
 
 
@@ -374,6 +399,7 @@ async def _excerpt_fallback(
     cards: Sequence[ToolCard],
     *,
     tool_path: Sequence[str] = (),
+    usage: ChatUsage | None = None,
 ) -> AsyncIterator[AssistantEvent]:
     """LLM 미가용 시 발췌 폴백 — 출처(문서 최상위 발췌 + 도구 카드)는 유지(docs/01 §10)."""
     doc_citations: tuple[Citation, ...] = ()
@@ -388,7 +414,7 @@ async def _excerpt_fallback(
         status="fallback",
         confidence=0.0,
         needs_review=False,
-        usage=None,
+        usage=usage,  # 스트리밍 실패 전까지 쓴 결정 turn 토큰(비용 누락 방지)
         fallback_reason=FALLBACK_LLM_UNAVAILABLE,
         citations=doc_citations,
         tool_citations=tool_citations,

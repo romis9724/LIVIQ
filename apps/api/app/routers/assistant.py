@@ -218,6 +218,9 @@ async def _assistant_response(
                             needs_review=done.needs_review,
                             fallback_reason=done.fallback_reason,
                             tool_path=list(done.tool_path),
+                            token_input=done.usage.input_tokens if done.usage else None,
+                            token_output=done.usage.output_tokens if done.usage else None,
+                            token_estimated=done.usage.estimated if done.usage else False,
                         ).model_dump_json(),
                     }
 
@@ -250,7 +253,12 @@ async def _load_or_create_conversation(
 async def _persist_assistant_message(
     session: AsyncSession, ctx: RequestContext, conversation_id: uuid.UUID, done: DoneEvent
 ) -> uuid.UUID:
-    """assistant 메시지 + 검증된 인용 기록. 비용은 usage(추정 포함) 그대로(docs/08 §9)."""
+    """assistant 메시지 + 검증된 인용 기록. 비용은 usage(추정 포함) 그대로(docs/08 §9).
+
+    token_input/output은 질의 1건의 **전 turn 합계**다(도구 결정 turn 포함 — H15-2 정정).
+    이전에는 최종 답변 turn만 기록해 실사용의 3분의 1 수준이었다 → 일일 예산 대조
+    (dashboard `_budget_stats`)가 같은 값을 쓰므로 사용량이 커 보이는 것은 의도된 정정이다.
+    """
     message = Message(
         tenant_id=ctx.tenant_id,
         conversation_id=conversation_id,

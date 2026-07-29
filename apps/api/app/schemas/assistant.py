@@ -47,3 +47,8 @@ class DoneData(BaseModel):
     fallback_reason: str | None = None
     # 호출한 도구 이름 순서(H3-4) — additive 필드, SSE 이벤트 4종 계약 불변.
     tool_path: list[str] = Field(default_factory=list)
+    # 토큰 usage(H15-2 질의당 원가 계량) — additive 필드, SSE 이벤트 4종 계약 불변.
+    # usage 없는 경로(근거 0 폴백 등)는 None. token_estimated=True면 프로바이더 미제공 추정치다.
+    token_input: int | None = None
+    token_output: int | None = None
+    token_estimated: bool = False

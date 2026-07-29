@@ -108,11 +108,20 @@ def _tc(name: str, args: object) -> dict[str, object]:
 
 
 def _decision(
-    *, content: str = "", tool_calls: list[dict[str, object]] | None = None
+    *,
+    content: str = "",
+    tool_calls: list[dict[str, object]] | None = None,
+    usage: tuple[int, int] | None = None,
 ) -> dict[str, Any]:
     message: dict[str, object] = {"content": content or None}
     if tool_calls:
         message["tool_calls"] = tool_calls
+    if usage is not None:
+        # 프로바이더 실측 usage(estimated=False 경로) — 결정 turn 합산 검증용.
+        return {
+            "choices": [{"message": message}],
+            "usage": {"prompt_tokens": usage[0], "completion_tokens": usage[1]},
+        }
     return {"choices": [{"message": message}]}
 
 
@@ -263,6 +272,54 @@ async def test_simple_doc_query_regression(settings: AiCoreSettings) -> None:
     assert done.status == "answered"
     assert done.citations[0].ref == 1
     assert done.usage is not None and done.usage.estimated
+
+
+async def test_usage_sums_tool_decision_turns_and_final_turn(settings: AiCoreSettings) -> None:
+    """done.usage = 도구 결정 turn 합 + 최종 답변 turn(H15-2).
+
+    최종 답변 turn만 세면 원가가 하한으로 나온다(도구 결과가 다음 결정 turn에 재전송되므로
+    누락분이 더 크다). 결정 turn usage만 바꾼 두 번의 실행 차이 = 결정 turn 토큰이어야 한다.
+    """
+
+    def decide_with(usage: tuple[int, int]) -> Callable[[list[dict[str, Any]]], dict[str, Any]]:
+        def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+            if any(m.get("role") == "tool" for m in messages):
+                return _decision(content="", usage=usage)  # 2번째 결정 turn(도구 호출 중단)
+            return _decision(tool_calls=[_tc("search_documents", {"query": "주차"})], usage=usage)
+
+        return decide
+
+    counted = _done(
+        await _run(_agent_llm(settings, decide_with((1000, 10))), FakeRetriever([_chunk()]))
+    )
+    baseline = _done(
+        await _run(_agent_llm(settings, decide_with((0, 0))), FakeRetriever([_chunk()]))
+    )
+    assert counted.status == "answered" and baseline.status == "answered"
+    assert counted.usage is not None and baseline.usage is not None
+    # 결정 turn 2회 × (1000, 10) 만큼만 커진다 — 최종 답변 turn 추정치는 두 실행이 동일.
+    assert counted.usage.input_tokens - baseline.usage.input_tokens == 2000
+    assert counted.usage.output_tokens - baseline.usage.output_tokens == 20
+    assert baseline.usage.input_tokens > 0  # 최종 답변 turn도 여전히 포함
+    # 최종 답변 turn은 스트리밍이라 프로바이더 usage가 없다 → 합계는 추정치 표기.
+    assert counted.usage.estimated is True
+
+
+async def test_fallback_usage_keeps_tool_decision_tokens(settings: AiCoreSettings) -> None:
+    """근거 0 폴백도 이미 쓴 결정 turn 토큰을 실어야 한다(비용 누락 방지)."""
+    llm = _agent_llm(
+        settings,
+        lambda messages: (
+            _decision(content="", usage=(700, 7))
+            if any(m.get("role") == "tool" for m in messages)
+            else _decision(tool_calls=[_tc("search_documents", {"query": "x"})], usage=(700, 7))
+        ),
+    )
+    done = _done(await _run(llm, FakeRetriever([])))  # 문서 없음 → 근거 0 폴백
+    assert done.status == "fallback"
+    assert done.usage is not None
+    assert (done.usage.input_tokens, done.usage.output_tokens) == (1400, 14)
+    assert done.usage.estimated is False  # 프로바이더 실측만(최종 답변 turn 없음)
 
 
 async def test_done_carries_tool_path_in_call_order(settings: AiCoreSettings) -> None:
