@@ -321,7 +321,8 @@ async def test_get_my_inquiries_lists_own(settings: AiCoreSettings) -> None:
     assert "누수" in result.card.quote and "in_progress" in result.card.quote
 
 
-async def test_get_my_inquiries_empty_returns_note(settings: AiCoreSettings) -> None:
+async def test_get_my_inquiries_empty_returns_card(settings: AiCoreSettings) -> None:
+    # DB가 확인한 "없음"은 확정 근거다 — note가 아니라 인용 가능한 카드(케이스셋 v2 §6-⓪).
     result = (
         await execute_tool(
             _call("get_my_inquiries", {}),
@@ -330,7 +331,9 @@ async def test_get_my_inquiries_empty_returns_note(settings: AiCoreSettings) -> 
             registry=default_registry(),
         )
     ).result
-    assert "민원이 없습니다" in result.note
+    assert result.card is not None
+    assert result.card.source_kind == "tool:get_my_inquiries"
+    assert "민원이 없습니다" in result.card.quote
 
 
 # ── get_facilities / get_overdue_checks (시설 역할) ─────────────────────
@@ -341,7 +344,7 @@ async def test_get_facilities_with_status_filter(settings: AiCoreSettings) -> No
 
     def handler(sql: str, params: dict[str, Any]) -> list[Any]:
         captured.update({"sql": sql, "params": params})
-        return [row(name="엘리베이터1", status="fault")]
+        return [row(name="엘리베이터1", status="fault", code="EL-101-01")]
 
     result = (
         await execute_tool(
@@ -354,6 +357,63 @@ async def test_get_facilities_with_status_filter(settings: AiCoreSettings) -> No
     assert result.card is not None and "엘리베이터1(fault)" in result.card.quote
     assert captured["params"]["status"] == "fault"
     assert "status = :status" in captured["sql"]
+
+
+async def test_get_facilities_quote_includes_counts(settings: AiCoreSettings) -> None:
+    # "승강기 몇 대" 류 대수 질문의 정답 근거 — 총수·코드 종류별 수를 집계해 인용한다.
+    # LIMIT 잘림(구현 전 MAX_TOOL_ROWS=20 < 설비 37건)이면 대수가 틀린다(케이스셋 v2 §6-⓪).
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        return [
+            row(name="승강기1", status="normal", code="EL-101-01"),
+            row(name="승강기2", status="normal", code="EL-102-01"),
+            row(name="CCTV1", status="normal", code="CM-401-01"),
+            row(name="무코드설비", status="normal", code=None),
+        ]
+
+    result = (
+        await execute_tool(
+            _call("get_facilities", {}),
+            ctx=CTX_MANAGER,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    assert "총 4개" in result.card.quote
+    assert "EL 2" in result.card.quote
+    assert "CM 1" in result.card.quote
+
+
+async def test_get_facilities_caps_list_but_counts_all(settings: AiCoreSettings) -> None:
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        return [row(name=f"설비{i}", status="normal", code=f"EL-{i:03d}-01") for i in range(25)]
+
+    result = (
+        await execute_tool(
+            _call("get_facilities", {}),
+            ctx=CTX_MANAGER,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    assert "총 25개" in result.card.quote  # 집계는 전수
+    assert "외 5개" in result.card.quote  # 나열은 20개 상한
+
+
+async def test_get_facilities_empty_returns_card(settings: AiCoreSettings) -> None:
+    result = (
+        await execute_tool(
+            _call("get_facilities", {"status": "fault"}),
+            ctx=CTX_MANAGER,
+            deps=_deps(settings, handler=lambda sql, params: []),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    assert result.card.source_kind == "tool:get_facilities"
+    assert "fault" in result.card.quote  # 조회 조건 명시
+    assert "없습니다" in result.card.quote
 
 
 async def test_get_overdue_checks_lists_due(settings: AiCoreSettings) -> None:
@@ -373,7 +433,9 @@ async def test_get_overdue_checks_lists_due(settings: AiCoreSettings) -> None:
     assert result.card is not None and "소방펌프" in result.card.quote
 
 
-async def test_get_overdue_checks_empty_returns_note(settings: AiCoreSettings) -> None:
+async def test_get_overdue_checks_empty_returns_card(settings: AiCoreSettings) -> None:
+    # R22 실측: 빈 결과가 note만 반환 → 인용 근거 없음 → 폴백. "DB가 확인한 없음"은
+    # 절대 규칙 1의 확정 도구 결과이므로 카드로 승격한다(케이스셋 v2 §6-⓪, codex HIGH).
     result = (
         await execute_tool(
             _call("get_overdue_checks", {}),
@@ -382,7 +444,28 @@ async def test_get_overdue_checks_empty_returns_note(settings: AiCoreSettings) -
             registry=default_registry(),
         )
     ).result
-    assert "임박하거나 초과된 설비가 없습니다" in result.note
+    assert result.card is not None
+    assert result.card.source_kind == "tool:get_overdue_checks"
+    assert "7일" in result.card.quote  # 조회 조건(윈도우) 명시
+    assert "없습니다" in result.card.quote
+
+
+def test_tool_descriptions_match_io_contract() -> None:
+    """설명문이 실제 I/O를 넘어서 약속하지 않는다(케이스셋 v2 §6-⓪).
+
+    - get_facilities: SELECT에 위치가 없다 — "위치" 약속 금지. 대수는 집계로 제공.
+    - get_overdue_checks: 윈도우는 7일 — "이번 달" 약속 금지.
+    - search_facility_graph: 타 도구명 직접 지시 금지(개명·가시성 변경에 취약).
+    """
+    registry = default_registry()
+    specs = {
+        s["function"]["name"]: s["function"]["description"]
+        for s in registry.specs_for(("MANAGER",), graph_available=True)
+    }
+    assert "위치" not in specs["get_facilities"]
+    assert "이번 달" not in specs["get_overdue_checks"]
+    assert "7일" in specs["get_overdue_checks"]
+    assert "get_overdue_checks" not in specs["search_facility_graph"]
 
 
 # ── search_facility_graph ──────────────────────────────────────────────
