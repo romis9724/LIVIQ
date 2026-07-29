@@ -162,6 +162,48 @@ export function loadCases({ set = "smoke", caseIds = [], limit = null } = {}) {
   return limit === null ? filtered : filtered.slice(0, limit);
 }
 
+const V2_CSV = join(HERE, "fixtures", "chetmaeul-v2", "quality-cases-v2.csv");
+
+/** 케이스셋 v2 로드(첫마을 실데이터). 컬럼·라벨 포맷이 v1과 달라 별도 로더. */
+export function loadCasesV2({ set = "smoke", caseIds = [], limit = null } = {}) {
+  const rows = parseCsv(readFileSync(V2_CSV, "utf8"));
+  const wanted = set.toLowerCase();
+  const filtered = rows.filter((r) => {
+    if (caseIds.length > 0) return caseIds.includes(r.case_id);
+    return wanted === "all" || r.execution_set.toLowerCase() === wanted;
+  });
+  return limit === null ? filtered : filtered.slice(0, limit);
+}
+
+/**
+ * v2 기대 라벨 파싱. v2 expected_citations는 실 UUID(`uuid` | `uuid#조항`), `tool:<name>`,
+ * `notice:<id>`, 빈값 중 하나(단일값). v1의 fixture-id 규약과 무관.
+ * expected_tool(primary)·acceptable_tools·expected_behavior·as_of를 함께 낸다.
+ */
+export function expectedV2(row) {
+  const documentIds = [];
+  const noticeIds = [];
+  const toolCites = [];
+  const raw = (row.expected_citations ?? "").trim();
+  if (raw) {
+    if (raw.startsWith("tool:")) toolCites.push(raw.slice(5));
+    else if (raw.startsWith("notice:")) noticeIds.push(raw.slice(7));
+    else documentIds.push(raw.split("#")[0].toLowerCase()); // uuid(#조항 제거)
+  }
+  return {
+    documentIds,
+    noticeIds,
+    toolCites,
+    expectedTool: (row.expected_tool ?? "").trim() || null,
+    acceptableTools: (row.acceptable_tools ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    behavior: (row.expected_behavior ?? "").trim() || null,
+    asOf: (row.as_of ?? "").trim() || null,
+  };
+}
+
 /** 케이스의 턴 목록(빈 턴 제외). */
 export function turnsOf(row) {
   return [row.turn_1, row.turn_2, row.turn_3].map((t) => t.trim()).filter(Boolean);

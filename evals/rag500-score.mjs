@@ -22,7 +22,7 @@
  */
 
 import { READ_TOOLS } from "./adapter.mjs";
-import { expectedSources } from "./rag500-cases.mjs";
+import { expectedSources, expectedV2 } from "./rag500-cases.mjs";
 import { costUsd } from "./rag500-pricing.mjs";
 
 // 기대사실을 자동 채점할 수 없는 카테고리(행동 규정) — 자동 판정은 하드 게이트만.
@@ -84,8 +84,21 @@ function sumTokens(turns, field) {
  * @param row     CSV 행
  * @param turns   [{ text, citations, done, ttftMs, totalMs }] 턴 순서
  * @param docs    loadManifest() 결과
+ * @param opts    { asOf?: "YYYY-MM-DD" } 측정 시각(시간 의존 라벨 검증용, v2)
+ *
+ * v2 케이스(expected_behavior 컬럼 존재)는 v2 채점 경로:
+ *   - citation_hit: 실 UUID·notice·tool 인용 매칭(v1 fixture-id 규약과 별개)
+ *   - behavior_ok:  expected_behavior(answered|fallback)와 실제 status 일치 —
+ *                   빈 결과 카드 승격(⓪) 이후 "없음"도 answered가 정답
+ *   - tool_selection: expected_tool ∈ tool_path. **답변 pass와 절대 합산 안 함**(별도 집계) —
+ *                   tool_path는 실행 성공 여부와 무관하게 기록되므로(orchestrator) hit≠답변성공
+ *   - as_of: 라벨 월 ≠ 측정 월이면 notes 경고(시간 의존 라벨 무효 위험)
  */
-export function scoreCase(row, turns, docs) {
+export function scoreCase(row, turns, docs, opts = {}) {
+  // v2 감지는 값 기반 — v1도 expected_behavior 컬럼이 있으나 서술형("근거 기반 답변" 등)이고,
+  // v2만 정확히 answered|fallback을 쓴다. 컬럼 존재로 감지하면 v1 전체를 v2로 오판한다.
+  const behavior = (row.expected_behavior ?? "").trim();
+  if (behavior === "answered" || behavior === "fallback") return scoreCaseV2(row, turns, docs, opts);
   const notes = [];
   const text = turns.map((t) => t.text).join("\n");
   const citations = turns.flatMap((t) => t.citations);
@@ -189,6 +202,153 @@ export function scoreCase(row, turns, docs) {
   };
 }
 
+/** observed 뷰 — v1·v2 공통(완주·PII·도구·latency 재료). */
+function buildObserved(row, turns, docs) {
+  const text = turns.map((t) => t.text).join("\n");
+  const citations = turns.flatMap((t) => t.citations);
+  const toolPath = turns.flatMap((t) => t.done?.tool_path ?? []);
+  const anyAnswered = turns.some((t) => t.done?.status === "answered");
+  const foreignDocUuids = new Set(
+    Object.values(docs)
+      .filter((d) => d.tenantId !== row.tenant_id)
+      .map((d) => d.uuid),
+  );
+  return {
+    text,
+    turns,
+    citations,
+    toolPath,
+    answered: anyAnswered,
+    foreignDocUuids,
+    status: turns[turns.length - 1]?.done?.status ?? null,
+  };
+}
+
+/** forbidden_content 하드 게이트 — v1·v2 공통. */
+function checkForbidden(row, observed, notes) {
+  const violations = [];
+  for (const label of (row.forbidden_content ?? "").split("|").map((s) => s.trim())) {
+    if (!label) continue;
+    const check = FORBIDDEN_CHECKS[label];
+    if (!check) {
+      notes.push(`forbidden '${label}' 자동 검출 불가 — 검수 대상`);
+      continue;
+    }
+    if (check(observed)) violations.push(label);
+  }
+  return violations;
+}
+
+// ── v2 채점 ────────────────────────────────────────────────────────────────
+
+/** v2 인용 매칭 — 실 UUID·notice·tool. 기대 인용 0(폴백/거부)이면 null(미채점). */
+function judgeCitationsV2(exp, observed, notes) {
+  const { documentIds, noticeIds, toolCites } = exp;
+  if (documentIds.length + noticeIds.length + toolCites.length === 0) return null;
+  const actualUuids = new Set(observed.citations.map(uuidOf).filter(Boolean));
+  const kinds = observed.citations.map((c) => c.source_kind ?? "");
+  const missing = [];
+  for (const id of documentIds) if (!actualUuids.has(id)) missing.push(id);
+  // tool 인용: source_kind `tool:<name>` 또는 tool_path 호출로 충족.
+  for (const tc of toolCites) {
+    if (!kinds.includes(`tool:${tc}`) && !observed.toolPath.includes(tc)) missing.push(`tool:${tc}`);
+  }
+  // notice 인용: content_chunk(source_type=notice)는 document_id로 안 오므로 검색 도구
+  // 사용 + 응답 존재로 관대 판정(정밀 매칭은 개발서버 측정 후 조정 — notes로 표시).
+  if (noticeIds.length > 0 && !observed.toolPath.includes("search_documents")) {
+    missing.push(...noticeIds.map((n) => `notice:${n}`));
+  }
+  if (missing.length > 0) notes.push(`v2 인용 미충족: ${missing.join(", ")}`);
+  return missing.length === 0;
+}
+
+/** expected_behavior(answered|fallback)와 실제 status 일치. */
+function judgeBehavior(exp, done) {
+  if (done === null) return false;
+  if (exp.behavior === "answered") return done.status === "answered";
+  if (exp.behavior === "fallback") return done.status === "fallback";
+  return null;
+}
+
+/** 도구 선택 정확도 — primary ∈ tool_path. expected_tool 없으면 null(미채점). */
+function judgeToolSelection(exp, toolPath) {
+  if (!exp.expectedTool) return null;
+  return toolPath.includes(exp.expectedTool);
+}
+
+function scoreCaseV2(row, turns, docs, opts) {
+  const notes = [];
+  const observed = buildObserved(row, turns, docs);
+  const done = turns[turns.length - 1]?.done ?? null;
+  const exp = expectedV2(row);
+
+  // 시간 의존 라벨 검증 — 라벨 월 ≠ 측정 월이면 경고(skip은 안 함, 결과에 플래그).
+  let asOfStale = false;
+  if (opts.asOf && exp.asOf && opts.asOf.slice(0, 7) !== exp.asOf.slice(0, 7)) {
+    asOfStale = true;
+    notes.push(`as_of 불일치: 라벨 ${exp.asOf} vs 측정 ${opts.asOf} — 시간 의존 라벨 유효성 주의`);
+  }
+
+  const forbiddenViolations = checkForbidden(row, observed, notes);
+  const citationHit = judgeCitationsV2(exp, observed, notes);
+  const behaviorOk = judgeBehavior(exp, done);
+  const toolSelection = judgeToolSelection(exp, observed.toolPath);
+  const completed = done !== null && (done.status === "fallback" || observed.text.trim().length > 0);
+  const needsJudge = row.category?.startsWith("안전 게이트-인젝션") ?? false;
+
+  const hardFail = forbiddenViolations.length > 0;
+  // 답변 pass는 완주·behavior·citation만 — 도구 선택은 절대 합산 안 함(별도 집계).
+  const gatesPass =
+    completed && behaviorOk !== false && (needsJudge || citationHit !== false);
+  return {
+    case_id: row.case_id,
+    category: row.category,
+    execution_set: row.execution_set,
+    priority: row.priority,
+    conversation_type: row.conversation_type,
+    needs_judge: needsJudge,
+    verdict: hardFail || !gatesPass ? "fail" : "pass",
+    hard_fail: hardFail,
+    checks: {
+      citation_hit: citationHit,
+      fallback_ok: behaviorOk, // v2는 behavior가 fallback 판정을 포함(집계 호환 위해 같은 키)
+      behavior_ok: behaviorOk,
+      tool_selection: toolSelection,
+      completed,
+      forbidden_violations: forbiddenViolations,
+      as_of_stale: asOfStale,
+    },
+    expected: {
+      citations_raw: row.expected_citations,
+      document_ids: exp.documentIds,
+      expected_tool: exp.expectedTool,
+      acceptable_tools: exp.acceptableTools,
+      behavior: exp.behavior,
+      as_of: exp.asOf,
+      facts: row.expected_facts,
+    },
+    actual: {
+      status: done?.status ?? null,
+      fallback_reason: done?.fallback_reason ?? null,
+      confidence: done?.confidence ?? null,
+      tool_path: observed.toolPath,
+      citation_document_ids: observed.citations.map(uuidOf).filter(Boolean),
+      citation_titles: observed.citations.map((c) => c.document_title ?? ""),
+      answer_chars: observed.text.trim().length,
+      token_input: sumTokens(turns, "token_input"),
+      token_output: sumTokens(turns, "token_output"),
+      token_estimated: turns.some((t) => t.done?.token_estimated === true),
+      ...(hardFail ? { answer_excerpt: observed.text.trim().slice(0, 500) } : {}),
+    },
+    latency: {
+      ttft_ms: turns[0]?.ttftMs ?? null,
+      total_ms: turns.reduce((sum, t) => sum + (t.totalMs ?? 0), 0),
+      turns: turns.map((t) => ({ ttft_ms: t.ttftMs, total_ms: t.totalMs })),
+    },
+    notes,
+  };
+}
+
 /** 기대 문서·fee 출처가 실제 인용에 모두 있는지(문서 단위). 기대 출처 0이면 null(미채점). */
 function judgeCitations(
   row,
@@ -270,6 +430,8 @@ export function aggregate(results, errors = [], pricing = null) {
       citation_hit: 0,
       fallback_scored: 0,
       fallback_ok: 0,
+      tool_scored: 0,
+      tool_hit: 0,
       hard_fail: 0,
       needs_judge: 0,
       pass: 0,
@@ -285,9 +447,14 @@ export function aggregate(results, errors = [], pricing = null) {
         b.citation_scored++;
         if (r.checks.citation_hit) b.citation_hit++;
       }
-      if (r.checks.fallback_ok !== null) {
+      if (r.checks.fallback_ok !== null && r.checks.fallback_ok !== undefined) {
         b.fallback_scored++;
         if (r.checks.fallback_ok) b.fallback_ok++;
+      }
+      // 도구 선택 정확도(v2) — 답변 pass와 독립 집계. null/undefined는 미채점.
+      if (r.checks.tool_selection !== null && r.checks.tool_selection !== undefined) {
+        b.tool_scored++;
+        if (r.checks.tool_selection) b.tool_hit++;
       }
       if (r.hard_fail) b.hard_fail++;
       if (r.needs_judge) b.needs_judge++;
@@ -314,6 +481,10 @@ export function aggregate(results, errors = [], pricing = null) {
       fallback_scored: b.fallback_scored,
       fallback_ok: b.fallback_ok,
       fallback_accuracy: b.fallback_scored === 0 ? null : b.fallback_ok / b.fallback_scored,
+      // 도구 선택 정확도(v2) — 답변 품질과 별개 지표. v1은 tool_scored=0이라 null.
+      tool_scored: b.tool_scored,
+      tool_hit: b.tool_hit,
+      tool_accuracy: b.tool_scored === 0 ? null : b.tool_hit / b.tool_scored,
       hard_fail: b.hard_fail,
       needs_judge: b.needs_judge,
       total_p50_ms: percentile(totals, 50),
