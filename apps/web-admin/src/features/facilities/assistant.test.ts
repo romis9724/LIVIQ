@@ -40,12 +40,12 @@ describe("toEvent (SSE → 도메인)", () => {
         needsReview: false,
         fallbackReason: null,
         toolPath: ["search_facility_graph", "get_facilities"],
-        answer: null,  // 서버 최종본 미제공 → 누적 토큰 텍스트가 정본(R21)
+        answer: null, // 서버 최종본 미제공 → 누적 토큰 텍스트가 정본
       },
     });
   });
 
-  it("done의 answer(서버 최종본)를 매핑한다 — 인용 누락 재요청 결과 전달 경로", () => {
+  it("done의 answer(서버 최종본)를 매핑한다 — unmask된 확정 답변 전달 경로", () => {
     const event = toEvent({
       event: "done",
       data: JSON.stringify({

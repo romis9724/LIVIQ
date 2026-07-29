@@ -24,7 +24,7 @@ export interface DoneResult {
   toolPath: string[];
   /**
    * 서버가 확정한 답변 본문. 있으면 누적 토큰 텍스트 대신 **이 값을 렌더한다.**
-   * 인용 누락 재요청(H15-2 R21) 결과는 스트리밍되지 않으므로 이 값이 최종본이다.
+   * 스트리밍 토큰은 마스킹된 원문이고 이 값은 unmask 후의 확정 답변이다.
    */
   answer: string | null;
 }

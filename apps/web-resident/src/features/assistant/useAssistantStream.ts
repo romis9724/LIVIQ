@@ -76,8 +76,8 @@ export function useAssistantStream() {
               break;
             case "done":
               conversationId.current = event.result.conversationId;
-              // 서버 최종본이 오면 그것을 정본으로 쓴다 — 인용 누락 재요청(R21) 결과는
-              // 스트리밍되지 않으므로 누적 텍스트에는 인용이 빠진 1차 답변만 있다.
+              // 서버 최종본이 오면 그것을 정본으로 쓴다 — 누적 토큰은 마스킹된 원문이고
+              // 이 값은 unmask 후의 확정 답변이다.
               updateAi(aiId, (m) => ({
                 ...m,
                 status: "done",
