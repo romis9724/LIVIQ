@@ -1,8 +1,9 @@
-"""seed_parking.py — 지하주차장 배치도·입주민 차량 시드 (H9-5).
+"""seed_parking.py — 지하주차장 배치도·입주민 차량·면 점유 시드 (H9-5, H15-4/ADR-0023).
 
-프로토타입 배치도(442면)와 입주민 차량(348대)을 DB에 적재한다. 배치도는 단지당 1행,
-차량은 명부(households) 매칭분만 — 둘 다 delete-then-insert 전량 교체(단일 트랜잭션)라
-재실행해도 개수가 늘지 않는다. 차량번호는 봉투 암호화해 plate_enc에만 저장한다(규칙 2).
+프로토타입 배치도(442면)와 입주민 차량(348대)을 DB에 적재하고, 결정적 배정으로 면 점유
+(parking_occupancy, 점유의 단일 사실 원천)를 계산해 적재한다. 배치도는 단지당 1행,
+차량은 명부(households) 매칭분만 — 셋 다 delete-then-insert 전량 교체(단일 트랜잭션)라
+재실행해도 개수가 늘지 않는다. 차량번호·외부차 번호판은 봉투 암호화해 암호문만 저장한다(규칙 2).
 
 입력은 `scripts/data/`의 추출물:
   - parking_layout.json   viewBox·buildings·boxes·cores·spots (렌더 페이로드 그대로)
@@ -30,8 +31,16 @@ from app.pii import PiiCrypto, get_pii_crypto
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_core.parking import Core, Occupancy, Spot, VehicleRef, assign_occupancy
 from liviq_db.engine import create_engine, create_session_factory
-from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle, Tenant
+from liviq_db.models import (
+    Building,
+    Household,
+    ParkingLayout,
+    ParkingOccupancy,
+    ParkingVehicle,
+    Tenant,
+)
 
 # 파일럿 단지(첫마을 4단지 푸르지오) — dev 시드·seed_demo와 동일한 tenant.
 DEFAULT_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -133,7 +142,97 @@ async def _replace_vehicles(
     return matched, unmatched
 
 
-def _report(layout: dict[str, Any], total: int, matched: int, unmatched: list[str]) -> None:
+def _layout_spots(layout: dict[str, Any]) -> list[Spot]:
+    return [
+        Spot(no=str(s["no"]), kind=str(s["kind"]), x=float(s["x"]), y=float(s["y"]))
+        for s in layout["spots"]
+    ]
+
+
+def _layout_cores(layout: dict[str, Any]) -> list[Core]:
+    return [
+        Core(
+            name=str(c["name"]),
+            x=float(c["x"]),
+            y=float(c["y"]),
+            w=float(c["w"]),
+            h=float(c["h"]),
+        )
+        for c in layout["cores"]
+    ]
+
+
+async def _vehicle_refs(session: AsyncSession, tenant_id: uuid.UUID) -> list[VehicleRef]:
+    """적재된 입주민 차 → 배정용 참조(동명은 코어명 "401동"과 맞춘다). 번호판 평문 없음."""
+    rows = await session.execute(
+        select(ParkingVehicle.id, Building.name, ParkingVehicle.is_ev)
+        .join(Household, Household.id == ParkingVehicle.household_id)
+        .join(Building, Building.id == Household.building_id)
+        .where(ParkingVehicle.tenant_id == tenant_id)
+    )
+    return [
+        VehicleRef(vehicle_id=str(vid), dong=f"{name}동", is_ev=bool(is_ev))
+        for vid, name, is_ev in rows
+    ]
+
+
+def _occupancy_row(
+    crypto: PiiCrypto, dek: bytes, tenant_id: uuid.UUID, occ: Occupancy
+) -> ParkingOccupancy:
+    """Occupancy(순수 배정) → 영속 행. 외부차 번호판은 암호문으로만 저장한다(규칙 2)."""
+    if occ.is_external:
+        assert occ.external_plate is not None and occ.vehicle_id is None
+        return ParkingOccupancy(
+            tenant_id=tenant_id,
+            spot_no=occ.spot_no,
+            is_external=True,
+            parking_vehicle_id=None,
+            external_plate_enc=crypto.encrypt(dek, occ.external_plate),
+            parked_hours=occ.parked_hours,
+        )
+    assert occ.vehicle_id is not None and occ.external_plate is None
+    return ParkingOccupancy(
+        tenant_id=tenant_id,
+        spot_no=occ.spot_no,
+        is_external=False,
+        parking_vehicle_id=uuid.UUID(occ.vehicle_id),
+        external_plate_enc=None,
+        parked_hours=occ.parked_hours,
+    )
+
+
+async def _replace_occupancy(
+    session: AsyncSession,
+    crypto: PiiCrypto,
+    tenant_id: uuid.UUID,
+    layout: dict[str, Any],
+) -> tuple[int, int, int]:
+    """점유 전량 교체 — 결정적 배정을 계산해 면당 1행 적재. (입주민, 외부, 빈 면) 반환."""
+    vehicles = await _vehicle_refs(session, tenant_id)
+    occupancies = assign_occupancy(_layout_spots(layout), _layout_cores(layout), vehicles)
+    # 불변식: 면당 1행(spot_no 유니크) — CHECK/UNIQUE 위반 방어(_occupancy_row가 CHECK도 assert).
+    spot_nos = [o.spot_no for o in occupancies]
+    assert len(spot_nos) == len(set(spot_nos)), "spot_no가 중복 배정됨"
+
+    dek = await crypto.get_dek(session, tenant_id)
+    await session.execute(delete(ParkingOccupancy).where(ParkingOccupancy.tenant_id == tenant_id))
+    for occ in occupancies:
+        session.add(_occupancy_row(crypto, dek, tenant_id, occ))
+    await session.flush()
+
+    resident = sum(1 for o in occupancies if not o.is_external)
+    external = sum(1 for o in occupancies if o.is_external)
+    empty = len(layout["spots"]) - len(occupancies)
+    return resident, external, empty
+
+
+def _report(
+    layout: dict[str, Any],
+    total: int,
+    matched: int,
+    unmatched: list[str],
+    occupancy: tuple[int, int, int],
+) -> None:
     print(
         f"배치도: 주차면 {len(layout['spots'])}면 · 동 {len(layout['buildings'])} · "
         f"코어 {len(layout['cores'])} · 안내 {len(layout['boxes'])} (viewBox {layout['viewBox']})"
@@ -142,6 +241,11 @@ def _report(layout: dict[str, Any], total: int, matched: int, unmatched: list[st
     if unmatched:
         samples = unmatched[:MAX_UNMATCHED_SAMPLES]
         print(f"  미매칭 표본({len(samples)}/{len(unmatched)}): {', '.join(samples)}")
+    resident, external, empty = occupancy
+    print(
+        f"점유: 총 {len(layout['spots'])}면 · 점유 {resident + external}"
+        f"(입주민 {resident} · 외부 {external}) · 빈 면 {empty}"
+    )
 
 
 async def _run(tenant_id: uuid.UUID) -> None:
@@ -160,7 +264,8 @@ async def _run(tenant_id: uuid.UUID) -> None:
             )
             await _replace_layout(session, tenant_id, layout)
             matched, unmatched = await _replace_vehicles(session, crypto, tenant_id, vehicles)
-        _report(layout, len(vehicles), matched, unmatched)
+            occupancy = await _replace_occupancy(session, crypto, tenant_id, layout)
+        _report(layout, len(vehicles), matched, unmatched, occupancy)
         print(f"단지: {tenant_id}")
     finally:
         await engine.dispose()
