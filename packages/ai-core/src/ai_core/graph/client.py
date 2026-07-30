@@ -26,6 +26,9 @@ _SEARCH_OVERSAMPLE = 5
 _DATABASE = "neo4j"
 # plan_devices 스냅샷에서 '방 자체'를 뜻하는 device_type — 마커가 아니라 방 허브로 승격한다(H14-1)
 _ROOM_DEVICE_TYPE = "room"
+# CAUSED_BY 인과 연쇄 탐색 상한(hop) — SEED-PLAN §7 "2~3 hop". 상한 없이 따라가면 순환·긴
+# 사슬에서 폭주하므로 3으로 고정한다(GraphRAG 다단계 입증에 충분, G1a).
+_CAUSAL_MAX_HOPS = 3
 
 
 @dataclass(frozen=True)
@@ -75,13 +78,19 @@ class FacilityGraph:
 
 @dataclass(frozen=True)
 class IncidentContext:
-    """장애 이웃 확장 결과 — 소속 시설·최근 정비(H3-3 search_facility_graph)."""
+    """장애 이웃 확장 결과 — 소속 시설·최근 정비(H3-3 search_facility_graph).
+
+    `causal_chain`은 이 장애(결과)의 선행 원인 증상들을 가까운 원인부터 나열한 것이다
+    (CAUSED_BY 다단계 추적, G1a). 인과 연쇄가 없으면 빈 튜플 — 기존 호출부(library.py)는
+    이 필드를 쓰지 않아 하위호환이다.
+    """
 
     incident_id: str
     symptom: str
     facility_name: str | None
     facility_status: str | None
     recent_work: tuple[str, ...]
+    causal_chain: tuple[str, ...] = ()
 
 
 class GraphClient:
@@ -220,15 +229,28 @@ class GraphClient:
         props: Mapping[str, Any],
         version: int,
         embedding: Sequence[float] | None = None,
+        caused_by_incident_id: str | None = None,
     ) -> None:
         # facility·incident를 같은 $tenant로 MERGE → cross-tenant 관계 구조적 불가.
         # facility 노드가 아직 없으면 stub(props는 후속 facility 이벤트가 채움).
+        #
+        # 인과 엣지 방향(SEED-PLAN §1 "결과 incident ← CAUSED_BY ← 원인 incident"):
+        # 이 incident(=결과)에서 원인 incident로 나가는 `(effect)-[:CAUSED_BY]->(cause)`.
+        # "effect CAUSED_BY cause"로 자연스럽게 읽히고, expand_incidents가 사용자 질의에
+        # 걸린 결과 장애에서 CAUSED_BY를 **바깥쪽으로** 따라가 선행 원인 연쇄를 얻는다
+        # (탐색 방향과 엣지 방향 일치). 원인 노드가 아직 없으면 stub으로 MERGE(HAS_INCIDENT
+        # 관례와 동일 — 후속 incident 이벤트가 채움). 엣지는 버전 가드 밖에서 만든다
+        # (관계는 프로퍼티 갱신과 달리 멱등이라 순서 역전 무관, HAS_INCIDENT와 동일 취급).
         await self._run(
             "MERGE (f:Facility {pg_id: $facility_id, tenant_id: $tenant}) "
             "ON CREATE SET f.last_applied_version = -1 "
             "MERGE (i:Incident {pg_id: $pg_id, tenant_id: $tenant}) "
             "ON CREATE SET i.last_applied_version = -1 "
             "MERGE (f)-[:HAS_INCIDENT]->(i) "
+            "FOREACH (_ IN CASE WHEN $caused_by IS NULL THEN [] ELSE [1] END | "
+            "    MERGE (cause:Incident {pg_id: $caused_by, tenant_id: $tenant}) "
+            "    ON CREATE SET cause.last_applied_version = -1 "
+            "    MERGE (i)-[:CAUSED_BY]->(cause)) "
             "WITH i WHERE $version > i.last_applied_version "
             "SET i.symptom = $symptom, i.resolution = $resolution, "
             "    i.occurred_at = $occurred_at, i.root_cause = $root_cause, "
@@ -245,6 +267,7 @@ class GraphClient:
                 "occurred_at": props.get("occurred_at"),
                 "root_cause": props.get("root_cause"),
                 "embedding": list(embedding) if embedding is not None else None,
+                "caused_by": caused_by_incident_id,
             },
         )
 
@@ -390,17 +413,34 @@ class GraphClient:
     async def expand_incidents(
         self, *, tenant_id: str, pg_ids: Sequence[str]
     ) -> list[IncidentContext]:
-        """장애들의 이웃(소속 시설·상태 + 최근 정비 작업 3건) 확장. tenant 구조 강제."""
+        """장애들의 이웃(소속 시설·상태 + 최근 정비 작업 3건 + 선행 원인 연쇄) 확장.
+
+        `causal_chain`은 각 장애에서 `CAUSED_BY`를 최대 `_CAUSAL_MAX_HOPS`(3) hop 따라간
+        선행 원인들의 증상을 가까운 원인부터 나열한다(GraphRAG 다단계 강점, SEED-PLAN §1).
+        CAUSED_BY 엣지는 merge_incident가 양 끝을 같은 tenant로 MERGE하므로 연쇄도 tenant
+        안에 구조적으로 갇힌다(추가 predicate 불필요 — HAS_INCIDENT와 동일 격리 근거).
+        tenant는 시작 시설에 강제한다.
+        """
         if not pg_ids:
             return []
         records = await self._run(
             "MATCH (f:Facility {tenant_id: $tenant})-[:HAS_INCIDENT]->(i:Incident) "
             "WHERE i.pg_id IN $ids "
+            # 인과 연쇄를 서브쿼리로 먼저 접어(가까운 원인 먼저) i당 1행으로 유지 — OPTIONAL
+            # MATCH라 연쇄가 없는 장애도 빈 리스트로 살아남는다(min(length) null → collect [] ).
+            "CALL { "
+            "  WITH i "
+            f"  OPTIONAL MATCH path = (i)-[:CAUSED_BY*1..{_CAUSAL_MAX_HOPS}]->(cause:Incident) "
+            "  WITH cause, min(length(path)) AS dist "
+            "  ORDER BY dist "
+            "  RETURN collect(cause.symptom) AS causal_chain "
+            "} "
             "OPTIONAL MATCH (f)-[:HAS_MAINTENANCE]->(m:MaintenanceLog) "
-            "WITH i, f, m ORDER BY m.performed_at DESC "
+            "WITH i, f, causal_chain, m ORDER BY m.performed_at DESC "
             "RETURN i.pg_id AS incident_id, i.symptom AS symptom, "
             "       f.name AS facility_name, f.status AS facility_status, "
-            "       [w IN collect(m.work) WHERE w IS NOT NULL][..3] AS recent_work",
+            "       [w IN collect(m.work) WHERE w IS NOT NULL][..3] AS recent_work, "
+            "       causal_chain",
             {"tenant": tenant_id, "ids": list(pg_ids)},
         )
         return [
@@ -410,6 +450,7 @@ class GraphClient:
                 facility_name=r["facility_name"],
                 facility_status=r["facility_status"],
                 recent_work=tuple(r["recent_work"]),
+                causal_chain=tuple(r["causal_chain"]),
             )
             for r in records
         ]

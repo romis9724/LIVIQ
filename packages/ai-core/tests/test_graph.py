@@ -288,10 +288,107 @@ async def test_expand_incidents_returns_facility_and_recent_work(graph: GraphCli
     assert ctx.facility_name == "지하펌프"
     assert ctx.facility_status == "fault"
     assert "패킹 교체" in ctx.recent_work
+    assert ctx.causal_chain == ()  # 인과 연쇄 없는 단독 장애
 
 
 async def test_expand_incidents_empty_ids_returns_empty(graph: GraphClient) -> None:
     assert await graph.expand_incidents(tenant_id=str(uuid.uuid4()), pg_ids=[]) == []
+
+
+async def _merge_incident(
+    graph: GraphClient,
+    *,
+    tenant: str,
+    facility: str,
+    pg_id: str,
+    symptom: str,
+    caused_by: str | None = None,
+) -> None:
+    await graph.merge_incident(
+        tenant_id=tenant,
+        pg_id=pg_id,
+        facility_id=facility,
+        props={"symptom": symptom},
+        version=1,
+        embedding=_vec(1),
+        caused_by_incident_id=caused_by,
+    )
+
+
+async def test_merge_incident_creates_caused_by_edge(graph: GraphClient) -> None:
+    """caused_by가 있으면 (결과)-[:CAUSED_BY]->(원인) 방향 엣지를 만든다(SEED-PLAN §1)."""
+    tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
+    cause, effect = str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=facility, props={"name": "홈넷서버", "status": "fault"}, version=1
+    )
+    await _merge_incident(graph, tenant=tenant, facility=facility, pg_id=cause, symptom="서버 고장")
+    await _merge_incident(
+        graph,
+        tenant=tenant,
+        facility=facility,
+        pg_id=effect,
+        symptom="월패드 불능",
+        caused_by=cause,
+    )
+
+    rows = await _read(
+        graph,
+        "MATCH (e:Incident {pg_id:$e, tenant_id:$t})-[:CAUSED_BY]->(c:Incident {pg_id:$c}) "
+        "RETURN count(*) AS n",
+        e=effect,
+        c=cause,
+        t=tenant,
+    )
+    assert rows[0]["n"] == 1
+
+
+async def test_expand_incidents_returns_causal_chain(graph: GraphClient) -> None:
+    """CAUSED_BY를 다단계(2 hop) 따라가 선행 원인들을 가까운 원인부터 반환한다."""
+    tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
+    root, mid, effect = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=facility, props={"name": "부스터펌프", "status": "fault"}, version=1
+    )
+    await _merge_incident(
+        graph, tenant=tenant, facility=facility, pg_id=root, symptom="수위센서 오작동"
+    )
+    await _merge_incident(
+        graph, tenant=tenant, facility=facility, pg_id=mid, symptom="펌프 진동", caused_by=root
+    )
+    await _merge_incident(
+        graph, tenant=tenant, facility=facility, pg_id=effect, symptom="진동 재발", caused_by=mid
+    )
+
+    contexts = await graph.expand_incidents(tenant_id=tenant, pg_ids=[effect])
+
+    assert len(contexts) == 1
+    # effect → mid(1 hop) → root(2 hop): 가까운 원인부터
+    assert contexts[0].causal_chain == ("펌프 진동", "수위센서 오작동")
+
+
+async def test_expand_incidents_causal_chain_respects_hop_limit(graph: GraphClient) -> None:
+    """3 hop 상한 — 4단계 깊이 연쇄는 3개까지만 반환하고 최말단은 제외한다."""
+    tenant, facility = str(uuid.uuid4()), str(uuid.uuid4())
+    ids = [str(uuid.uuid4()) for _ in range(5)]  # i0(결과) → i1 → i2 → i3 → i4(근원)
+    await graph.merge_facility(
+        tenant_id=tenant, pg_id=facility, props={"name": "수신반", "status": "fault"}, version=1
+    )
+    for depth, pg_id in enumerate(ids):
+        caused_by = ids[depth + 1] if depth + 1 < len(ids) else None
+        await _merge_incident(
+            graph,
+            tenant=tenant,
+            facility=facility,
+            pg_id=pg_id,
+            symptom=f"단계{depth}",
+            caused_by=caused_by,
+        )
+
+    contexts = await graph.expand_incidents(tenant_id=tenant, pg_ids=[ids[0]])
+
+    chain = contexts[0].causal_chain
+    assert chain == ("단계1", "단계2", "단계3")  # 3 hop까지, i4(단계4)는 제외
 
 
 async def test_fetch_facility_graph_shapes_nodes_links_without_embedding(

@@ -102,6 +102,9 @@ async def _apply_event(graph: GraphClient, llm: LlmClient, event: OutboxEvent) -
         await graph.merge_facility(tenant_id=tenant, pg_id=pg_id, props=payload, version=version)
     elif event.aggregate_type == "incident":
         embedding = await _incident_embedding(llm, payload)
+        # 인과 연쇄(CAUSED_BY, G1a) — payload 스냅샷에 있으면 원인 incident로 배선한다.
+        # _json_safe가 UUID→str로 직렬화하므로 여기서는 str|None 그대로 전달.
+        caused_by = payload.get("caused_by_incident_id")
         await graph.merge_incident(
             tenant_id=tenant,
             pg_id=pg_id,
@@ -109,6 +112,7 @@ async def _apply_event(graph: GraphClient, llm: LlmClient, event: OutboxEvent) -
             props=payload,
             version=version,
             embedding=embedding,
+            caused_by_incident_id=str(caused_by) if caused_by else None,
         )
     elif event.aggregate_type == "maintenance_log":
         await graph.merge_maintenance(

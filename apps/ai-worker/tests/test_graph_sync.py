@@ -140,6 +140,37 @@ async def test_pending_batch_processed_and_reflected(pg_dsn: str, fake_llm: LlmC
         incident_call = next(c for c in graph.calls if c["kind"] == "incident")
         assert incident_call["embedding"] is not None
         assert len(incident_call["embedding"]) == _DIM
+        assert incident_call["caused_by_incident_id"] is None  # payload에 없으면 None
+    finally:
+        await _cleanup(factory, tenant_id)
+        await engine.dispose()
+
+
+async def test_incident_caused_by_forwarded_to_merge(pg_dsn: str, fake_llm: LlmClient) -> None:
+    """payload의 caused_by_incident_id가 merge_incident 인자로 전달된다(G1a)."""
+    engine, factory = _factory(pg_dsn)
+    cause_id = uuid.uuid4()
+
+    def events(tid: uuid.UUID) -> list[OutboxEvent]:
+        return [
+            _outbox(
+                tid,
+                aggregate_type="incident",
+                payload={
+                    "facility_id": str(uuid.uuid4()),
+                    "symptom": "월패드 불능",
+                    "caused_by_incident_id": str(cause_id),
+                },
+            )
+        ]
+
+    tenant_id = await _seed(factory, events)
+    graph = SpyGraph()
+    ctx = {"session_factory": factory, "graph": graph, "llm": fake_llm}
+    try:
+        await sync_outbox_task(ctx)
+        incident_call = next(c for c in graph.calls if c["kind"] == "incident")
+        assert incident_call["caused_by_incident_id"] == str(cause_id)
     finally:
         await _cleanup(factory, tenant_id)
         await engine.dispose()
