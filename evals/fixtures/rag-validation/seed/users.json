@@ -133,5 +133,104 @@
     "household_id": "C-HH-0201",
     "display_name": "합성사용자15",
     "email": "synthetic15@example.com"
+  },
+  {
+    "user_id": "46f87feb-94bc-4c5c-a768-89366e8737f6",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "MANAGER",
+    "status": "active",
+    "household_id": null,
+    "display_name": "eval",
+    "email": "eval-mgr@example.com"
+  },
+  {
+    "user_id": "88aa6f7a-ca24-467f-b931-122fe574d7a8",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "401-201",
+    "display_name": "eval",
+    "email": "eval-res-401-201@example.com"
+  },
+  {
+    "user_id": "28989e29-e703-4228-b696-10ae0eb034aa",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "401-1203",
+    "display_name": "eval",
+    "email": "eval-res-401-1203@example.com"
+  },
+  {
+    "user_id": "1220d57f-2e29-4eaf-b253-4de728a5ecea",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "403-201",
+    "display_name": "eval",
+    "email": "eval-res-403-201@example.com"
+  },
+  {
+    "user_id": "6cc08221-1359-49f1-a80e-9869e41773e6",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "402-802",
+    "display_name": "eval",
+    "email": "eval-res-402-802@example.com"
+  },
+  {
+    "user_id": "2c62e75d-1db9-45ea-946b-a44b190bb916",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "401-2303",
+    "display_name": "eval",
+    "email": "eval-res-401-2303@example.com"
+  },
+  {
+    "user_id": "2d711840-78ca-42be-9711-77d73c588a6e",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "403-1002",
+    "display_name": "eval",
+    "email": "eval-res-403-1002@example.com"
+  },
+  {
+    "user_id": "4370e4d1-5887-400d-a9d1-ebc3cf2aaace",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "405-1303",
+    "display_name": "eval",
+    "email": "eval-res-405-1303@example.com"
+  },
+  {
+    "user_id": "117f0ee5-9cd0-4e73-aca7-8a5d85a919fe",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "404-403",
+    "display_name": "eval",
+    "email": "eval-res-404-403@example.com"
+  },
+  {
+    "user_id": "a034c6b2-d31d-485b-878c-f902a3b74f7a",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "405-301",
+    "display_name": "eval",
+    "email": "eval-res-405-301@example.com"
+  },
+  {
+    "user_id": "457c5006-a8fc-45c0-bd61-e6f363b8103f",
+    "tenant_id": "11111111-1111-1111-1111-111111111111",
+    "role": "RESIDENT",
+    "status": "active",
+    "household_id": "404-1502",
+    "display_name": "eval",
+    "email": "eval-res-404-1502@example.com"
   }
 ]
