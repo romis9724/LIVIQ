@@ -725,7 +725,7 @@ codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, 
 
 ### 4.11 주차장 (H9-5 — 지하주차장 배치도·등록 차량)
 
-관리자 주차장 대시보드의 원천. **면 점유 상태는 저장하지 않는다** — 배치도(면 좌표)와 등록 차량만 확정 데이터이고, 어느 면에 어느 차가 있는지는 프론트 시뮬레이션이다(번호판 인식 카메라 연동 시 교체 — [11 §3.4.2](11-data-architecture.md)).
+관리자 주차장 대시보드·입주민 최근접 빈자리 도구의 원천. 배치도(면 좌표)·등록 차량·**면 점유**(`parking_occupancy`, H15-4 [ADR-0023](adr/0023-parking-occupancy-persisted.md))가 모두 확정 데이터다 — 점유는 더 이상 프론트 시뮬레이션이 아니라 PG SoR이다(번호판 인식 카메라 연동 시 적재 경로만 교체 — [11 §3.4.2](11-data-architecture.md)).
 
 ```sql
 -- 지하주차장 배치도 (단지당 1행 · 전량 교체 · 렌더 페이로드 그대로)
@@ -743,12 +743,23 @@ parking_vehicles(id, tenant_id,
                  is_ev bool default false,
                  created_at, updated_at)
   INDEX(household_id), INDEX(tenant_id, household_id)
+
+-- 면 점유 (면당 1행 · 전량 교체 · H15-4 — 점유 SoR을 PG로, ADR-0023)
+parking_occupancy(id, tenant_id,
+                  spot_no text,                 -- parking_layouts.layout.spots[].no
+                  is_external bool default false,
+                  parking_vehicle_id uuid NULL, -- FK → parking_vehicles(tenant_id, id) composite, ON DELETE CASCADE
+                  external_plate_enc bytea NULL,-- 외부/방문차 번호판 암호문(is_external=true일 때)
+                  parked_hours double precision,-- 입차 경과(뷰 표시용 상대값)
+                  created_at, updated_at)
+  UNIQUE(tenant_id, spot_no)
+  -- CHECK: is_external=false ⇒ vehicle_id NOT NULL·plate NULL / true ⇒ vehicle_id NULL·plate NOT NULL
 ```
 
-> **적재 계약**: API는 **읽기 전용**(`GET /admin/parking/layout`·`GET /admin/parking/vehicles`, MANAGER) — 적재는 시드 스크립트(`apps/api/scripts/seed_parking.py` + `scripts/data/parking_layout.json`·`parking_vehicles.json`)가 담당한다. 배치도는 전량 교체, 차량은 delete-then-insert(멱등)이며 차량 (동, 호)를 `buildings.name`·`households.unit_no`로 매칭 — 미매칭은 스킵하고 리포트에 표본을 남긴다(트윈 geometry 업로드와 동일 규율).
+> **적재 계약**: API는 **읽기 전용**(`GET /admin/parking/layout`·`/vehicles`·`/occupancy`, MANAGER) — 적재는 시드 스크립트(`apps/api/scripts/seed_parking.py` + `scripts/data/parking_layout.json`·`parking_vehicles.json`)가 담당한다. 배치도는 전량 교체, 차량은 delete-then-insert(멱등)이며 차량 (동, 호)를 `buildings.name`·`households.unit_no`로 매칭 — 미매칭은 스킵하고 리포트에 표본을 남긴다(트윈 geometry 업로드와 동일 규율). **점유(`parking_occupancy`)는 시더가 차량 적재 뒤 결정적 배정을 계산해 전량 교체**(입주민=동 코어 최근접 빈 면·장애인 미배정·전기차 면 EV만, 외부 8대=입구 근처). 입주민 최근접 빈자리 도구(`find_nearest_available_parking`)와 관리자 뷰가 이 한 테이블을 공유(ADR-0023).
 > **파일럿 실적재**(첫마을 4단지): 442면(일반 406·장애인 15·전기차 21)·차량 348대(274세대·EV 29) 전량 매칭(미매칭 0).
 > **차량번호는 PII**: `pii_vault`가 아니라 세대 귀속 업무 테이블에 암호문으로 두고, 복호는 관리자 조회 API만 수행한다(마스킹 없이 전량 표시 — 주차 관리 목적, 입주민 앱·LLM 미노출, [06 §4.1](06-security-privacy.md)).
-> soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`).
+> soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 세 테이블(layouts·vehicles·occupancy) 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`). `parking_occupancy`는 `liviq_app` SELECT grant(도구가 api 프로세스에서 조회).
 
 ## 5. RLS (행 수준 보안)
 

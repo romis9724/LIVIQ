@@ -31,7 +31,7 @@
 | 관리비 | PG `fees` | **없음(정형, SQL 조회)** | AI는 설명만, 계산·검색 불필요 |
 | 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities`(**H13-3 기동** — 죽은 스키마였던 `unit_types`·`floor_plans`·`plan_devices`가 이때부터 실 행 보유, 저장 위치는 이 표의 결정 그대로 불변) | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 · **그래프 노드 편입 예정**(H13-3+ — 평면도 마커·방·평형을 outbox 경유로 Neo4j에 투영, FR-FAC-06. **SoR은 PG 유지**) |
 | 명부·계정 | PG `users`·`pii_vault` | **없음** | 정형·PII 분리 저장 |
-| 주차 배치도·등록 차량 | PG `parking_layouts`·`parking_vehicles`(번호판 암호문) | **없음(정형, SQL 조회)** | 면 좌표·차량은 정형 질의, 번호판은 LLM 미노출(§3.4.2) |
+| 주차 배치도·등록 차량·**면 점유** | PG `parking_layouts`·`parking_vehicles`(번호판 암호문)·`parking_occupancy`(H15-4) | **없음(정형, SQL 조회)** | 면 좌표·차량·점유는 정형 질의, 최근접 빈자리는 공간 거리 계산(§3.4.2·ADR-0023), 번호판은 LLM 미노출 |
 
 ## 3. 데이터 흐름
 
@@ -144,7 +144,7 @@ flowchart LR
 |--------|------|------|
 | 지하주차장 배치도(viewBox·동 footprint·442면 좌표·면 종류) | 프로토타입 추출물 `scripts/data/parking_layout.json`(동 footprint는 shapefile 유래) | **확정** — `parking_layouts` 1행(전량 교체) |
 | 등록 차량 348대(차량번호·차종·EV 여부·소속 동/호) | `scripts/data/parking_vehicles.json` → (동, 호) 명부 매칭 | **확정** — `parking_vehicles`(delete-then-insert 멱등), 번호판은 암호문만 |
-| 어느 면에 어느 차가 있는지(점유·입차 시각·외부 차량) | 프론트 `parking-sim.ts`(시드 20260725 고정·재실률 0.75·외부 8대) | **시뮬레이션** — DB 미저장, ★ 입출차 카메라(번호판 인식) API 교체 지점 |
+| 어느 면에 어느 차가 있는지(점유·입차 경과·외부 차량) | 시더가 배정 계산 → `parking_occupancy` | **확정**(H15-4 [ADR-0023](adr/0023-parking-occupancy-persisted.md)) — PG SoR(면당 1행 전량 교체). 관리자 뷰·입주민 최근접 빈자리 도구 공유. ★ 입출차 카메라(번호판 인식) API 교체 지점(적재 경로만) |
 
 적재는 API가 아니라 시드 스크립트(`apps/api/scripts/seed_parking.py`) 경로다 — 트윈 geometry 업로드와 같은 규율(매칭분만 반영·미매칭은 리포트·재실행 멱등). 스키마: [03 §4.11](03-database-design.md).
 
@@ -153,9 +153,11 @@ flowchart LR
   PROTO[프로토타입 배치도·차량 추출물 JSON] --> SEED[seed_parking.py · 동/호 명부 매칭]
   SEED -->|unmatched| RP3[매칭 리포트 표본]
   SEED -->|matched| PL[(parking_layouts 1행 · parking_vehicles 348대 plate_enc)]
+  SEED -->|배정 계산| OCC[(parking_occupancy 면당 1행)]
   PL --> PV[관리자 주차장 대시보드 SVG 배치도]
-  SIM[parking-sim.ts 시드 고정 시뮬레이션] -.점유 상태.-> PV
-  CAM[입출차 카메라 번호판 인식 · 추후] -.교체.-> SIM
+  OCC -->|점유 상태| PV
+  OCC -->|빈 면| TOOL[입주민 최근접 빈자리 도구]
+  CAM[입출차 카메라 번호판 인식 · 추후] -.적재 경로 교체.-> OCC
 ```
 
 ### 3.5 PG→Neo4j 동기화
