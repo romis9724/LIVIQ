@@ -811,3 +811,22 @@ tool_confidence 0.8 · 전 문서 재색인(34/34 indexed·failed 0) · **as_of_
 4. 튜닝 스윕(승자 모델 1개 — top_k 4/8/16 · 청크 2값(재색인 동반))
 5. **지연·동시(1·5·10)는 사내망(배포 호스트)에서 재측정** — 터널 수치는 참고
 6. OpenAI 축(토요일): mini급 + 상위 1종 소규모 — 품질 상한 + 비용 실측
+
+## R24 — GraphRAG 비교 (pgvector vs Neo4j) · 개발서버 vLLM llama3.1-8B-AWQ · 40건
+
+**구성**: `--caseset=graphrag --set=all --auth=session`, dev api(터널 18000→8000), 병렬 20(pair p01~p10)·세대민원 12·다단계 8. 시드: `seed_graph.py`(incident 16·정비 22·CAUSED_BY 4·LINKED_TO 72)+`seed_graph_doc.py`(겹침 문서 10청크). 라벨: `gen_labels.py gen graphrag-cases-draft.csv`(owner 접속, selfcheck 14/14). 결과 JSON: `rag500-2026-07-30T15-49-28-graphrag-vllm-llama31.json`.
+
+**백엔드별 집계**
+
+| 백엔드 | n | pass | 인용hit | 폴백정확 | 도구정확 | p50 | p95 |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| pgvector(문서) | 10 | 9 | 90% | 100% | 90% | 2775ms | 7369ms |
+| neo4j(그래프·추적) | 27 | 15 | 81% | 67% | 81% | 1828ms | 4178ms |
+
+전체 40건 pass 26·인용 83.8%·**hard_fail 0**(PII·테넌트·쓰기 위반 없음).
+
+**병렬 쌍 head-to-head**(같은 질의, 문서 vs 그래프): 8/10 쌍 양쪽 pass. p05·p07 문서 승, p02 그래프 승 — 어느 백엔드도 지배 안 함(§3 예측대로 차이=지식 아닌 **검색 메커니즘**). 지연은 **10쌍 전부 neo4j가 빠름**(p01 2286 vs 7369ms 등) — 그래프 벡터인덱스+expand가 문서 검색보다 저렴.
+
+**핵심 발견 — 병목은 백엔드가 아니라 8B 도구 라우팅.** 실패 14건 중 다수(0003·0010·0014·0022·0023·0024)가 그래프/`trace_home_device_issue` 대신 `search_documents` 기본 선택 → 인용 미스. 그래프 도구가 제대로 호출되면(0026~0029·0034~0037·0039) 답 정확. **R1~R23 결론 재확인**: 8B 상한은 검색이 아니라 도구·인용 규율. GraphRAG 인프라(인과 엣지·세대 추적 도구·비교 케이스·백엔드 채점)는 전부 동작·검증됐고 Neo4j가 지연 우위·지식 near-parity — 남은 미지수는 **상위 모델이 도구 라우팅 상한을 뚫는가**(A안 재측정 대상).
+
+**개발서버 실행 절차**(재현): ①`gitlab` 리모트로 main push→CI 자동 배포(migrate가 마이그레이션 적용) ②시드 스크립트 컨테이너 복사 후 `docker exec ... python /tmp/scripts/seed_graph*.py`(상시 ai-worker가 outbox→Neo4j·문서 ingest 자동 처리) ③RLS 읽기 검증은 `app.tenant_id` GUC 설정 필수(미설정 시 행 은닉) ④gen_labels는 owner 접속(RLS 우회) ⑤러너는 터널+`--auth=session`(users.json에 eval 계정 매핑 필요).
