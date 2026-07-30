@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { aggregate, scoreCase } from "./rag500-score.mjs";
+import { aggregate, deriveBackend, scoreCase } from "./rag500-score.mjs";
 
 const DOCS = {}; // 문서 매칭 없는 케이스는 docs 비어도 됨
 
@@ -156,4 +156,89 @@ test("집계 — 도구 선택은 tool_accuracy로 별도, pass에 안 섞임", 
   assert.equal(agg.overall.tool_scored, 2);
   assert.equal(agg.overall.tool_hit, 1); // 도구는 1건만 정답
   assert.equal(agg.overall.tool_accuracy, 0.5);
+});
+
+// ── GraphRAG 비교(§6) ────────────────────────────────────────────────────────
+
+test("deriveBackend — expected_tool → 비교 백엔드 매핑", () => {
+  assert.equal(deriveBackend("search_documents"), "pgvector");
+  assert.equal(deriveBackend("search_facility_graph"), "neo4j");
+  assert.equal(deriveBackend("trace_home_device_issue"), "neo4j");
+  assert.equal(deriveBackend("get_fees"), null);
+  assert.equal(deriveBackend(""), null);
+  assert.equal(deriveBackend(undefined), null);
+});
+
+test("by_backend 버킷 — pgvector·neo4j 나란히 집계, category 오염 없음", () => {
+  // 도구 hit 여부로 tool_accuracy가 백엔드 버킷에도 계산되는지 확인.
+  const doc = (case_id, hit) =>
+    scoreCase(
+      v2row({ case_id, category: "관리규약 조항", expected_tool: "search_documents" }),
+      [turn({ done: { status: "answered", tool_path: hit ? ["search_documents"] : [] } })],
+      DOCS,
+    );
+  const graph = (case_id) =>
+    scoreCase(
+      v2row({ case_id, category: "시설 그래프", expected_tool: "search_facility_graph" }),
+      [turn({ done: { status: "answered", tool_path: ["search_facility_graph"] } })],
+      DOCS,
+    );
+  const results = [doc("A", true), doc("B", false), graph("C"), graph("D")];
+  const agg = aggregate(results);
+
+  const pg = agg.by_backend.find((b) => b.key === "backend:pgvector");
+  const ng = agg.by_backend.find((b) => b.key === "backend:neo4j");
+  assert.equal(agg.by_backend.length, 2);
+  assert.equal(pg.n, 2);
+  assert.equal(ng.n, 2);
+  assert.equal(pg.tool_accuracy, 0.5); // 문서 경로 1/2 도구 적중
+  assert.equal(ng.tool_accuracy, 1); // 그래프 경로 2/2 도구 적중
+  // by_category에 backend 키가 안 섞이고, 두 카테고리가 그대로 나온다.
+  assert.ok(agg.by_category.every((b) => !b.key.startsWith("backend:")));
+  assert.ok(agg.by_category.some((b) => b.key === "관리규약 조항"));
+  assert.ok(agg.by_category.some((b) => b.key === "시설 그래프"));
+});
+
+test("pairs — 같은 pair_id의 pgvector행+neo4j행이 한 항목 양 슬롯으로", () => {
+  const doc = scoreCase(
+    v2row({ case_id: "D1", pair_id: "p01", expected_tool: "search_documents" }),
+    [turn({ done: { status: "answered", tool_path: ["search_documents"] } })],
+    DOCS,
+  );
+  const graph = scoreCase(
+    v2row({ case_id: "G1", pair_id: "p01", expected_tool: "search_facility_graph" }),
+    [turn({ done: { status: "answered", tool_path: ["search_facility_graph"] } })],
+    DOCS,
+  );
+  const agg = aggregate([graph, doc]); // 입력 순서 무관
+  assert.equal(agg.pairs.length, 1);
+  assert.equal(agg.pairs[0].pair_id, "p01");
+  assert.ok(agg.pairs[0].pgvector !== null);
+  assert.ok(agg.pairs[0].neo4j !== null);
+  assert.equal(agg.pairs[0].pgvector.pass, true);
+  assert.equal(typeof agg.pairs[0].neo4j.total_ms, "number");
+});
+
+test("pairs — 한 쪽만 있는 pair_id는 반대 슬롯 null(불완전 쌍)", () => {
+  const doc = scoreCase(
+    v2row({ case_id: "D1", pair_id: "p02", expected_tool: "search_documents" }),
+    [turn()],
+    DOCS,
+  );
+  const agg = aggregate([doc]);
+  assert.equal(agg.pairs.length, 1);
+  assert.ok(agg.pairs[0].pgvector !== null);
+  assert.equal(agg.pairs[0].neo4j, null);
+});
+
+test("하위호환 — pair_id/backend 없는 기존 v2는 pairs=[]·by_backend=[]", () => {
+  const results = [
+    scoreCase(v2row({ case_id: "A", expected_tool: "get_fees" }), [turn()], DOCS),
+    scoreCase(v2row({ case_id: "B", expected_tool: "" }), [turn()], DOCS),
+  ];
+  const agg = aggregate(results);
+  assert.deepEqual(agg.pairs, []);
+  assert.deepEqual(agg.by_backend, []);
+  assert.equal(agg.overall.n, 2);
+  assert.equal(agg.by_category.length, 1); // 한 카테고리
 });
