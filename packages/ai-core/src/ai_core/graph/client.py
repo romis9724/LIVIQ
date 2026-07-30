@@ -30,6 +30,23 @@ _ROOM_DEVICE_TYPE = "room"
 # 사슬에서 폭주하므로 3으로 고정한다(GraphRAG 다단계 입증에 충분, G1a).
 _CAUSAL_MAX_HOPS = 3
 
+# expand_incidents(앵커=incident)·incidents_for_facilities(앵커=facility) 공유 프로젝션(G2).
+# 앵커 MATCH 뒤·RETURN 앞에 붙는 공통 조각: CAUSED_BY 연쇄를 서브쿼리로 접어(가까운 원인
+# 먼저) i당 1행 유지 + 최근 정비 3건 정렬. OPTIONAL MATCH라 연쇄 없는 장애도 빈 리스트로
+# 살아남는다(min(length) null → collect [] ). CAUSED_BY는 merge_incident가 양 끝을 같은
+# tenant로 MERGE하므로 연쇄도 tenant 안에 구조적으로 갇힌다.
+_INCIDENT_PROJECTION = (
+    "CALL { "
+    "  WITH i "
+    f"  OPTIONAL MATCH path = (i)-[:CAUSED_BY*1..{_CAUSAL_MAX_HOPS}]->(cause:Incident) "
+    "  WITH cause, min(length(path)) AS dist "
+    "  ORDER BY dist "
+    "  RETURN collect(cause.symptom) AS causal_chain "
+    "} "
+    "OPTIONAL MATCH (f)-[:HAS_MAINTENANCE]->(m:MaintenanceLog) "
+    "WITH i, f, causal_chain, m ORDER BY m.performed_at DESC "
+)
+
 
 @dataclass(frozen=True)
 class IncidentHit:
@@ -83,6 +100,10 @@ class IncidentContext:
     `causal_chain`은 이 장애(결과)의 선행 원인 증상들을 가까운 원인부터 나열한 것이다
     (CAUSED_BY 다단계 추적, G1a). 인과 연쇄가 없으면 빈 튜플 — 기존 호출부(library.py)는
     이 필드를 쓰지 않아 하위호환이다.
+
+    `root_cause`·`resolution`은 세대 기기 장애 추적(G2 incidents_for_facilities)이 채우는
+    조치 이력 근거다. expand_incidents는 프로젝션하지 않아 기본 None — 기존 호출부에 무영향
+    (하위호환).
     """
 
     incident_id: str
@@ -91,6 +112,8 @@ class IncidentContext:
     facility_status: str | None
     recent_work: tuple[str, ...]
     causal_chain: tuple[str, ...] = ()
+    root_cause: str | None = None
+    resolution: str | None = None
 
 
 class GraphClient:
@@ -426,34 +449,39 @@ class GraphClient:
         records = await self._run(
             "MATCH (f:Facility {tenant_id: $tenant})-[:HAS_INCIDENT]->(i:Incident) "
             "WHERE i.pg_id IN $ids "
-            # 인과 연쇄를 서브쿼리로 먼저 접어(가까운 원인 먼저) i당 1행으로 유지 — OPTIONAL
-            # MATCH라 연쇄가 없는 장애도 빈 리스트로 살아남는다(min(length) null → collect [] ).
-            "CALL { "
-            "  WITH i "
-            f"  OPTIONAL MATCH path = (i)-[:CAUSED_BY*1..{_CAUSAL_MAX_HOPS}]->(cause:Incident) "
-            "  WITH cause, min(length(path)) AS dist "
-            "  ORDER BY dist "
-            "  RETURN collect(cause.symptom) AS causal_chain "
-            "} "
-            "OPTIONAL MATCH (f)-[:HAS_MAINTENANCE]->(m:MaintenanceLog) "
-            "WITH i, f, causal_chain, m ORDER BY m.performed_at DESC "
-            "RETURN i.pg_id AS incident_id, i.symptom AS symptom, "
+            + _INCIDENT_PROJECTION
+            + "RETURN i.pg_id AS incident_id, i.symptom AS symptom, "
             "       f.name AS facility_name, f.status AS facility_status, "
             "       [w IN collect(m.work) WHERE w IS NOT NULL][..3] AS recent_work, "
             "       causal_chain",
             {"tenant": tenant_id, "ids": list(pg_ids)},
         )
-        return [
-            IncidentContext(
-                incident_id=r["incident_id"],
-                symptom=r["symptom"],
-                facility_name=r["facility_name"],
-                facility_status=r["facility_status"],
-                recent_work=tuple(r["recent_work"]),
-                causal_chain=tuple(r["causal_chain"]),
-            )
-            for r in records
-        ]
+        # root_cause·resolution은 프로젝션하지 않으므로 None 유지(하위호환 — 브리프 §1).
+        return [_incident_context(r) for r in records]
+
+    async def incidents_for_facilities(
+        self, *, tenant_id: str, facility_ids: Sequence[str]
+    ) -> list[IncidentContext]:
+        """시설(facility pg_id) 집합의 HAS_INCIDENT 장애를 expand_incidents와 동일 프로젝션으로
+        확장한다(G2 세대 기기 장애 추적). 앵커가 incident가 아니라 **facility**인 점만 다르다.
+
+        expand_incidents와 달리 `root_cause`·`resolution`도 프로젝션해 조치 이력 근거를 채운다
+        (§4.2). tenant는 시작 Facility에 강제해 단지 격리를 구조적으로 보장한다.
+        """
+        if not facility_ids:
+            return []
+        records = await self._run(
+            "MATCH (f:Facility {tenant_id: $tenant})-[:HAS_INCIDENT]->(i:Incident) "
+            "WHERE f.pg_id IN $ids "
+            + _INCIDENT_PROJECTION
+            + "RETURN i.pg_id AS incident_id, i.symptom AS symptom, "
+            "       i.root_cause AS root_cause, i.resolution AS resolution, "
+            "       f.name AS facility_name, f.status AS facility_status, "
+            "       [w IN collect(m.work) WHERE w IS NOT NULL][..3] AS recent_work, "
+            "       causal_chain",
+            {"tenant": tenant_id, "ids": list(facility_ids)},
+        )
+        return [_incident_context(r) for r in records]
 
     # ── 화면 조회 (H13-1 — 시설 그래프 메인의 유일한 읽기 경로) ─────────────
 
@@ -656,6 +684,21 @@ def _plan_room_names(devices: Sequence[Mapping[str, Any]]) -> list[str]:
     declared = (d.get("room") for d in devices if d.get("device_type") == _ROOM_DEVICE_TYPE)
     referenced = (d.get("room") for d in devices if d.get("device_type") != _ROOM_DEVICE_TYPE)
     return _distinct([*declared, *referenced])
+
+
+def _incident_context(record: Any) -> IncidentContext:
+    """레코드 → IncidentContext. root_cause·resolution은 프로젝션하지 않은 쿼리에서
+    `Record.get`이 None을 돌려주므로 expand_incidents 하위호환이 유지된다."""
+    return IncidentContext(
+        incident_id=record["incident_id"],
+        symptom=record["symptom"],
+        facility_name=record["facility_name"],
+        facility_status=record["facility_status"],
+        recent_work=tuple(record["recent_work"]),
+        causal_chain=tuple(record["causal_chain"]),
+        root_cause=record.get("root_cause"),
+        resolution=record.get("resolution"),
+    )
 
 
 def _neighbor_node(kind: str, node_id: str, record: Any) -> GraphNode:

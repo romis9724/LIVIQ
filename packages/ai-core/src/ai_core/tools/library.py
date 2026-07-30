@@ -27,6 +27,7 @@ from ai_core.tools.registry import (
     ToolRegistry,
     ToolResult,
 )
+from ai_core.tools.trace_home_device import trace_home_device_issue_tool
 
 # docs/08 도구 결과 상한 — 목록형 도구 결과 행 수 제한(토큰=비용).
 MAX_TOOL_ROWS = 20
@@ -313,10 +314,11 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 7종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출."""
+    """운영 도구 8종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출."""
     return ToolRegistry(
         [
             find_in_floor_plan_tool(),
+            trace_home_device_issue_tool(),
             Tool(
                 name="search_documents",
                 description="공지·규약·회의록 등 단지 문서에서 근거를 검색한다.",
