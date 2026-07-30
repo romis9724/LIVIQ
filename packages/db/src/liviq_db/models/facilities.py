@@ -66,7 +66,14 @@ class MaintenanceLog(IdMixin, TenantMixin, CreatedAtMixin, Base):
 
 class Incident(IdMixin, TenantMixin, CreatedAtMixin, Base):
     __tablename__ = "incidents"
-    __table_args__ = (tenant_fk("facility_id", "facilities", name="fk_incidents_facility"),)
+    __table_args__ = (
+        # 자기참조 CAUSED_BY FK가 (tenant_id, id)를 참조하려면 부모 쪽 UNIQUE가 필요하다.
+        tenant_id_unique("incidents"),
+        tenant_fk("facility_id", "facilities", name="fk_incidents_facility"),
+        # 다단계 인과: caused_by_incident_id → 같은 단지의 원인 incident(GraphRAG G1a,
+        # SEED-PLAN §1). composite FK라 다른 단지 incident 참조를 DB가 거부한다(규칙 3).
+        tenant_fk("caused_by_incident_id", "incidents", name="fk_incidents_caused_by"),
+    )
 
     facility_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     occurred_at: Mapped[datetime.datetime | None] = mapped_column(
@@ -75,3 +82,8 @@ class Incident(IdMixin, TenantMixin, CreatedAtMixin, Base):
     symptom: Mapped[str] = mapped_column(Text, nullable=False)
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
     root_cause: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # nullable — 대부분의 장애는 선행 원인 없이 단독 발생한다. NULL이면 composite FK는
+    # MATCH SIMPLE 규칙으로 미검증(연쇄 없음).
+    caused_by_incident_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )

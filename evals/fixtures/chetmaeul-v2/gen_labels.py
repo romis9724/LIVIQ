@@ -28,6 +28,8 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   facilities:status:<status>      상태 조회 (빈 결과면 "없음" 카드가 정답)
   overdue:window                  점검 임박·초과 (현 데이터 전부 NULL → "없음" 카드가 정답)
   graph:incident                  장애 원인 추적 (접지 incident 기반)
+  graph:chain:<결과증상키워드>    다단계 인과 연쇄 (caused_by 재귀, 2노드 미만이면 거부)
+  home-device:<기기키워드>        세대 기기→연결 설비 계통 장애 이력 (household_ref·user_ref 필수)
   plan-device:<라벨>              세대 평면도 기기 (household_ref 바인딩 필수)
   fallback:absent                 코퍼스 부재 — 폴백이 정답
   isolation:cross-tenant          타 단지 질문 차단 — 폴백/거부가 정답
@@ -54,6 +56,8 @@ TENANT_NAME = "첫마을 4단지 푸르지오"
 HERE = Path(__file__).parent
 SNAPSHOT_PATH = HERE / "snapshot.json"
 OUT_PATH = HERE / "quality-cases-v2.csv"
+# GraphRAG 비교 케이스는 정본 오염 회피 위해 별도 CSV로 뽑는다(§8-3).
+GRAPHRAG_OUT_PATH = HERE / "graphrag-cases.csv"
 
 # 코드 실측 — `default_registry().specs_for((role,), graph_available=True)` 출력 그대로.
 # 이 표가 코드와 어긋나면 selfcheck가 아니라 케이스가 전부 틀리므로, 변경 시 반드시 동기화.
@@ -66,7 +70,11 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
     "get_overdue_checks": frozenset({"FACILITY", "MANAGER"}),
     "search_facility_graph": frozenset({"FACILITY", "MANAGER"}),
     "find_in_floor_plan": frozenset({"RESIDENT"}),
+    "trace_home_device_issue": frozenset({"RESIDENT"}),
 }
+
+# caused_by_incident_id 순환 방어 — 시드는 비순환이나 재귀 CTE 깊이 상한으로 안전하게.
+_CHAIN_MAX_DEPTH = 10
 
 # 채점 계약(§5): 빈 결과 카드 승격(⓪, PR #112) 이후 기준 — "없음"도 answered+도구 인용.
 BEHAVIOR_ANSWERED = "answered"
@@ -357,6 +365,10 @@ async def resolve_overdue(
 async def resolve_graph(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
+    # args[0]로 서브분기 — 비었거나 "incident"면 기존 동작(하위호환, graph:incident 불변),
+    # "chain"이면 다단계 인과 연쇄 라벨(G1a caused_by_incident_id).
+    if args and args[0] == "chain":
+        return await _resolve_graph_chain(conn, tid, args[1] if len(args) > 1 else "")
     rows = await conn.fetch(
         "SELECT symptom FROM incidents WHERE tenant_id = $1 ORDER BY created_at", tid
     )
@@ -372,6 +384,125 @@ async def resolve_graph(
         label_source_resolved=f"incidents n={len(rows)}",
         errors=[],
     )
+
+
+async def _resolve_graph_chain(conn: asyncpg.Connection, tid: str, kw: str) -> Label:
+    """graph:chain:<결과증상키워드> — caused_by_incident_id 재귀 CTE로 인과 연쇄(결과→원인…)."""
+    if not kw:
+        return _error("graph:chain은 결과 증상 키워드 필수")
+    # 결과 incident 하나를 결정론적으로 고정(같은 증상 다건이면 최초 발생분).
+    start = await conn.fetchrow(
+        "SELECT id, symptom FROM incidents"
+        " WHERE tenant_id = $1 AND symptom ILIKE $2 ORDER BY created_at LIMIT 1",
+        tid,
+        f"%{kw}%",
+    )
+    if start is None:
+        return _error(f"결과 장애 없음: symptom~{kw}")
+    # 재귀 CTE로 결과→원인→원인… — tenant 스코프·깊이 상한으로 순환 방어.
+    rows = await conn.fetch(
+        "WITH RECURSIVE chain AS ("
+        "   SELECT id, symptom, caused_by_incident_id, 0 AS depth FROM incidents"
+        "   WHERE tenant_id = $1 AND id = $2"
+        "   UNION ALL"
+        "   SELECT i.id, i.symptom, i.caused_by_incident_id, c.depth + 1 FROM incidents i"
+        "   JOIN chain c ON i.id = c.caused_by_incident_id"
+        "   WHERE i.tenant_id = $1 AND c.depth < $3"
+        " ) SELECT symptom FROM chain ORDER BY depth",
+        tid,
+        start["id"],
+        _CHAIN_MAX_DEPTH,
+    )
+    if len(rows) < 2:
+        return _error("연쇄 아님 — caused_by 없음")
+    symptoms = [r["symptom"] for r in rows]
+    return Label(
+        expected_facts=" ← ".join(symptoms),
+        expected_citations="tool:search_facility_graph",
+        expected_tool="search_facility_graph",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of="",
+        label_source_resolved=f"incidents chain len={len(symptoms)} from={start['id']}",
+        errors=[],
+    )
+
+
+async def resolve_home_device(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """home-device:<기기키워드> — 세대 기기 → 연결 공용 설비 계통 장애 이력(RESIDENT 도구)."""
+    href = case.get("household_ref", "")
+    uref = case.get("user_ref", "")
+    if not href or not uref:
+        return _error("home-device는 household_ref·user_ref 바인딩 필수(세대 스코프 authz)")
+    kw = args[0] if args else ""
+    if not kw:
+        return _error("home-device는 기기 키워드 필수")
+    building, _, unit_no = href.partition("-")
+    # 도구(trace_home_device.py)와 동일 해석 체인 — plan-device의 floor_plan 서브쿼리를 재사용하되
+    # facility_id가 채워진 base 기기만(연결 공용 설비 계통이 있는 기기).
+    fid_rows = await conn.fetch(
+        "SELECT DISTINCT pd.facility_id FROM plan_devices pd"
+        " WHERE pd.tenant_id = $1 AND pd.household_id IS NULL AND pd.action = 'base'"
+        " AND pd.facility_id IS NOT NULL"
+        " AND pd.floor_plan_id = ("
+        "   SELECT fp.id FROM floor_plans fp"
+        "   JOIN unit_types ut ON ut.id = fp.unit_type_id"
+        "   JOIN household_geometries hg"
+        "     ON split_part(hg.unit_type_label, '(', 1) = ut.name"
+        "    AND hg.tenant_id = fp.tenant_id"
+        "   JOIN households h ON h.id = hg.household_id"
+        "   JOIN buildings b ON b.id = h.building_id"
+        "   WHERE fp.tenant_id = $1 AND fp.scope = 'unit_type'"
+        "     AND b.name = $2 AND h.unit_no::text = $3"
+        "   ORDER BY fp.version DESC, fp.id LIMIT 1)"
+        " AND pd.device_type ILIKE $4",
+        tid,
+        building,
+        unit_no,
+        f"%{kw}%",
+    )
+    fids = [r["facility_id"] for r in fid_rows]
+    if not fids:
+        # 매칭 기기 없음/전부 facility_id NULL(미모델링) → 도구가 note 반환 → 폴백이 정답(§4.2).
+        return Label(
+            expected_facts="연결된 공용 설비 계통 정보 없음 — 안내/폴백",
+            expected_citations="",
+            expected_tool="",
+            acceptable_tools="trace_home_device_issue",
+            expected_behavior=BEHAVIOR_FALLBACK,
+            as_of="",
+            label_source_resolved=f"home-device household={href} kw~{kw} facility=none",
+            errors=[],
+        )
+    # 연결 설비의 장애 이력(빈 결과도 ⓪ 카드 승격 — answered). 인과 선행은 chain 리졸버가 담당.
+    rows = await conn.fetch(
+        "SELECT symptom, root_cause, resolution FROM incidents"
+        " WHERE tenant_id = $1 AND facility_id = ANY($2) ORDER BY created_at",
+        tid,
+        fids,
+    )
+    facts = "; ".join(_incident_summary(r) for r in rows) if rows else "과거 장애 이력 없음"
+    return Label(
+        expected_facts=facts,
+        expected_citations="tool:trace_home_device_issue",
+        expected_tool="trace_home_device_issue",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of="",
+        label_source_resolved=f"incidents facilities={[str(f) for f in fids]} n={len(rows)}",
+        errors=[],
+    )
+
+
+def _incident_summary(row: asyncpg.Record) -> str:
+    parts = [f"증상: {row['symptom']}"]
+    if row["root_cause"]:
+        parts.append(f"원인: {row['root_cause']}")
+    if row["resolution"]:
+        parts.append(f"조치: {row['resolution']}")
+    return " ".join(parts)
 
 
 async def resolve_plan_device(
@@ -515,6 +646,7 @@ RESOLVERS = {
     "facilities": resolve_facilities,
     "overdue": resolve_overdue,
     "graph": resolve_graph,
+    "home-device": resolve_home_device,
     "plan-device": resolve_plan_device,
     "fallback": resolve_fallback,
     "isolation": resolve_isolation,
@@ -574,7 +706,9 @@ async def make_snapshot(conn: asyncpg.Connection, tid: str) -> dict[str, Any]:
 # ── CLI ─────────────────────────────────────────────────────────────────
 
 
-async def cmd_gen(conn: asyncpg.Connection, tid: str, draft_path: str) -> int:
+async def cmd_gen(
+    conn: asyncpg.Connection, tid: str, draft_path: str, out_path: Path = OUT_PATH
+) -> int:
     with open(draft_path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.DictReader(f))
     out_rows: list[dict[str, str]] = []
@@ -620,11 +754,11 @@ async def cmd_gen(conn: asyncpg.Connection, tid: str, draft_path: str) -> int:
         return 1
     snapshot = await make_snapshot(conn, tid)
     SNAPSHOT_PATH.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n", "utf-8")
-    with open(OUT_PATH, "w", newline="", encoding="utf-8") as f:
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(out_rows[0].keys()))
         writer.writeheader()
         writer.writerows(out_rows)
-    print(f"✓ {len(out_rows)}건 → {OUT_PATH.name} · 스냅샷 → {SNAPSHOT_PATH.name}")
+    print(f"✓ {len(out_rows)}건 → {out_path.name} · 스냅샷 → {SNAPSHOT_PATH.name}")
     return 0
 
 
@@ -647,6 +781,11 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         ("facilities:status:fault", {"role": "FACILITY"}),
         ("overdue:window", {"role": "MANAGER"}),
         ("graph:incident", {"role": "FACILITY"}),
+        ("graph:chain:진동", {"role": "MANAGER"}),
+        (
+            "home-device:월패드",
+            {"role": "RESIDENT", "household_ref": "401-201", "user_ref": inquiry_author or ""},
+        ),
         ("fallback:absent", {"role": "RESIDENT"}),
         ("isolation:cross-tenant", {"role": "RESIDENT"}),
         # 역할 위반 — 거부돼야 정상
@@ -686,7 +825,8 @@ async def main() -> int:
             print(json.dumps(snap, ensure_ascii=False, indent=2))
             return 0
         if cmd == "gen":
-            return await cmd_gen(conn, tid, sys.argv[2])
+            out_path = Path(sys.argv[3]) if len(sys.argv) > 3 else OUT_PATH
+            return await cmd_gen(conn, tid, sys.argv[2], out_path)
         if cmd == "selfcheck":
             return await cmd_selfcheck(conn, tid)
         print(f"미지원 명령: {cmd}", file=sys.stderr)

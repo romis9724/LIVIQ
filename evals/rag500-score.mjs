@@ -262,6 +262,22 @@ function judgeCitationsV2(exp, observed, notes) {
   return missing.length === 0;
 }
 
+/**
+ * expected_tool → 비교 백엔드(GraphRAG 비교 §6). 문서 경로=pgvector, 그래프·기기추적=neo4j.
+ * 그 밖/빈 값은 null(비교 대상 아님 — 세대민원·다단계·기존 v2).
+ */
+export function deriveBackend(expectedTool) {
+  switch ((expectedTool ?? "").trim()) {
+    case "search_documents":
+      return "pgvector";
+    case "search_facility_graph":
+    case "trace_home_device_issue":
+      return "neo4j";
+    default:
+      return null;
+  }
+}
+
 /** expected_behavior(answered|fallback)와 실제 status 일치. */
 function judgeBehavior(exp, done) {
   if (done === null) return false;
@@ -307,6 +323,9 @@ function scoreCaseV2(row, turns, docs, opts) {
     priority: row.priority,
     conversation_type: row.conversation_type,
     needs_judge: needsJudge,
+    // GraphRAG 비교(§6) — 병렬 쌍 묶음키·백엔드 태그. 비교 밖 케이스는 둘 다 null.
+    pair_id: (row.pair_id ?? "").trim() || null,
+    backend: deriveBackend(row.expected_tool),
     verdict: hardFail || !gatesPass ? "fail" : "pass",
     hard_fail: hardFail,
     checks: {
@@ -440,7 +459,10 @@ export function aggregate(results, errors = [], pricing = null) {
     }).get(key);
 
   for (const r of results) {
-    for (const key of [r.category, "__ALL__"]) {
+    const keys = [r.category, "__ALL__"];
+    // 백엔드 버킷(GraphRAG 비교) — category 롤업과 분리(by_backend로 따로 반환).
+    if (r.backend) keys.push(`backend:${r.backend}`);
+    for (const key of keys) {
       const b = bucket(key);
       b.n++;
       if (r.checks.citation_hit !== null) {
@@ -507,6 +529,32 @@ export function aggregate(results, errors = [], pricing = null) {
   const all = rows.get("__ALL__");
   return {
     overall: all ? { ...summarize(all), errors: errors.length } : null,
-    by_category: [...rows.values()].filter((b) => b.key !== "__ALL__").map(summarize),
+    // category 롤업 — backend 버킷은 by_backend로 분리(롤업 오염 방지).
+    by_category: [...rows.values()]
+      .filter((b) => b.key !== "__ALL__" && !b.key.startsWith("backend:"))
+      .map(summarize),
+    by_backend: [...rows.values()].filter((b) => b.key.startsWith("backend:")).map(summarize),
+    pairs: buildPairs(results),
   };
+}
+
+/**
+ * 병렬 쌍 head-to-head(§6) — pair_id로 묶어 pgvector·neo4j 두 경로를 나란히.
+ * 값은 개별 결과 원자료(비율 아님). 한 쪽만 있으면 반대 슬롯 null(불완전 쌍 경고용).
+ * pair_id 없는 결과는 제외. pair_id 오름차순 정렬.
+ */
+function buildPairs(results) {
+  const byPair = new Map();
+  for (const r of results) {
+    if (!r.pair_id || !r.backend) continue;
+    const pair = byPair.get(r.pair_id) ?? { pair_id: r.pair_id, pgvector: null, neo4j: null };
+    pair[r.backend] = {
+      citation_hit: r.checks.citation_hit,
+      fallback_ok: r.checks.fallback_ok,
+      total_ms: r.latency.total_ms,
+      pass: r.verdict === "pass",
+    };
+    byPair.set(r.pair_id, pair);
+  }
+  return [...byPair.values()].sort((a, b) => a.pair_id.localeCompare(b.pair_id));
 }
