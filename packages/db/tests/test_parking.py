@@ -65,6 +65,46 @@ async def _count(conn: AsyncConnection, table: str) -> int:
     return int(value)
 
 
+async def _insert_occupancy_external(
+    conn: AsyncConnection,
+    tenant_id: object,
+    *,
+    spot_no: str = "001",
+    plate_enc: bytes = _PLATE_BLOB,
+    parked_hours: float = 3.5,
+) -> uuid.UUID:
+    result = await conn.execute(
+        text(
+            "INSERT INTO parking_occupancy"
+            "(tenant_id, spot_no, is_external, external_plate_enc, parked_hours) "
+            "VALUES(:t, :s, true, :pe, :h) RETURNING id"
+        ).bindparams(t=tenant_id, s=spot_no, pe=plate_enc, h=parked_hours)
+    )
+    value = result.scalar_one()
+    assert isinstance(value, uuid.UUID)
+    return value
+
+
+async def _insert_occupancy_resident(
+    conn: AsyncConnection,
+    tenant_id: object,
+    vehicle_id: object,
+    *,
+    spot_no: str = "002",
+    parked_hours: float = 6.0,
+) -> uuid.UUID:
+    result = await conn.execute(
+        text(
+            "INSERT INTO parking_occupancy"
+            "(tenant_id, spot_no, is_external, parking_vehicle_id, parked_hours) "
+            "VALUES(:t, :s, false, :v, :h) RETURNING id"
+        ).bindparams(t=tenant_id, s=spot_no, v=vehicle_id, h=parked_hours)
+    )
+    value = result.scalar_one()
+    assert isinstance(value, uuid.UUID)
+    return value
+
+
 # ── 배치도 ────────────────────────────────────────────────────────────────────
 
 
@@ -184,3 +224,96 @@ async def test_vehicle_cascades_on_household_delete(
     await owner_conn.execute(text("DELETE FROM households WHERE id = :h").bindparams(h=hid))
     await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
     assert await _count(owner_conn, "parking_vehicles") == 0
+
+
+# ── 점유 (parking_occupancy, H15-4) ────────────────────────────────────────────
+
+
+async def test_occupancy_external_round_trips(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """외부차 점유 — is_external=true·external_plate_enc(bytea)·parked_hours 왕복."""
+    occ_id = await _insert_occupancy_external(owner_conn, seed.a.tenant_id)
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    row = (
+        await owner_conn.execute(
+            text(
+                "SELECT spot_no, is_external, external_plate_enc, parking_vehicle_id, parked_hours "
+                "FROM parking_occupancy WHERE id = :i"
+            ).bindparams(i=occ_id)
+        )
+    ).first()
+    assert row is not None
+    spot_no, is_external, plate_enc, vehicle_id, parked_hours = row
+    assert (spot_no, is_external) == ("001", True)
+    assert bytes(plate_enc) == _PLATE_BLOB
+    assert vehicle_id is None
+    assert parked_hours == 3.5
+
+
+async def test_occupancy_resident_round_trips(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """입주민 점유 — parking_vehicle_id composite FK·external_plate_enc NULL 왕복."""
+    vehicle_id = await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id)
+    occ_id = await _insert_occupancy_resident(owner_conn, seed.a.tenant_id, vehicle_id)
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    row = (
+        await owner_conn.execute(
+            text(
+                "SELECT is_external, parking_vehicle_id, external_plate_enc "
+                "FROM parking_occupancy WHERE id = :i"
+            ).bindparams(i=occ_id)
+        )
+    ).first()
+    assert row is not None
+    is_external, got_vehicle_id, plate_enc = row
+    assert is_external is False
+    assert got_vehicle_id == vehicle_id
+    assert plate_enc is None
+
+
+async def test_occupancy_check_rejects_resident_without_vehicle(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """무결성 CHECK — is_external=false인데 parking_vehicle_id 없으면 거부."""
+    with pytest.raises(IntegrityError):
+        await owner_conn.execute(
+            text(
+                "INSERT INTO parking_occupancy(tenant_id, spot_no, is_external) "
+                "VALUES(:t, '003', false)"
+            ).bindparams(t=seed.a.tenant_id)
+        )
+
+
+async def test_occupancy_check_rejects_external_with_vehicle(
+    owner_conn: AsyncConnection, seed: Seed
+) -> None:
+    """무결성 CHECK — is_external=true인데 external_plate_enc 없으면 거부."""
+    with pytest.raises(IntegrityError):
+        await owner_conn.execute(
+            text(
+                "INSERT INTO parking_occupancy(tenant_id, spot_no, is_external) "
+                "VALUES(:t, '004', true)"
+            ).bindparams(t=seed.a.tenant_id)
+        )
+
+
+async def test_occupancy_unique_spot_per_tenant(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """면당 1행 — 같은 단지 같은 spot_no 두 번째 점유는 UNIQUE(tenant_id, spot_no) 위반."""
+    await _insert_occupancy_external(owner_conn, seed.a.tenant_id, spot_no="005")
+    with pytest.raises(IntegrityError):
+        await _insert_occupancy_external(owner_conn, seed.a.tenant_id, spot_no="005")
+
+
+async def test_occupancy_tenant_isolation(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """A는 자기 점유만 — B의 점유는 안 보인다(격리 CRITICAL)."""
+    await _insert_occupancy_external(owner_conn, seed.a.tenant_id)
+    b_id = await _insert_occupancy_external(owner_conn, seed.b.tenant_id)
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    assert await _count(owner_conn, "parking_occupancy") == 1, "타 단지 점유가 노출됨(격리 실패)"
+    row = (
+        await owner_conn.execute(
+            text("SELECT id FROM parking_occupancy WHERE id = :i").bindparams(i=b_id)
+        )
+    ).first()
+    assert row is None, "B 단지 점유가 A 컨텍스트에서 조회됨(격리 실패)"
