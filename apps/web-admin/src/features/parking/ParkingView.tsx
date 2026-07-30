@@ -6,15 +6,14 @@ import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
   getParkingLayout,
-  listParkingVehicles,
+  getParkingOccupancy,
   type ParkingLayout,
+  type ParkingOccupancy,
   type ParkingSpot,
-  type ParkingVehicle,
 } from "@/lib/api";
 import {
   EXTERNAL_GROUP,
-  SIM_SEED,
-  simulateParking,
+  occupancyToSim,
   summarize,
   elapsedText,
   type ParkedCar,
@@ -63,7 +62,7 @@ const SUMMARY_TILES: readonly SummaryTile[] = [
 type DataState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; layout: ParkingLayout | null; vehicles: ParkingVehicle[] };
+  | { kind: "ready"; layout: ParkingLayout | null; occupancy: ParkingOccupancy[] };
 
 function errorMessage(err: unknown): string {
   if (err instanceof ApiError || err instanceof Error) return err.message;
@@ -72,15 +71,15 @@ function errorMessage(err: unknown): string {
 
 export function ParkingView() {
   const [state, setState] = useState<DataState>({ kind: "loading" });
-  // 입차시각 기준점 — 마운트 시 1회 고정(시뮬레이션·경과시간이 리렌더마다 흔들리지 않게).
+  // 입차시각 기준점 — 마운트 시 1회 고정(상대 경과시간이 리렌더마다 흔들리지 않게).
   const [nowMs] = useState(() => Date.now());
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     try {
-      // 레이아웃·차량은 독립 — 병렬로 받아 왕복을 줄인다(트윈 로드와 동일 패턴).
-      const [layout, vehicles] = await Promise.all([getParkingLayout(), listParkingVehicles()]);
-      setState({ kind: "ready", layout, vehicles });
+      // 레이아웃·점유는 독립 — 병렬로 받아 왕복을 줄인다(트윈 로드와 동일 패턴).
+      const [layout, occupancy] = await Promise.all([getParkingLayout(), getParkingOccupancy()]);
+      setState({ kind: "ready", layout, occupancy });
     } catch (err) {
       setState({ kind: "error", message: errorMessage(err) });
     }
@@ -101,7 +100,7 @@ export function ParkingView() {
       <main className="admin-page__main">
         {/* 데이터 정직성 안내는 콘텐츠 최상단 유지 — 점유가 실측처럼 보이면 안 된다. */}
         <p className="pk-sim-badge">
-          <span aria-hidden="true">🧪</span> 점유 현황은 시뮬레이션입니다(번호판 인식 연동 전).
+          <span aria-hidden="true">🧪</span> 점유 현황은 데모 시드 데이터입니다(번호판 인식 연동 전).
           배치도·차량 목록은 등록 데이터입니다.
         </p>
         {state.kind === "loading" ? (
@@ -128,7 +127,7 @@ export function ParkingView() {
             />
           </section>
         ) : (
-          <ReadyView layout={state.layout} vehicles={state.vehicles} nowMs={nowMs} />
+          <ReadyView layout={state.layout} occupancy={state.occupancy} nowMs={nowMs} />
         )}
       </main>
     </>
@@ -146,22 +145,19 @@ function LoadingSkeleton() {
 
 interface ReadyViewProps {
   layout: ParkingLayout;
-  vehicles: readonly ParkingVehicle[];
+  occupancy: readonly ParkingOccupancy[];
   nowMs: number;
 }
 
-function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
+function ReadyView({ layout, occupancy, nowMs }: ReadyViewProps) {
   const [selectedNo, setSelectedNo] = useState<string | null>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   // 기본은 2D — 3D 는 옵트인이고, WebGL 이 없거나 느린 기기는 2D 로 계속 볼 수 있다.
   const [viewMode, setViewMode] = useState<ViewMode>("2d");
 
-  // 점유는 마운트 1회 계산 — 시드·nowMs 고정이라 재렌더에도 같은 상태를 보여준다.
-  const sim = useMemo(
-    () => simulateParking(layout.spots, layout.cores, vehicles, SIM_SEED, nowMs),
-    [layout, vehicles, nowMs],
-  );
+  // 점유 정본(parking_occupancy) → 렌더 계약. nowMs 고정이라 재렌더에도 같은 경과를 보여준다.
+  const sim = useMemo(() => occupancyToSim(occupancy, nowMs), [occupancy, nowMs]);
   const counts = useMemo(() => summarize(layout.spots, sim.bySpot), [layout.spots, sim]);
   const dongs = useMemo(() => layout.buildings.map((b) => b.name), [layout.buildings]);
   const selectedSpot = selectedNo

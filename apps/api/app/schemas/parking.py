@@ -33,3 +33,20 @@ class ParkingVehicleItem(BaseModel):
 class ParkingVehicleListOut(BaseModel):
     vehicles: list[ParkingVehicleItem]
     total: int
+
+
+class ParkingOccupancyItem(BaseModel):
+    """면 점유 1건 — plate는 복호 평문(입주민·외부 공통). 외부차는 dong·ho·model이 null."""
+
+    spot_no: str
+    is_external: bool
+    dong: str | None  # 예 "401동" (외부차는 null)
+    ho: str | None  # 예 "1502호" (외부차는 null)
+    model: str | None
+    plate: str
+    parked_hours: float | None  # 입차 경과(뷰 표시용 — "N시간 전" 안정화)
+
+
+class ParkingOccupancyListOut(BaseModel):
+    occupancy: list[ParkingOccupancyItem]
+    total: int
