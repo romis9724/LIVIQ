@@ -163,10 +163,25 @@ export function loadCases({ set = "smoke", caseIds = [], limit = null } = {}) {
 }
 
 const V2_CSV = join(HERE, "fixtures", "chetmaeul-v2", "quality-cases-v2.csv");
+const GRAPHRAG_CSV = join(HERE, "fixtures", "chetmaeul-v2", "graphrag-cases.csv");
 
 /** 케이스셋 v2 로드(첫마을 실데이터). 컬럼·라벨 포맷이 v1과 달라 별도 로더. */
 export function loadCasesV2({ set = "smoke", caseIds = [], limit = null } = {}) {
   const rows = parseCsv(readFileSync(V2_CSV, "utf8"));
+  const wanted = set.toLowerCase();
+  const filtered = rows.filter((r) => {
+    if (caseIds.length > 0) return caseIds.includes(r.case_id);
+    return wanted === "all" || r.execution_set.toLowerCase() === wanted;
+  });
+  return limit === null ? filtered : filtered.slice(0, limit);
+}
+
+/**
+ * GraphRAG 비교 케이스셋 로드(§6). 컬럼·라벨 포맷은 v2와 동일(expectedV2 재사용) +
+ * pair_id 1개 추가. execution_set은 전부 "Full" — --set=full|all로 40건 다 잡힌다.
+ */
+export function loadCasesGraphrag({ set = "smoke", caseIds = [], limit = null } = {}) {
+  const rows = parseCsv(readFileSync(GRAPHRAG_CSV, "utf8"));
   const wanted = set.toLowerCase();
   const filtered = rows.filter((r) => {
     if (caseIds.length > 0) return caseIds.includes(r.case_id);

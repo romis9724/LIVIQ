@@ -37,6 +37,7 @@ import { fileURLToPath } from "node:url";
 import {
   fixtureUuid,
   loadCases,
+  loadCasesGraphrag,
   loadCasesV2,
   loadManifest,
   loadUsers,
@@ -86,13 +87,15 @@ if (auth !== "dev" && auth !== "session") {
   process.exit(2);
 }
 
-// 케이스셋: v1(합성단지 회귀) | v2(첫마을 실데이터 정본). 채점 경로는 행의 expected_behavior로
-// 자동 분기되나, 로더는 여기서 고른다.
+// 케이스셋: v1(합성단지 회귀) | v2(첫마을 실데이터 정본) | graphrag(GraphRAG 비교 §6, 라벨은
+// v2와 동일 의미 + pair_id). 채점 경로는 행의 expected_behavior로 자동 분기되나, 로더는 여기서 고른다.
 const caseset = argOf("caseset", "v1");
-if (caseset !== "v1" && caseset !== "v2") {
-  console.error(`--caseset 값은 v1|v2 — 받은 값: ${caseset}`);
+if (caseset !== "v1" && caseset !== "v2" && caseset !== "graphrag") {
+  console.error(`--caseset 값은 v1|v2|graphrag — 받은 값: ${caseset}`);
   process.exit(2);
 }
+// v2·graphrag는 v2 라벨 의미(expected_behavior·as_of·behavior)를 공유한다.
+const v2Labels = caseset !== "v1";
 // 시간 의존 라벨(v2 as_of) 검증 기준 시각. 미지정 시 오늘(측정일).
 const asOf = argOf("as-of", new Date().toISOString().slice(0, 10));
 
@@ -100,7 +103,8 @@ const docs = loadManifest();
 const users = auth === "session" ? loadUsers() : {};
 // 세션 쿠키는 계정당 1회만 발급(로그인 분당 상한 5회) — 이후 케이스는 재사용.
 const sessionCookies = new Map();
-const loader = caseset === "v2" ? loadCasesV2 : loadCases;
+const loader =
+  caseset === "graphrag" ? loadCasesGraphrag : caseset === "v2" ? loadCasesV2 : loadCases;
 const cases = loader({ set, caseIds, limit });
 if (cases.length === 0) {
   console.error(`대상 케이스 0건 — set=${set} case=${caseIds.join(",") || "-"} 필터 확인.`);
@@ -109,7 +113,7 @@ if (cases.length === 0) {
 
 console.log(
   `\nrag500 — ${cases.length}건 (caseset=${caseset} set=${set}) · backend=${label} · api=${API_URL}` +
-    (caseset === "v2" ? ` · as_of=${asOf}` : "") +
+    (v2Labels ? ` · as_of=${asOf}` : "") +
     "\n",
 );
 
@@ -270,18 +274,23 @@ writeFileSync(outPath, JSON.stringify(snapshot, null, 2) + "\n");
 const header =
   `  ${padDisplay("카테고리", 24)}  n   pass  인용hit  폴백정확  hardfail  검수  p50ms   p95ms   토큰in  토큰out` +
   (costOn ? "    원가USD  질의당USD" : "");
+/** 집계 표 한 행 — 카테고리·백엔드 표가 같은 컬럼 포맷을 공유한다. */
+function metricRow(b) {
+  return (
+    `  ${padDisplay(b.key, 26)}${String(b.n).padStart(3)} ${String(b.pass).padStart(5)}` +
+    `  ${pct(b.citation_hit_rate)}   ${pct(b.fallback_accuracy)}  ${String(b.hard_fail).padStart(7)}` +
+    ` ${String(b.needs_judge).padStart(5)} ${String(b.total_p50_ms ?? "-").padStart(6)} ${String(b.total_p95_ms ?? "-").padStart(7)}` +
+    ` ${String(b.token_input_sum).padStart(8)} ${String(b.token_output_sum).padStart(7)}` +
+    (costOn
+      ? ` ${usd(b.cost_usd, 6).padStart(10)} ${usd(b.cost_per_query_usd, 6).padStart(10)}`
+      : "")
+  );
+}
+
 console.log(`\n${header}\n  ${"-".repeat(costOn ? 110 : 88)}`);
 const overallRow = summary.overall ? [{ ...summary.overall, key: "전체" }] : [];
 for (const b of [...summary.by_category, ...overallRow]) {
-  console.log(
-    `  ${padDisplay(b.key, 26)}${String(b.n).padStart(3)} ${String(b.pass).padStart(5)}` +
-      `  ${pct(b.citation_hit_rate)}   ${pct(b.fallback_accuracy)}  ${String(b.hard_fail).padStart(7)}` +
-      ` ${String(b.needs_judge).padStart(5)} ${String(b.total_p50_ms ?? "-").padStart(6)} ${String(b.total_p95_ms ?? "-").padStart(7)}` +
-      ` ${String(b.token_input_sum).padStart(8)} ${String(b.token_output_sum).padStart(7)}` +
-      (costOn
-        ? ` ${usd(b.cost_usd, 6).padStart(10)} ${usd(b.cost_per_query_usd, 6).padStart(10)}`
-        : ""),
-  );
+  console.log(metricRow(b));
 }
 console.log(
   `\nTTFT p50 ${summary.overall?.ttft_p50_ms ?? "-"}ms · p95 ${summary.overall?.ttft_p95_ms ?? "-"}ms` +
@@ -299,6 +308,32 @@ if (estimatedCases > 0) {
       " usage 미제공(추정치). 결정 turn은 실측이므로 원가는 근사값이다",
   );
 }
+// GraphRAG 비교(§6) — 백엔드별 집계·병렬 쌍 head-to-head. 비교 케이스가 없으면(비-graphrag
+// 실행) by_backend가 비어 두 블록 다 건너뛴다.
+if (summary.by_backend.length > 0) {
+  const backendHeader =
+    `  ${padDisplay("백엔드", 24)}  n   pass  인용hit  폴백정확  hardfail  검수  p50ms   p95ms   토큰in  토큰out` +
+    (costOn ? "    원가USD  질의당USD" : "");
+  console.log(`\n${backendHeader}\n  ${"-".repeat(costOn ? 110 : 88)}`);
+  for (const b of summary.by_backend) {
+    console.log(metricRow({ ...b, key: b.key.replace(/^backend:/, "") }));
+  }
+}
+
+if (summary.pairs.length > 0) {
+  console.log("\n병렬 쌍 head-to-head (pgvector vs neo4j — 같은 질의)");
+  for (const p of summary.pairs) {
+    console.log(`  ${p.pair_id} | pgvector: ${slot(p.pgvector)} | neo4j: ${slot(p.neo4j)}`);
+  }
+}
+
+/** head-to-head 한 슬롯 — 한쪽만 있는 불완전 쌍은 '-'. */
+function slot(side) {
+  if (!side) return "-";
+  const mark = (v) => (v === null ? "-" : v ? "✓" : "✗");
+  return `hit=${mark(side.citation_hit)} ms=${Math.round(side.total_ms)} pass=${mark(side.pass)}`;
+}
+
 console.log(`결과: ${outPath}\n`);
 
 // 채점 실패는 측정값이지 러너 오류가 아니다 — 호출 자체가 전부 실패한 경우만 비제로 종료.
