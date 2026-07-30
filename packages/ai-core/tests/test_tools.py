@@ -496,6 +496,31 @@ async def test_search_facility_graph_builds_card(settings: AiCoreSettings) -> No
     assert "패킹 교체" in result.card.quote
 
 
+async def test_search_facility_graph_card_shows_causal_chain(settings: AiCoreSettings) -> None:
+    # G1a 다단계 인과 — causal_chain이 채워지면 카드 quote에 선행원인 연쇄가 노출돼야 한다.
+    hits = [IncidentHit(pg_id="i1", symptom="진동 재발", score=0.9)]
+    contexts = [
+        IncidentContext(
+            incident_id="i1",
+            symptom="진동 재발",
+            facility_name="지하펌프",
+            facility_status="fault",
+            recent_work=(),
+            causal_chain=("베어링 마모", "윤활유 부족"),
+        )
+    ]
+    result = (
+        await execute_tool(
+            _call("search_facility_graph", {"query": "진동"}),
+            ctx=CTX_MANAGER,
+            deps=_deps(settings, graph=FakeGraph(hits, contexts)),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    assert "선행원인: 베어링 마모 ← 윤활유 부족" in result.card.quote
+
+
 async def test_search_facility_graph_without_graph_returns_note(settings: AiCoreSettings) -> None:
     # 그래프 미가용이면 스펙에서 빠지지만, 직접 호출 방어도 확인(graph_available=False).
     registry = default_registry()

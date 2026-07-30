@@ -112,8 +112,11 @@ def _graph_quote(hits: list[IncidentHit], contexts: list[IncidentContext]) -> st
         facility = (
             f"{c.facility_name}({c.facility_status})" if c and c.facility_name else "시설미상"
         )
+        # 다단계 인과(G1a) — expand가 causal_chain을 채우면 카드에 노출한다(trace_quote 표기 일관).
+        # 없으면 생략(하위호환).
+        chain = f" · 선행원인: {' ← '.join(c.causal_chain)}" if c and c.causal_chain else ""
         work = f" · 최근정비: {', '.join(c.recent_work)}" if c and c.recent_work else ""
-        lines.append(f"{facility} 증상: {hit.symptom}{work}")
+        lines.append(f"{facility} 증상: {hit.symptom}{chain}{work}")
     return " / ".join(lines)
 
 
