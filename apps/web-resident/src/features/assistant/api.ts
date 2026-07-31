@@ -13,6 +13,12 @@ export interface Citation {
   quote: string;
   page: number | null;
   clause: string | null;
+  /**
+   * 도구 결과의 구조화 페이로드(ADR-0025 §6). 문서 인용은 항상 null.
+   * 서버가 확정한 값이지만 와이어에서 온 JSON 이라 여기서는 좁히지 않는다 —
+   * `structured.ts` 의 `toStructured` 가 kind 별로 검사해 좁힌다(모르는 kind 는 무시).
+   */
+  data: unknown;
 }
 
 export interface DoneResult {
@@ -34,10 +40,16 @@ export interface DoneResult {
    * (`search_similar_inquiries` 포함 → 접수 CTA 렌더, ADR-0024).
    */
   toolPath: string[];
+  /**
+   * 맥락 기반 다음 행동 제안 최대 3개(ADR-0025 §7 — 코드 규칙 생성, LLM 미개입).
+   * 비어 있으면 칩을 렌더하지 않는다.
+   */
+  suggestions: string[];
 }
 
 export type AssistantEvent =
-  | { type: "status"; stage: Stage }
+  /** `tool` = 지금 실행 중인 도구 이름. 도구 없는 단계(첫 searching·generating·verifying)는 null. */
+  | { type: "status"; stage: Stage; tool: string | null }
   | { type: "token"; text: string }
   | { type: "citation"; citation: Citation }
   | { type: "done"; result: DoneResult };
@@ -76,7 +88,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
     const d = JSON.parse(frame.data);
     switch (frame.event) {
       case "status":
-        return { type: "status", stage: d.stage };
+        return { type: "status", stage: d.stage, tool: d.tool ?? null };
       case "token":
         return { type: "token", text: d.text };
       case "citation":
@@ -89,6 +101,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
             quote: d.quote,
             page: d.page ?? null,
             clause: d.clause ?? null,
+            data: d.data ?? null,
           },
         };
       case "done":
@@ -103,6 +116,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
             fallbackReason: d.fallback_reason ?? null,
             answer: d.answer ?? null,
             toolPath: d.tool_path ?? [],
+            suggestions: d.suggestions ?? [],
           },
         };
       default:

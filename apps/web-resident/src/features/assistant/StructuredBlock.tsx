@@ -1,0 +1,156 @@
+"use client";
+
+/**
+ * 구조화 블록 렌더러 (H18-3 ②) — `citation.data.kind` 별 표·목록·상태 카드.
+ *
+ * `packages/ui` 가 아니라 여기에 두는 이유: 이 블록들의 형태는 어시스턴트 SSE 도구 페이로드
+ * 계약(ADR-0025 §6) 그 자체라 다른 화면에서 쓸 수 있는 모양이 아니고, 소비자도 하나뿐이다.
+ * 두 번째 소비자가 생기면 그때 올린다(YAGNI). 스타일은 assistant.css 의 토큰만 쓴다.
+ *
+ * 값은 서버가 확정한 것을 **그대로** 뿌린다. 프론트에서 하는 계산은 천단위 구분 표기뿐이다.
+ */
+
+import type {
+  FacilityStatusData,
+  FeeTableData,
+  InquiryCasesData,
+  ParkingSpotsData,
+  StructuredData,
+} from "./structured";
+
+/** 금액 표기 — 값 자체는 서버 것 그대로, 자릿수 구분만 붙인다. */
+const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;
+
+export function StructuredBlock({ data }: { data: StructuredData }) {
+  switch (data.kind) {
+    case "fee_table":
+      return <FeeTable data={data} />;
+    case "parking_spots":
+      return <ParkingSpots data={data} />;
+    case "facility_status":
+      return <FacilityStatus data={data} />;
+    case "inquiry_cases":
+      return <InquiryCases data={data} />;
+  }
+}
+
+function FeeTable({ data }: { data: FeeTableData }) {
+  if (data.rows.length === 0) return null;
+  // 증감은 색만으로 전하지 않는다 — "늘었어요/줄었어요"를 글자로 함께 쓴다(WCAG 1.4.1).
+  const trend =
+    data.diff === null ? null : data.diff >= 0 ? "늘었어요" : "줄었어요";
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">{data.period} 관리비 내역</figcaption>
+      {/* 375px 에서 표가 넘치면 이 컨테이너 안에서만 가로 스크롤된다. */}
+      <div className="sb__scroll" tabIndex={0} role="group" aria-label="관리비 항목 표">
+        <table className="sb__table">
+          <thead>
+            <tr>
+              <th scope="col">항목</th>
+              <th scope="col" className="sb__num">
+                금액
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((row) => (
+              <tr key={row.name}>
+                <th scope="row">{row.name}</th>
+                <td className="sb__num">{won(row.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">합계</th>
+              <td className="sb__num">{won(data.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      {data.prevTotal !== null && data.diff !== null ? (
+        <p className="sb__note">
+          전월 {won(data.prevTotal)} 대비 {won(Math.abs(data.diff))} {trend}
+        </p>
+      ) : null}
+    </figure>
+  );
+}
+
+function ParkingSpots({ data }: { data: ParkingSpotsData }) {
+  if (data.spots.length === 0) return null;
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">가까운 빈자리</figcaption>
+      <ol className="sb__list">
+        {data.spots.map((spot, i) => (
+          <li key={spot.no} className="sb__item">
+            <span className="sb__rank" aria-hidden="true">
+              {i + 1}
+            </span>
+            <span className="sb__item-main">
+              <strong>{spot.no}면</strong>
+              <span className="sb__item-sub">{spot.kind}</span>
+            </span>
+            <span className="sb__item-side">약 {spot.distanceM}m</span>
+          </li>
+        ))}
+      </ol>
+    </figure>
+  );
+}
+
+function FacilityStatus({ data }: { data: FacilityStatusData }) {
+  if (data.total === 0) return null;
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">시설 현황 (총 {data.total}대)</figcaption>
+      <ul className="sb__counts">
+        {data.statusCounts.map(({ status, count }) => (
+          <li key={status} className="sb__count">
+            {/* 상태는 글자로 쓴다 — 색·아이콘 단독 전달 금지(WCAG 1.4.1). */}
+            <span className="sb__count-label">{status}</span>
+            <span className="sb__count-value">{count}대</span>
+          </li>
+        ))}
+      </ul>
+      {data.items.length > 0 ? (
+        <ul className="sb__list">
+          {data.items.map((item) => (
+            <li key={item.code ?? item.name} className="sb__item">
+              <span className="sb__item-main">
+                <strong>{item.name}</strong>
+                {item.code ? <span className="sb__item-sub">{item.code}</span> : null}
+              </span>
+              <span className="sb__item-side">{item.status}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </figure>
+  );
+}
+
+function InquiryCases({ data }: { data: InquiryCasesData }) {
+  if (data.cases.length === 0) return null;
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">비슷한 민원 {data.cases.length}건</figcaption>
+      <ul className="sb__list">
+        {data.cases.map((c) => (
+          <li key={c.title} className="sb__case">
+            <span className="sb__case-head">
+              <strong>{c.title}</strong>
+              <span className="sb__item-sub">
+                {c.category} · {c.status}
+                {c.isMine ? " · 내 접수" : ""}
+              </span>
+            </span>
+            <span className="sb__case-body">{c.resolution}</span>
+          </li>
+        ))}
+      </ul>
+    </figure>
+  );
+}

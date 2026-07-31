@@ -137,10 +137,23 @@
   margin: 0;
 }
 
-/* 되묻기 — 답변이 아니라 되던지는 질문이라 강조 테두리로 구분한다(색 단독 전달 아님:
-   본문이 물음표로 끝나고 안내 문구가 함께 붙는다). */
+/* 되묻기 — 답변이 아니라 되던지는 질문이라 강조 테두리로 구분한다. 색 단독 전달이 아니다:
+   "확인이 필요해요" 라벨과 안내 문구가 글자로 같은 뜻을 전한다. */
 .bubble-ai--clarify {
   border-left: 3px solid var(--color-accent);
+}
+.clarify__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.clarify__question {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 .caret {
@@ -171,9 +184,265 @@
   color: var(--color-text-muted);
 }
 
+/* 스트리밍 진행 표시 — 점이 뛰는 것만으로 전하지 않는다(문구가 항상 함께 있다). */
+.ai-row__pulse {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: liviq-blink 1s infinite;
+}
+
 .ai-row__review-note {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+/* ===== 답변 과정(접이식, 기본 접힘) — H18-3 ① ===== */
+.ai-steps {
+  align-self: flex-start;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.ai-steps__summary {
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  list-style-position: inside;
+}
+.ai-steps__summary:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-text);
+}
+.ai-steps__summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ai-steps__list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* ===== 출처 우선 배치 — H18-3 ③ ===== */
+.ai-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.ai-sources__label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+}
+/* 카드를 세로로 쌓으면 답변이 화면 밖으로 밀린다 — 한 줄로 눕히고 넘치면 가로 스크롤.
+   키보드로도 스크롤할 수 있도록 tabIndex 를 주고 포커스 링을 남긴다. */
+.ai-sources__strip {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  scroll-snap-type: x proximity;
+}
+.ai-sources__strip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.ai-sources__card {
+  flex: none;
+  max-width: 15rem;
+  scroll-snap-align: start;
+}
+
+/* ===== 후속 질문 칩 — H18-3 ④ ===== */
+.ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-self: flex-start;
+}
+.ai-chip {
+  min-height: 36px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out);
+}
+.ai-chip::before {
+  content: "＋ ";
+  color: var(--color-accent);
+}
+.ai-chip:hover {
+  background: var(--color-citation);
+}
+.ai-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ===== 구조화 블록(.sb) — H18-3 ② ===== */
+.sb {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+  padding: var(--space-3);
+}
+.sb__caption {
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.sb__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+/* 375px 에서 표가 넘쳐도 페이지가 아니라 이 안에서만 스크롤된다. */
+.sb__scroll {
+  overflow-x: auto;
+}
+.sb__scroll:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.sb__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.sb__table th,
+.sb__table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  white-space: nowrap;
+}
+.sb__table thead th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-border);
+}
+.sb__table tbody tr + tr th,
+.sb__table tbody tr + tr td {
+  border-top: 1px solid var(--color-border);
+}
+.sb__table tbody th {
+  font-weight: 400;
+}
+.sb__table tfoot th,
+.sb__table tfoot td {
+  border-top: 2px solid var(--color-border-strong);
+  font-weight: 700;
+}
+.sb__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sb__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sb__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+}
+.sb__rank {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sb__item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.sb__item-sub {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.sb__item-side {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sb__counts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.sb__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-xs);
+}
+.sb__count-label {
+  color: var(--color-text-muted);
+}
+.sb__count-value {
+  font-weight: 700;
+}
+
+.sb__case {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+}
+.sb__case-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sb__case-body {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
 }
 
 /* 답변 CTA(민원 접수·주차위치) — 세로 flex 안에서 폭을 늘리지 않고 내용만큼만 차지.

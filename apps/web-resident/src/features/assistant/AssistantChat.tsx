@@ -10,15 +10,13 @@ import {
   buildParkingHref,
   spotNosFromCitations,
 } from "@/features/parking/links";
-import { answerKind } from "./api";
+import { type Citation, answerKind } from "./api";
+import { progressLabel } from "./progress";
+import { StructuredBlock } from "./StructuredBlock";
+import { structuredBlocks } from "./structured";
+import { visibleSuggestions } from "./suggestions";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
-
-const STAGE_HINT: Record<string, string> = {
-  searching: "출처 문서 찾는 중…",
-  generating: "답변 작성 중…",
-  verifying: "근거 확인 중…",
-};
 
 const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 관리사무소 담당자에게 연결해 드릴게요.";
 
@@ -115,7 +113,12 @@ export function AssistantChat() {
                 {m.text}
               </div>
             ) : (
-              <AiRow key={m.id} message={m} question={questionBefore(messages, i)} />
+              <AiRow
+                key={m.id}
+                message={m}
+                question={questionBefore(messages, i)}
+                onAsk={submit}
+              />
             ),
           )
         )}
@@ -158,9 +161,11 @@ interface AiRowProps {
   message: AiMessage;
   /** 이 답변을 유발한 질문 원문 — 민원 접수 링크 프리필용. */
   question: string;
+  /** 후속 질문 칩 — 칩 문구를 그대로 새 질문으로 보낸다. */
+  onAsk: (question: string) => void;
 }
 
-function AiRow({ message, question }: AiRowProps) {
+function AiRow({ message, question, onAsk }: AiRowProps) {
   const kind = answerKind(message);
   const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
   const composeHref = buildComposeHref(question);
@@ -168,6 +173,15 @@ function AiRow({ message, question }: AiRowProps) {
   // 못 뽑아도 CTA 는 띄운다(면 강조 없이 지도만 — H17-2).
   const isParking = message.result?.toolPath.includes(PARKING_TOOL) ?? false;
   const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
+  const blocks = structuredBlocks(message.citations);
+  // 폴백에는 칩을 달지 않는다 — 담당자 연락처·접수 버튼이 이미 그 자리의 행동이다.
+  const chips =
+    kind === "answered"
+      ? visibleSuggestions(message.result?.suggestions ?? [], {
+          inquiry: isInquiry,
+          parking: isParking,
+        })
+      : [];
 
   return (
     <div className="ai-row">
@@ -177,33 +191,35 @@ function AiRow({ message, question }: AiRowProps) {
       <div className="ai-row__body">
         {kind === "streaming" ? (
           <>
+            <div className="ai-row__hint" role="status">
+              <span className="ai-row__pulse" aria-hidden="true" />
+              {progressLabel(message.stage, message.tool)} 중…
+            </div>
             <div className="bubble-ai">
               {message.text}
               <span className="caret" aria-hidden="true" />
             </div>
-            <div className="ai-row__hint">
-              <span aria-hidden="true">📄</span> {STAGE_HINT[message.stage] ?? "처리 중…"}
-            </div>
           </>
         ) : kind === "clarify" ? (
-          // 되묻기: 출처·신뢰도·피드백을 붙이지 않는다 — 근거 있는 답변이 아니라 질문이다.
+          // 되묻기: 출처·신뢰도·피드백·칩을 붙이지 않는다 — 근거 있는 답변이 아니라 질문이다.
           <div className="bubble-ai bubble-ai--clarify">
-            <p>{message.text}</p>
-            <p className="ai-row__hint">답을 알려주시면 이어서 찾아볼게요.</p>
+            <p className="clarify__label">
+              <span aria-hidden="true">💬</span> 확인이 필요해요
+            </p>
+            <p className="clarify__question">{message.text}</p>
+            <p className="ai-row__hint">아래 입력창에 답해 주시면 이어서 찾아볼게요.</p>
           </div>
         ) : kind === "answered" ? (
           <>
+            {/* 출처 우선(H18-3 ③): 답변 본문보다 근거를 먼저 인지시킨다.
+                과정 → 출처 → 답변 → 데이터 블록 순. */}
+            <ProgressSteps steps={message.steps} />
+            <SourceStrip citations={message.citations} />
             <ConfidenceBadge status={message.result?.needsReview ? "review" : "answered"} />
             <div className="bubble-ai">
               <p>{message.text}</p>
-              {message.citations.map((c) => (
-                <CitationCard
-                  key={c.ref}
-                  title={c.documentTitle}
-                  meta={[c.clause, c.page != null ? `${c.page}p` : null]
-                    .filter(Boolean)
-                    .join(" · ")}
-                />
+              {blocks.map((b) => (
+                <StructuredBlock key={b.ref} data={b.data} />
               ))}
             </div>
             {message.result?.needsReview ? (
@@ -223,19 +239,17 @@ function AiRow({ message, question }: AiRowProps) {
                 ) : null}
               </div>
             ) : null}
+            <SuggestionChips chips={chips} onAsk={onAsk} />
             <FeedbackButtons />
           </>
         ) : (
           <>
+            <ProgressSteps steps={message.steps} />
             <ConfidenceBadge status="handoff" />
             <div className="bubble-ai">
               <p>{message.error ? message.text : fallbackText(message.result?.fallbackReason ?? null)}</p>
               {message.citations.map((c) => (
-                <CitationCard
-                  key={c.ref}
-                  title={c.documentTitle}
-                  meta={[c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ")}
-                />
+                <CitationCard key={c.ref} title={c.documentTitle} meta={citationMeta(c)} />
               ))}
               {/* 연락처 안내는 폴백의 본체라 남긴다. 별도 "담당자 연결" 버튼은 실제로 연결해 줄
                   채널이 없어(전화번호 안내가 전부) 제거했다 — 누르면 아무 일도 없는 버튼이었다. */}
@@ -251,5 +265,70 @@ function AiRow({ message, question }: AiRowProps) {
         )}
       </div>
     </div>
+  );
+}
+
+function citationMeta(c: Citation): string {
+  return [c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ");
+}
+
+/**
+ * 답변 과정 — 기본 접힘. `<details>` 를 쓰는 이유: 키보드 열고 닫기·스크린리더 상태 노출을
+ * 브라우저가 공짜로 해준다(자체 토글 상태·aria-expanded 를 만들 이유가 없다).
+ */
+function ProgressSteps({ steps }: { steps: readonly string[] }) {
+  if (steps.length === 0) return null;
+  return (
+    <details className="ai-steps">
+      <summary className="ai-steps__summary">답변 과정 {steps.length}단계</summary>
+      <ol className="ai-steps__list">
+        {steps.map((step, i) => (
+          <li key={`${i}-${step}`}>{step}</li>
+        ))}
+      </ol>
+    </details>
+  );
+}
+
+/**
+ * 출처 우선 배치(H18-3 ③) — 답변 위 가로 스크롤 한 줄. 카드는 기존 CitationCard 그대로 쓴다
+ * (H17 에서 이미 줄인 것을 다시 키우지 않는다). 375px 에서는 이 줄 안에서만 스크롤된다.
+ */
+function SourceStrip({ citations }: { citations: readonly Citation[] }) {
+  if (citations.length === 0) return null;
+  return (
+    <section className="ai-sources" aria-label={`출처 ${citations.length}건`}>
+      <p className="ai-sources__label">출처 {citations.length}건</p>
+      <div className="ai-sources__strip" tabIndex={0}>
+        {citations.map((c) => (
+          <CitationCard
+            key={c.ref}
+            className="ai-sources__card"
+            title={c.documentTitle}
+            meta={citationMeta(c)}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** 맥락 기반 후속 질문 칩 — 누르면 그 문구로 새 질문을 보낸다. 비면 아무것도 렌더하지 않는다. */
+function SuggestionChips({
+  chips,
+  onAsk,
+}: {
+  chips: readonly string[];
+  onAsk: (question: string) => void;
+}) {
+  if (chips.length === 0) return null;
+  return (
+    <nav className="ai-chips" aria-label="이어서 물어보기">
+      {chips.map((chip) => (
+        <button key={chip} type="button" className="ai-chip" onClick={() => onAsk(chip)}>
+          {chip}
+        </button>
+      ))}
+    </nav>
   );
 }

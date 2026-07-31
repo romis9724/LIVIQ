@@ -46,18 +46,18 @@ describe("parseSseBuffer", () => {
   });
 });
 
-describe("toEvent — done 이벤트", () => {
-  const doneFrame = (payload: Record<string, unknown>) => ({
-    event: "done",
-    data: JSON.stringify({
-      conversation_id: "c1",
-      status: "answered",
-      confidence: 0.9,
-      needs_review: false,
-      ...payload,
-    }),
-  });
+const doneFrame = (payload: Record<string, unknown>) => ({
+  event: "done",
+  data: JSON.stringify({
+    conversation_id: "c1",
+    status: "answered",
+    confidence: 0.9,
+    needs_review: false,
+    ...payload,
+  }),
+});
 
+describe("toEvent — done 이벤트", () => {
   it("tool_path 를 toolPath 로 옮긴다", () => {
     const event = toEvent(doneFrame({ tool_path: ["search_similar_inquiries"] }));
     expect(event?.type).toBe("done");
@@ -75,6 +75,34 @@ describe("toEvent — done 이벤트", () => {
     const event = toEvent(doneFrame({ status: "clarify", answer: "몇 월 관리비인가요?" }));
     expect(event?.type === "done" && event.result.status).toBe("clarify");
     expect(event?.type === "done" && event.result.answer).toBe("몇 월 관리비인가요?");
+  });
+});
+
+describe("toEvent — H18 additive 필드", () => {
+  it("status.tool 을 옮긴다(없으면 null — 구버전 서버 하위호환)", () => {
+    const withTool = toEvent({ event: "status", data: '{"stage":"searching","tool":"get_fees"}' });
+    expect(withTool).toEqual({ type: "status", stage: "searching", tool: "get_fees" });
+    const withoutTool = toEvent({ event: "status", data: '{"stage":"generating"}' });
+    expect(withoutTool).toEqual({ type: "status", stage: "generating", tool: null });
+  });
+
+  it("citation.data 를 그대로 옮긴다(문서 인용은 null)", () => {
+    const tool = toEvent({
+      event: "citation",
+      data: '{"ref":1,"document_title":"관리비","quote":"q","data":{"kind":"fee_table"}}',
+    });
+    expect(tool?.type === "citation" && tool.citation.data).toEqual({ kind: "fee_table" });
+    const doc = toEvent({
+      event: "citation",
+      data: '{"ref":2,"document_id":"d1","document_title":"관리규약","quote":"q"}',
+    });
+    expect(doc?.type === "citation" && doc.citation.data).toBeNull();
+  });
+
+  it("done.suggestions 를 옮긴다(없으면 빈 배열)", () => {
+    const event = toEvent(doneFrame({ suggestions: ["지난달과 비교하기"] }));
+    expect(event?.type === "done" && event.result.suggestions).toEqual(["지난달과 비교하기"]);
+    expect(toEvent(doneFrame({}))).toMatchObject({ result: { suggestions: [] } });
   });
 });
 

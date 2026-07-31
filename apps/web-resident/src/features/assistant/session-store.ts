@@ -9,8 +9,9 @@
 
 import type { ChatMessage } from "./useAssistantStream";
 
-/** 저장 키 — 스키마가 바뀌면 뒤 버전을 올려 옛 값을 자연 폐기한다. */
-export const THREAD_STORAGE_KEY = "liviq.assistant.thread.v1";
+/** 저장 키 — 스키마가 바뀌면 뒤 버전을 올려 옛 값을 자연 폐기한다.
+ *  v2: AI 메시지에 `steps`(진행 단계) 추가 — H18-3. */
+export const THREAD_STORAGE_KEY = "liviq.assistant.thread.v2";
 
 export interface StoredThread {
   messages: ChatMessage[];
@@ -28,8 +29,8 @@ function isChatMessage(value: unknown): value is ChatMessage {
   const m = value as Record<string, unknown>;
   if (typeof m.id !== "string" || typeof m.text !== "string") return false;
   if (m.role === "user") return true;
-  // ai 메시지는 렌더가 citations 배열을 반드시 훑는다 — 없으면 복원 즉시 터진다.
-  return m.role === "ai" && Array.isArray(m.citations);
+  // ai 메시지는 렌더가 citations·steps 배열을 반드시 훑는다 — 없으면 복원 즉시 터진다.
+  return m.role === "ai" && Array.isArray(m.citations) && Array.isArray(m.steps);
 }
 
 /**

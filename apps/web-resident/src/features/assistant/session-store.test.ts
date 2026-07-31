@@ -12,8 +12,10 @@ function ai(overrides: Partial<AiMessage> = {}): AiMessage {
     role: "ai",
     status: "done",
     stage: "verifying",
+    tool: null,
     text: "매주 화요일에 배출합니다.",
     citations: [],
+    steps: ["단지 문서 검색", "답변 작성"],
     ...overrides,
   };
 }
@@ -81,9 +83,15 @@ describe("parseThread", () => {
   });
 
   it("drops entries that would break rendering", () => {
-    // Arrange — 옛 스키마·손댄 값: 역할 불명, citations 없는 ai, 문자열
+    // Arrange — 옛 스키마·손댄 값: 역할 불명, citations/steps 없는 ai, 문자열
     const raw = JSON.stringify({
-      messages: [user(), { id: "x", role: "ai", text: "no citations" }, { role: "bot" }, "oops"],
+      messages: [
+        user(),
+        { id: "x", role: "ai", text: "no citations" },
+        { id: "y", role: "ai", text: "no steps", citations: [] },
+        { role: "bot" },
+        "oops",
+      ],
       conversationId: 42,
     });
 

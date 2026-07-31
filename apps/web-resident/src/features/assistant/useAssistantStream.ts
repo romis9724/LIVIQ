@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Citation, type DoneResult, type Stage, streamAsk } from "./api";
+import { appendProgress } from "./progress";
 import { persistableMessages, readThread, writeThread } from "./session-store";
 
 export interface AiMessage {
@@ -9,8 +10,12 @@ export interface AiMessage {
   role: "ai";
   status: "streaming" | "done";
   stage: Stage;
+  /** 지금 실행 중인 도구 — 스트리밍 중 한 줄 힌트에만 쓴다(끝나면 steps 가 기록). */
+  tool: string | null;
   text: string;
   citations: Citation[];
+  /** 지나온 진행 단계 라벨. 답변 후 접이식 "답변 과정"으로 되짚는다(H18-3 ①). */
+  steps: string[];
   result?: DoneResult;
   error?: boolean;
 }
@@ -77,7 +82,16 @@ export function useAssistantStream() {
       setMessages((prev) => [
         ...prev,
         { id: nextId(), role: "user", text },
-        { id: aiId, role: "ai", status: "streaming", stage: "searching", text: "", citations: [] },
+        {
+          id: aiId,
+          role: "ai",
+          status: "streaming",
+          stage: "searching",
+          tool: null,
+          text: "",
+          citations: [],
+          steps: [],
+        },
       ]);
       setPending(true);
 
@@ -88,7 +102,12 @@ export function useAssistantStream() {
         })) {
           switch (event.type) {
             case "status":
-              updateAi(aiId, (m) => ({ ...m, stage: event.stage }));
+              updateAi(aiId, (m) => ({
+                ...m,
+                stage: event.stage,
+                tool: event.tool,
+                steps: appendProgress(m.steps, event.stage, event.tool),
+              }));
               break;
             case "token":
               updateAi(aiId, (m) => ({ ...m, text: m.text + event.text }));

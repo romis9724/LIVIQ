@@ -15,6 +15,7 @@ function citation(overrides: Partial<Citation> = {}): Citation {
     quote: "① 012면 (일반, 약 34m)\n② 034면 (전기차, 약 40m)\n(데모 데이터 · 출처: parking_vehicles 점유 현황)",
     page: null,
     clause: null,
+    data: null,
     ...overrides,
   };
 }
