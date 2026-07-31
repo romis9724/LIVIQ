@@ -659,6 +659,24 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H17-1 | 민원 트리아지 도구 + 접수 딥링크 | ①마이그레이션: `CREATE EXTENSION pg_trgm` ②ai-core 도구 `search_similar_inquiries`(RESIDENT — `word_similarity` 정렬, 같은 tenant `done` 건 + 본인 진행중 건, 반환은 제목·카테고리 라벨·담당자 reply 발췌 120자, 상한 5) ③`default_registry` 등록(9→10종) ④web-resident: SSE done의 `tool_path` 파싱 추가 → 도구 호출 or 폴백 시 "민원 접수하기" CTA → `/inquiries?compose=1&title=&body=` ⑤`InquiryCenter` searchParams 프리필(compose=1이면 접수 탭 + 제목·본문 초기값) ⑥골든셋 민원 케이스 + `required_tools` | tenant 격리·본인 외 민원의 작성자·본문 미노출(CRITICAL) + 도구 라우팅 회귀(골든셋 pass·라우팅률 기존 범위 내) + 게이트 그린 + 시각 실측 | ✅ 완료 — 마이그레이션 `c6d7e8f9a0b1`(pg_trgm). 도구 SQL은 `is_mine` 불리언만 내보내고 작성자·본문·동호수는 SELECT 자체를 안 한다(테스트가 SQL 문자열도 단언). **로컬 라우팅 실측(단발, ollama 8B)으로 초안 2개를 되돌렸다**: 도구 설명이 정확히 반대로 갈려(신고→평면도, "내 민원"→유사검색) 설명 앞머리를 증상 신고로 재작성, 임계 0.3→0.5(0.385짜리 무관 사례가 붙어 모델이 옳게 NO_EVIDENCE를 냄). 결과 신고 3건 중 도구 선택 2·answered 1, 경계 케이스 정정 2회 재현. 폴백 경로에도 접수 CTA가 떠 "접수 연결"은 라우팅과 무관하게 동작. 상세는 [ADR-0024 §실측](adr/0024-assistant-inquiry-triage.md). 골든셋 케이스 9건(IQ-01~09)은 draft·리졸버까지 완료 — **dev에서 `gen` 재생성 후 반복 측정은 후속**(로컬 gen은 문서 UUID가 달라 기존 라벨을 오염시킴). 부수 수정: `evals/adapter.mjs` READ_TOOLS에 누락돼 있던 읽기 도구 3종(H13·H15-4 누적) — 안전게이트 위양성 경로였다. 테스트 ai-core 229·db 171·web-resident 142 |
 | H17-2 | 입주민 주차맵 | ①API `GET /parking/map`(RESIDENT — layout + 면별 점유 여부 **불리언만** + 본인 세대 차량의 `spot_no`·`entry_at`. 타 세대 번호판·동호수 미포함) ②`ParkingMap` 2D를 `@liviq/ui`로 승격(FloorPlanViewer 선례 — 면 상태·툴팁을 props로 일반화, admin은 어댑터로 기존 표시 유지) ③web-resident `/parking` 화면(빈/점유·본인 차 위치·추천 면 강조, `?spot=` 딥링크로 포커스) ④어시스턴트 답변의 `find_nearest_available_parking` 결과에 "주차위치 보기" CTA → `/parking?spot=<면번호>` | 타 세대 차량정보 미노출(CRITICAL) + RESIDENT 인가·tenant 격리 + admin 주차뷰 회귀 없음 + 게이트 그린 + 2D 맵 시각 실측(375px 포함) | ✅ 완료 — `GET /parking/map`(RESIDENT)은 `occupied_spot_nos`(불리언 성격의 면 번호 목록)와 본인 세대 `spot_no`·`entry_at`만 낸다 — 번호판·동호수·세대 식별자·입주민/외부 구분은 **스키마에 필드 자체가 없다**(복호 경로 없음 → 감사 로그 불필요). `ParkingMap`을 `@liviq/ui`로 승격(admin은 330→69줄 어댑터, 툴팁·dim 판정은 앱 책임 — ui는 PII를 모른다). 입주민 화면은 폭 ~430px라 볼 면이 정해진 진입은 3× 확대로 열고 포커스(`initialZoom`). 면 번호는 도구 카드 quote에서만 파싱한다(모델이 본문에 쓴 숫자는 근거가 아님). 시각 실측: "빈자리 186면 / 전체 442면"·"내 차: 208면 · 8시간 33분 전 입차"·`?spot=012,034` 보라 점선 강조·admin 툴팁(번호판·동호수) 회귀 없음. 테스트 api 483·ui 50·web-admin 362·web-resident 153. 부수 수정: `parseViewBox("")`가 `[NaN,0,0,0]`을 반환하던 기존 버그, 프론트 `Citation.documentId` 타입이 서버(도구 카드 null)와 어긋나던 것 |
 
+### 8.21 H18 체크리스트 (에이전트 심화 — 계획·멀티턴·되묻기·구조화 응답)
+
+> 근거: 사용자 평가(2026-08-01) — "답이 단조롭다. 에이전트가 아니라 단순 챗봇 같다. 다른 에이전트
+> UI/UX를 참고해 디자인하고, 프롬프트·실행 설계도 다시 하라."
+> 인터뷰 확정: 실행 구조는 **직접 구현 유지 + 계획 단계**(LangChain·LangGraph 미도입) · 멀티턴
+> 컨텍스트와 **명확화 되묻기 둘 다** · 응답은 구조화 블록·맥락 기반 다음 행동·도구 과정 노출·길이
+> 완화 · UI 레퍼런스는 **Perplexity 계열**(출처 우선·단계 표시·후속 질문). 상세: [ADR-0025](adr/0025-agent-depth-plan-clarify-structured.md).
+> **불변**: 마스킹 fail-closed(규칙 2)는 히스토리에도 적용 · 화면 숫자는 도구 확정값 그대로(규칙 5·8 —
+> LLM이 표를 재작성하지 않음) · 근거 없는 답변 금지(규칙 1, 되묻기는 저촉 아님) · SSE는 **4종 유지**,
+> 필드만 additive 확장.
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H18-1 | 대화 컨텍스트 + 되묻기 | ①`answer_question(question, history=...)` — 직전 3턴 답변 본문만(턴당 400자 상한), 도구 결정·최종 답변 turn 양쪽에 주입, `ensure_masked` 통과 ②히스토리 있으면 답변 캐시 우회 ③특수 도구 `ask_clarification` — 실행 대신 `DoneEvent(status="clarify")`로 즉시 되묻고 종료, 직전 턴이 clarify면 스펙에서 제외(연속 금지) ④api가 대화 히스토리를 로드해 전달 ⑤web-resident가 `clarify` 상태를 되묻기 말풍선으로 렌더 | 히스토리 마스킹(CRITICAL) + 연속 되묻기 차단 + 캐시 우회 + 멀티턴 골든셋 케이스 + 게이트 그린 | ⏳ |
+| H18-2 | 계획 turn + 구조화 응답 | ①루프에서 **무-도구 turn을 계획으로 재해석**(1회 한정), `MAX_TOOL_STEPS` 3→4, `AGENT_SYSTEM_PROMPT`에 계획 지시 ②`ToolCard.data` 추가 — 관리비 항목표·주차 자리목록·시설 상태를 구조화 페이로드로(LLM은 재작성하지 않음) ③SSE additive: `status.tool`·`citation.data`·`done.suggestions`·`done.status="clarify"` ④다음 행동 제안은 `tool_path` 기반 **코드 규칙**(LLM 호출 0) ⑤`packages/api-types` 재생성 | 무한 루프 없음(계획 1회 상한) + 숫자 재작성 0(도구 값과 화면 값 일치 테스트) + 기존 SSE 소비자 하위호환 + 게이트 그린 | ⏳ |
+| H18-3 | Perplexity형 응답 UI | ①답변 상단 출처 우선 배치·단계 표시(어떤 도구를 왜 썼는지 접이식) ②구조화 블록 렌더러(표·목록·상태 카드) ③맥락 기반 후속 질문 칩(고정 추천 아님) ④되묻기 UI ⑤375px·다크 대비·키보드 접근 | 시각 실측(375px 포함) + a11y(색 단독 전달 금지·포커스) + 기존 화면 회귀 없음 | ⏳ |
+| H18-4 | 프롬프트 재설계 + 측정 | ①`ANSWER_SYSTEM_PROMPT` 길이 지시 → 형식 지시로 교체(인용·NO_EVIDENCE 규칙 불변) ②`AGENT_SYSTEM_PROMPT` 계획·되묻기 지시 ③골든셋에 멀티턴·되묻기 케이스 신설 ④dev 3회 측정 — 인용률·도구 선택·되묻기 오남용률 | R29 대비 인용·도구 선택 회귀 없음 + 되묻기 오남용(단순 질의에 clarify) 10% 미만 + 측정 기록 | ⏳ |
+
 ## 9. 정의: "완료(Done)"
 
 
