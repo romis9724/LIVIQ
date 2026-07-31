@@ -62,3 +62,8 @@ no_implicit_optional = true
 # pgvector·testcontainers·boto3·fakeredis·openpyxl은 타입 스텁을 배포하지 않음
 module = ["pgvector.*", "testcontainers.*", "boto3.*", "fakeredis.*", "openpyxl.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# apps/api 테스트가 scripts/를 sys.path로 직접 import하는 관행 — 패키지가 아니라 스텁이 없다
+module = ["data.*", "seed_parking", "graph_seed", "floor_plan_annotations", "graph_overlap_doc"]
+ignore_missing_imports = true

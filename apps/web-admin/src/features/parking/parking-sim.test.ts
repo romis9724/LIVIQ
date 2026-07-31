@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { ParkingCore, ParkingSpot, ParkingVehicle } from "@/lib/api";
+import type { ParkingSpot, ParkingVehicle } from "@/lib/api";
 import {
-  OCCUPANCY_RATE,
-  SIM_SEED,
+  EXTERNAL_GROUP,
   elapsedText,
-  makeRand,
-  simulateParking,
+  matchesGroup,
+  occupancyFromVehicles,
   summarize,
 } from "./parking-sim";
 
 const NOW_MS = Date.parse("2026-07-25T12:00:00Z");
+const ENTRY_AT = "2026-07-25T09:30:00Z";
 const SPOT_PITCH = 36;
 
 /** 테스트 배치 — 한 줄에 n면, 기본은 전부 일반면. */
@@ -24,152 +24,131 @@ function makeSpots(n: number, override: Partial<Record<number, Partial<ParkingSp
   }));
 }
 
-const CORES: ParkingCore[] = [
-  { name: "401동", x: 200, y: 100, w: 72, h: 128 },
-  { name: "402동", x: 900, y: 100, w: 72, h: 128 },
-];
-
-function makeVehicles(n: number, everyEv = 0): ParkingVehicle[] {
-  return Array.from({ length: n }, (_, i) => ({
-    id: `veh-${i}`,
-    householdId: `hh-${i}`,
-    dong: i % 2 === 0 ? "401동" : "402동",
-    ho: `${100 + i}호`,
-    plate: `${10 + i}가${1000 + i}`,
+function vehicle(overrides: Partial<ParkingVehicle> = {}): ParkingVehicle {
+  return {
+    id: "veh-1",
+    householdId: "hh-1",
+    dong: "401동",
+    ho: "101호",
+    plate: "12가3456",
     model: "아이오닉5",
-    isEv: everyEv > 0 && i % everyEv === 0,
-  }));
+    isEv: false,
+    spotNo: "001",
+    entryAt: ENTRY_AT,
+    external: false,
+    ...overrides,
+  };
 }
 
-describe("makeRand", () => {
-  it("returns the same sequence for the same seed", () => {
-    const a = makeRand(SIM_SEED);
-    const b = makeRand(SIM_SEED);
-    const seqA = [a(), a(), a(), a()];
-    const seqB = [b(), b(), b(), b()];
+/** 입주민 n대 — 면 001부터 순서대로 주차. */
+function parkedResidents(n: number): ParkingVehicle[] {
+  return Array.from({ length: n }, (_, i) =>
+    vehicle({
+      id: `veh-${i}`,
+      householdId: `hh-${i}`,
+      dong: i % 2 === 0 ? "401동" : "402동",
+      ho: `${100 + i}호`,
+      plate: `${10 + i}가${1000 + i}`,
+      spotNo: String(i + 1).padStart(3, "0"),
+    }),
+  );
+}
 
-    expect(seqA).toEqual(seqB);
-    expect(seqA.every((v) => v >= 0 && v < 1)).toBe(true);
-  });
+describe("occupancyFromVehicles", () => {
+  it("indexes parked vehicles by spot number", () => {
+    // Arrange
+    const vehicles = parkedResidents(3);
 
-  it("returns a different sequence for a different seed", () => {
-    expect(makeRand(1)()).not.toBe(makeRand(2)());
-  });
-});
+    // Act
+    const { bySpot, occupied } = occupancyFromVehicles(vehicles);
 
-describe("simulateParking", () => {
-  it("produces identical occupancy for the same seed and inputs", () => {
-    const spots = makeSpots(60);
-    const vehicles = makeVehicles(30);
-
-    const first = simulateParking(spots, CORES, vehicles, SIM_SEED, NOW_MS);
-    const second = simulateParking(spots, CORES, vehicles, SIM_SEED, NOW_MS);
-
-    expect([...second.bySpot.entries()]).toEqual([...first.bySpot.entries()]);
-    expect([...second.occupied]).toEqual([...first.occupied]);
-  });
-
-  it("parks roughly the configured occupancy rate of resident vehicles", () => {
-    const spots = makeSpots(400);
-    const vehicles = makeVehicles(200);
-
-    const { bySpot } = simulateParking(spots, CORES, vehicles, SIM_SEED, NOW_MS);
-    const residents = [...bySpot.values()].filter((car) => !car.external);
-
-    // 재실률 75% ±10%p — 시드 고정이라 결정적이지만 구현 세부에 과하게 묶지 않는다.
-    const rate = residents.length / vehicles.length;
-    expect(rate).toBeGreaterThan(OCCUPANCY_RATE - 0.1);
-    expect(rate).toBeLessThan(OCCUPANCY_RATE + 0.1);
-  });
-
-  it("never assigns accessible spots and reserves EV spots for EV vehicles", () => {
-    const spots = makeSpots(40, {
-      0: { kind: "장애인" },
-      1: { kind: "장애인" },
-      2: { kind: "전기차" },
-      3: { kind: "전기차" },
+    // Assert
+    expect([...bySpot.keys()]).toEqual(["001", "002", "003"]);
+    expect([...occupied]).toEqual(["001", "002", "003"]);
+    expect(bySpot.get("002")).toEqual({
+      plate: "11가1001",
+      dong: "402동",
+      ho: "101호",
+      model: "아이오닉5",
+      external: false,
+      entryMs: Date.parse(ENTRY_AT),
     });
-    const vehicles = makeVehicles(30); // EV 없음
-
-    const { bySpot } = simulateParking(spots, CORES, vehicles, SIM_SEED, NOW_MS);
-
-    expect(bySpot.has("001")).toBe(false);
-    expect(bySpot.has("002")).toBe(false);
-    expect(bySpot.has("003")).toBe(false);
-    expect(bySpot.has("004")).toBe(false);
   });
 
-  it("allows EV vehicles on EV spots", () => {
-    // 전기차면만 있는 배치 — EV 차량이면 배정되고, 비-EV 차량이면 한 대도 못 세운다.
-    const spots = makeSpots(6, {
-      0: { kind: "전기차" },
-      1: { kind: "전기차" },
-      2: { kind: "전기차" },
-      3: { kind: "전기차" },
-      4: { kind: "전기차" },
-      5: { kind: "전기차" },
+  it("excludes vehicles without a spot (registered but not parked)", () => {
+    // Arrange
+    const vehicles = [vehicle({ spotNo: null, entryAt: null }), vehicle({ id: "veh-2" })];
+
+    // Act
+    const { bySpot } = occupancyFromVehicles(vehicles);
+
+    // Assert
+    expect(bySpot.size).toBe(1);
+    expect(bySpot.has("001")).toBe(true);
+  });
+
+  it("maps external vehicles without household labels", () => {
+    // Arrange
+    const external = vehicle({
+      id: "veh-ext",
+      householdId: null,
+      dong: null,
+      ho: null,
+      model: null,
+      external: true,
+      spotNo: "010",
     });
 
-    const evSim = simulateParking(spots, CORES, makeVehicles(6, 1), SIM_SEED, NOW_MS);
-    const gasSim = simulateParking(spots, CORES, makeVehicles(6), SIM_SEED, NOW_MS);
+    // Act
+    const car = occupancyFromVehicles([external]).bySpot.get("010");
 
-    expect([...evSim.bySpot.values()].filter((car) => !car.external).length).toBeGreaterThan(0);
-    expect([...gasSim.bySpot.values()].filter((car) => !car.external)).toHaveLength(0);
+    // Assert
+    expect(car).toMatchObject({ external: true, dong: null, ho: null, model: null });
   });
 
-  it("adds 8 external cars with plates that never collide", () => {
-    const spots = makeSpots(200);
-    const vehicles = makeVehicles(50);
+  it("falls back to entryMs 0 when entryAt is missing or unparseable", () => {
+    // Arrange
+    const vehicles = [
+      vehicle({ id: "veh-1", spotNo: "001", entryAt: null }),
+      vehicle({ id: "veh-2", spotNo: "002", entryAt: "not-a-date" }),
+    ];
 
-    const { bySpot } = simulateParking(spots, CORES, vehicles, SIM_SEED, NOW_MS);
-    const externals = [...bySpot.values()].filter((car) => car.external);
-    const plates = [...bySpot.values()].map((car) => car.plate);
-    const residentPlates = new Set(vehicles.map((v) => v.plate));
+    // Act
+    const { bySpot } = occupancyFromVehicles(vehicles);
 
-    expect(externals).toHaveLength(8);
-    expect(new Set(plates).size).toBe(plates.length);
-    expect(externals.some((car) => residentPlates.has(car.plate))).toBe(false);
-    // 외부 차량은 세대 정보가 없다(입주민 DB 미등록).
-    expect(externals.every((car) => car.dong === null && car.ho === null)).toBe(true);
+    // Assert
+    expect(bySpot.get("001")?.entryMs).toBe(0);
+    expect(bySpot.get("002")?.entryMs).toBe(0);
   });
 
-  it("keeps entry times in the past relative to nowMs", () => {
-    const { bySpot } = simulateParking(makeSpots(120), CORES, makeVehicles(40), SIM_SEED, NOW_MS);
+  it("keeps the last vehicle when two share a spot (DB partial unique should prevent it)", () => {
+    // Arrange
+    const vehicles = [
+      vehicle({ id: "veh-1", plate: "11가1111", spotNo: "001" }),
+      vehicle({ id: "veh-2", plate: "22나2222", spotNo: "001" }),
+    ];
 
-    expect([...bySpot.values()].every((car) => car.entryMs < NOW_MS)).toBe(true);
+    // Act
+    const { bySpot, occupied } = occupancyFromVehicles(vehicles);
+
+    // Assert
+    expect(bySpot.size).toBe(1);
+    expect(occupied.size).toBe(1);
+    expect(bySpot.get("001")?.plate).toBe("22나2222");
   });
 
-  it("stops assigning when spots run out", () => {
-    const spots = makeSpots(5);
-
-    const { bySpot, occupied } = simulateParking(spots, CORES, makeVehicles(50), SIM_SEED, NOW_MS);
-
-    expect(bySpot.size).toBeLessThanOrEqual(spots.length);
-    expect(occupied.size).toBe(bySpot.size);
-  });
-
-  it("prefers spots near the vehicle's own building core", () => {
-    // 401동 코어(x≈236)와 402동 코어(x≈936) 사이에 넓게 면을 깔고 401동 차량만 세운다.
-    const spots = makeSpots(60);
-    const vehicles = makeVehicles(8).map((v) => ({ ...v, dong: "401동" }));
-
-    const { bySpot } = simulateParking(spots, [CORES[0]!], vehicles, SIM_SEED, NOW_MS, 1);
-    const xs = [...bySpot.keys()]
-      .map((no) => spots.find((sp) => sp.no === no))
-      .filter((sp): sp is ParkingSpot => sp !== undefined)
-      .filter((sp) => !bySpot.get(sp.no)?.external)
-      .map((sp) => sp.x);
-
-    // 코어(x 236) 근처에 몰려야 한다 — 평균이 배치 중앙(x≈1160)보다 훨씬 왼쪽.
-    const mean = xs.reduce((sum, x) => sum + x, 0) / xs.length;
-    expect(mean).toBeLessThan(700);
+  it("returns an empty occupancy for no vehicles", () => {
+    expect(occupancyFromVehicles([]).bySpot.size).toBe(0);
   });
 });
 
 describe("summarize", () => {
   it("keeps counts consistent (resident+external=occupied, occupied+empty=total)", () => {
     const spots = makeSpots(120);
-    const { bySpot } = simulateParking(spots, CORES, makeVehicles(40), SIM_SEED, NOW_MS);
+    const { bySpot } = occupancyFromVehicles([
+      ...parkedResidents(40),
+      vehicle({ id: "ext-1", external: true, dong: null, ho: null, spotNo: "100" }),
+    ]);
 
     const counts = summarize(spots, bySpot);
 
@@ -181,11 +160,15 @@ describe("summarize", () => {
 
   it("counts resident cars per building and excludes external cars", () => {
     const spots = makeSpots(40);
-    const { bySpot } = simulateParking(spots, CORES, makeVehicles(20), SIM_SEED, NOW_MS);
+    const { bySpot } = occupancyFromVehicles([
+      ...parkedResidents(20),
+      vehicle({ id: "ext-1", external: true, dong: null, ho: null, spotNo: "030" }),
+    ]);
 
     const counts = summarize(spots, bySpot);
     const byDongTotal = Object.values(counts.byDong).reduce((sum, n) => sum + n, 0);
 
+    expect(counts.external).toBe(1);
     expect(byDongTotal).toBe(counts.resident);
     expect(Object.keys(counts.byDong).sort()).toEqual(["401동", "402동"]);
   });
@@ -199,6 +182,30 @@ describe("summarize", () => {
       empty: 0,
       byDong: {},
     });
+  });
+});
+
+describe("matchesGroup", () => {
+  it("matches resident cars by building name", () => {
+    const car = occupancyFromVehicles([vehicle()]).bySpot.get("001");
+
+    expect(matchesGroup(car, "401동")).toBe(true);
+    expect(matchesGroup(car, "402동")).toBe(false);
+    expect(matchesGroup(car, EXTERNAL_GROUP)).toBe(false);
+  });
+
+  it("matches external cars only on the external group", () => {
+    const car = occupancyFromVehicles([
+      vehicle({ external: true, dong: null, ho: null }),
+    ]).bySpot.get("001");
+
+    expect(matchesGroup(car, EXTERNAL_GROUP)).toBe(true);
+    expect(matchesGroup(car, "401동")).toBe(false);
+  });
+
+  it("never matches an empty spot", () => {
+    expect(matchesGroup(undefined, "401동")).toBe(false);
+    expect(matchesGroup(undefined, EXTERNAL_GROUP)).toBe(false);
   });
 });
 

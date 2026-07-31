@@ -1,13 +1,14 @@
-"""주차장 대시보드 통합 — 실 PG (H9-5).
+"""주차장 대시보드 통합 — 실 PG (H9-5 · 점유 H16).
 
-배치도 조회(미적재 시 null)·차량 목록(동·호 표시 포맷·정렬)·인가 매트릭스(STAFF·RESIDENT 403)·
-tenant 격리(타 단지 미노출)·차량번호 봉투 암호화 왕복(plate_enc는 암호문, 응답은 복호 평문)을
-본다. 세대·명부는 기존 시드 재사용.
+배치도 조회(미적재 시 null)·차량 목록(동·호 표시 포맷·정렬·점유 필드·외부 차량)·인가 매트릭스
+(STAFF·RESIDENT 403)·tenant 격리(타 단지 미노출)·차량번호 봉투 암호화 왕복(plate_enc는 암호문,
+응답은 복호 평문)을 본다. 세대·명부는 기존 시드 재사용.
 """
 
 from __future__ import annotations
 
 import base64
+import datetime
 import uuid
 from collections.abc import AsyncIterator
 
@@ -59,12 +60,14 @@ async def seeded(db_session: AsyncSession) -> AsyncIterator[tuple[AsyncSession, 
 
 async def _add_vehicle(
     session: AsyncSession,
-    household_id: uuid.UUID,
+    household_id: uuid.UUID | None,
     *,
     plate: str = _PLATE,
     model: str | None = "아이오닉5",
     is_ev: bool = True,
     tenant_id: uuid.UUID = TENANT_ID,
+    spot_no: str | None = None,
+    entry_at: datetime.datetime | None = None,
 ) -> uuid.UUID:
     """차량 직접 적재(운영 경로는 시드 스크립트 — 라우터는 읽기 전용)."""
     crypto = PiiCrypto(_KEK)
@@ -75,6 +78,8 @@ async def _add_vehicle(
         plate_enc=crypto.encrypt(dek, plate),
         model=model,
         is_ev=is_ev,
+        spot_no=spot_no,
+        entry_at=entry_at,
     )
     session.add(row)
     await session.flush()
@@ -128,6 +133,8 @@ async def test_vehicles_dong_ho_format(seeded: tuple) -> None:
     assert item["household_id"] == str(hid)
     assert item["model"] == "아이오닉5"
     assert item["is_ev"] is True
+    assert item["external"] is False
+    assert (item["spot_no"], item["entry_at"]) == (None, None)  # 등록만 되고 미주차
 
 
 async def test_vehicles_sorted_by_dong_ho(seeded: tuple) -> None:
@@ -140,6 +147,34 @@ async def test_vehicles_sorted_by_dong_ho(seeded: tuple) -> None:
         body = (await c.get("/admin/parking/vehicles")).json()
     assert [v["ho"] for v in body["vehicles"]] == ["301호", "302호", "501호"]
     assert body["total"] == 3
+
+
+# ── 점유·외부 차량 (H16) ──────────────────────────────────────────────────────
+
+
+async def test_occupancy_fields_serialized(seeded: tuple) -> None:
+    """spot_no·entry_at은 DB 값 그대로 — 점유의 단일 출처는 DB다(프론트 시뮬 폐기)."""
+    session, mapping = seeded
+    entry_at = datetime.datetime(2026, 7, 31, 3, 20, tzinfo=datetime.UTC)
+    await _add_vehicle(session, mapping[(3, 301)], spot_no="042", entry_at=entry_at)
+    async with _client(session) as c:
+        body = (await c.get("/admin/parking/vehicles")).json()
+    item = body["vehicles"][0]
+    assert item["spot_no"] == "042"
+    assert datetime.datetime.fromisoformat(item["entry_at"]) == entry_at
+
+
+async def test_external_vehicle_listed(seeded: tuple) -> None:
+    """세대 없는 외부 차량도 목록에 나온다(household 조인이 LEFT — H16)."""
+    session, mapping = seeded
+    await _add_vehicle(session, mapping[(3, 301)])
+    await _add_vehicle(session, None, plate="123가4567", model=None, is_ev=False, spot_no="200")
+    async with _client(session) as c:
+        body = (await c.get("/admin/parking/vehicles")).json()
+    assert body["total"] == 2
+    external = next(v for v in body["vehicles"] if v["external"])
+    assert (external["household_id"], external["dong"], external["ho"]) == (None, None, None)
+    assert (external["plate"], external["spot_no"]) == ("123가4567", "200")
 
 
 # ── 차량번호 암호화 (CRITICAL) ────────────────────────────────────────────────

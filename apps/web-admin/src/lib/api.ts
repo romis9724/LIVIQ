@@ -2276,8 +2276,8 @@ export async function getTwinHouseholdDetail(householdId: string): Promise<TwinH
 }
 
 // ── 주차장 대시보드 (H9-5 · MANAGER 전용) ──────────────────────────────────────
-// 지하주차장 2D 배치도. 레이아웃(면·동 footprint)은 시드 데이터, 점유는 클라이언트
-// 시뮬레이션(features/parking/parking-sim — ★ 번호판 인식 API 교체 지점).
+// 지하주차장 2D 배치도. 레이아웃(면·동 footprint)·점유 모두 DB 정본이다 — 점유는
+// parking_vehicles 의 spot_no·entry_at(H16-1, 시드 배정. 입출차 카메라 연동 시 갱신 주체만 교체).
 // plate 는 서버가 복호한 평문 차량번호 — 관리자 세션에만 노출(입주민 앱·LLM 미노출, 규칙 2).
 
 export type ParkingSpotKind = "일반" | "장애인" | "전기차";
@@ -2308,7 +2308,7 @@ export interface ParkingBox {
   h: number;
 }
 
-/** 엘리베이터 코어 — 동별 1개. 시뮬레이션의 "자기 동 근처 선호" 기준점. */
+/** 엘리베이터 코어 — 동별 1개. 배치도 렌더·시드 배정의 "자기 동 근처" 기준점. */
 export interface ParkingCore {
   name: string;
   x: number;
@@ -2325,15 +2325,22 @@ export interface ParkingLayout {
   spots: ParkingSpot[];
 }
 
-/** 입주민 등록 차량. plate 는 복호된 평문(개인정보), dong·ho 는 세대 라벨. */
+/**
+ * 등록 차량 1대. plate 는 복호된 평문(개인정보), dong·ho 는 세대 라벨.
+ * external=true 는 외부 차량 — 세대가 없어 householdId·dong·ho·model 이 전부 null.
+ * spotNo 는 주차 중인 면 번호(ParkingSpot.no 와 매칭), null 이면 등록만 되고 미주차.
+ */
 export interface ParkingVehicle {
   id: string;
-  householdId: string;
-  dong: string;
-  ho: string;
+  householdId: string | null;
+  dong: string | null;
+  ho: string | null;
   plate: string;
   model: string | null;
   isEv: boolean;
+  spotNo: string | null;
+  entryAt: string | null; // ISO8601
+  external: boolean;
 }
 
 interface RawParkingBuilding {
@@ -2352,12 +2359,15 @@ interface RawParkingLayout {
 
 interface RawParkingVehicle {
   id: string;
-  household_id: string;
-  dong: string;
-  ho: string;
+  household_id: string | null;
+  dong: string | null;
+  ho: string | null;
   plate: string;
   model: string | null;
   is_ev: boolean;
+  spot_no: string | null;
+  entry_at: string | null;
+  external: boolean;
 }
 
 /** buildings 는 동명 키 맵 — 렌더 순서를 고정하려고 동명 정렬 배열로 바꾼다. */
@@ -2382,7 +2392,7 @@ export async function getParkingLayout(): Promise<ParkingLayout | null> {
   return body.layout ? toLayout(body.layout as RawParkingLayout) : null;
 }
 
-/** 입주민 등록 차량 목록(plate 복호). 미등록이면 빈 배열. 403=권한 없음. */
+/** 등록 차량 목록(plate 복호 · 입주민+외부, 점유는 spot_no). 미등록이면 빈 배열. 403=권한 없음. */
 export async function listParkingVehicles(): Promise<ParkingVehicle[]> {
   // ponytail: 응답의 total 은 items 길이와 동일 — 파생 가능하니 배열만 반환(페이징 생기면 추가).
   const response = await apiFetch(`${API_BASE_URL}/admin/parking/vehicles`, {
@@ -2392,12 +2402,15 @@ export async function listParkingVehicles(): Promise<ParkingVehicle[]> {
   const body = await response.json();
   return ((body.vehicles as RawParkingVehicle[]) ?? []).map((v) => ({
     id: v.id,
-    householdId: v.household_id,
-    dong: v.dong,
-    ho: v.ho,
+    householdId: v.household_id ?? null,
+    dong: v.dong ?? null,
+    ho: v.ho ?? null,
     plate: v.plate,
     model: v.model ?? null,
     isEv: v.is_ev,
+    spotNo: v.spot_no ?? null,
+    entryAt: v.entry_at ?? null,
+    external: v.external ?? false,
   }));
 }
 

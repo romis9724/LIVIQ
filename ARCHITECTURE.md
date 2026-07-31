@@ -82,12 +82,13 @@ AI 질의 앞단(H4): Redis 레이트 리밋(사용자·단지, 429·fail-open)�
 web-resident의 SSE 이벤트 타입은 로컬 정의(api-types 소비 전환은 백로그, [docs/09 §8.3](docs/09-implementation-harness.md)).
 관리자 공간정보 화면(H9, [ADR-0019](docs/adr/0019-complex-twin-3d.md))은 **읽기 전용 조회 배선**이다 — 트윈은
 `household_geometries` + `/admin/twin/*`(geometry·overlay·세대 상세) + web-admin `/twin`(deck.gl ↔ VWorld/Cesium iframe 토글),
-주차장(H9-5)은 `parking_layouts`(단지당 1행·`layout` JSONB — viewBox·동 footprint·442면 spots)·`parking_vehicles`(348대·차량번호는
+주차장(H9-5·H16)은 `parking_layouts`(단지당 1행·`layout` JSONB — viewBox·동 footprint·442면 spots)·`parking_vehicles`(입주민 348대+외부 8대·차량번호는
 `plate_enc` 봉투 암호화)를 `GET /admin/parking/layout`·`GET /admin/parking/vehicles`(**MANAGER** 전용, plate 복호)로 읽어
 web-admin `/parking`이 SVG 배치도로 렌더한다. 적재 경로는 API가 아니라 시드 스크립트다
 (`apps/api/scripts/seed_parking.py` + `scripts/data/parking_layout.json`·`parking_vehicles.json` — 전량 교체 멱등).
-**면 점유 상태는 실데이터가 아니라
-클라이언트 시뮬레이션**(`apps/web-admin/src/features/parking/parking-sim.ts` — 시드 고정, 입출차 카메라(번호판 인식) API 교체 지점).
+**면 점유 상태도 DB가 단일 출처다**(H16 — `spot_no`·`entry_at`·부분 유니크 `(tenant_id, spot_no)`, 외부 차량은 `household_id NULL`).
+시드가 결정적 배정(고정 시드·재실률 0.75·자기 동 근처 선호)하고, 웹은 인덱싱만 한다
+(`parking-sim.ts`의 `occupancyFromVehicles` — 입출차 카메라(번호판 인식) 연동 시 시드 경로만 교체).
 차량번호는 관리자 세션에만 복호 노출하고 입주민 앱·LLM 경로에는 흐르지 않는다([docs/06 §4](docs/06-security-privacy.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
