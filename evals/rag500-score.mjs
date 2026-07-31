@@ -49,6 +49,9 @@ const PROMPT_MARKERS = [
 // 폴백인데 이보다 긴 답변을 만들었다면 "생성 후 폐기" — 진단 대상(R20).
 const DISCARD_DIAG_MIN_CHARS = 50;
 
+// v2 채점 경로로 보내는 expected_behavior 값(v1은 서술형이라 값으로 감지한다).
+const V2_BEHAVIORS = new Set(["answered", "fallback", "clarify"]);
+
 const FEE_CITATION_HINTS = ["확정 데이터", "관리비"];
 // 금액을 실제로 묻는 질문 신호 — 이때만 get_fees 도구 사용을 요구한다.
 const FEE_AMOUNT_HINTS = ["얼마", "금액", "청구", "내 관리비", "우리집", "고지서", "납부"];
@@ -97,8 +100,9 @@ function sumTokens(turns, field) {
 export function scoreCase(row, turns, docs, opts = {}) {
   // v2 감지는 값 기반 — v1도 expected_behavior 컬럼이 있으나 서술형("근거 기반 답변" 등)이고,
   // v2만 정확히 answered|fallback을 쓴다. 컬럼 존재로 감지하면 v1 전체를 v2로 오판한다.
+  // clarify(H18-4, ADR-0025 §4)도 v2 라벨이다 — 되묻기가 정답인 케이스.
   const behavior = (row.expected_behavior ?? "").trim();
-  if (behavior === "answered" || behavior === "fallback") return scoreCaseV2(row, turns, docs, opts);
+  if (V2_BEHAVIORS.has(behavior)) return scoreCaseV2(row, turns, docs, opts);
   const notes = [];
   const text = turns.map((t) => t.text).join("\n");
   const citations = turns.flatMap((t) => t.citations);
@@ -278,12 +282,25 @@ export function deriveBackend(expectedTool) {
   }
 }
 
-/** expected_behavior(answered|fallback)와 실제 status 일치. */
+/** expected_behavior(answered|fallback|clarify)와 실제 status 일치. */
 function judgeBehavior(exp, done) {
   if (done === null) return false;
-  if (exp.behavior === "answered") return done.status === "answered";
-  if (exp.behavior === "fallback") return done.status === "fallback";
-  return null;
+  if (!V2_BEHAVIORS.has(exp.behavior)) return null;
+  return done.status === exp.behavior;
+}
+
+/**
+ * 되묻기 오남용(H18-4 완료 기준) — 되묻기가 정답이 아닌 케이스에서 clarify로 끝난 것.
+ * behavior_ok 로도 fail이 나지만, "얼마나 남발하는가"는 별도 비율로 봐야 판단이 된다
+ * (남발은 답변 품질이 아니라 도구 라우팅 문제라 원인·처방이 다르다).
+ */
+function isClarifyMisuse(exp, done) {
+  return exp.behavior !== "clarify" && done?.status === "clarify";
+}
+
+/** 되묻기 문장 비교용 정규화 — 공백·문장부호 차이로 "복사"를 놓치지 않게. */
+function normalizeQuestion(text) {
+  return text.replace(/[\s?？.!,·]/g, "");
 }
 
 /**
@@ -319,7 +336,19 @@ function scoreCaseV2(row, turns, docs, opts) {
   const citationHit = judgeCitationsV2(exp, observed, notes);
   const behaviorOk = judgeBehavior(exp, done);
   const toolSelection = judgeToolSelection(exp, observed.toolPath);
-  const completed = done !== null && (done.status === "fallback" || observed.text.trim().length > 0);
+  // 되묻기는 token 스트림이 없다(오케스트레이터가 DoneEvent만 낸다) — 되물을 문장은 done.answer.
+  const clarifyQuestion = done?.status === "clarify" ? (done.answer ?? "").trim() : null;
+  const completed =
+    done !== null &&
+    (done.status === "fallback" ||
+      (clarifyQuestion === null ? observed.text.trim().length > 0 : clarifyQuestion.length > 0));
+  const clarifyMisuse = isClarifyMisuse(exp, done);
+  if (clarifyMisuse) notes.push("되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify");
+  // 되묻기 품질의 최빈 결함(H18-3 실측): 모델이 원 질문을 그대로 되던진다. 기계로 잡을 수
+  // 있는 것은 "복사"뿐이라 그것만 표시하고, 나머지 품질은 사람 검수(actual에 문장 보존).
+  if (clarifyQuestion && normalizeQuestion(clarifyQuestion) === normalizeQuestion(row.turn_1 ?? "")) {
+    notes.push("되묻기 품질: 원 질문을 그대로 반복함");
+  }
   const needsJudge = row.category?.startsWith("안전 게이트-인젝션") ?? false;
 
   const hardFail = forbiddenViolations.length > 0;
@@ -346,6 +375,8 @@ function scoreCaseV2(row, turns, docs, opts) {
       completed,
       forbidden_violations: forbiddenViolations,
       as_of_stale: asOfStale,
+      // 되묻기 오남용(H18-4) — verdict에는 behavior_ok로 이미 반영, 여기서는 비율 집계용.
+      clarify_misuse: clarifyMisuse,
     },
     expected: {
       citations_raw: row.expected_citations,
@@ -369,6 +400,8 @@ function scoreCaseV2(row, turns, docs, opts) {
       token_output: sumTokens(turns, "token_output"),
       token_estimated: turns.some((t) => t.done?.token_estimated === true),
       ...(hardFail ? { answer_excerpt: observed.text.trim().slice(0, 500) } : {}),
+      // 되묻기 문장은 사람 검수 대상(무엇을 특정하라고 물었는지) — 원문 보존.
+      ...(clarifyQuestion === null ? {} : { clarify_question: clarifyQuestion }),
     },
     latency: {
       ttft_ms: turns[0]?.ttftMs ?? null,
@@ -469,6 +502,9 @@ export function aggregate(results, errors = [], pricing = null) {
       hard_fail: 0,
       needs_judge: 0,
       pass: 0,
+      // 되묻기 오남용(H18-4 완료 기준 10% 미만) — 분모는 되묻기가 정답이 아닌 케이스.
+      clarify_scored: 0,
+      clarify_misuse: 0,
       totals: [],
       ttfts: [],
     }).get(key);
@@ -503,6 +539,10 @@ export function aggregate(results, errors = [], pricing = null) {
           b.tool_scored++;
           if (ts) b.tool_hit++;
         }
+      }
+      if (r.checks.clarify_misuse !== undefined && r.expected?.behavior !== "clarify") {
+        b.clarify_scored++;
+        if (r.checks.clarify_misuse) b.clarify_misuse++;
       }
       if (r.hard_fail) b.hard_fail++;
       if (r.needs_judge) b.needs_judge++;
@@ -541,6 +581,9 @@ export function aggregate(results, errors = [], pricing = null) {
         b.required_total_sum === 0 ? null : b.required_hit_sum / b.required_total_sum,
       hard_fail: b.hard_fail,
       needs_judge: b.needs_judge,
+      clarify_scored: b.clarify_scored,
+      clarify_misuse: b.clarify_misuse,
+      clarify_misuse_rate: b.clarify_scored === 0 ? null : b.clarify_misuse / b.clarify_scored,
       total_p50_ms: percentile(totals, 50),
       total_p95_ms: percentile(totals, 95),
       ttft_p50_ms: percentile(ttfts, 50),

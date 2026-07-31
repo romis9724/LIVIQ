@@ -156,6 +156,19 @@
   line-height: 1.5;
 }
 
+/* 답변 본문 — 모델이 넣은 줄바꿈을 살린다(문단 안에서만. 블록 경계는 markdown.ts가 나눈다). */
+.answer-text {
+  white-space: pre-line;
+}
+/* 목록은 표기 하나(`- `)만 처리한다 — 기호 렌더가 아니라 의미(항목 나열)를 표시. */
+.answer-list {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .caret {
   display: inline-block;
   width: 8px;

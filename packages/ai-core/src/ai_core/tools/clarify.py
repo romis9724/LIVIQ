@@ -24,7 +24,17 @@ CLARIFY_TOOL_NAME = "ask_clarification"
 
 
 class ClarificationArgs(BaseModel):
-    question: str = Field(..., min_length=1, description="사용자에게 되물을 한 문장")
+    # 되묻기 **품질**은 이 인자 설명이 좌우한다 — 도구 설명(라우팅 신호)은 건드리지 않는다
+    # (R22: 설명 어휘가 겹치면 라우팅이 무너진다). H18-3 실측에서 모델이 원 질문을 그대로
+    # 되물어(질문 복사) 되묻기가 무의미했다.
+    question: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "사용자에게 되물을 한 문장. 사용자 질문을 그대로 반복하지 말고, "
+            "기간·동호수·대상 설비처럼 무엇을 정해야 답할 수 있는지 구체적으로 묻는다."
+        ),
+    )
 
 
 async def _ask_clarification(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:

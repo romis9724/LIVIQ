@@ -58,9 +58,11 @@ export const READ_TOOLS = new Set([
   "trace_home_device_issue", // 세대 기기→설비 계통 장애 추적 (GraphRAG G3a)
   "find_nearest_available_parking", // 최근접 빈 주차면 (H15-4, ADR-0023)
   "search_similar_inquiries", // 유사 민원 처리 사례 (H17-1, ADR-0024)
+  "ask_clarification", // 되묻기 특수 도구 — DB를 읽지도 쓰지도 않는다 (H18-1, ADR-0025 §4)
 ]);
 // 에이전트 스텝 상한(ai-core MAX_TOOL_STEPS와 일치) — tool_path 길이 상한 관측.
-const STEP_CAP = 3;
+// 4 = 계획 turn 1 + 도구 3 (H18-2, ADR-0025 §2).
+const STEP_CAP = 4;
 
 const HEADERS = {
   "X-Dev-Tenant-Id": TENANT_ID,

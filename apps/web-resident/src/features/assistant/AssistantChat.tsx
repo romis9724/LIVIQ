@@ -11,6 +11,7 @@ import {
   spotNosFromCitations,
 } from "@/features/parking/links";
 import { type Citation, answerKind } from "./api";
+import { answerBlocks } from "./markdown";
 import { progressLabel } from "./progress";
 import { StructuredBlock } from "./StructuredBlock";
 import { structuredBlocks } from "./structured";
@@ -196,7 +197,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
               {progressLabel(message.stage, message.tool)} 중…
             </div>
             <div className="bubble-ai">
-              {message.text}
+              <AnswerBody text={message.text} />
               <span className="caret" aria-hidden="true" />
             </div>
           </>
@@ -217,7 +218,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             <SourceStrip citations={message.citations} />
             <ConfidenceBadge status={message.result?.needsReview ? "review" : "answered"} />
             <div className="bubble-ai">
-              <p>{message.text}</p>
+              <AnswerBody text={message.text} />
               {blocks.map((b) => (
                 <StructuredBlock key={b.ref} data={b.data} />
               ))}
@@ -265,6 +266,30 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * 답변 본문 — 문단·목록만 렌더한다(markdown.ts). 마크다운 라이브러리도
+ * `dangerouslySetInnerHTML` 도 쓰지 않는다: 모델 출력은 신뢰 경계 밖이다(XSS).
+ */
+function AnswerBody({ text }: { text: string }) {
+  return (
+    <>
+      {answerBlocks(text).map((block, i) =>
+        block.kind === "ul" ? (
+          <ul key={`ul-${i}`} className="answer-list">
+            {block.items.map((item, j) => (
+              <li key={`${j}-${item}`}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p key={`p-${i}`} className="answer-text">
+            {block.text}
+          </p>
+        ),
+      )}
+    </>
   );
 }
 

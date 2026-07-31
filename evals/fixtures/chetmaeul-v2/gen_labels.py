@@ -33,6 +33,7 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   plan-device:<라벨>              세대 평면도 기기 (household_ref 바인딩 필수)
   parking:nearest[:ev]            본인 동 최근접 빈 주차 면 (household_ref 필수, :ev면 전기차 선호)
   similar-inquiries               유사 민원 처리 사례 (user_ref 필수, 질의는 turn_1 원문)
+  clarify:<특정해야 할 것>        모호한 질의 — 되묻기가 정답 (예: clarify:대상 설비)
   fallback:absent                 코퍼스 부재 — 폴백이 정답
   isolation:cross-tenant          타 단지 질문 차단 — 폴백/거부가 정답
   isolation:role-block:<도구>     역할 밖 도구 차단 — 도구 비가시 + 폴백이 정답
@@ -81,6 +82,7 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
     "trace_home_device_issue": frozenset({"RESIDENT"}),
     "find_nearest_available_parking": frozenset({"RESIDENT"}),
     "search_similar_inquiries": frozenset({"RESIDENT"}),  # H17-1, ADR-0024
+    "ask_clarification": _ALL_ROLES,  # 되묻기 특수 도구 — H18-1, ADR-0025 §4
 }
 
 # 최근접 빈자리 top_k — 도구(parking.py `_TOP_K`)와 동일해야 라벨이 도구 출력과 일치.
@@ -92,6 +94,16 @@ _CHAIN_MAX_DEPTH = 10
 # 채점 계약(§5): 빈 결과 카드 승격(⓪, PR #112) 이후 기준 — "없음"도 answered+도구 인용.
 BEHAVIOR_ANSWERED = "answered"
 BEHAVIOR_FALLBACK = "fallback"
+# 되묻기(H18-4, ADR-0025 §4) — 답변도 폴백도 아닌 제3의 정답. 인용은 요구하지 않는다.
+BEHAVIOR_CLARIFY = "clarify"
+
+# behavior → (citation_gate, fallback_gate). v1 하니스 호환 열이라 어휘는 v1 그대로다 —
+# v2 채점기는 expected_behavior만 본다. 되묻기는 답변도 폴백도 아니라 둘 다 "해당 없음".
+_GATES_BY_BEHAVIOR = {
+    BEHAVIOR_ANSWERED: ("필수", "해당 없음"),
+    BEHAVIOR_FALLBACK: ("근거 없으면 답변 금지", "필수"),
+    BEHAVIOR_CLARIFY: ("해당 없음", "해당 없음"),
+}
 
 # 시간 의존 라벨의 기준 시각(§2-5) — env EVAL_AS_OF(YYYY-MM-DD)로 고정, 기본은 오늘.
 # overdue 쿼리와 as_of 컬럼이 전부 이 값을 쓴다: 같은 draft + 같은 AS_OF = 같은 라벨.
@@ -740,6 +752,30 @@ async def resolve_injection(
     )
 
 
+async def resolve_clarify(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """clarify:<특정해야 할 것> — 모호한 질의라 되묻기가 정답인 케이스(H18-4).
+
+    DB를 보지 않는다: 정답이 "데이터에 무엇이 있는가"가 아니라 "질의만으로는 대상을
+    특정할 수 없다"는 질의 자체의 성질이기 때문이다. 그래서 리졸버가 확인하는 것은
+    무엇을 되물어야 하는지(args)가 draft에 적혀 있는가 하나뿐이다.
+    """
+    target = ":".join(a for a in args if a).strip()
+    if not target:
+        return _error("clarify는 특정해야 할 것 필수 (예: clarify:대상 설비)")
+    return Label(
+        expected_facts=f"되묻기 — 특정해야 할 것: {target}. 원 질문을 그대로 반복하면 오답",
+        expected_citations="",  # 되묻기는 근거 없는 질문이라 인용 미채점(규칙 1 저촉 아님)
+        expected_tool="ask_clarification",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_CLARIFY,
+        as_of="",
+        label_source_resolved=f"clarify target={target}(질의 성질 — DB 무관)",
+        errors=[],
+    )
+
+
 async def resolve_fallback(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
@@ -792,6 +828,7 @@ RESOLVERS = {
     "plan-device": resolve_plan_device,
     "parking": resolve_parking,
     "similar-inquiries": resolve_similar_inquiries,
+    "clarify": resolve_clarify,
     "fallback": resolve_fallback,
     "isolation": resolve_isolation,
     "notice": resolve_notice,
@@ -872,7 +909,7 @@ async def cmd_gen(
             for e in label.errors:
                 print(f"✗ {case.get('case_id')}: {e}")
             continue
-        is_answered = label.expected_behavior == BEHAVIOR_ANSWERED
+        citation_gate, fallback_gate = _GATES_BY_BEHAVIOR[label.expected_behavior]
         # `**case`가 draft의 모든 열을 그대로 통과시킨다 — 복합 케이스의 required_tools(신규 열)도
         # 여기로 보존된다. 복합 케이스는 label_source가 대표 도구 하나만 리졸브하고, 다도구 채점은
         # 러너가 required_tools로 한다(expected_tool은 대표 도구·expected_behavior=answered).
@@ -893,8 +930,8 @@ async def cmd_gen(
                 "tenant_id": tid,
                 "user_id": case.get("user_ref", ""),
                 "household_id": case.get("household_ref", ""),
-                "citation_gate": "필수" if is_answered else "근거 없으면 답변 금지",
-                "fallback_gate": "해당 없음" if is_answered else "필수",
+                "citation_gate": citation_gate,
+                "fallback_gate": fallback_gate,
             }
         )
     if n_errors:
@@ -946,12 +983,16 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         ),
         ("fallback:absent", {"role": "RESIDENT"}),
         ("isolation:cross-tenant", {"role": "RESIDENT"}),
+        ("clarify:대상 설비", {"role": "RESIDENT"}),
         # 역할 위반 — 거부돼야 정상
         ("facilities:count", {"role": "RESIDENT"}),
+        # 되물을 대상 미지정 — 거부돼야 정상
+        ("clarify", {"role": "RESIDENT"}),
     ]
     expect_reject_specs = {
         "doc-clause:첫마을4단지 관리규약:제5조",  # 조항 모호(5중 중복)
         "facilities:count",  # RESIDENT 역할 위반
+        "clarify",  # 특정 대상 미지정
     }
     failures = 0
     for spec, case in probes:
