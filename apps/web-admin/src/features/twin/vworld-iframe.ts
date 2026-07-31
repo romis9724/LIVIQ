@@ -12,11 +12,13 @@
  * postMessage 계약:
  *   부모 → iframe : { type:'init', center:[lon,lat], units:[{householdId,polygon2d,baseZ,floorHeight,rgb:[r,g,b]}] }
  *                   { type:'recolor', colors:{ [householdId]:[r,g,b] } }
+ *                   { type:'camera', cmd:'lock'|'orbit', on } · { type:'camera', cmd:'zoom', delta } ·
+ *                   { type:'camera', cmd:'home' }
  *   iframe → 부모 : { type:'ready' } · { type:'error', message } · { type:'select', householdId }
  *
  * 개인정보 미전송(규칙 2): units 는 좌표·색·householdId(uuid)뿐. 실명 등은 부모 상세 패널이 마스킹 조회.
- * srcdoc 은 순수 JS 문자열이라 TS 모듈을 import 할 수 없다 — scaleCoords 압출 수학은
- * vworld-render.ts(테스트본)의 인라인 복제다(값 변경 시 양쪽 동기화).
+ * srcdoc 은 순수 JS 문자열이라 TS 모듈을 import 할 수 없다 — scaleCoords 압출 수학과 nextOrbitRange
+ * 줌 계산은 vworld-render.ts(테스트본)의 인라인 복제다(값 변경 시 양쪽 동기화).
  * TODO(CSP): web-admin CSP 도입 시 frame-src 'self' + iframe script-src 에 map.vworld.kr 허용 필요(docs/06).
  */
 
@@ -40,6 +42,11 @@ export function buildVWorldSrcdoc(apiKey: string): string {
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0d0d1f; }
   #vmap { position: absolute; inset: 0; }
+  /* 이 버튼들은 camera.flyTo 기반이라 우리 임베드에서 영구 무동작이다(ADR-0019 H9-7).
+     누르면 enableInputs 가 꺼진 채 복구되지 않아 휠·드래그까지 마비시키므로 숨긴다.
+     대체 컨트롤은 부모 React 가 소유한다. 나침반·이동컨트롤·측정도구는 정상이라 그대로 둔다. */
+  .dt-api-map--tool-bt-plus, .dt-api-map--tool-bt-minus,
+  .dt-api-map--tool-bt-current, .dt-api-map--tool-bt-max { display: none !important; }
 </style>
 </head>
 <body>
@@ -64,6 +71,12 @@ export function buildVWorldSrcdoc(apiKey: string): string {
   // 프로토타입과 같은 560m 를 하한으로 두고, 단지가 크면 반지름에 비례해 물린다.
   var LOOK_RANGE_MIN = 560;
   var LOOK_RANGE_FACTOR = 2.5;
+  // 줌 상수·계산은 vworld-render.ts(테스트본)의 인라인 복제 — 값이 바뀌면 양쪽을 함께 고친다.
+  var ZOOM_MIN_RANGE_M = 150;   // 더 당기면 VWorld 실사 타일이 저해상 지형으로 바뀐다(실측)
+  var ZOOM_MAX_RANGE_M = 4000;
+  var ZOOM_STEP = 1.35;
+  var FREE_ZOOM_FACTOR = 0.25;  // 자유 시점: 현재 고도 대비 이동량 — 고도와 무관하게 같은 체감
+  var FREE_ZOOM_MIN_M = 20;     // 낮은 고도에서 한 클릭이 무의미해지지 않게
 
   var viewer = null;
   var primitive = null;         // 세대 shell Primitive(반투명 압출)
@@ -77,6 +90,7 @@ export function buildVWorldSrcdoc(apiKey: string): string {
   var locked = false;           // 시점 단지 고정(lookAt 궤도 회전)
   var orbitTimer = null;        // 360° 자동 회전 setInterval 핸들
   var orbitHeading = 0;         // 현재 회전 방위(rad)
+  var orbitRange = null;        // 확대·축소로 정한 궤도 거리(m). null 이면 단지 크기 자동(H9-7)
   var complexSphere = null;     // 세대 전체를 감싸는 BoundingSphere — 시점 기준점·궤도 거리
   var appliedSnap = null;       // 우리가 마지막으로 세운 카메라 위치 지문(드리프트 감지용)
   var buildingTileset = null;   // VWorld 3D 건물 타일셋(map4) — 우리 단지 볼록껍질로 클리핑
@@ -179,6 +193,15 @@ export function buildVWorldSrcdoc(apiKey: string): string {
   // 우리가 세운 시점이 무시되므로(실측), 시점을 세우기 전에 항상 비행부터 취소한다.
   function cancelFlight() {
     if (viewer.camera.cancelFlight) viewer.camera.cancelFlight();
+  }
+
+  // VWorld 인트로·위젯이 건 flyTo 는 우리 임베드에서 시작조차 안 되고(startTime undefined),
+  // 비행 규약대로 꺼진 enableInputs 가 완료 콜백 부재로 영영 복구되지 않아 휠·드래그까지 마비된다.
+  // cancelFlight 로 유령 tween 을 걷어내면 입력이 되살아난다(실측, ADR-0019 H9-7).
+  function restoreInputs() {
+    if (!viewer) return;
+    cancelFlight();
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
   }
 
   // 단지 남동쪽 조감 시점(프로토타입 setCamera) — 단지 고정이 꺼진 경우의 기본 시점.
@@ -392,7 +415,9 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     return Cesium.Cartesian3.fromDegrees(center[0], center[1], groundH + 40);
   }
   // 단지 크기에 맞춘 궤도 거리 — 반지름 대비 배수(화면에 여유 있게 담기도록).
+  // 사용자가 줌으로 거리를 정했으면 그 값이 우선한다 — 자동회전·드리프트 복구가 매번 되돌리지 않도록.
   function lookRange() {
+    if (orbitRange !== null) return orbitRange;
     return complexSphere ? Math.max(LOOK_RANGE_MIN, complexSphere.radius * LOOK_RANGE_FACTOR) : LOOK_RANGE_MIN;
   }
   // 현재 orbitHeading 으로 단지 중심을 화면 중앙에 두는 궤도 시점 적용.
@@ -421,6 +446,40 @@ export function buildVWorldSrcdoc(apiKey: string): string {
   }
   function stopOrbit() {
     if (orbitTimer) { clearInterval(orbitTimer); orbitTimer = null; }
+  }
+
+  // ── 확대·축소·현위치 (직접 대입 — 애니메이션 금지, ADR-0019 H9-7) ──
+  // vworld-render.ts nextOrbitRange 의 인라인 복제(양쪽 동기화 필요).
+  function nextOrbitRange(current, delta) {
+    if (!isFinite(current) || current <= 0) return ZOOM_MIN_RANGE_M;
+    var next = delta < 0 ? current / ZOOM_STEP : current * ZOOM_STEP;
+    return Math.min(ZOOM_MAX_RANGE_M, Math.max(ZOOM_MIN_RANGE_M, next));
+  }
+  // 저장된 거리가 아니라 카메라↔기준점 실거리를 읽는다 — 휠로 당긴 뒤 버튼을 눌러도 시점이 튀지 않게.
+  function currentOrbitRange() {
+    return Cesium.Cartesian3.distance(viewer.camera.positionWC, lookTarget());
+  }
+  // 확대 delta<0 · 축소 delta>0. 단지 고정이면 궤도 거리만 바꿔 단지가 화면 중앙을 벗어나지 않는다.
+  function zoomBy(delta) {
+    if (!viewer || !center) return;
+    restoreInputs();
+    if (locked) {
+      orbitRange = nextOrbitRange(currentOrbitRange(), delta);
+      applyLook();
+      appliedSnap = cameraSnap();   // 우리가 세운 시점 — watchCamera 가 되돌리지 않도록 갱신
+      return;
+    }
+    // 자유 시점: 기준점이 없으니 고도 비례 전진/후진(zoomIn/Out 은 즉시 대입, flyTo 아님).
+    var step = Math.max(FREE_ZOOM_MIN_M, viewer.camera.positionCartographic.height * FREE_ZOOM_FACTOR);
+    if (delta < 0) viewer.camera.zoomIn(step); else viewer.camera.zoomOut(step);
+    appliedSnap = cameraSnap();
+  }
+  // "현위치" = 단지 초기 시점 복귀(GPS 아님 — 운영자 인터뷰 확정). frameComplex 가 곧 초기 시점 확정 로직.
+  function goHome() {
+    if (!viewer || !center) return;
+    restoreInputs();
+    orbitRange = null;   // 줌으로 정한 거리도 초기 프레이밍으로 되돌린다
+    frameComplex();
   }
 
   // 조감도 initPosition 으로 맵 시작 후 뷰어 준비 폴링(프로토타입 startMap/waitViewer).
@@ -459,6 +518,7 @@ export function buildVWorldSrcdoc(apiKey: string): string {
         buildComplexSphere();   // 확정된 높이로 시점 기준 구 계산
         applyStyle(style);
         settleCamera(function () {
+          restoreInputs();           // 인트로 비행이 남긴 입력 비활성 해제 — 공개 순간부터 휠·드래그가 살아있게
           post({ type: "ready" });   // 여기서 처음 화면이 공개된다 — 이미 완성된 상태
           watchCamera();             // 이후 뒤늦은 전지구 리셋만 복구
         });
@@ -492,6 +552,8 @@ export function buildVWorldSrcdoc(apiKey: string): string {
     } else if (d.type === "camera") {
       if (d.cmd === "lock") setLock(!!d.on);
       else if (d.cmd === "orbit") { if (d.on) startOrbit(); else stopOrbit(); }
+      else if (d.cmd === "zoom") { if (typeof d.delta === "number") zoomBy(d.delta); }
+      else if (d.cmd === "home") goHome();
     } else if (d.type === "clip") {
       applyClip(!!d.on);
     }
