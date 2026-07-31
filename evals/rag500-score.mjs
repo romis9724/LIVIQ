@@ -286,8 +286,18 @@ function judgeBehavior(exp, done) {
   return null;
 }
 
-/** 도구 선택 정확도 — primary ∈ tool_path. expected_tool 없으면 null(미채점). */
+/**
+ * 도구 선택 정확도. 두 갈래:
+ *   - required_tools(AND, 복합 질의): 전부 호출됐는지. 부분호출 감점을 위해 분수 반환
+ *     `{hit, total, pass}`(pass=전부 호출). acceptable_tools(OR)와 별개 — 재사용 금지.
+ *   - 단일 expected_tool: primary ∈ tool_path (boolean). 둘 다 없으면 null(미채점).
+ */
 function judgeToolSelection(exp, toolPath) {
+  if (exp.requiredTools?.length) {
+    const hit = exp.requiredTools.filter((t) => toolPath.includes(t)).length;
+    const total = exp.requiredTools.length;
+    return { hit, total, pass: hit === total };
+  }
   if (!exp.expectedTool) return null;
   return toolPath.includes(exp.expectedTool);
 }
@@ -342,6 +352,7 @@ function scoreCaseV2(row, turns, docs, opts) {
       document_ids: exp.documentIds,
       expected_tool: exp.expectedTool,
       acceptable_tools: exp.acceptableTools,
+      required_tools: exp.requiredTools,
       behavior: exp.behavior,
       as_of: exp.asOf,
       facts: row.expected_facts,
@@ -451,6 +462,10 @@ export function aggregate(results, errors = [], pricing = null) {
       fallback_ok: 0,
       tool_scored: 0,
       tool_hit: 0,
+      // 복합 질의(required_tools AND) — 부분호출 분수 합산(sum(hit)/sum(total)).
+      required_cases: 0,
+      required_hit_sum: 0,
+      required_total_sum: 0,
       hard_fail: 0,
       needs_judge: 0,
       pass: 0,
@@ -474,9 +489,20 @@ export function aggregate(results, errors = [], pricing = null) {
         if (r.checks.fallback_ok) b.fallback_ok++;
       }
       // 도구 선택 정확도(v2) — 답변 pass와 독립 집계. null/undefined는 미채점.
-      if (r.checks.tool_selection !== null && r.checks.tool_selection !== undefined) {
-        b.tool_scored++;
-        if (r.checks.tool_selection) b.tool_hit++;
+      // 복합(required_tools)은 {hit,total,pass} 객체: tool_hit는 완전호출(pass)만 세고,
+      // 부분호출은 required_* 분수로 별도 합산(콘솔 "복합 완전호출률").
+      const ts = r.checks.tool_selection;
+      if (ts !== null && ts !== undefined) {
+        if (typeof ts === "object") {
+          b.required_cases++;
+          b.required_hit_sum += ts.hit;
+          b.required_total_sum += ts.total;
+          b.tool_scored++;
+          if (ts.pass) b.tool_hit++;
+        } else {
+          b.tool_scored++;
+          if (ts) b.tool_hit++;
+        }
       }
       if (r.hard_fail) b.hard_fail++;
       if (r.needs_judge) b.needs_judge++;
@@ -507,6 +533,12 @@ export function aggregate(results, errors = [], pricing = null) {
       tool_scored: b.tool_scored,
       tool_hit: b.tool_hit,
       tool_accuracy: b.tool_scored === 0 ? null : b.tool_hit / b.tool_scored,
+      // 복합 질의 완전호출률 — required_tools 부분호출까지 반영한 분수 지표(tool_accuracy와 별개).
+      required_cases: b.required_cases,
+      required_hit_sum: b.required_hit_sum,
+      required_total_sum: b.required_total_sum,
+      required_call_rate:
+        b.required_total_sum === 0 ? null : b.required_hit_sum / b.required_total_sum,
       hard_fail: b.hard_fail,
       needs_judge: b.needs_judge,
       total_p50_ms: percentile(totals, 50),

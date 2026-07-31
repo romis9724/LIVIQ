@@ -27,7 +27,7 @@ from sqlalchemy.pool import NullPool
 pytestmark = pytest.mark.integration
 
 _DB_ROOT = Path(__file__).resolve().parent.parent
-# b4c5d6e7f8a9(parking_occupancy)의 down_revision — 왕복 대상 하한.
+# b4c5d6e7f8a9(spot_no·entry_at)의 down_revision — 왕복 대상 하한.
 _OCCUPANCY_PARENT = "a3b4c5d6e7f8"
 
 _LAYOUT = {

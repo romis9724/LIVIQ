@@ -58,6 +58,7 @@ def test_tenant_scope_table_count() -> None:
     H9-5: parking_layouts·parking_vehicles 신설(지하주차장 배치도·차량) — +2.
     H15-1: ai_backend_config 신설(전역 LLM 백엔드 설정 단일 행) — +1.
     H15-3: ai_backend_config 컬럼 확장만(테이블 순증감 0).
+    H16: 점유는 parking_vehicles 컬럼(spot_no·entry_at)으로 — 테이블 순증감 0.
     """
     assert len(metadata.tables) == 39
 

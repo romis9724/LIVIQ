@@ -1,4 +1,4 @@
-"""읽기 전용 도구 레지스트리 + 도구호출 에이전트 도구 7종 (ADR-0007, docs/01 §5.2)."""
+"""읽기 전용 도구 레지스트리 + 도구호출 에이전트 도구 9종 (ADR-0007, docs/01 §5.2)."""
 
 from ai_core.tools.library import default_registry
 from ai_core.tools.registry import (

@@ -725,7 +725,7 @@ codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, 
 
 ### 4.11 주차장 (H9-5 — 지하주차장 배치도·등록 차량 · H16 — 점유 영속화)
 
-관리자 주차장 대시보드의 원천. **면 점유 상태도 DB가 단일 출처다**(H16) — H9-5의 프론트 시뮬레이션을 폐기하고, 시드가 배정한 주차면·입차시각을 `parking_vehicles`에 저장한다(번호판 인식 카메라 연동 시 시드 경로만 교체 — [11 §3.4.2](11-data-architecture.md)).
+관리자 주차장 대시보드·입주민 최근접 빈자리 도구(`find_nearest_available_parking` — H15-4, 점유 조회는 H16 컬럼으로 재배선)의 원천. **면 점유 상태도 DB가 단일 출처다**(H16) — H9-5의 프론트 시뮬레이션을 폐기하고, 시드가 배정한 주차면·입차시각을 `parking_vehicles`에 저장한다(번호판 인식 카메라 연동 시 시드 경로만 교체 — [11 §3.4.2](11-data-architecture.md)). 별도 `parking_occupancy` 테이블(H15-4 초안)은 H16 컬럼 방식으로 대체·폐기했다([ADR-0023](adr/0023-parking-occupancy-persisted.md) 개정 노트).
 
 ```sql
 -- 지하주차장 배치도 (단지당 1행 · 전량 교체 · 렌더 페이로드 그대로)
@@ -753,7 +753,7 @@ parking_vehicles(id, tenant_id,
 > **점유 배정(H16)**: 시드가 결정적 난수(고정 시드)로 배정한다 — 입주민 차량 재실률 0.75·자기 동 코어 근처 선호·장애인면 미배정·전기차면 EV 전용, 외부 차량 8대는 입구 근처 선호에 절반은 장기(20~72h). 규칙은 폐기한 프론트 시뮬(parking-sim)과 동일하되 Python 재구현이라 배치 결과의 비트 일치는 요구하지 않는다(재실행 멱등이면 충분).
 > **파일럿 실적재**(첫마을 4단지): 442면(일반 406·장애인 15·전기차 21)·차량 348대(274세대·EV 29) 전량 매칭(미매칭 0).
 > **차량번호는 PII**: `pii_vault`가 아니라 세대 귀속 업무 테이블에 암호문으로 두고, 복호는 관리자 조회 API만 수행한다(마스킹 없이 전량 표시 — 주차 관리 목적, 입주민 앱·LLM 미노출, [06 §4.1](06-security-privacy.md)).
-> soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`).
+> soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`). 최근접 빈자리 도구는 api 프로세스(`liviq_app`)에서 `parking_vehicles.spot_no`를 SELECT한다.
 
 ## 5. RLS (행 수준 보안)
 

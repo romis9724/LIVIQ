@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import PII_PLATES_VIEWED, client_ip, record_audit
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.parking import ParkingLayoutOut, ParkingVehicleItem, ParkingVehicleListOut
+from app.schemas.parking import (
+    ParkingLayoutOut,
+    ParkingVehicleItem,
+    ParkingVehicleListOut,
+)
 from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle
 
 router = APIRouter(prefix="/admin/parking", tags=["parking"])

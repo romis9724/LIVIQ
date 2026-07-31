@@ -355,7 +355,7 @@ def _cell(m: dict[str, Any]) -> str:
 
 
 def _output_path(label: str) -> Path:
-    """리포지토리 상대 결과 경로 — 없으면 /tmp 폴백(컨테이너 실행은 parents 얕아 IndexError 회피)."""
+    """리포지토리 상대 결과 경로 — 없으면 /tmp 폴백(컨테이너는 parents가 얕아 IndexError 회피)."""
     parents = Path(__file__).resolve().parents
     out_dir = parents[3] / RESULTS_SUBPATH if len(parents) > 3 else Path("/tmp")
     if not out_dir.is_dir():
