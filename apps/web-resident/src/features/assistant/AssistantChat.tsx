@@ -15,6 +15,7 @@ import { answerBlocks } from "./markdown";
 import { progressLabel } from "./progress";
 import { StructuredBlock } from "./StructuredBlock";
 import { structuredBlocks } from "./structured";
+import { groupCitations } from "./sources";
 import { visibleSuggestions } from "./suggestions";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
@@ -248,8 +249,8 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             <ConfidenceBadge status="handoff" />
             <div className="bubble-ai">
               <p>{message.error ? message.text : fallbackText(message.result?.fallbackReason ?? null)}</p>
-              {message.citations.map((c) => (
-                <CitationCard key={c.ref} title={c.documentTitle} meta={citationMeta(c)} />
+              {groupCitations(message.citations).map((s) => (
+                <CitationCard key={s.ref} title={s.title} meta={s.details.join(" · ")} />
               ))}
               {/* 연락처 안내가 폴백의 본체이자 유일한 행동이다. 버튼은 두지 않는다 —
                   "담당자 연결"은 연결해 줄 채널이 없었고, "민원 접수하기"는 답을 못 준 화면에서
@@ -287,10 +288,6 @@ function AnswerBody({ text }: { text: string }) {
   );
 }
 
-function citationMeta(c: Citation): string {
-  return [c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ");
-}
-
 /**
  * 답변 과정 — 기본 접힘. `<details>` 를 쓰는 이유: 키보드 열고 닫기·스크린리더 상태 노출을
  * 브라우저가 공짜로 해준다(자체 토글 상태·aria-expanded 를 만들 이유가 없다).
@@ -314,17 +311,19 @@ function ProgressSteps({ steps }: { steps: readonly string[] }) {
  * (H17 에서 이미 줄인 것을 다시 키우지 않는다). 375px 에서는 이 줄 안에서만 스크롤된다.
  */
 function SourceStrip({ citations }: { citations: readonly Citation[] }) {
-  if (citations.length === 0) return null;
+  // 같은 문서의 청크가 각각 카드로 뜨면 "출처가 중복"으로 읽힌다 — 표시만 묶는다(sources.ts).
+  const sources = groupCitations(citations);
+  if (sources.length === 0) return null;
   return (
-    <section className="ai-sources" aria-label={`출처 ${citations.length}건`}>
-      <p className="ai-sources__label">출처 {citations.length}건</p>
+    <section className="ai-sources" aria-label={`출처 ${sources.length}건`}>
+      <p className="ai-sources__label">출처 {sources.length}건</p>
       <div className="ai-sources__strip" tabIndex={0}>
-        {citations.map((c) => (
+        {sources.map((s) => (
           <CitationCard
-            key={c.ref}
+            key={s.ref}
             className="ai-sources__card"
-            title={c.documentTitle}
-            meta={citationMeta(c)}
+            title={s.title}
+            meta={s.details.join(" · ")}
           />
         ))}
       </div>
