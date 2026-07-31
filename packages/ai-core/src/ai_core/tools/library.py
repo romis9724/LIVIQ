@@ -355,7 +355,12 @@ def default_registry() -> ToolRegistry:
             ),
             Tool(
                 name="get_my_inquiries",
-                description="본인이 접수한 민원의 제목·처리 상태를 조회한다.",
+                # 신고형 질의를 받는 search_similar_inquiries와 갈라지는 지점은 "이미 접수한
+                # 내 건"이다 — 그 어휘를 설명에 명시해야 8B가 둘을 구분한다(2026-08-01 실측).
+                description=(
+                    "내가 이미 접수한 민원의 제목과 처리 상태를 조회한다. "
+                    "'내 민원', '접수한 민원'의 진행 상황을 물을 때 쓴다."
+                ),
                 args_model=NoArgs,
                 run=_get_my_inquiries,
             ),

@@ -116,7 +116,10 @@ async def test_returns_title_category_and_reply_summary(settings: AiCoreSettings
     assert "위층 배관 이음부를 교체했습니다. 재발 시 재접수 바랍니다." in quote
     # 본인 건은 상태 한글과 함께 구분 표기, 카테고리 없으면 "분류없음".
     assert "[분류없음] 세탁실 배수 역류 (내 접수 · 처리중)" in quote
-    assert "담당자 답변 기록 없음" in quote
+    # 답변이 없는 건은 부정문 대신 상태를 긍정문으로 — 부정문이 섞이면 8B가 카드 전체를
+    # 근거 없음으로 읽는다(2026-08-01 실측). 건수 머리말도 같은 이유로 붙인다.
+    assert "관리사무소가 처리 중" in quote
+    assert quote.startswith("비슷한 민원 2건:")
 
 
 # ── (2) 0건 → note가 아니라 카드 승격 ───────────────────────────────────

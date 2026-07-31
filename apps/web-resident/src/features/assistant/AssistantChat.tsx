@@ -5,6 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
 import { getMe } from "@/lib/api";
 import { buildComposeHref } from "@/features/inquiries/prefill";
+import {
+  PARKING_TOOL,
+  buildParkingHref,
+  spotNosFromCitations,
+} from "@/features/parking/links";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
@@ -166,6 +171,10 @@ function AiRow({ message, question, onChip }: AiRowProps) {
   const answered = message.result?.status === "answered" && !message.error;
   const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
   const composeHref = buildComposeHref(question);
+  // 주차 도구가 호출됐으면 지도로 보낸다. 추천 면은 도구 결과 카드에서만 뽑고,
+  // 못 뽑아도 CTA 는 띄운다(면 강조 없이 지도만 — H17-2).
+  const isParking = message.result?.toolPath.includes(PARKING_TOOL) ?? false;
+  const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
 
   return (
     <div className="ai-row">
@@ -202,10 +211,19 @@ function AiRow({ message, question, onChip }: AiRowProps) {
             {message.result?.needsReview ? (
               <p className="ai-row__review-note">관리사무소 확인 예정인 답변이에요.</p>
             ) : null}
-            {isInquiry ? (
-              <Link href={composeHref} className="btn btn--secondary btn--sm ai-row__cta">
-                민원 접수하기
-              </Link>
+            {isInquiry || isParking ? (
+              <div className="ai-row__ctas">
+                {isInquiry ? (
+                  <Link href={composeHref} className="btn btn--secondary btn--sm">
+                    민원 접수하기
+                  </Link>
+                ) : null}
+                {isParking ? (
+                  <Link href={parkingHref} className="btn btn--secondary btn--sm">
+                    주차위치 보기
+                  </Link>
+                ) : null}
+              </div>
             ) : null}
             <FeedbackButtons />
             <div className="ai-row__followups">

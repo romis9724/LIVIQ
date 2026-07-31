@@ -8,11 +8,14 @@
  * (파일명 sim 은 H9-5 시뮬레이션 시절 잔재 — 참조가 많아 유지)
  */
 
+import { SPOT_H, SPOT_W } from "@liviq/ui";
 import type { ParkingSpot, ParkingVehicle } from "@/lib/api";
 
-// 배치도 축척 — 면 1개 34x64px = 2.5m x 5.0m (13px/m). 프로토타입과 동일해야 좌표가 맞는다.
-export const SPOT_W = 34;
-export const SPOT_H = 64;
+// 축척 상수·viewBox 파싱·경과시간 포맷은 공용 ParkingMap(@liviq/ui)이 정본 — 여기선 통과만
+// 시킨다(H17-2). 값을 복제하면 2D·3D·입주민 맵 좌표가 어긋난다.
+export { SPOT_H, SPOT_W, elapsedText, parseViewBox } from "@liviq/ui";
+
+// 면 34x64px = 2.5m x 5.0m → 13px/m. 거리 표기(3D 라벨)용 역환산.
 export const PX_TO_M = 1 / 13;
 
 /** 소속 필터의 "외부 차량" 그룹 키(동명이 아닌 유일 값). */
@@ -118,19 +121,3 @@ export function matchesGroup(car: ParkedCar | undefined, group: string): boolean
   return group === EXTERNAL_GROUP ? car.external : car.dong === group;
 }
 
-/** "0 0 3020 1082" → [minX, minY, width, height]. 파싱 실패는 0 으로 둔다(2D·3D 공용). */
-export function parseViewBox(viewBox: string): [number, number, number, number] {
-  const parts = viewBox
-    .trim()
-    .split(/[\s,]+/)
-    .map((v) => Number.parseFloat(v));
-  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0, parts[3] ?? 0];
-}
-
-/** 주차 경과 시간 — "3시간 20분" / "20분". 미래 입차(음수)는 "0분". */
-export function elapsedText(entryMs: number, nowMs: number): string {
-  const minutes = Math.max(0, Math.floor((nowMs - entryMs) / 60000));
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return hours > 0 ? `${hours}시간 ${rest}분` : `${rest}분`;
-}

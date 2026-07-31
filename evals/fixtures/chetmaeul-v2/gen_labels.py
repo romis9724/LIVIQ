@@ -32,6 +32,7 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   home-device:<기기키워드>        세대 기기→연결 설비 계통 장애 이력 (household_ref·user_ref 필수)
   plan-device:<라벨>              세대 평면도 기기 (household_ref 바인딩 필수)
   parking:nearest[:ev]            본인 동 최근접 빈 주차 면 (household_ref 필수, :ev면 전기차 선호)
+  similar-inquiries               유사 민원 처리 사례 (user_ref 필수, 질의는 turn_1 원문)
   fallback:absent                 코퍼스 부재 — 폴백이 정답
   isolation:cross-tenant          타 단지 질문 차단 — 폴백/거부가 정답
   isolation:role-block:<도구>     역할 밖 도구 차단 — 도구 비가시 + 폴백이 정답
@@ -54,6 +55,10 @@ from typing import Any
 import asyncpg
 
 from ai_core.parking import Core, Spot, nearest_available_spots
+
+# 도구의 랭킹 SQL·임계·상한을 그대로 쓴다(비공개 이름 의도적 참조) — 문구를 복사하면
+# 가시성 규칙(done 또는 본인 건)과 임계가 갈라져 라벨이 도구 출력과 어긋난다.
+from ai_core.tools.inquiries import _LIMIT, _SIMILAR_SQL, _SIMILARITY_THRESHOLD
 
 TENANT_NAME = "첫마을 4단지 푸르지오"
 HERE = Path(__file__).parent
@@ -630,6 +635,67 @@ async def resolve_parking(
     )
 
 
+# SQLAlchemy `:name` 바인드 → asyncpg `$n`. `::cast`는 건드리지 않는다(negative lookbehind).
+_NAMED_PARAM_RE = re.compile(r"(?<!:):([A-Za-z_]\w*)")
+
+
+def _positional(sql: str) -> tuple[str, list[str]]:
+    """`:name` 바인드를 첫 등장 순서로 `$1..$n`으로 바꾸고 이름 순서를 함께 낸다."""
+    names: list[str] = []
+
+    def repl(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name not in names:
+            names.append(name)
+        return f"${names.index(name) + 1}"
+
+    return _NAMED_PARAM_RE.sub(repl, sql), names
+
+
+async def resolve_similar_inquiries(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """similar-inquiries — 유사 민원 처리 사례 (도구 search_similar_inquiries와 동일 랭킹).
+
+    도구의 SQL을 그대로 실행한다(파라미터 표기만 asyncpg용으로 변환) — parking과 같은
+    드리프트 차단 원칙. 질의는 turn_1 원문을 쓴다: 실제 query 인자는 LLM이 만들지만
+    라벨은 결정론이어야 하므로 사용자 발화를 근사로 고정한다.
+    """
+    uref = case.get("user_ref", "")
+    if not uref:
+        return _error("similar-inquiries는 user_ref 바인딩 필수(본인 민원 가시성 계산)")
+    query = (case.get("turn_1") or "").strip()
+    if not query:
+        return _error("similar-inquiries는 turn_1(질의 원문) 필수")
+    sql, names = _positional(str(_SIMILAR_SQL))
+    binds = {
+        "q": query,
+        "tid": tid,
+        "uid": uref,
+        "threshold": _SIMILARITY_THRESHOLD,
+        "lim": _LIMIT,
+    }
+    missing = [n for n in names if n not in binds]
+    if missing:
+        return _error(f"도구 SQL 파라미터 변경됨: {missing} — 리졸버 binds 동기화 필요")
+    rows = await conn.fetch(sql, *(binds[n] for n in names))
+    if not rows:
+        # 0건이면 케이스가 늘 "없음" 카드로 떨어져 트리아지 라우팅을 측정하지 못한다.
+        # 질문을 시드 민원에 맞추거나 시드를 보강하라는 뜻이므로 생성을 거부한다.
+        return _error(f"유사 민원 0건(임계 {_SIMILARITY_THRESHOLD}): '{query}' — 질문·시드 확인")
+    facts = "; ".join(f"[{r['category_label'] or '분류없음'}] {r['title']}" for r in rows)
+    return Label(
+        expected_facts=facts,
+        expected_citations="tool:search_similar_inquiries",
+        expected_tool="search_similar_inquiries",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of=AS_OF,
+        label_source_resolved=f"similar-inquiries user={uref} n={len(rows)}",
+        errors=[],
+    )
+
+
 async def resolve_notice(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
@@ -725,6 +791,7 @@ RESOLVERS = {
     "home-device": resolve_home_device,
     "plan-device": resolve_plan_device,
     "parking": resolve_parking,
+    "similar-inquiries": resolve_similar_inquiries,
     "fallback": resolve_fallback,
     "isolation": resolve_isolation,
     "notice": resolve_notice,
@@ -859,6 +926,15 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         ("inquiries:mine", {"role": "RESIDENT", "user_ref": inquiry_author or ""}),
         ("plan-device:콘센트", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("parking:nearest", {"role": "RESIDENT", "household_ref": "401-201"}),
+        (
+            # 매칭 대상은 done 민원(전원 가시)이라 user_ref가 누구든 히트해야 정상.
+            "similar-inquiries",
+            {
+                "role": "RESIDENT",
+                "user_ref": inquiry_author or "",
+                "turn_1": "엘리베이터가 덜컹거려요",
+            },
+        ),
         ("facilities:count:EL", {"role": "MANAGER"}),
         ("facilities:status:fault", {"role": "FACILITY"}),
         ("overdue:window", {"role": "MANAGER"}),

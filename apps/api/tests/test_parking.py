@@ -1,8 +1,10 @@
-"""주차장 대시보드 통합 — 실 PG (H9-5 · 점유 H16).
+"""주차장 대시보드 통합 — 실 PG (H9-5 · 점유 H16 · 입주민 주차맵 H17-2).
 
 배치도 조회(미적재 시 null)·차량 목록(동·호 표시 포맷·정렬·점유 필드·외부 차량)·인가 매트릭스
 (STAFF·RESIDENT 403)·tenant 격리(타 단지 미노출)·차량번호 봉투 암호화 왕복(plate_enc는 암호문,
 응답은 복호 평문)을 본다. 세대·명부는 기존 시드 재사용.
+입주민 주차맵(GET /parking/map)은 인가(RESIDENT 전용)·타 세대 PII 미노출(CRITICAL)·본인 세대
+차량만 위치 노출·tenant 격리를 본다.
 """
 
 from __future__ import annotations
@@ -17,12 +19,12 @@ import pytest_asyncio
 from app.deps import RequestContext, get_context, get_tenant_session, visibilities_for
 from app.main import create_app
 from app.pii import PiiCrypto, get_pii_crypto
-from conftest import MANAGER_USER_ID, TENANT_ID, seed_tenant
+from conftest import MANAGER_USER_ID, TENANT_ID, USER_ID, seed_tenant
 from httpx import ASGITransport
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import ParkingLayout, ParkingVehicle
+from liviq_db.models import ParkingLayout, ParkingVehicle, User
 
 TENANT_B_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 _KEK = base64.b64encode(b"0" * 32).decode()
@@ -41,10 +43,11 @@ def _client(
     *,
     roles: tuple[str, ...] = ("MANAGER",),
     tenant_id: uuid.UUID = TENANT_ID,
+    user_id: uuid.UUID = MANAGER_USER_ID,
 ) -> httpx.AsyncClient:
     app = create_app()
     app.dependency_overrides[get_context] = lambda: RequestContext(
-        tenant_id, MANAGER_USER_ID, roles=roles, visibilities=visibilities_for(roles)
+        tenant_id, user_id, roles=roles, visibilities=visibilities_for(roles)
     )
     app.dependency_overrides[get_tenant_session] = lambda: db_session
     app.dependency_overrides[get_pii_crypto] = lambda: PiiCrypto(_KEK)
@@ -216,3 +219,86 @@ async def test_cross_tenant_not_visible(seeded: tuple) -> None:
     async with _client(session, tenant_id=TENANT_B_ID) as c:
         assert (await c.get("/admin/parking/layout")).json() == {"layout": None}
         assert (await c.get("/admin/parking/vehicles")).json() == {"vehicles": [], "total": 0}
+
+
+# ── 입주민 주차맵 GET /parking/map (H17-2) ────────────────────────────────────
+
+
+async def _add_resident(
+    session: AsyncSession,
+    *,
+    household_id: uuid.UUID | None,
+    user_id: uuid.UUID = USER_ID,
+    tenant_id: uuid.UUID = TENANT_ID,
+) -> None:
+    session.add(User(id=user_id, tenant_id=tenant_id, status="active", household_id=household_id))
+    await session.flush()
+
+
+async def test_map_layout_absent_returns_null(seeded: tuple) -> None:
+    """배치도 미적재도 200 + layout null — 프론트가 빈 상태를 렌더한다(관리자 관례와 동일)."""
+    session, mapping = seeded
+    await _add_resident(session, household_id=mapping[(3, 301)])
+    async with _client(session, roles=("RESIDENT",), user_id=USER_ID) as c:
+        body = (await c.get("/parking/map")).json()
+    assert body == {"layout": None, "occupied_spot_nos": [], "my_vehicles": []}
+
+
+async def test_map_hides_other_household_pii(seeded: tuple) -> None:
+    """CRITICAL — 타 세대 차량은 면 번호만. 번호판·동호수·세대 식별자가 응답에 없어야 한다."""
+    session, mapping = seeded
+    await _add_resident(session, household_id=mapping[(3, 301)])
+    session.add(ParkingLayout(tenant_id=TENANT_ID, layout=_LAYOUT))
+    other = mapping[(5, 501)]
+    await _add_vehicle(session, other, plate=_PLATE, spot_no="200")
+    await _add_vehicle(session, None, plate="123가4567", model=None, is_ev=False, spot_no="201")
+
+    async with _client(session, roles=("RESIDENT",), user_id=USER_ID) as c:
+        response = await c.get("/parking/map")
+    raw = response.text
+    body = response.json()
+
+    assert body["occupied_spot_nos"] == ["200", "201"]
+    assert body["my_vehicles"] == []  # 본인 세대는 미주차
+    # 응답 스키마에 PII 필드 자체가 없다 — 키 집합을 고정해 나중에 늘어나는 것도 막는다.
+    assert set(body) == {"layout", "occupied_spot_nos", "my_vehicles"}
+    assert _PLATE not in raw
+    assert "123가4567" not in raw
+    assert str(other) not in raw  # 타 세대 식별자
+
+
+async def test_map_returns_only_my_household_vehicles(seeded: tuple) -> None:
+    """본인 세대 차량만 spot_no·entry_at 노출 — 세대는 세션에서 정한다(클라이언트 입력 없음)."""
+    session, mapping = seeded
+    mine = mapping[(3, 301)]
+    await _add_resident(session, household_id=mine)
+    entry_at = datetime.datetime(2026, 8, 1, 3, 20, tzinfo=datetime.UTC)
+    await _add_vehicle(session, mine, spot_no="042", entry_at=entry_at)
+    await _add_vehicle(session, mapping[(5, 501)], plate="102노9973", spot_no="200")
+
+    async with _client(session, roles=("RESIDENT",), user_id=USER_ID) as c:
+        body = (await c.get("/parking/map")).json()
+
+    assert body["occupied_spot_nos"] == ["042", "200"]
+    assert len(body["my_vehicles"]) == 1
+    assert set(body["my_vehicles"][0]) == {"spot_no", "entry_at"}  # 번호판 없음
+    assert body["my_vehicles"][0]["spot_no"] == "042"
+    assert datetime.datetime.fromisoformat(body["my_vehicles"][0]["entry_at"]) == entry_at
+
+
+async def test_map_denied_for_non_residents(seeded: tuple) -> None:
+    session, _ = seeded
+    for role in ("MANAGER", "STAFF"):
+        async with _client(session, roles=(role,)) as c:
+            assert (await c.get("/parking/map")).status_code == 403
+
+
+async def test_map_cross_tenant_not_visible(seeded: tuple) -> None:
+    """단지A의 배치도·점유는 단지B 입주민에게 노출되지 않는다."""
+    session, mapping = seeded
+    session.add(ParkingLayout(tenant_id=TENANT_ID, layout=_LAYOUT))
+    await _add_vehicle(session, mapping[(3, 301)], spot_no="042")
+
+    async with _client(session, roles=("RESIDENT",), tenant_id=TENANT_B_ID) as c:
+        body = (await c.get("/parking/map")).json()
+    assert body == {"layout": None, "occupied_spot_nos": [], "my_vehicles": []}

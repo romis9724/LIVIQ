@@ -1,0 +1,171 @@
+/*
+ * 입주민 주차맵 화면 — 헤더·요약·범례 등 화면 셸만. (H17-2)
+ * 배치도(SVG)·줌·팬·면 색은 @liviq/ui ParkingMap 이 담당한다. 범례 스와치는 그 팔레트
+ * 변수(--pk-*)를 그대로 참조해 지도와 색이 어긋나지 않게 한다.
+ */
+.rpk {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.rpk__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.rpk__back {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-left: calc(-1 * var(--space-2));
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
+.rpk__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+.rpk__main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+/* 요약 — 색에 기대지 않는 1차 정보(스크린리더도 이 문장을 읽는다). */
+.rpk__summary {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 내 차 위치 — 누르면 지도가 그 면으로 포커스한다. */
+.rpk__mycars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rpk__mycar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--pk-mine-stroke);
+  border-radius: var(--radius-md);
+  background: var(--pk-mine-fill);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+.rpk__mycar[data-empty] {
+  border-color: var(--color-border);
+  background: var(--color-surface-sunken);
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.rpk__mycar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* AI 비서 추천 자리 안내 — 지도의 보라 점선과 같은 의미를 문구로도 준다. */
+.rpk__recommend {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--pk-recommend);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.rpk__stage {
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.rpk__answer {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rpk__note {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* ---- 범례 ---- */
+.rpk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.rpk-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.rpk-legend__sw {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-border-strong);
+  background: var(--color-surface-sunken);
+}
+.rpk-legend__sw[data-state="empty"] {
+  background: var(--pk-empty-fill);
+  border-color: var(--pk-empty-stroke);
+}
+.rpk-legend__sw[data-state="occupied"] {
+  background: var(--pk-occupied-fill);
+  border-color: var(--pk-occupied-stroke);
+}
+.rpk-legend__sw[data-state="mine"] {
+  background: var(--pk-mine-fill);
+  border-color: var(--pk-mine-stroke);
+}
+.rpk-legend__sw[data-state="recommend"] {
+  background: transparent;
+  border-color: var(--pk-recommend);
+  border-style: dashed;
+}
+.rpk-legend__sw[data-state="accessible"] {
+  background: var(--pk-accessible-fill);
+  border-color: var(--pk-accessible-stroke);
+}
+.rpk-legend__sw[data-state="ev"] {
+  background: var(--pk-box-fill);
+  border-color: var(--pk-box-stroke);
+}

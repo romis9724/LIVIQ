@@ -201,6 +201,7 @@
 | [0007](adr/0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 + 스텝 상한(정적 라우터 대체) | 정적 라우터 유지 / 자유 ReAct 루프 | 복합 질의 커버 + 비용·평가 통제. 쓰기는 도구 제외로 규칙 8 유지 |
 | [0013](adr/0013-python-backend.md) | 백엔드 전면 Python(FastAPI·arq·SQLAlchemy+Alembic·ai-core) | 기존 TS 백엔드 스택 유지 | AI/데이터 생태계 정합, mcp 자산 재사용, 웹↔api 타입은 OpenAPI 생성 |
 | [0015](adr/0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환(첨부·예약 발행) | AI 초안→검수→발행 흐름 유지 | 운영 실무는 정형 문서 직접 작성, 첨부가 실요구·AI 불요 |
+| [0024](adr/0024-assistant-inquiry-triage.md) | AI 비서 민원 트리아지 — 읽기 도구 1종 + 접수 딥링크 프리필 | 챗 안 확인 버튼→코드가 POST / 분류 LLM turn 추가 / 민원 임베딩 색인 | 기존 접수 폼 재사용(규칙 8), 질의당 호출 +0, trigram으로 먼저 재고 |
 
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.

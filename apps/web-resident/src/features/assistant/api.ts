@@ -7,7 +7,8 @@ export type Stage = "searching" | "generating" | "verifying";
 
 export interface Citation {
   ref: number;
-  documentId: string;
+  /** 문서 인용은 문서 id, **도구 결과 카드는 null**(제목·quote 로 식별 — 주차 CTA 가 쓴다). */
+  documentId: string | null;
   documentTitle: string;
   quote: string;
   page: number | null;
@@ -82,7 +83,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
           type: "citation",
           citation: {
             ref: d.ref,
-            documentId: d.document_id,
+            documentId: d.document_id ?? null,
             documentTitle: d.document_title,
             quote: d.quote,
             page: d.page ?? null,

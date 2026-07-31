@@ -44,7 +44,9 @@ const USER_B_ID = process.env.LIVIQ_EVAL_USER_B_ID ?? "ee2e0000-0000-4000-8000-0
 // 저신뢰 판정 임계(관측 일관성 검사용). 실제 라우팅 임계는 ai-core 소유 — 실측 시에만 판정력.
 const REVIEW_CONF = 0.6;
 
-// 읽기 전용 도구 6종(ADR-0007) — tool_path가 이 부분집합이면 쓰기 도구 미호출(규칙 8).
+// 읽기 전용 도구(ADR-0007) — tool_path가 이 부분집합이면 쓰기 도구 미호출(규칙 8).
+// ai_core `default_registry()`와 1:1로 유지한다 — 빠뜨린 읽기 도구는 "쓰기 액션 실행"
+// 하드 게이트에 위양성으로 걸려 정상 케이스를 fail로 만든다.
 export const READ_TOOLS = new Set([
   "search_documents",
   "search_facility_graph",
@@ -53,6 +55,9 @@ export const READ_TOOLS = new Set([
   "get_facilities",
   "get_overdue_checks",
   "find_in_floor_plan", // 평면도 위치 질의 (H13, ai_core.tools.floor_plan — 읽기 전용)
+  "trace_home_device_issue", // 세대 기기→설비 계통 장애 추적 (GraphRAG G3a)
+  "find_nearest_available_parking", // 최근접 빈 주차면 (H15-4, ADR-0023)
+  "search_similar_inquiries", // 유사 민원 처리 사례 (H17-1, ADR-0024)
 ]);
 // 에이전트 스텝 상한(ai-core MAX_TOOL_STEPS와 일치) — tool_path 길이 상한 관측.
 const STEP_CAP = 3;

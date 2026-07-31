@@ -23,13 +23,20 @@ from ai_core.tools.registry import Tool, ToolCard, ToolContext, ToolDeps, ToolRe
 _SOURCE_KIND = "tool:search_similar_inquiries"
 _CARD_TITLE = "유사 민원 처리 사례"
 _LIMIT = 5
-# 조사·어미 변화를 흡수하는 최소선. 낮추면 무관한 민원이 근거로 붙는다(ADR-0024).
-_SIMILARITY_THRESHOLD = 0.3
+# 0.3으로 시작했다가 실측(2026-08-01)으로 올렸다: "엘리베이터가 덜컹거려요"에 0.385짜리
+# "월패드에서 엘리베이터 호출이 안 됩니다"가 붙자 모델이 (옳게) 근거로 인정하지 않고
+# NO_EVIDENCE를 냈다. trigram은 의미검색이 아니라 어휘 겹침이라, 임계가 낮으면 겹치는
+# 명사 하나로 무관한 사례가 딸려온다. 회수보다 정확도를 택한다 — 못 찾으면 접수 CTA로
+# 넘어가면 되지만, 엉뚱한 사례는 답변 자체를 폐기시킨다(ADR-0024 · 임베딩 승격 여지).
+_SIMILARITY_THRESHOLD = 0.5
 _REPLY_MAX_CHARS = 120
 _ELLIPSIS = "…"
 
 _NO_MATCH_QUOTE = "비슷한 민원 기록을 찾지 못했습니다."
-_NO_REPLY = "담당자 답변 기록 없음"
+# 부정문("답변 기록 없음")을 쓰면 8B가 카드 전체를 근거 없음으로 읽고 NO_EVIDENCE를 뱉는다
+# (2026-08-01 실측 — 카드 2건이 실제로 있었는데도 폴백). 상태를 긍정문으로 말해준다.
+_STATUS_ONLY = {"done": "처리 완료(답변 기록 없음)"}
+_IN_PROGRESS_NOTE = "관리사무소가 처리 중"
 
 _STATUS_LABEL = {
     "received": "미배정",
@@ -68,9 +75,10 @@ class SimilarInquiriesArgs(BaseModel):
     query: str = Field(..., min_length=1, description="민원 내용·증상 요약")
 
 
-def _summary(reply_body: str | None) -> str:
+def _summary(reply_body: str | None, status: str) -> str:
+    """처리결과 한 줄 — 담당자 답변이 있으면 발췌, 없으면 상태를 긍정문으로."""
     if not reply_body:
-        return _NO_REPLY
+        return _STATUS_ONLY.get(status, _IN_PROGRESS_NOTE)
     # 카드 quote는 한 줄 단위로 읽히므로 줄바꿈은 접는다.
     body = " ".join(reply_body.split())
     if len(body) <= _REPLY_MAX_CHARS:
@@ -81,7 +89,7 @@ def _summary(reply_body: str | None) -> str:
 def _line(r: Any) -> str:
     category = r.category_label or "분류없음"
     mine = f" (내 접수 · {_STATUS_LABEL.get(r.status, r.status)})" if r.is_mine else ""
-    return f"- [{category}] {r.title}{mine} — 처리결과: {_summary(r.reply_body)}"
+    return f"- [{category}] {r.title}{mine} — 처리결과: {_summary(r.reply_body, r.status)}"
 
 
 async def _search_similar_inquiries(
@@ -101,19 +109,28 @@ async def _search_similar_inquiries(
         )
     ).all()
     # DB가 확인한 "없음"도 확정 근거 — note면 인용 카드가 없어 폴백된다(⓪ 계약, R22 실측).
-    quote = "\n".join(_line(r) for r in rows) if rows else _NO_MATCH_QUOTE
+    # 건수를 머리말로 세어준다 — 목록만 주면 8B가 근거의 존재를 놓치고 NO_EVIDENCE로 샜다.
+    quote = (
+        f"비슷한 민원 {len(rows)}건:\n" + "\n".join(_line(r) for r in rows)
+        if rows
+        else _NO_MATCH_QUOTE
+    )
     return ToolResult(card=ToolCard(title=_CARD_TITLE, quote=quote, source_kind=_SOURCE_KIND))
 
 
 def search_similar_inquiries_tool() -> Tool:
     return Tool(
         name="search_similar_inquiries",
-        # get_my_inquiries와 의미가 겹치면 8B 라우팅이 무너진다(R22 선례) — 경계를
-        # 마지막 문장으로 못 박는다. 고장·신고 용례는 시설 신고까지 이 도구가 받게 한다.
+        # 초안은 "이전에 접수된 비슷한 **민원**"으로 시작하고 경계를 "…만 물으면
+        # get_my_inquiries를 쓴다"로 달았는데, 실측(2026-08-01)에서 정확히 반대로 갈렸다:
+        # 신고 4건은 전부 find_in_floor_plan/문서로 새고, "제가 접수한 민원" 질문만 이 도구를
+        # 골랐다. '민원'이라는 단어가 설명 앞머리와 타 도구 이름에 함께 있어 그 단어가 든
+        # 질문을 빨아들인 것 — R22의 "의미 중복이 라우팅을 무너뜨린다"와 같은 실패다.
+        # 그래서 앞머리를 **증상 신고 상황**으로 바꾸고 '민원'·타 도구 이름은 뺐다.
         description=(
-            "단지에서 이전에 접수된 비슷한 민원이 어떻게 처리됐는지 찾는다. "
-            "고장·누수·소음·하자 등 불편사항을 말하거나 신고하려 할 때 쓴다 — "
-            "본인이 접수한 민원의 진행 상태만 물으면 get_my_inquiries를 쓴다."
+            "고장·누수·소음·냄새·하자처럼 불편한 상태를 겪고 있다고 말하거나 신고할 때 쓴다. "
+            "같은 단지에서 앞서 같은 증상이 접수됐다면 어떻게 처리됐는지 찾아 알려준다. "
+            "이미 접수한 건의 진행 상태를 묻는 질문에는 쓰지 않는다."
         ),
         args_model=SimilarInquiriesArgs,
         run=_search_similar_inquiries,

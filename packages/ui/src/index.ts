@@ -65,3 +65,15 @@ export type {
   FloorPlanViewerPlan,
   FloorPlanViewerDevice,
 } from "./components/floor-plan-viewer/FloorPlanViewer";
+
+export { ParkingMap } from "./components/parking-map/ParkingMap";
+export type {
+  ParkingMapProps,
+  ParkingMapLayout,
+  ParkingMapSpot,
+  ParkingMapBuilding,
+  ParkingMapBox,
+  ParkingSpotState,
+  ParkingSpotView,
+} from "./components/parking-map/ParkingMap";
+export { SPOT_H, SPOT_W, elapsedText, parseViewBox } from "./components/parking-map/parking-map-data";

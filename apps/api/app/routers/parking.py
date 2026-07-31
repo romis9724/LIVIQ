@@ -1,4 +1,4 @@
-"""parking — 지하주차장 배치도·차량 조회 (MANAGER 전용, H9-5 · 점유 H16).
+"""parking — 지하주차장 배치도·차량 조회 (MANAGER, H9-5 · 점유 H16) + 입주민 주차맵(H17-2).
 
 배치도(parking_layouts, 단지당 1행)는 렌더 페이로드를 그대로 반환하고, 차량(parking_vehicles)은
 명부(households·buildings)에 **LEFT** 조인해 동·호 표시 문자열과 함께 반환한다 — 세대가 없는
@@ -6,6 +6,10 @@
 봉투 암호화(plate_enc), 조회 시 복호해 관리자에게만 노출한다(규칙 2 — 입주민 앱·LLM 미노출).
 적재는 시드 스크립트(seed_parking.py) 경로 — 이 라우터는 읽기 전용이다.
 모든 쿼리는 tenant 컨텍스트 세션 + tenant_id 명시 필터로 이중 방어(규칙 3).
+
+라우터는 둘로 나뉜다 — `router`(/admin/parking, MANAGER)는 차량번호 평문을 내보내고,
+`resident_router`(/parking, RESIDENT)는 점유 여부와 본인 차량 위치만 내보낸다. 인가·응답
+계약이 정반대라 한 라우터에 섞지 않는다.
 """
 
 from __future__ import annotations
@@ -20,15 +24,19 @@ from app.audit import PII_PLATES_VIEWED, client_ip, record_audit
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
 from app.schemas.parking import (
+    MyParkingVehicleOut,
     ParkingLayoutOut,
+    ParkingMapOut,
     ParkingVehicleItem,
     ParkingVehicleListOut,
 )
-from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle
+from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle, User
 
 router = APIRouter(prefix="/admin/parking", tags=["parking"])
+resident_router = APIRouter(prefix="/parking", tags=["parking"])
 
 _MANAGER = require_roles("MANAGER")
+_RESIDENT = require_roles("RESIDENT")
 _PLATE_FALLBACK = "*"  # 복호 실패 차량 — 목록엔 남기고 번호만 가린다
 
 
@@ -108,3 +116,62 @@ async def list_vehicles(
         ip=client_ip(request),
     )
     return ParkingVehicleListOut(vehicles=vehicles, total=len(vehicles))
+
+
+# ── 입주민 주차맵 (H17-2) ─────────────────────────────────────────────────────
+
+
+@resident_router.get("/map", response_model=ParkingMapOut)
+async def get_parking_map(
+    ctx: Annotated[RequestContext, Depends(_RESIDENT)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> ParkingMapOut:
+    """배치도 + 점유 면 번호 + 본인 세대 차량 위치.
+
+    타 세대 정보는 "면이 찼다"는 사실만 나간다 — 번호판·동호수·세대 식별자는 조회조차
+    하지 않는다(규칙 2, 복호 경로 없음 → 감사 로그도 불필요). 본인 세대는 세션의
+    `users.household_id`로 정하고 클라이언트 입력을 받지 않는다(규칙 4 — 우회 표면 없음).
+    배치도 미적재는 404가 아니라 layout=null(관리자 /layout 과 같은 관례).
+    """
+    layout = await session.scalar(
+        select(ParkingLayout.layout).where(ParkingLayout.tenant_id == ctx.tenant_id)
+    )
+
+    occupied = (
+        await session.scalars(
+            select(ParkingVehicle.spot_no)
+            .where(
+                ParkingVehicle.tenant_id == ctx.tenant_id,
+                ParkingVehicle.spot_no.is_not(None),
+            )
+            .order_by(ParkingVehicle.spot_no)
+        )
+    ).all()
+
+    household_id = await session.scalar(
+        select(User.household_id).where(User.id == ctx.user_id, User.tenant_id == ctx.tenant_id)
+    )
+    # 세대 미배정(승인 전 등)은 빈 목록 — 지도 자체는 볼 수 있어야 하므로 404로 막지 않는다.
+    my_rows = (
+        (
+            await session.execute(
+                select(ParkingVehicle.spot_no, ParkingVehicle.entry_at)
+                .where(
+                    ParkingVehicle.tenant_id == ctx.tenant_id,
+                    ParkingVehicle.household_id == household_id,
+                    ParkingVehicle.spot_no.is_not(None),
+                )
+                .order_by(ParkingVehicle.spot_no)
+            )
+        ).all()
+        if household_id is not None
+        else []
+    )
+
+    return ParkingMapOut(
+        layout=layout,
+        occupied_spot_nos=[no for no in occupied if no is not None],
+        my_vehicles=[
+            MyParkingVehicleOut(spot_no=spot_no, entry_at=entry_at) for spot_no, entry_at in my_rows
+        ],
+    )

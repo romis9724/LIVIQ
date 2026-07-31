@@ -73,8 +73,11 @@ dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
 시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
 outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
 `/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
-레지스트리 6종(역할·그래프 가용성 필터, tenant·user는 코드 주입), 스텝 상한 3, 도구 인용은 `source_kind=tool:*`
+레지스트리 10종(역할·그래프 가용성 필터, tenant·user는 코드 주입 — 목록은 [docs/01 §5.2](docs/01-architecture.md)),
+스텝 상한 3, 도구 인용은 `source_kind=tool:*`
 (SSE citation은 document_id null). Neo4j env 없으면 그래프 도구만 제외(PG 폴백).
+민원 트리아지(H17-1, [ADR-0024](docs/adr/0024-assistant-inquiry-triage.md))는 도구 추가 1종으로 끝난다 —
+접수는 프론트가 `tool_path`를 보고 띄우는 프리필 딥링크이고 **AI는 쓰기를 하지 않는다**(규칙 8).
 시설 AI 도우미 `POST /admin/facilities/assistant`(H3-4)는 같은 에이전트에 시설 프롬프트(원인 후보·단정 금지)만
 주입해 공유 — done 이벤트 `tool_path`로 도구 경로 관측(evals 규칙 8 실측).
 AI 질의 앞단(H4): Redis 레이트 리밋(사용자·단지, 429·fail-open)과 정확 캐시([docs/08 §2.0](docs/08-llm-token-optimization.md)

@@ -269,9 +269,10 @@
 }
 
 /* 바로가기 */
+/* 바로가기 5칸 — 375px 에서도 한 줄에 들어간다(라벨 4자 x 0.74rem ≈ 44px < 칸 폭). */
 .shortcut-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: var(--space-2);
 }
 .shortcut {
