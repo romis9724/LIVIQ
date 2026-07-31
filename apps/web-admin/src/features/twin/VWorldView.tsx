@@ -66,7 +66,7 @@ function VWorldCanvas({
   clipOn,
   onSelectHousehold,
 }: VWorldCanvasProps) {
-  const { status, error, srcDoc, iframeRef, onLoad } = useVWorld({
+  const { status, error, srcDoc, iframeRef, onLoad, zoomIn, zoomOut, goHome } = useVWorld({
     apiKey,
     geometry,
     overlay,
@@ -102,6 +102,27 @@ function VWorldCanvas({
             title="실사 3D를 표시할 수 없습니다"
             description={`${error ?? "실사 3D 초기화에 실패했습니다."} 기본 3D 뷰는 정상 동작합니다.`}
           />
+        </div>
+      ) : null}
+
+      {/* 카메라 컨트롤 — VWorld 위젯의 확대·축소·현재위치는 죽어 있어 CSS 로 숨기고 여기로 대체한다
+          (ADR-0019 H9-7). 위젯(우상단 세로 스택)과 겹치지 않게 그 아래로 내려 배치. */}
+      {status === "ready" ? (
+        <div className="twin-vworld-camera" role="group" aria-label="시점 조작">
+          <button type="button" className="twin-camera-btn" onClick={zoomIn} aria-label="확대">
+            <span aria-hidden="true">+</span>
+          </button>
+          <button type="button" className="twin-camera-btn" onClick={zoomOut} aria-label="축소">
+            <span aria-hidden="true">−</span>
+          </button>
+          <button
+            type="button"
+            className="twin-camera-btn"
+            onClick={goHome}
+            aria-label="단지 초기 시점으로 이동"
+          >
+            <span aria-hidden="true">⌖</span>
+          </button>
         </div>
       ) : null}
 

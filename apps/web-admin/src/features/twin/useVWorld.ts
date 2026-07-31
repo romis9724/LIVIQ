@@ -15,6 +15,9 @@ export interface VWorldState {
   srcDoc: string;
   iframeRef: RefObject<HTMLIFrameElement | null>;
   onLoad: () => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  goHome: () => void; // 단지 초기 시점 복귀(GPS 아님 — ADR-0019 H9-7)
 }
 
 // iframe 에 넘기는 세대 단위 — 좌표·색·householdId 뿐(개인정보 없음, 규칙 2).
@@ -177,5 +180,20 @@ export function useVWorld({
     iframeRef.current?.contentWindow?.postMessage({ type: "clip", on: clipOn }, "*");
   }, [clipOn, status]);
 
-  return { status, error, srcDoc, iframeRef, onLoad };
+  // 카메라 컨트롤 — VWorld 위젯 버튼은 flyTo 기반이라 우리 임베드에서 죽어 있다(ADR-0019 H9-7 개정).
+  // 부모 버튼이 iframe 에 직접 대입 명령을 보낸다. ready 전에는 viewer 가 없어 no-op.
+  const isReady = status === "ready";
+  const sendCamera = useCallback(
+    (payload: Record<string, unknown>) => {
+      if (!isReady) return;
+      iframeRef.current?.contentWindow?.postMessage({ type: "camera", ...payload }, "*");
+    },
+    [isReady],
+  );
+
+  const zoomIn = useCallback(() => sendCamera({ cmd: "zoom", delta: -1 }), [sendCamera]);
+  const zoomOut = useCallback(() => sendCamera({ cmd: "zoom", delta: 1 }), [sendCamera]);
+  const goHome = useCallback(() => sendCamera({ cmd: "home" }), [sendCamera]);
+
+  return { status, error, srcDoc, iframeRef, onLoad, zoomIn, zoomOut, goHome };
 }
