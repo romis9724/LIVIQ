@@ -70,7 +70,6 @@ PK-08,질문→답변 품질 v2,Full,P1,복합·라우팅,주차,한국어,단�
 PK-09,질문→답변 품질 v2,Full,P1,복합·라우팅,주차,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,parking:nearest,,find_nearest_available_parking,,지하주차장에 빈 데 있나?,,,,
 PK-10,질문→답변 품질 v2,Full,P1,복합·라우팅,주차,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,parking:nearest,,find_nearest_available_parking,,가까운 주차 자리 좀 찾아줘.,,,,
 GC-01,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:부스터펌프,,search_facility_graph,,"부스터펌프에서 진동이 자꾸 재발하는데, 원래 원인이 뭔지 끝까지 짚어줘.",,,,
-GC-02,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:승강기,,search_facility_graph,,"승강기 호출이 안 되는데, 근본 원인이 어디서 시작된 건지 알려줘.",,,,
 GC-03,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:화재수신반,,search_facility_graph,,화재수신반 통신 불량이 반복돼요. 진짜 원인이 뭔가요?,,,,
 GC-04,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:부스터펌프,,search_facility_graph,,"부스터펌프 진동이 점점 심해지는데, 최초 원인까지 확인해줄 수 있나요?",,,,
 IQ-01,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,월패드 버튼을 눌러도 반응이 없어요.,,,,개인정보 평문

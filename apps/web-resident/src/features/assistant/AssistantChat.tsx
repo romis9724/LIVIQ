@@ -13,8 +13,6 @@ import {
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
-const SUGGESTIONS = ["관리비 이의신청 방법", "엘리베이터 점검일", "분리수거 배출 시간"];
-
 const STAGE_HINT: Record<string, string> = {
   searching: "출처 문서 찾는 중…",
   generating: "답변 작성 중…",
@@ -85,9 +83,8 @@ export function AssistantChat() {
         </span>
         <span className="assistant__heading">
           <span className="assistant__title">AI 비서</span>
-          <span className="assistant__sub">
-            {tenantName ? `${tenantName} · 출처 기반 응대` : "출처 기반 응대"}
-          </span>
+          {/* 부제는 소속 단지명만. 로드 실패하면 아무것도 쓰지 않는다(빈 줄만 남기지 않도록). */}
+          {tenantName ? <span className="assistant__sub">{tenantName}</span> : null}
         </span>
       </header>
 
@@ -99,15 +96,8 @@ export function AssistantChat() {
             </span>
             <p className="assistant-empty__title">무엇이든 물어보세요</p>
             <p className="assistant-empty__desc">
-              단지 규약·관리비·공지·시설을 출처와 함께 알려드려요. 아래에서 골라 시작해 보세요.
+              단지 규약·관리비·공지·시설을 출처와 함께 알려드려요. 아래 입력창에 질문해 주세요.
             </p>
-            <div className="chips">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" className="chip" onClick={() => submit(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           messages.map((m: ChatMessage, i: number) =>
@@ -116,12 +106,7 @@ export function AssistantChat() {
                 {m.text}
               </div>
             ) : (
-              <AiRow
-                key={m.id}
-                message={m}
-                question={questionBefore(messages, i)}
-                onChip={submit}
-              />
+              <AiRow key={m.id} message={m} question={questionBefore(messages, i)} />
             ),
           )
         )}
@@ -163,10 +148,9 @@ interface AiRowProps {
   message: AiMessage;
   /** 이 답변을 유발한 질문 원문 — 민원 접수 링크 프리필용. */
   question: string;
-  onChip: (q: string) => void;
 }
 
-function AiRow({ message, question, onChip }: AiRowProps) {
+function AiRow({ message, question }: AiRowProps) {
   const streaming = message.status === "streaming";
   const answered = message.result?.status === "answered" && !message.error;
   const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
@@ -204,7 +188,6 @@ function AiRow({ message, question, onChip }: AiRowProps) {
                   meta={[c.clause, c.page != null ? `${c.page}p` : null]
                     .filter(Boolean)
                     .join(" · ")}
-                  href="#"
                 />
               ))}
             </div>
@@ -220,22 +203,12 @@ function AiRow({ message, question, onChip }: AiRowProps) {
                 ) : null}
                 {isParking ? (
                   <Link href={parkingHref} className="btn btn--secondary btn--sm">
-                    주차위치 보기
+                    <span aria-hidden="true">🅿️</span> 주차위치 보기
                   </Link>
                 ) : null}
               </div>
             ) : null}
             <FeedbackButtons />
-            <div className="ai-row__followups">
-              <span className="ai-row__followups-label">이어서 물어보기</span>
-              <div className="chips">
-                {SUGGESTIONS.map((c) => (
-                  <button key={c} type="button" className="chip" onClick={() => onChip(c)}>
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
           </>
         ) : (
           <>
@@ -247,16 +220,14 @@ function AiRow({ message, question, onChip }: AiRowProps) {
                   key={c.ref}
                   title={c.documentTitle}
                   meta={[c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ")}
-                  href="#"
                 />
               ))}
+              {/* 연락처 안내는 폴백의 본체라 남긴다. 별도 "담당자 연결" 버튼은 실제로 연결해 줄
+                  채널이 없어(전화번호 안내가 전부) 제거했다 — 누르면 아무 일도 없는 버튼이었다. */}
               <div className="handoff-contact">관리사무소 · 평일 09:00~18:00 · 담당 김*수 소장</div>
               <div className="handoff-actions">
-                <button type="button" className="btn btn--primary">
-                  담당자 연결
-                </button>
                 {/* AI 가 답하지 못한 건은 접수로 넘긴다 — 질문 원문이 프리필된 폼으로(ADR-0024). */}
-                <Link href={composeHref} className="btn btn--secondary">
+                <Link href={composeHref} className="btn btn--secondary btn--sm">
                   민원 접수하기
                 </Link>
               </div>

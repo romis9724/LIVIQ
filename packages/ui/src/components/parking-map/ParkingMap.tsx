@@ -84,8 +84,12 @@ const NUMBER_OFFSET_TOP = 11; // dir=down 면은 위쪽에 번호
 const NUMBER_OFFSET_BOTTOM = 5; // dir=up 면은 아래쪽에 번호
 const HL_PAD = 3; // 선택 강조 테두리 여유
 
-/** 줌 배율 — 1 = 전체 보기(컨테이너 폭에 맞춤), 그 이상은 확대 + 드래그 팬. */
-const ZOOM_STEPS = [1, 1.5, 2, 3] as const;
+/**
+ * 줌 배율 — 1 = 전체 보기(컨테이너 폭에 맞춤), 그 이상은 확대 + 드래그 팬.
+ * 5× 는 사용자 요청(2026-08-01) — 3× 로도 면 번호가 작다는 지적. 팬·포커스는 배율에 비례해
+ * 계산하므로(scrollWidth 기준) 단계 추가만으로 동작한다.
+ */
+const ZOOM_STEPS = [1, 1.5, 2, 3, 5] as const;
 const DRAG_THRESHOLD = 4; // px — 이보다 움직였으면 팬 제스처(면 선택 취소)
 
 const EMPTY_VIEW: ParkingSpotView = { state: "empty", tooltip: "" };
