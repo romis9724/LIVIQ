@@ -797,7 +797,7 @@ export interface paths {
         };
         /**
          * List Vehicles
-         * @description 입주민 차량 목록(동·호 오름차순). plate는 복호 평문 — 관리자 전용.
+         * @description 차량 목록(동·호 오름차순, 외부 차량은 뒤). plate는 복호 평문 — 관리자 전용.
          */
         get: operations["list_vehicles_admin_parking_vehicles_get"];
         put?: never;
@@ -3587,18 +3587,19 @@ export interface components {
         };
         /**
          * ParkingVehicleItem
-         * @description 입주민 차량 1대 — plate는 복호 평문.
+         * @description 차량 1대 — plate는 복호 평문. 외부 차량은 household_id·dong·ho가 null.
          */
         ParkingVehicleItem: {
             /** Dong */
-            dong: string;
+            dong: string | null;
+            /** Entry At */
+            entry_at: string | null;
+            /** External */
+            external: boolean;
             /** Ho */
-            ho: string;
-            /**
-             * Household Id
-             * Format: uuid
-             */
-            household_id: string;
+            ho: string | null;
+            /** Household Id */
+            household_id: string | null;
             /**
              * Id
              * Format: uuid
@@ -3610,6 +3611,8 @@ export interface components {
             model: string | null;
             /** Plate */
             plate: string;
+            /** Spot No */
+            spot_no: string | null;
         };
         /** ParkingVehicleListOut */
         ParkingVehicleListOut: {

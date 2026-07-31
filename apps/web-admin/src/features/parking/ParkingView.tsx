@@ -13,8 +13,7 @@ import {
 } from "@/lib/api";
 import {
   EXTERNAL_GROUP,
-  SIM_SEED,
-  simulateParking,
+  occupancyFromVehicles,
   summarize,
   elapsedText,
   type ParkedCar,
@@ -72,7 +71,7 @@ function errorMessage(err: unknown): string {
 
 export function ParkingView() {
   const [state, setState] = useState<DataState>({ kind: "loading" });
-  // 입차시각 기준점 — 마운트 시 1회 고정(시뮬레이션·경과시간이 리렌더마다 흔들리지 않게).
+  // 경과시간 기준점 — 마운트 시 1회 고정(리렌더마다 흔들리지 않게).
   const [nowMs] = useState(() => Date.now());
 
   const load = useCallback(async () => {
@@ -99,11 +98,6 @@ export function ParkingView() {
       </header>
 
       <main className="admin-page__main">
-        {/* 데이터 정직성 안내는 콘텐츠 최상단 유지 — 점유가 실측처럼 보이면 안 된다. */}
-        <p className="pk-sim-badge">
-          <span aria-hidden="true">🧪</span> 점유 현황은 시뮬레이션입니다(번호판 인식 연동 전).
-          배치도·차량 목록은 등록 데이터입니다.
-        </p>
         {state.kind === "loading" ? (
           <LoadingSkeleton />
         ) : state.kind === "error" ? (
@@ -157,11 +151,8 @@ function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
   // 기본은 2D — 3D 는 옵트인이고, WebGL 이 없거나 느린 기기는 2D 로 계속 볼 수 있다.
   const [viewMode, setViewMode] = useState<ViewMode>("2d");
 
-  // 점유는 마운트 1회 계산 — 시드·nowMs 고정이라 재렌더에도 같은 상태를 보여준다.
-  const sim = useMemo(
-    () => simulateParking(layout.spots, layout.cores, vehicles, SIM_SEED, nowMs),
-    [layout, vehicles, nowMs],
-  );
+  // 점유는 응답 그대로 — 면 번호로 인덱싱만 한다(차량 목록이 바뀔 때만 재계산).
+  const sim = useMemo(() => occupancyFromVehicles(vehicles), [vehicles]);
   const counts = useMemo(() => summarize(layout.spots, sim.bySpot), [layout.spots, sim]);
   const dongs = useMemo(() => layout.buildings.map((b) => b.name), [layout.buildings]);
   const selectedSpot = selectedNo

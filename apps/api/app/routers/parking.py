@@ -1,7 +1,8 @@
-"""parking — 지하주차장 배치도·입주민 차량 조회 (MANAGER 전용, H9-5).
+"""parking — 지하주차장 배치도·차량 조회 (MANAGER 전용, H9-5 · 점유 H16).
 
 배치도(parking_layouts, 단지당 1행)는 렌더 페이로드를 그대로 반환하고, 차량(parking_vehicles)은
-명부(households·buildings)에 조인해 동·호 표시 문자열과 함께 반환한다. 차량번호는 저장 시
+명부(households·buildings)에 **LEFT** 조인해 동·호 표시 문자열과 함께 반환한다 — 세대가 없는
+외부 차량(household_id NULL)도 면을 점유하므로 목록에서 빠지면 안 된다(H16). 차량번호는 저장 시
 봉투 암호화(plate_enc), 조회 시 복호해 관리자에게만 노출한다(규칙 2 — 입주민 앱·LLM 미노출).
 적재는 시드 스크립트(seed_parking.py) 경로 — 이 라우터는 읽기 전용이다.
 모든 쿼리는 tenant 컨텍스트 세션 + tenant_id 명시 필터로 이중 방어(규칙 3).
@@ -46,7 +47,7 @@ async def list_vehicles(
     session: Annotated[AsyncSession, Depends(get_tenant_session)],
     crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
 ) -> ParkingVehicleListOut:
-    """입주민 차량 목록(동·호 오름차순). plate는 복호 평문 — 관리자 전용."""
+    """차량 목록(동·호 오름차순, 외부 차량은 뒤). plate는 복호 평문 — 관리자 전용."""
     rows = (
         await session.execute(
             select(
@@ -55,11 +56,13 @@ async def list_vehicles(
                 ParkingVehicle.plate_enc,
                 ParkingVehicle.model,
                 ParkingVehicle.is_ev,
+                ParkingVehicle.spot_no,
+                ParkingVehicle.entry_at,
                 Building.name,
                 Household.unit_no,
             )
-            .join(Household, Household.id == ParkingVehicle.household_id)
-            .join(Building, Building.id == Household.building_id)
+            .outerjoin(Household, Household.id == ParkingVehicle.household_id)
+            .outerjoin(Building, Building.id == Household.building_id)
             .where(ParkingVehicle.tenant_id == ctx.tenant_id)
             .order_by(Building.name, Household.unit_no, ParkingVehicle.created_at)
         )
@@ -79,13 +82,16 @@ async def list_vehicles(
         ParkingVehicleItem(
             id=vid,
             household_id=hid,
-            dong=f"{dong}동",
-            ho=f"{unit_no}호",
+            dong=f"{dong}동" if dong is not None else None,
+            ho=f"{unit_no}호" if unit_no is not None else None,
             plate=plate_of(plate_enc),
             model=model,
             is_ev=is_ev,
+            spot_no=spot_no,
+            entry_at=entry_at,
+            external=hid is None,
         )
-        for vid, hid, plate_enc, model, is_ev, dong, unit_no in rows
+        for vid, hid, plate_enc, model, is_ev, spot_no, entry_at, dong, unit_no in rows
     ]
     # 개인정보 열람 감사(docs/06 §8) — 차량번호를 **복호해 평문으로 내보내는** 유일한 경로다.
     # 번호판 자체는 기록하지 않는다(감사 로그에 개인정보 비저장 — §4.3). 건수만 남긴다.

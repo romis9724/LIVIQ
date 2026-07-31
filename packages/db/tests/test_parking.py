@@ -2,21 +2,33 @@
 
 owner(superuser)로 시드 후 `set_context`로 런타임 role 전환해 검증한다(RLS는 owner가 우회하므로
 격리 검증은 반드시 liviq_app role에서). 배치도는 단지당 1행(UNIQUE(tenant_id)), 차량은 세대당
-다건 허용(UNIQUE 없음) + 세대 삭제 시 CASCADE.
+다건 허용(UNIQUE 없음) + 세대 삭제 시 CASCADE. 점유(H16)는 spot_no·entry_at 왕복 + 부분
+유니크(한 면 한 대) + 외부 차량(household_id NULL)까지.
 """
 
 from __future__ import annotations
 
+import asyncio
+import datetime
 import json
+import os
 import uuid
+from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from conftest import Seed, set_context
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncConnection
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.pool import NullPool
 
 pytestmark = pytest.mark.integration
+
+_DB_ROOT = Path(__file__).resolve().parent.parent
+# b4c5d6e7f8a9(parking_occupancy)의 down_revision — 왕복 대상 하한.
+_OCCUPANCY_PARENT = "a3b4c5d6e7f8"
 
 _LAYOUT = {
     "viewBox": "0 0 3020 1082",
@@ -48,12 +60,23 @@ async def _insert_vehicle(
     plate_enc: bytes = _PLATE_BLOB,
     model: str | None = "아이오닉5",
     is_ev: bool = True,
+    spot_no: str | None = None,
+    entry_at: object = None,
 ) -> uuid.UUID:
     result = await conn.execute(
         text(
-            "INSERT INTO parking_vehicles(tenant_id, household_id, plate_enc, model, is_ev) "
-            "VALUES(:t, :h, :pe, :m, :ev) RETURNING id"
-        ).bindparams(t=tenant_id, h=household_id, pe=plate_enc, m=model, ev=is_ev)
+            "INSERT INTO parking_vehicles"
+            "(tenant_id, household_id, plate_enc, model, is_ev, spot_no, entry_at) "
+            "VALUES(:t, :h, :pe, :m, :ev, :sn, :ea) RETURNING id"
+        ).bindparams(
+            t=tenant_id,
+            h=household_id,
+            pe=plate_enc,
+            m=model,
+            ev=is_ev,
+            sn=spot_no,
+            ea=entry_at,
+        )
     )
     value = result.scalar_one()
     assert isinstance(value, uuid.UUID)
@@ -124,6 +147,66 @@ async def test_vehicle_round_trips(owner_conn: AsyncConnection, seed: Seed) -> N
     assert (model, is_ev) == ("아이오닉5", True)
 
 
+async def test_vehicle_occupancy_round_trips(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """spot_no·entry_at(점유 상태)이 스키마를 왕복한다(H16 — 점유의 단일 출처는 DB)."""
+    entry_at = datetime.datetime(2026, 7, 31, 3, 20, tzinfo=datetime.UTC)
+    vehicle_id = await _insert_vehicle(
+        owner_conn, seed.a.tenant_id, seed.a.household_id, spot_no="042", entry_at=entry_at
+    )
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    row = (
+        await owner_conn.execute(
+            text("SELECT spot_no, entry_at FROM parking_vehicles WHERE id = :i").bindparams(
+                i=vehicle_id
+            )
+        )
+    ).first()
+    assert row is not None
+    assert row[0] == "042"
+    assert row[1] == entry_at
+
+
+async def test_external_vehicle_without_household(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """household_id NULL = 외부 차량 — 명부에 없는 차량도 점유를 가질 수 있다(H16)."""
+    vehicle_id = await _insert_vehicle(
+        owner_conn, seed.a.tenant_id, None, model=None, spot_no="777"
+    )
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+
+    row = (
+        await owner_conn.execute(
+            text("SELECT household_id, spot_no FROM parking_vehicles WHERE id = :i").bindparams(
+                i=vehicle_id
+            )
+        )
+    ).first()
+    assert row == (None, "777")
+
+
+async def test_spot_unique_per_tenant(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """한 면에 두 대 금지 — 같은 단지의 같은 spot_no는 부분 유니크 위반(H16)."""
+    await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id, spot_no="042")
+    with pytest.raises(IntegrityError):
+        await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id, spot_no="042")
+
+
+async def test_same_spot_no_across_tenants(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """유니크는 단지 스코프 — 다른 단지의 같은 면 번호는 허용."""
+    await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id, spot_no="042")
+    await _insert_vehicle(owner_conn, seed.b.tenant_id, seed.b.household_id, spot_no="042")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+    assert await _count(owner_conn, "parking_vehicles") == 1
+
+
+async def test_multiple_unparked_vehicles(owner_conn: AsyncConnection, seed: Seed) -> None:
+    """미주차(spot_no NULL)는 여러 대 허용 — 부분 유니크가 NULL을 안 건다(H16)."""
+    await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id, model="G80")
+    await _insert_vehicle(owner_conn, seed.a.tenant_id, seed.a.household_id, model="쏘나타")
+    await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
+    assert await _count(owner_conn, "parking_vehicles") == 2
+
+
 async def test_vehicle_plate_enc_required(owner_conn: AsyncConnection, seed: Seed) -> None:
     """plate_enc는 NOT NULL — 차량번호 없는 행은 만들 수 없다."""
     with pytest.raises(IntegrityError):
@@ -184,3 +267,37 @@ async def test_vehicle_cascades_on_household_delete(
     await owner_conn.execute(text("DELETE FROM households WHERE id = :h").bindparams(h=hid))
     await set_context(owner_conn, "liviq_app", seed.a.tenant_id)
     assert await _count(owner_conn, "parking_vehicles") == 0
+
+
+# ── 마이그레이션 왕복 (H16) ───────────────────────────────────────────────────
+
+
+async def _occupancy_columns(dsn: str) -> int:
+    engine = create_async_engine(dsn, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            return int(
+                await conn.scalar(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_name = 'parking_vehicles' "
+                        "AND column_name IN ('spot_no', 'entry_at')"
+                    )
+                )
+                or 0
+            )
+    finally:
+        await engine.dispose()
+
+
+def test_occupancy_migration_roundtrip(pg_dsn: str) -> None:
+    """downgrade → upgrade 왕복(외부 차량 행 정리 포함). 세션 공용 DB라 반드시 head로 되돌린다."""
+    os.environ["DATABASE_URL"] = pg_dsn
+    cfg = Config()
+    cfg.set_main_option("script_location", str(_DB_ROOT / "alembic"))
+    try:
+        command.downgrade(cfg, _OCCUPANCY_PARENT)
+        assert asyncio.run(_occupancy_columns(pg_dsn)) == 0
+    finally:
+        command.upgrade(cfg, "head")
+    assert asyncio.run(_occupancy_columns(pg_dsn)) == 2
