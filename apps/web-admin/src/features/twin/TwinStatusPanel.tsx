@@ -10,6 +10,7 @@ import {
   type Inquiry,
   type TwinGeometryItem,
 } from "@/lib/api";
+import { TabGroup } from "./TabGroup";
 import { occupancyMetrics } from "./twin-data";
 
 // 현황판 라벨 — 서버 코드값을 사람이 읽는 문구로(폴백: 원문).
@@ -28,7 +29,16 @@ const FACILITY_STATUS_LABELS: Record<FacilityStatus, string> = {
 };
 // 심각도 정렬(문제 먼저) — 목록 상단에 이상 설비가 오게.
 const FACILITY_SEVERITY: Record<FacilityStatus, number> = { risk: 3, fault: 2, check: 1, normal: 0 };
-const RECENT_INQUIRY_LIMIT = 6;
+// 목록은 내부 스크롤이라 패널 높이를 늘리지 않는다 — 더 넉넉히 보여준다.
+const RECENT_INQUIRY_LIMIT = 20;
+
+// 현황 목록 탭 — 두 목록을 세로로 쌓으면 패널이 과하게 길어져 하나만 노출한다.
+type StatusTab = "inquiries" | "facilities";
+const STATUS_TABS: readonly StatusTab[] = ["inquiries", "facilities"];
+const STATUS_TAB_LABELS: Record<StatusTab, string> = {
+  inquiries: "최근 민원",
+  facilities: "설비 상태",
+};
 
 function labelOf(map: Record<string, string>, key: string): string {
   return map[key] ?? key;
@@ -55,12 +65,13 @@ type ListState =
   | { kind: "ready"; inquiries: Inquiry[]; facilities: Facility[] };
 
 /**
- * 트윈 대시보드 현황판 — 타일(총세대·입주율·미처리민원·설비이상) + 최근민원 + 설비상태(H9-4).
+ * 트윈 대시보드 현황판 — 타일(총세대·입주율·미처리민원·설비이상) + 최근민원/설비상태 탭(H9-4).
  * 총세대·입주율은 트윈 geometry/occupancy 파생, 민원·설비는 listAdminInquiries·listFacilities 재사용.
  * 목록 로드 실패해도 타일(총세대·입주율)은 항상 보인다(비차단).
  */
 export function TwinStatusPanel({ geometry, occupancy }: TwinStatusPanelProps) {
   const [state, setState] = useState<ListState>({ kind: "loading" });
+  const [tab, setTab] = useState<StatusTab>("inquiries");
 
   useEffect(() => {
     let alive = true;
@@ -93,8 +104,20 @@ export function TwinStatusPanel({ geometry, occupancy }: TwinStatusPanelProps) {
         <Tile label="설비 이상" value={facilityIssues} unit="건" tone={facilityIssues ? "danger" : undefined} />
       </ul>
 
-      <RecentInquiries state={state} />
-      <FacilityStatusList state={state} />
+      <TabGroup
+        label="현황 목록 선택"
+        className="twin-status__tabs"
+        tabClassName="twin-status__tab"
+        options={STATUS_TABS}
+        labels={STATUS_TAB_LABELS}
+        active={tab}
+        onSelect={setTab}
+      />
+      {tab === "inquiries" ? (
+        <RecentInquiries state={state} />
+      ) : (
+        <FacilityStatusList state={state} />
+      )}
     </aside>
   );
 }
@@ -120,8 +143,7 @@ function Tile({ label, value, unit, tone }: TileProps) {
 
 function RecentInquiries({ state }: { state: ListState }) {
   return (
-    <section className="twin-status__section">
-      <h3 className="twin-status__title">최근 민원</h3>
+    <section className="twin-status__section" role="tabpanel" aria-label="최근 민원">
       {state.kind === "loading" ? (
         <Skeleton height="3.5rem" />
       ) : state.kind === "error" ? (
@@ -149,8 +171,7 @@ function RecentInquiries({ state }: { state: ListState }) {
 
 function FacilityStatusList({ state }: { state: ListState }) {
   return (
-    <section className="twin-status__section">
-      <h3 className="twin-status__title">설비 상태</h3>
+    <section className="twin-status__section" role="tabpanel" aria-label="설비 상태">
       {state.kind === "loading" ? (
         <Skeleton height="3.5rem" />
       ) : state.kind === "error" ? (
