@@ -25,23 +25,28 @@ export function FeedbackButtons({ defaultValue = null, onVote, className }: Feed
 
   return (
     <div className={cx("feedback", className)}>
+      {/* 아이콘만 노출한다(글자 제거). 대신 aria-label 로 접근 가능한 이름을 남긴다 —
+          이모지는 aria-hidden 이라 라벨이 없으면 스크린리더가 읽을 게 사라진다(WCAG 4.1.2).
+          title 은 마우스 툴팁용. */}
       <button
         type="button"
         className="feedback-btn feedback-btn--up"
         aria-pressed={vote === "up"}
-        aria-label="도움이 됐어요"
+        aria-label="도움돼요"
+        title="도움돼요"
         onClick={() => choose("up")}
       >
-        <span aria-hidden="true">👍</span> 도움돼요
+        <span aria-hidden="true">👍</span>
       </button>
       <button
         type="button"
         className="feedback-btn feedback-btn--down"
         aria-pressed={vote === "down"}
         aria-label="아쉬워요"
+        title="아쉬워요"
         onClick={() => choose("down")}
       >
-        <span aria-hidden="true">👎</span> 아쉬워요
+        <span aria-hidden="true">👎</span>
       </button>
     </div>
   );

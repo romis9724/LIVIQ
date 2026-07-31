@@ -25,7 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from test_assistant import _parse_sse, _seed_indexed_document
 
 from ai_core.llm.client import LlmClient
+from ai_core.tools.clarify import build_clarification
 from liviq_db.models import Conversation, Message
+
+# 되묻기 문장은 ai-core 템플릿이 만든다(conftest의 _TOOL_ARGS 항목과 짝) — api는 그대로
+# 흘려보내기만 하는지 본다. 문구를 여기 하드코딩하면 템플릿 변경 때 두 곳이 갈라진다.
+CLARIFY_TEXT = build_clarification("기간", "관리비")
 
 
 def _client(db_session: AsyncSession, llm: LlmClient, redis: object) -> httpx.AsyncClient:
@@ -173,14 +178,14 @@ async def test_clarify_is_streamed_and_persisted(
     events = _parse_sse(response.text)
     done = events[-1][1]
     assert done["status"] == "clarify"
-    assert done["answer"] == "어느 달 관리비를 말씀하시나요?"
+    assert done["answer"] == CLARIFY_TEXT
     assert done["fallback_reason"] is None
     assert not [name for name, _ in events if name == "token"]  # 답변 생성 경로 미실행
 
     stored = (await db_session.scalars(select(Message).where(Message.role == "assistant"))).all()
     assert len(stored) == 1
     assert stored[0].status == "clarify"
-    assert stored[0].content == "어느 달 관리비를 말씀하시나요?"
+    assert stored[0].content == CLARIFY_TEXT
 
 
 async def test_consecutive_clarify_is_blocked(clarify_client: httpx.AsyncClient) -> None:

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 import httpx
+import pytest
 from test_orchestrator import CTX, FakeRetriever, _chunk, _decision, _deps, _done, _tc
 
 from ai_core.config import AiCoreSettings
@@ -184,7 +185,7 @@ async def test_clarify_tool_ends_turn_immediately(settings: AiCoreSettings) -> N
         lambda messages: _decision(
             tool_calls=[
                 _tc("search_documents", {"query": "관리비"}),
-                _tc(CLARIFY, {"question": "몇 월 관리비를 말씀하시나요?"}),
+                _tc(CLARIFY, {"missing": "기간", "context": "관리비"}),
             ],
             usage=(120, 8),
         ),
@@ -194,7 +195,8 @@ async def test_clarify_tool_ends_turn_immediately(settings: AiCoreSettings) -> N
     done = _done(events)
 
     assert done.status == "clarify"
-    assert done.answer == "몇 월 관리비를 말씀하시나요?"
+    # 문장은 모델이 아니라 코드 템플릿이 만든다(H18-3: 8B가 원 질문을 복사했다).
+    assert done.answer == "관리비에 대해 어느 기간을 말씀하시나요? (예: 이번 달, 지난달)"
     assert done.confidence == 0.0 and done.needs_review is False
     assert done.tool_path == (CLARIFY,)
     assert not done.citations and not done.tool_citations
@@ -225,7 +227,7 @@ async def test_clarify_call_ignored_when_not_allowed(settings: AiCoreSettings) -
             if any(m.get("role") == "tool" for m in messages)
             else _decision(
                 tool_calls=[
-                    _tc(CLARIFY, {"question": "또 되묻기"}),
+                    _tc(CLARIFY, {"missing": "기간"}),
                     _tc("search_documents", {"query": "주차"}),
                 ]
             )
@@ -237,8 +239,11 @@ async def test_clarify_call_ignored_when_not_allowed(settings: AiCoreSettings) -
     assert CLARIFY in done.tool_path  # 실행은 됐으나(근거 없음 note) 되묻기로 끝나지 않음
 
 
-async def test_clarify_with_invalid_args_does_not_clarify(settings: AiCoreSettings) -> None:
-    """인자 검증 실패 시 빈 문장으로 되묻지 않는다 — 일반 도구 경로로 계속."""
+@pytest.mark.parametrize("args", [{}, {"missing": "   "}, {"missing": "가" * 41}])
+async def test_clarify_with_invalid_args_does_not_clarify(
+    settings: AiCoreSettings, args: dict[str, str]
+) -> None:
+    """인자 검증 실패(미지정·빈 값·문장 통째)면 되묻지 않는다 — 일반 도구 경로로 계속."""
     rec = Recorded()
     llm = _recording_llm(
         settings,
@@ -246,7 +251,7 @@ async def test_clarify_with_invalid_args_does_not_clarify(settings: AiCoreSettin
             _decision(content="")
             if any(m.get("role") == "tool" for m in messages)
             else _decision(
-                tool_calls=[_tc(CLARIFY, {}), _tc("search_documents", {"query": "주차"})]
+                tool_calls=[_tc(CLARIFY, args), _tc("search_documents", {"query": "주차"})]
             )
         ),
         rec,
@@ -268,8 +273,8 @@ async def test_clarify_tool_run_has_no_side_effect() -> None:
     tool = ask_clarification_tool()
     # deps는 쓰지 않는다(DB·LLM 접근 없음) — 그 사실 자체를 None 주입으로 고정한다.
     deps = cast(ToolDeps, None)
-    result = await tool.run(CTX, deps, ClarificationArgs(question="어느 동?"))
-    assert result.note == "어느 동?"
+    result = await tool.run(CTX, deps, ClarificationArgs(missing="동/호수"))
+    assert result.note == "어느 동·호수를 말씀하시나요? (예: 401동 201호)"
     assert result.card is None and result.doc_chunks == ()
 
 

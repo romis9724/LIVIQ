@@ -175,7 +175,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
   const isParking = message.result?.toolPath.includes(PARKING_TOOL) ?? false;
   const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
   const blocks = structuredBlocks(message.citations);
-  // 폴백에는 칩을 달지 않는다 — 담당자 연락처·접수 버튼이 이미 그 자리의 행동이다.
+  // 폴백에는 칩을 달지 않는다 — 담당자 연락처 안내가 그 자리의 유일한 행동이다.
   const chips =
     kind === "answered"
       ? visibleSuggestions(message.result?.suggestions ?? [], {
@@ -226,22 +226,21 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             {message.result?.needsReview ? (
               <p className="ai-row__review-note">관리사무소 확인 예정인 답변이에요.</p>
             ) : null}
-            {isInquiry || isParking ? (
-              <div className="ai-row__ctas">
-                {isInquiry ? (
-                  <Link href={composeHref} className="btn btn--secondary btn--sm">
-                    민원 접수하기
-                  </Link>
-                ) : null}
-                {isParking ? (
-                  <Link href={parkingHref} className="btn btn--secondary btn--sm">
-                    <span aria-hidden="true">🅿️</span> 주차위치 보기
-                  </Link>
-                ) : null}
-              </div>
-            ) : null}
             <SuggestionChips chips={chips} onAsk={onAsk} />
-            <FeedbackButtons />
+            {/* CTA 와 피드백은 한 줄. CTA 는 왼쪽, 피드백은 오른쪽 끝으로 민다. */}
+            <div className="ai-row__actions">
+              {isInquiry ? (
+                <Link href={composeHref} className="btn btn--secondary btn--sm">
+                  민원 접수하기
+                </Link>
+              ) : null}
+              {isParking ? (
+                <Link href={parkingHref} className="btn btn--secondary btn--sm">
+                  <span aria-hidden="true">🅿️</span> 주차위치 보기
+                </Link>
+              ) : null}
+              <FeedbackButtons className="ai-row__feedback" />
+            </div>
           </>
         ) : (
           <>
@@ -252,15 +251,10 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
               {message.citations.map((c) => (
                 <CitationCard key={c.ref} title={c.documentTitle} meta={citationMeta(c)} />
               ))}
-              {/* 연락처 안내는 폴백의 본체라 남긴다. 별도 "담당자 연결" 버튼은 실제로 연결해 줄
-                  채널이 없어(전화번호 안내가 전부) 제거했다 — 누르면 아무 일도 없는 버튼이었다. */}
+              {/* 연락처 안내가 폴백의 본체이자 유일한 행동이다. 버튼은 두지 않는다 —
+                  "담당자 연결"은 연결해 줄 채널이 없었고, "민원 접수하기"는 답을 못 준 화면에서
+                  민원으로 떠넘기는 인상이라 뺐다(사용자 지시). 접수 CTA 는 답변 경로에만 남는다. */}
               <div className="handoff-contact">관리사무소 · 평일 09:00~18:00 · 담당 김*수 소장</div>
-              <div className="handoff-actions">
-                {/* AI 가 답하지 못한 건은 접수로 넘긴다 — 질문 원문이 프리필된 폼으로(ADR-0024). */}
-                <Link href={composeHref} className="btn btn--secondary btn--sm">
-                  민원 접수하기
-                </Link>
-              </div>
             </div>
           </>
         )}

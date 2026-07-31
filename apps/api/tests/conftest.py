@@ -88,7 +88,8 @@ async def db_session(pg_dsn: str) -> AsyncIterator[AsyncSession]:
 # 필수 인자가 있는 도구의 고정 인자(나머지는 빈 객체) — 인자 검증을 통과시키기 위한 것.
 _TOOL_ARGS = {
     "search_documents": '{"query": "질의"}',
-    "ask_clarification": '{"question": "어느 달 관리비를 말씀하시나요?"}',
+    # 되묻기는 항목만 지목한다 — 문장은 ai_core.tools.clarify가 만든다(H18-3 후속).
+    "ask_clarification": '{"missing": "기간", "context": "관리비"}',
 }
 
 

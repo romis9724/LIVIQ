@@ -458,13 +458,17 @@
   line-height: 1.5;
 }
 
-/* 답변 CTA(민원 접수·주차위치) — 세로 flex 안에서 폭을 늘리지 않고 내용만큼만 차지.
-   둘이 나란히 설 수 있어 좁은 화면(375px)에서는 줄바꿈한다. */
-.ai-row__ctas {
+/* 답변 액션 한 줄 — CTA(민원 접수·주차위치)는 왼쪽, 피드백은 오른쪽 끝.
+   375px 에서 CTA 둘이 다 뜨면 줄바꿈되지만, 각 버튼은 내용만큼만 차지해
+   세로로 길게 늘어나지 않는다. */
+.ai-row__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
-  align-self: flex-start;
+}
+.ai-row__feedback {
+  margin-left: auto;
 }
 
 /* handoff */
@@ -475,12 +479,6 @@
   border-radius: var(--radius-sm);
   padding: var(--space-3);
 }
-.handoff-actions {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
 /* composer */
 .composer {
   flex: none;

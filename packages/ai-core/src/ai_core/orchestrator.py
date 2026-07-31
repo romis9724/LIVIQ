@@ -45,7 +45,7 @@ from ai_core.rag.prompt import (
 )
 from ai_core.rag.retrieval import MIN_SCORE, RetrievedChunk
 from ai_core.suggestions import suggest_next_actions
-from ai_core.tools.clarify import CLARIFY_TOOL_NAME, ClarificationArgs
+from ai_core.tools.clarify import CLARIFY_TOOL_NAME, ClarificationArgs, build_clarification
 from ai_core.tools.registry import (
     ToolCard,
     ToolContext,
@@ -188,6 +188,7 @@ async def answer_question(
     doc_chunks: list[RetrievedChunk] = []
     seen_chunk_ids: set[str] = set()
     cards: list[ToolCard] = []
+    seen_cards: set[tuple[str, str]] = set()
     tool_path: list[str] = []
     llm_down = False
     # turn별 usage — 도구 결정 turn이 비용의 대부분(도구 결과가 다음 turn에 재전송된다).
@@ -239,7 +240,7 @@ async def answer_question(
             execution = await execute_tool(call, ctx=ctx, deps=deps, registry=registry)
             tool_path.append(call.name)
             content = _absorb_and_mask(
-                execution.result, doc_chunks, seen_chunk_ids, cards, extra_names
+                execution.result, doc_chunks, seen_chunk_ids, cards, seen_cards, extra_names
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
@@ -416,16 +417,19 @@ def _clarify_question(calls: Sequence[ToolCallRequest]) -> str | None:
     ToolResult에 판별 필드를 더하지 않고 **도구 이름 상수**로 판별한다 — 나머지 도구의
     결과 계약을 건드리지 않는 쪽이 diff가 작고, "이 도구만 실행 경로가 다르다"는 사실도
     한 곳(오케스트레이터)에만 남는다. 인자는 다른 도구와 동일하게 Pydantic으로 검증하며,
-    검증 실패면 되묻기를 포기한다(None → 일반 도구 경로로 계속) — 빈 문장으로 되묻느니
-    낫다.
+    검증 실패(빈 항목·문장 통째 투입 등)면 되묻기를 포기한다(None → 일반 도구 경로로
+    계속) — 빈 문장으로 되묻느니 낫다.
+
+    문장은 모델이 아니라 build_clarification이 만든다(H18-3: 8B가 원 질문을 복사했다).
     """
     for call in calls:
         if call.name != CLARIFY_TOOL_NAME:
             continue
         try:
-            return ClarificationArgs.model_validate_json(call.arguments or "{}").question
+            args = ClarificationArgs.model_validate_json(call.arguments or "{}")
         except ValidationError:
             return None
+        return build_clarification(args.missing, args.context)
     return None
 
 
@@ -476,12 +480,16 @@ def _absorb_and_mask(
     doc_chunks: list[RetrievedChunk],
     seen_chunk_ids: set[str],
     cards: list[ToolCard],
+    seen_cards: set[tuple[str, str]],
     extra_names: Sequence[str],
 ) -> str:
     """도구 결과를 근거에 누적하고, LLM에 되먹일 텍스트를 마스킹해 반환(규칙 2).
 
     마스킹 불가한 근거는 사용하지 않는다(evidence에도 추가하지 않음) — 최종 답변 rebuild가
     2차 게이트지만, 루프 turn에도 원문 PII가 새면 안 되므로 여기서 fail-closed.
+
+    문서 청크·도구 카드 **양쪽 모두** 중복이면 근거에 쌓지 않고 안내만 되돌린다 —
+    같은 내용을 컨텍스트에 다시 실으면 토큰만 태운다(규칙 7).
     """
     if result.doc_chunks:
         new = [c for c in result.doc_chunks if str(c.chunk_id) not in seen_chunk_ids]
@@ -496,9 +504,19 @@ def _absorb_and_mask(
         doc_chunks.extend(new)
         return masked
     if result.card is not None:
+        # 카드 중복 제거 키 = (source_kind, quote). 8B는 같은 도구를 2~3회 반복 호출한다
+        # (측정 로그: search_similar_inquiries 3연속) — 걸러내지 않으면 같은 카드가 출처로
+        # 2~3개 뜬다. 인자를 키로 쓰지 않는 이유: 인자가 달라도 같은 결과가 나오는 호출이
+        # 실재하고(예: period 생략 vs 최신월 명시) 사용자에겐 같은 근거다. 반대로 인자가
+        # 달라 결과가 다르면 quote가 달라 별개 출처로 남는다(과도한 병합 방지).
+        # title은 quote와 함께 움직이므로 키에 더해도 판별력이 늘지 않는다.
+        key = (result.card.source_kind, result.card.quote)
+        if key in seen_cards:
+            return "이미 조회한 결과입니다."
         masked, ok = _safe_mask(result.llm_text(), extra_names)
         if not ok:
             return "(민감정보 포함으로 생략됨)"
+        seen_cards.add(key)
         cards.append(result.card)
         return masked
     # 데이터 없음/오류 안내 — 근거 아님(카드·청크 생성 안 함)이나 그대로도 마스킹.
