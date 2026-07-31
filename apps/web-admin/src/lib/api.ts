@@ -2401,6 +2401,45 @@ export async function listParkingVehicles(): Promise<ParkingVehicle[]> {
   }));
 }
 
+/** 면 점유 1건(parking_occupancy 정본 — ADR-0023). plate 는 복호 평문, 외부차는 dong·ho·model null. */
+export interface ParkingOccupancy {
+  spotNo: string;
+  isExternal: boolean;
+  dong: string | null;
+  ho: string | null;
+  model: string | null;
+  plate: string;
+  parkedHours: number | null;
+}
+
+interface RawParkingOccupancy {
+  spot_no: string;
+  is_external: boolean;
+  dong: string | null;
+  ho: string | null;
+  model: string | null;
+  plate: string;
+  parked_hours: number | null;
+}
+
+/** 주차장 점유 현황(정본 조회 — 프론트 시뮬 대체). 미적재면 빈 배열. 403=권한 없음. */
+export async function getParkingOccupancy(): Promise<ParkingOccupancy[]> {
+  const response = await apiFetch(`${API_BASE_URL}/admin/parking/occupancy`, {
+    headers: DEV_HEADERS,
+  });
+  await ensureOk(response);
+  const body = await response.json();
+  return ((body.occupancy as RawParkingOccupancy[]) ?? []).map((o) => ({
+    spotNo: o.spot_no,
+    isExternal: o.is_external,
+    dong: o.dong ?? null,
+    ho: o.ho ?? null,
+    model: o.model ?? null,
+    plate: o.plate,
+    parkedHours: o.parked_hours ?? null,
+  }));
+}
+
 // ── 평면도(H13-4, docs/05 평면도 절 · MANAGER) ─────────────────────────────────
 // 좌표는 원본 이미지 픽셀. 마커 편집은 로컬에 쌓았다가 PUT 전체 교체(자동저장 아님).
 

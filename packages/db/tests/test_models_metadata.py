@@ -58,8 +58,9 @@ def test_tenant_scope_table_count() -> None:
     H9-5: parking_layouts·parking_vehicles 신설(지하주차장 배치도·차량) — +2.
     H15-1: ai_backend_config 신설(전역 LLM 백엔드 설정 단일 행) — +1.
     H15-3: ai_backend_config 컬럼 확장만(테이블 순증감 0).
+    H15-4(ADR-0023): parking_occupancy 신설(면 점유 단일 사실 원천) — +1.
     """
-    assert len(metadata.tables) == 39
+    assert len(metadata.tables) == 40
 
 
 def test_ai_backend_config_optional_columns_are_nullable() -> None:

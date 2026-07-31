@@ -788,6 +788,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/parking/occupancy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Occupancy
+         * @description 면 점유 정본(parking_occupancy) — ADR-0023 단일진실. plate는 복호 평문(관리자 전용).
+         *
+         *     입주민 행(is_external=false)은 차량→세대→동에 조인해 동·호·차종을 채우고, 외부 행은
+         *     external_plate_enc만 복호한다(dong·ho·model=null). 면 번호 오름차순.
+         */
+        get: operations["list_occupancy_admin_parking_occupancy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/parking/vehicles": {
         parameters: {
             query?: never;
@@ -3586,6 +3609,33 @@ export interface components {
             } | null;
         };
         /**
+         * ParkingOccupancyItem
+         * @description 면 점유 1건 — plate는 복호 평문(입주민·외부 공통). 외부차는 dong·ho·model이 null.
+         */
+        ParkingOccupancyItem: {
+            /** Dong */
+            dong: string | null;
+            /** Ho */
+            ho: string | null;
+            /** Is External */
+            is_external: boolean;
+            /** Model */
+            model: string | null;
+            /** Parked Hours */
+            parked_hours: number | null;
+            /** Plate */
+            plate: string;
+            /** Spot No */
+            spot_no: string;
+        };
+        /** ParkingOccupancyListOut */
+        ParkingOccupancyListOut: {
+            /** Occupancy */
+            occupancy: components["schemas"]["ParkingOccupancyItem"][];
+            /** Total */
+            total: number;
+        };
+        /**
          * ParkingVehicleItem
          * @description 입주민 차량 1대 — plate는 복호 평문.
          */
@@ -5962,6 +6012,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ParkingLayoutOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_occupancy_admin_parking_occupancy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingOccupancyListOut"];
                 };
             };
             /** @description Validation Error */

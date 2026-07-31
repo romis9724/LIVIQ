@@ -18,8 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit import PII_PLATES_VIEWED, client_ip, record_audit
 from app.deps import RequestContext, get_tenant_session, require_roles
 from app.pii import PiiCrypto, get_pii_crypto
-from app.schemas.parking import ParkingLayoutOut, ParkingVehicleItem, ParkingVehicleListOut
-from liviq_db.models import Building, Household, ParkingLayout, ParkingVehicle
+from app.schemas.parking import (
+    ParkingLayoutOut,
+    ParkingOccupancyItem,
+    ParkingOccupancyListOut,
+    ParkingVehicleItem,
+    ParkingVehicleListOut,
+)
+from liviq_db.models import Building, Household, ParkingLayout, ParkingOccupancy, ParkingVehicle
 
 router = APIRouter(prefix="/admin/parking", tags=["parking"])
 
@@ -98,3 +104,80 @@ async def list_vehicles(
         ip=client_ip(request),
     )
     return ParkingVehicleListOut(vehicles=vehicles, total=len(vehicles))
+
+
+@router.get("/occupancy", response_model=ParkingOccupancyListOut)
+async def list_occupancy(
+    request: Request,
+    ctx: Annotated[RequestContext, Depends(_MANAGER)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    crypto: Annotated[PiiCrypto, Depends(get_pii_crypto)],
+) -> ParkingOccupancyListOut:
+    """면 점유 정본(parking_occupancy) — ADR-0023 단일진실. plate는 복호 평문(관리자 전용).
+
+    입주민 행(is_external=false)은 차량→세대→동에 조인해 동·호·차종을 채우고, 외부 행은
+    external_plate_enc만 복호한다(dong·ho·model=null). 면 번호 오름차순.
+    """
+    rows = (
+        await session.execute(
+            select(
+                ParkingOccupancy.spot_no,
+                ParkingOccupancy.is_external,
+                ParkingOccupancy.external_plate_enc,
+                ParkingOccupancy.parked_hours,
+                ParkingVehicle.plate_enc,
+                ParkingVehicle.model,
+                Building.name,
+                Household.unit_no,
+            )
+            .outerjoin(ParkingVehicle, ParkingVehicle.id == ParkingOccupancy.parking_vehicle_id)
+            .outerjoin(Household, Household.id == ParkingVehicle.household_id)
+            .outerjoin(Building, Building.id == Household.building_id)
+            .where(ParkingOccupancy.tenant_id == ctx.tenant_id)
+            .order_by(ParkingOccupancy.spot_no)
+        )
+    ).all()
+    if not rows:
+        return ParkingOccupancyListOut(occupancy=[], total=0)
+
+    dek = await crypto.get_dek(session, ctx.tenant_id)
+
+    def plate_of(plate_enc: bytes | None) -> str:
+        if plate_enc is None:
+            return _PLATE_FALLBACK
+        try:
+            return crypto.decrypt(dek, plate_enc)
+        except Exception:  # noqa: BLE001 — 복호 실패해도 목록 렌더는 중단하지 않는다
+            return _PLATE_FALLBACK
+
+    items = [
+        ParkingOccupancyItem(
+            spot_no=spot_no,
+            is_external=is_external,
+            dong=None if is_external else f"{dong}동",
+            ho=None if is_external else f"{unit_no}호",
+            model=None if is_external else model,
+            plate=plate_of(external_plate_enc if is_external else resident_plate_enc),
+            parked_hours=parked_hours,
+        )
+        for (
+            spot_no,
+            is_external,
+            external_plate_enc,
+            parked_hours,
+            resident_plate_enc,
+            model,
+            dong,
+            unit_no,
+        ) in rows
+    ]
+    # 개인정보 열람 감사 — 번호판을 복호해 평문으로 내보내는 경로다(§4.3 — 번호판 자체 미기록, 건수만).
+    await record_audit(
+        session,
+        tenant_id=ctx.tenant_id,
+        action=PII_PLATES_VIEWED,
+        actor_user_id=ctx.user_id,
+        meta={"count": len(items)},
+        ip=client_ip(request),
+    )
+    return ParkingOccupancyListOut(occupancy=items, total=len(items))

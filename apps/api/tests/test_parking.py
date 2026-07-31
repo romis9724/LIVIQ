@@ -21,7 +21,7 @@ from httpx import ASGITransport
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from liviq_db.models import ParkingLayout, ParkingVehicle
+from liviq_db.models import AuditLog, ParkingLayout, ParkingOccupancy, ParkingVehicle
 
 TENANT_B_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 _KEK = base64.b64encode(b"0" * 32).decode()
@@ -79,6 +79,48 @@ async def _add_vehicle(
     session.add(row)
     await session.flush()
     return row.id
+
+
+async def _add_resident_occupancy(
+    session: AsyncSession,
+    spot_no: str,
+    vehicle_id: uuid.UUID,
+    *,
+    parked_hours: float | None = 2.0,
+    tenant_id: uuid.UUID = TENANT_ID,
+) -> None:
+    session.add(
+        ParkingOccupancy(
+            tenant_id=tenant_id,
+            spot_no=spot_no,
+            is_external=False,
+            parking_vehicle_id=vehicle_id,
+            parked_hours=parked_hours,
+        )
+    )
+    await session.flush()
+
+
+async def _add_external_occupancy(
+    session: AsyncSession,
+    spot_no: str,
+    *,
+    plate: str = "99바7788",
+    parked_hours: float | None = 30.0,
+    tenant_id: uuid.UUID = TENANT_ID,
+) -> None:
+    crypto = PiiCrypto(_KEK)
+    dek = await crypto.get_dek(session, tenant_id)
+    session.add(
+        ParkingOccupancy(
+            tenant_id=tenant_id,
+            spot_no=spot_no,
+            is_external=True,
+            external_plate_enc=crypto.encrypt(dek, plate),
+            parked_hours=parked_hours,
+        )
+    )
+    await session.flush()
 
 
 # ── 배치도 ────────────────────────────────────────────────────────────────────
@@ -181,3 +223,88 @@ async def test_cross_tenant_not_visible(seeded: tuple) -> None:
     async with _client(session, tenant_id=TENANT_B_ID) as c:
         assert (await c.get("/admin/parking/layout")).json() == {"layout": None}
         assert (await c.get("/admin/parking/vehicles")).json() == {"vehicles": [], "total": 0}
+
+
+# ── 점유 정본 (parking_occupancy, ADR-0023) ───────────────────────────────────
+
+
+async def test_occupancy_empty(seeded: tuple) -> None:
+    session, _ = seeded
+    async with _client(session) as c:
+        r = await c.get("/admin/parking/occupancy")
+    assert r.status_code == 200
+    assert r.json() == {"occupancy": [], "total": 0}
+
+
+async def test_occupancy_resident_and_external(seeded: tuple) -> None:
+    """입주민 행은 동·호·차종을 채우고, 외부 행은 번호판만(dong·ho·model null). 면 번호 오름차순."""
+    session, mapping = seeded
+    vid = await _add_vehicle(session, mapping[(3, 301)])
+    await _add_external_occupancy(session, "002")
+    await _add_resident_occupancy(session, "001", vid)
+
+    async with _client(session) as c:
+        body = (await c.get("/admin/parking/occupancy")).json()
+
+    assert body["total"] == 2
+    resident, external = body["occupancy"]  # spot_no 오름차순 → 001, 002
+    assert resident["spot_no"] == "001"
+    assert resident["is_external"] is False
+    assert (resident["dong"], resident["ho"]) == ("101동", "301호")
+    assert resident["model"] == "아이오닉5"
+    assert resident["plate"] == _PLATE  # 복호 평문(관리자 전용)
+    assert resident["parked_hours"] == 2.0
+
+    assert external["spot_no"] == "002"
+    assert external["is_external"] is True
+    assert external["dong"] is None and external["ho"] is None and external["model"] is None
+    assert external["plate"] == "99바7788"
+
+
+async def test_occupancy_plate_encrypted_at_rest(seeded: tuple) -> None:
+    """외부차 번호판도 DB엔 암호문만 — 응답만 복호 평문(규칙 2, CRITICAL)."""
+    session, _ = seeded
+    await _add_external_occupancy(session, "010", plate="77허1234")
+    enc = await session.scalar(
+        select(ParkingOccupancy.external_plate_enc).where(ParkingOccupancy.spot_no == "010")
+    )
+    assert isinstance(enc, bytes)
+    assert "77허1234".encode() not in enc
+    async with _client(session) as c:
+        body = (await c.get("/admin/parking/occupancy")).json()
+    assert body["occupancy"][0]["plate"] == "77허1234"
+
+
+async def test_occupancy_records_pii_audit(seeded: tuple) -> None:
+    """번호판 복호 노출 경로 — pii.plates_viewed 감사 1건(번호판 자체 미기록, 건수만)."""
+    session, mapping = seeded
+    vid = await _add_vehicle(session, mapping[(3, 301)])
+    await _add_resident_occupancy(session, "001", vid)
+    await _add_external_occupancy(session, "002")
+
+    async with _client(session) as c:
+        assert (await c.get("/admin/parking/occupancy")).status_code == 200
+
+    rows = (
+        await session.execute(
+            select(AuditLog).where(AuditLog.action == "pii.plates_viewed")
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].meta == {"count": 2}
+
+
+async def test_occupancy_staff_and_resident_denied(seeded: tuple) -> None:
+    session, _ = seeded
+    for role in ("STAFF", "RESIDENT"):
+        async with _client(session, roles=(role,)) as c:
+            assert (await c.get("/admin/parking/occupancy")).status_code == 403
+
+
+async def test_occupancy_cross_tenant_not_visible(seeded: tuple) -> None:
+    """단지A 점유는 단지B 컨텍스트에 노출되지 않는다(CRITICAL)."""
+    session, mapping = seeded
+    vid = await _add_vehicle(session, mapping[(3, 301)])
+    await _add_resident_occupancy(session, "001", vid)
+    async with _client(session, tenant_id=TENANT_B_ID) as c:
+        assert (await c.get("/admin/parking/occupancy")).json() == {"occupancy": [], "total": 0}
