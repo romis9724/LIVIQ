@@ -723,9 +723,9 @@ codes(id, tenant_id, group_id,                 -- FK → code_groups(tenant_id, 
 > **삭제 정책**: soft delete 대상 **아님**(§3 목록 제외) — **하드 삭제**. is_system 그룹 삭제는 409, 삭제 시 하위 코드 CASCADE. 도메인 테이블(`notices`·`documents`)이 H8-6에서 `codes.id`를 FK **RESTRICT**로 참조하게 됐다(적용됨) → 참조 중 코드 삭제는 DB IntegrityError → API 409, 비활성(`active=false`)으로 숨김 권장.
 > **기본 코드 시드**(규칙 8 — 액션은 코드): 단지 생성 시 시드 + 기존 단지는 마이그레이션 시드. NOTICE_CATEGORY(일반·시설점검·방역소독·회의결과·주민행사·시스템장애 — '일반' 기본), DOC_CATEGORY(규약·회의록·공지·지침·매뉴얼). 그룹은 `is_system=true`(삭제·키 변경 잠금), 코드 행은 단지별 수정·추가·비활성 가능.
 
-### 4.11 주차장 (H9-5 — 지하주차장 배치도·등록 차량)
+### 4.11 주차장 (H9-5 — 지하주차장 배치도·등록 차량 · H16 — 점유 영속화)
 
-관리자 주차장 대시보드의 원천. **면 점유 상태는 저장하지 않는다** — 배치도(면 좌표)와 등록 차량만 확정 데이터이고, 어느 면에 어느 차가 있는지는 프론트 시뮬레이션이다(번호판 인식 카메라 연동 시 교체 — [11 §3.4.2](11-data-architecture.md)).
+관리자 주차장 대시보드의 원천. **면 점유 상태도 DB가 단일 출처다**(H16) — H9-5의 프론트 시뮬레이션을 폐기하고, 시드가 배정한 주차면·입차시각을 `parking_vehicles`에 저장한다(번호판 인식 카메라 연동 시 시드 경로만 교체 — [11 §3.4.2](11-data-architecture.md)).
 
 ```sql
 -- 지하주차장 배치도 (단지당 1행 · 전량 교체 · 렌더 페이로드 그대로)
@@ -735,17 +735,22 @@ parking_layouts(id, tenant_id,
                 created_at, updated_at)
   UNIQUE(tenant_id)
 
--- 입주민 등록 차량 (세대당 다건 허용 — UNIQUE 없음)
+-- 차량 1대 (세대당 다건 허용 — UNIQUE 없음). H16: 외부 차량은 household_id NULL.
 parking_vehicles(id, tenant_id,
-                 household_id,           -- FK → households(tenant_id, id) composite, ON DELETE CASCADE
+                 household_id NULL,      -- FK → households(tenant_id, id) composite, ON DELETE CASCADE
+                                         -- NULL = 외부 차량(명부에 없는 방문·방치 차량 — H16)
                  plate_enc bytea,        -- 차량번호 봉투 암호화(AES-256-GCM · per-tenant DEK) — 평문 컬럼 없음
                  model text NULL,        -- 차종(표시용)
                  is_ev bool default false,
+                 spot_no text NULL,      -- 주차면 번호(layout spots.no) — NULL = 등록만 되고 미주차(H16)
+                 entry_at timestamptz NULL, -- 입차시각(경과 시간 표시 근거) — spot_no와 함께만 의미(H16)
                  created_at, updated_at)
-  INDEX(household_id), INDEX(tenant_id, household_id)
+  INDEX(household_id), INDEX(tenant_id, household_id),
+  UNIQUE(tenant_id, spot_no) WHERE spot_no IS NOT NULL   -- 한 면에 두 대 금지(부분 유니크)
 ```
 
 > **적재 계약**: API는 **읽기 전용**(`GET /admin/parking/layout`·`GET /admin/parking/vehicles`, MANAGER) — 적재는 시드 스크립트(`apps/api/scripts/seed_parking.py` + `scripts/data/parking_layout.json`·`parking_vehicles.json`)가 담당한다. 배치도는 전량 교체, 차량은 delete-then-insert(멱등)이며 차량 (동, 호)를 `buildings.name`·`households.unit_no`로 매칭 — 미매칭은 스킵하고 리포트에 표본을 남긴다(트윈 geometry 업로드와 동일 규율).
+> **점유 배정(H16)**: 시드가 결정적 난수(고정 시드)로 배정한다 — 입주민 차량 재실률 0.75·자기 동 코어 근처 선호·장애인면 미배정·전기차면 EV 전용, 외부 차량 8대는 입구 근처 선호에 절반은 장기(20~72h). 규칙은 폐기한 프론트 시뮬(parking-sim)과 동일하되 Python 재구현이라 배치 결과의 비트 일치는 요구하지 않는다(재실행 멱등이면 충분).
 > **파일럿 실적재**(첫마을 4단지): 442면(일반 406·장애인 15·전기차 21)·차량 348대(274세대·EV 29) 전량 매칭(미매칭 0).
 > **차량번호는 PII**: `pii_vault`가 아니라 세대 귀속 업무 테이블에 암호문으로 두고, 복호는 관리자 조회 API만 수행한다(마스킹 없이 전량 표시 — 주차 관리 목적, 입주민 앱·LLM 미노출, [06 §4.1](06-security-privacy.md)).
 > soft delete 대상 아님(§3 목록 제외 — 교체 적재가 수명주기). RLS는 두 테이블 모두 표준 tenant 격리(§5 일반 규칙 — ENABLE+FORCE·`tenant_isolation`).

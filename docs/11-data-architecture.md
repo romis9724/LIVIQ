@@ -136,26 +136,25 @@ flowchart LR
   HG --> TW[관리자 3D 트윈 뷰 · 오버레이는 명부·민원·관리비·설비 조인]
 ```
 
-### 3.4.2 주차 배치도·차량 계보 (H9-5)
+### 3.4.2 주차 배치도·차량 계보 (H9-5 · H16 점유 영속화)
 
-주차 데이터는 **확정 데이터와 시뮬레이션을 명확히 분리**한다.
+주차 데이터는 전부 **DB 확정 데이터**다 — H9-5의 프론트 점유 시뮬레이션은 H16에서 폐기하고 시드 배정으로 영속화했다.
 
 | 데이터 | 원천 | 성격 |
 |--------|------|------|
 | 지하주차장 배치도(viewBox·동 footprint·442면 좌표·면 종류) | 프로토타입 추출물 `scripts/data/parking_layout.json`(동 footprint는 shapefile 유래) | **확정** — `parking_layouts` 1행(전량 교체) |
 | 등록 차량 348대(차량번호·차종·EV 여부·소속 동/호) | `scripts/data/parking_vehicles.json` → (동, 호) 명부 매칭 | **확정** — `parking_vehicles`(delete-then-insert 멱등), 번호판은 암호문만 |
-| 어느 면에 어느 차가 있는지(점유·입차 시각·외부 차량) | 프론트 `parking-sim.ts`(시드 20260725 고정·재실률 0.75·외부 8대) | **시뮬레이션** — DB 미저장, ★ 입출차 카메라(번호판 인식) API 교체 지점 |
+| 어느 면에 어느 차가 있는지(점유·입차시각·외부 차량 8대) | `seed_parking.py` 결정적 배정(재실률 0.75·자기 동 근처 선호·EV/장애인면 규칙 — H16) | **확정** — `parking_vehicles.spot_no`·`entry_at`(외부 차량은 `household_id NULL`), ★ 입출차 카메라(번호판 인식) 연동 시 시드 경로만 교체 |
 
 적재는 API가 아니라 시드 스크립트(`apps/api/scripts/seed_parking.py`) 경로다 — 트윈 geometry 업로드와 같은 규율(매칭분만 반영·미매칭은 리포트·재실행 멱등). 스키마: [03 §4.11](03-database-design.md).
 
 ```mermaid
 flowchart LR
-  PROTO[프로토타입 배치도·차량 추출물 JSON] --> SEED[seed_parking.py · 동/호 명부 매칭]
+  PROTO[프로토타입 배치도·차량 추출물 JSON] --> SEED[seed_parking.py · 동/호 명부 매칭 + 점유 배정 H16]
   SEED -->|unmatched| RP3[매칭 리포트 표본]
-  SEED -->|matched| PL[(parking_layouts 1행 · parking_vehicles 348대 plate_enc)]
+  SEED -->|matched| PL[(parking_layouts 1행 · parking_vehicles spot_no·entry_at·plate_enc)]
   PL --> PV[관리자 주차장 대시보드 SVG 배치도]
-  SIM[parking-sim.ts 시드 고정 시뮬레이션] -.점유 상태.-> PV
-  CAM[입출차 카메라 번호판 인식 · 추후] -.교체.-> SIM
+  CAM[입출차 카메라 번호판 인식 · 추후] -.시드 경로 교체.-> SEED
 ```
 
 ### 3.5 PG→Neo4j 동기화
