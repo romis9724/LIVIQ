@@ -300,7 +300,7 @@ merge(main): 이미지 4종 빌드·GHCR push(sha + latest 태그)
 | H13. 시설 그래프·평면도 | 시설관리 메인을 3D 시설 그래프로(계통/위치 렌즈·검색 fly-to·상세 패널)·민원-시설 연결 3단·세대 평면도(데이터·입주민 뷰·편집·어시스턴트 도구) | tenant 격리·MANAGER 인가·**LLM 추천 승인 게이트**(CRITICAL) + Neo4j 미가용 폴백 + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-27, §8.16 — PR #94~#98 스택, 머지 대기) — [ADR-0022](adr/0022-facility-graph-dashboard.md) |
 | H14. 시설관리 UX 개편·코드 체계 | 시설관리 탭 폐지→전체화면 그래프+플로팅 패널(도면→방·종류→마커 계층)·시설 코드 체계(계통-위치-연번)·평면도 공통코드·트윈 평면도 동일화·주차장 3D(주행 차량)·관리자 전 메뉴 UI 일관화(§5A 가이드) | 코드 자동부여 유일성·tenant 격리(CRITICAL) + FloorPlan 잔존 노드 재발 방지 + 게이트 그린 + 시각 실측 | ✅ 완료 (2026-07-28, §8.17 — 단일 브랜치 PR, 머지 대기) |
 | H15. LLM 백엔드 런타임 전환 | SYS_ADMIN AI 설정 UI(base URL·모델·API 키·연결 테스트)·`ai_backend_config` 전역 테이블·요청 단위 즉시 반영(env 폴백)·백엔드 비교 측정(ollama vs vLLM vs OpenAI) | SYS_ADMIN 인가(CRITICAL)·API 키 마스킹 응답 + 캐시 키 백엔드 분리 + 게이트 그린 + 시각 실측 | 🚧 진행 (§8.18 — H15-1 ✅·H15-3 ✅, H15-2 로컬 축 완료·GraphRAG 비교(G1~G4) 개발서버 실측 완료·OpenAI 축 대기) |
-| H16. 주차 점유 실데이터화 | 프론트 점유 시뮬 폐기 → DB 단일 출처: `parking_vehicles.spot_no`·`entry_at`·`household_id NULL`(외부 차량) + 시드 결정적 배정 + API 확장 + 웹 실데이터 렌더 | 부분 유니크(tenant, spot_no)·RLS 유지(CRITICAL) + 시드 멱등 + 게이트 그린 + 시각 실측 | 🚧 진행 (§8.19) |
+| H16. 주차 점유 실데이터화 | 프론트 점유 시뮬 폐기 → DB 단일 출처: `parking_vehicles.spot_no`·`entry_at`·`household_id NULL`(외부 차량) + 시드 결정적 배정 + API 확장 + 웹 실데이터 렌더 | 부분 유니크(tenant, spot_no)·RLS 유지(CRITICAL) + 시드 멱등 + 게이트 그린 + 시각 실측 | ✅ 완료 (§8.19) |
 
 ### 8.1 H0 체크리스트 (토대) — ✅ 완료
 
@@ -638,7 +638,7 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 
 | 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
 |------|------|--------|-----------|------|
-| H16-1 | 점유 영속화(백엔드+웹) | ①마이그레이션: `spot_no text NULL`·`entry_at timestamptz NULL`·`household_id` NULL 완화·부분 유니크 `(tenant_id, spot_no) WHERE spot_no IS NOT NULL`([03 §4.11](03-database-design.md)) ②`seed_parking.py` 확장: 결정적 배정(고정 시드 — 규칙은 구 parking-sim과 동일, 비트 일치 불요) + 외부 차량 8대 생성 ③API: `ParkingVehicleItem`에 `spot_no`·`entry_at`·`external` 추가(dong·ho nullable) ④웹: `simulateParking` 삭제, API 데이터로 `bySpot` 구성(2D·3D·목록·필터·경과시간 유지), "점유는 시뮬레이션" 문구 제거 | 부분 유니크·RLS(CRITICAL) + 시드 멱등(재실행 개수 동일) + 게이트 그린 + 주차장 대시보드 2D/3D 시각 실측 | 🚧 |
+| H16-1 | 점유 영속화(백엔드+웹) | ①마이그레이션: `spot_no text NULL`·`entry_at timestamptz NULL`·`household_id` NULL 완화·부분 유니크 `(tenant_id, spot_no) WHERE spot_no IS NOT NULL`([03 §4.11](03-database-design.md)) ②`seed_parking.py` 확장: 결정적 배정(고정 시드 — 규칙은 구 parking-sim과 동일, 비트 일치 불요) + 외부 차량 8대 생성 ③API: `ParkingVehicleItem`에 `spot_no`·`entry_at`·`external` 추가(dong·ho nullable) ④웹: `simulateParking` 삭제, API 데이터로 `bySpot` 구성(2D·3D·목록·필터·경과시간 유지), "점유는 시뮬레이션" 문구 제거 | 부분 유니크·RLS(CRITICAL) + 시드 멱등(재실행 개수 동일) + 게이트 그린 + 주차장 대시보드 2D/3D 시각 실측 | ✅ 완료 — 마이그레이션 `b4c5d6e7f8a9`. 시드 실측(첫마을): 주차 256면(입주민 248+외부 8)·빈 186, 2회 실행 356행 동일(멱등)·spot_no 중복 0·장애인면 배정 0·비EV 전기차면 0. 웹은 `occupancyFromVehicles`로 인덱싱만(sim PRNG 전량 삭제). 테스트 db 171·api 478·web 362. 시각 실측: 2D 면 클릭 상세(002면—401동 1103호·카니발·경과 8h28m)·3D·목록·동별 칩·콘솔 0. mypy override 1건(scripts 직접 import 관행 — 기존 5건 포함 해소) |
 
 ## 9. 정의: "완료(Done)"
 
