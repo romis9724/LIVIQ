@@ -158,6 +158,84 @@ test("집계 — 도구 선택은 tool_accuracy로 별도, pass에 안 섞임", 
   assert.equal(agg.overall.tool_accuracy, 0.5);
 });
 
+// ── 복합 질의(required_tools, AND) ───────────────────────────────────────────
+
+test("required_tools — 전부 호출되면 pass(hit===total)", () => {
+  const r = scoreCase(
+    v2row({
+      required_tools: "get_fees,search_documents",
+      expected_behavior: "answered",
+    }),
+    [turn({ done: { status: "answered", tool_path: ["get_fees", "search_documents"] } })],
+    DOCS,
+  );
+  assert.deepEqual(r.checks.tool_selection, { hit: 2, total: 2, pass: true });
+  assert.deepEqual(r.expected.required_tools, ["get_fees", "search_documents"]);
+});
+
+test("required_tools — 부분 호출은 hit<total·pass=false(답변 pass와 별개)", () => {
+  const r = scoreCase(
+    v2row({
+      required_tools: "get_fees,search_documents",
+      expected_behavior: "answered",
+    }),
+    [turn({ done: { status: "answered", tool_path: ["get_fees"] } })],
+    DOCS,
+  );
+  assert.deepEqual(r.checks.tool_selection, { hit: 1, total: 2, pass: false });
+  assert.equal(r.verdict, "pass"); // 도구 부분호출이어도 답변은 pass — 별도 지표
+});
+
+test("required_tools 없으면 단일 expected_tool 로직 불변(하위호환)", () => {
+  const r = scoreCase(
+    v2row({ expected_tool: "get_facilities", expected_behavior: "answered", required_tools: "" }),
+    [turn({ done: { status: "answered", tool_path: ["search_documents"] } })],
+    DOCS,
+  );
+  assert.equal(r.checks.tool_selection, false); // boolean 그대로
+});
+
+test("집계 — 복합 완전호출률(분수 합산)과 tool_accuracy(완전호출) 병기", () => {
+  const results = [
+    // 완전호출: hit 2/2, pass
+    scoreCase(
+      v2row({ case_id: "A", required_tools: "get_fees,search_documents", expected_behavior: "answered" }),
+      [turn({ done: { status: "answered", tool_path: ["get_fees", "search_documents"] } })],
+      DOCS,
+    ),
+    // 부분호출: hit 1/2, fail
+    scoreCase(
+      v2row({ case_id: "B", required_tools: "get_fees,search_documents", expected_behavior: "answered" }),
+      [turn({ done: { status: "answered", tool_path: ["get_fees"] } })],
+      DOCS,
+    ),
+    // 단일 expected_tool 정답(boolean 카운트 유지 확인)
+    scoreCase(
+      v2row({ case_id: "C", expected_tool: "get_fees", expected_behavior: "answered" }),
+      [turn({ done: { status: "answered", tool_path: ["get_fees"] } })],
+      DOCS,
+    ),
+  ];
+  const agg = aggregate(results);
+  assert.equal(agg.overall.pass, 3); // 답변은 셋 다 pass
+  assert.equal(agg.overall.required_cases, 2);
+  assert.equal(agg.overall.required_hit_sum, 3); // 2 + 1
+  assert.equal(agg.overall.required_total_sum, 4); // 2 + 2
+  assert.equal(agg.overall.required_call_rate, 0.75); // 3/4
+  // tool_accuracy: 복합 완전호출(A) + 단일 정답(C) = 2, 복합 부분(B)는 미완 → 2/3
+  assert.equal(agg.overall.tool_scored, 3);
+  assert.equal(agg.overall.tool_hit, 2);
+});
+
+test("집계 — required_tools 케이스 없으면 required_call_rate null(회귀)", () => {
+  const results = [
+    scoreCase(v2row({ case_id: "A", expected_tool: "get_fees" }), [turn()], DOCS),
+  ];
+  const agg = aggregate(results);
+  assert.equal(agg.overall.required_cases, 0);
+  assert.equal(agg.overall.required_call_rate, null);
+});
+
 // ── GraphRAG 비교(§6) ────────────────────────────────────────────────────────
 
 test("deriveBackend — expected_tool → 비교 백엔드 매핑", () => {

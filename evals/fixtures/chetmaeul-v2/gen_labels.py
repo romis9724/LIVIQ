@@ -31,6 +31,7 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   graph:chain:<결과증상키워드>    다단계 인과 연쇄 (caused_by 재귀, 2노드 미만이면 거부)
   home-device:<기기키워드>        세대 기기→연결 설비 계통 장애 이력 (household_ref·user_ref 필수)
   plan-device:<라벨>              세대 평면도 기기 (household_ref 바인딩 필수)
+  parking:nearest[:ev]            본인 동 최근접 빈 주차 면 (household_ref 필수, :ev면 전기차 선호)
   fallback:absent                 코퍼스 부재 — 폴백이 정답
   isolation:cross-tenant          타 단지 질문 차단 — 폴백/거부가 정답
   isolation:role-block:<도구>     역할 밖 도구 차단 — 도구 비가시 + 폴백이 정답
@@ -52,6 +53,8 @@ from typing import Any
 
 import asyncpg
 
+from ai_core.parking import Core, Spot, nearest_available_spots
+
 TENANT_NAME = "첫마을 4단지 푸르지오"
 HERE = Path(__file__).parent
 SNAPSHOT_PATH = HERE / "snapshot.json"
@@ -71,7 +74,11 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
     "search_facility_graph": frozenset({"FACILITY", "MANAGER"}),
     "find_in_floor_plan": frozenset({"RESIDENT"}),
     "trace_home_device_issue": frozenset({"RESIDENT"}),
+    "find_nearest_available_parking": frozenset({"RESIDENT"}),
 }
+
+# 최근접 빈자리 top_k — 도구(parking.py `_TOP_K`)와 동일해야 라벨이 도구 출력과 일치.
+_PARKING_TOP_K = 3
 
 # caused_by_incident_id 순환 방어 — 시드는 비순환이나 재귀 CTE 깊이 상한으로 안전하게.
 _CHAIN_MAX_DEPTH = 10
@@ -554,6 +561,71 @@ async def resolve_plan_device(
     )
 
 
+async def resolve_parking(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """parking:nearest[:ev] — 본인 동 최근접 빈 주차 면 (도구 find_nearest_available_parking와 동일 계산).
+
+    도구(parking.py)와 순수 함수 `nearest_available_spots`를 공유해 드리프트를 막는다 —
+    세대→동 앵커·layout·occupancy만 asyncpg로 읽고 계산은 ai_core.parking에 위임(§드리프트 차단).
+    """
+    if not args or args[0] != "nearest":
+        return _error(f"parking 모드 미지원: {':'.join(args) or '(빈값)'} — 'nearest'만 지원")
+    href = case.get("household_ref", "")
+    if not href:
+        return _error("parking:nearest는 household_ref 바인딩 필수(세대→동 앵커)")
+    # household_ref "401-201" → 동 이름 "401동"(layout.cores[].name과 1:1 — ADR-0023 §2).
+    # 도구는 user_id→household_id→building.name으로 동을 얻지만, draft는 household_ref에 동명이
+    # 직접 들어있어(fees·plan-device와 동일 관례) partition으로 결정론적으로 뽑는다.
+    building, _, _unit = href.partition("-")
+    if not building:
+        return _error(f"household_ref 형식 오류: {href} (예 401-201)")
+    core_name = f"{building}동"
+    ev_preferred = "ev" in args[1:]
+
+    layout_row = await conn.fetchrow("SELECT layout FROM parking_layouts WHERE tenant_id = $1", tid)
+    if layout_row is None or not layout_row["layout"]:
+        return _error("주차장 배치도 없음(parking_layouts) — 시드 확인")
+    # asyncpg는 jsonb를 str로 반환한다(도구 쪽 SQLAlchemy는 dict) — 여기서 역직렬화해 맞춘다.
+    raw = layout_row["layout"]
+    layout = json.loads(raw) if isinstance(raw, str) else raw
+
+    occupied = {
+        r["spot_no"]
+        for r in await conn.fetch("SELECT spot_no FROM parking_occupancy WHERE tenant_id = $1", tid)
+    }
+    spots = [
+        Spot(no=str(s["no"]), kind=str(s["kind"]), x=float(s["x"]), y=float(s["y"]))
+        for s in layout.get("spots", [])
+    ]
+    cores = [
+        Core(
+            name=str(c["name"]), x=float(c["x"]), y=float(c["y"]), w=float(c["w"]), h=float(c["h"])
+        )
+        for c in layout.get("cores", [])
+    ]
+    nearest = nearest_available_spots(
+        spots, cores, occupied, core_name, ev_preferred=ev_preferred, top_k=_PARKING_TOP_K
+    )
+    if not nearest:
+        # 코어명 불일치(동명 오타)와 "빈자리 0"을 구분 — 전자는 생성 거부해 draft를 고치게 한다.
+        if not any(c.name == core_name for c in cores):
+            return _error(f"동 코어 없음: {core_name} (layout.cores 확인 — 동명·시드)")
+        facts = "가까운 빈 주차자리 없음(확정 조회)"
+    else:
+        facts = "가장 가까운 빈자리: " + "·".join(f"{n.no}면" for n in nearest)
+    return Label(
+        expected_facts=facts,
+        expected_citations="tool:find_nearest_available_parking",
+        expected_tool="find_nearest_available_parking",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of="",
+        label_source_resolved=f"parking nearest core={core_name} ev={ev_preferred} n={len(nearest)}",
+        errors=[],
+    )
+
+
 async def resolve_notice(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
@@ -648,6 +720,7 @@ RESOLVERS = {
     "graph": resolve_graph,
     "home-device": resolve_home_device,
     "plan-device": resolve_plan_device,
+    "parking": resolve_parking,
     "fallback": resolve_fallback,
     "isolation": resolve_isolation,
     "notice": resolve_notice,
@@ -729,6 +802,10 @@ async def cmd_gen(
                 print(f"✗ {case.get('case_id')}: {e}")
             continue
         is_answered = label.expected_behavior == BEHAVIOR_ANSWERED
+        # `**case`가 draft의 모든 열을 그대로 통과시킨다 — 복합 케이스의 required_tools(신규 열)도
+        # 여기로 보존된다. 복합 케이스는 label_source가 대표 도구 하나만 리졸브하고, 다도구 채점은
+        # 러너가 required_tools로 한다(expected_tool은 대표 도구·expected_behavior=answered).
+        # ponytail: 별도 병합 리졸버 없음 — 열 보존이면 충분, 다도구 합성 facts가 필요해지면 그때.
         out_rows.append(
             {
                 **case,
@@ -777,6 +854,7 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         ("fees:latest", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("inquiries:mine", {"role": "RESIDENT", "user_ref": inquiry_author or ""}),
         ("plan-device:콘센트", {"role": "RESIDENT", "household_ref": "401-201"}),
+        ("parking:nearest", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("facilities:count:EL", {"role": "MANAGER"}),
         ("facilities:status:fault", {"role": "FACILITY"}),
         ("overdue:window", {"role": "MANAGER"}),

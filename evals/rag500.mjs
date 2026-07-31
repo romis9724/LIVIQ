@@ -308,6 +308,17 @@ if (estimatedCases > 0) {
       " usage 미제공(추정치). 결정 turn은 실측이므로 원가는 근사값이다",
   );
 }
+// 도구 선택 정확도 — 답변 pass와 별개 지표(별도 집계). 복합 질의(required_tools)가 있으면
+// 완전호출률(부분호출 분수 반영)을 함께 표기한다.
+if ((summary.overall?.tool_scored ?? 0) > 0) {
+  const o = summary.overall;
+  console.log(
+    `\n도구 선택 정확도 ${pct(o.tool_accuracy)} (${o.tool_hit}/${o.tool_scored})` +
+      (o.required_cases > 0
+        ? ` · 복합 완전호출률 ${pct(o.required_call_rate)} (${o.required_hit_sum}/${o.required_total_sum}, ${o.required_cases}건)`
+        : ""),
+  );
+}
 // GraphRAG 비교(§6) — 백엔드별 집계·병렬 쌍 head-to-head. 비교 케이스가 없으면(비-graphrag
 // 실행) by_backend가 비어 두 블록 다 건너뛴다.
 if (summary.by_backend.length > 0) {

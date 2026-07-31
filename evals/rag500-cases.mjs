@@ -214,6 +214,12 @@ export function expectedV2(row) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
+    // required_tools(AND) — 복합 질의 멀티툴 판정용. acceptable_tools(OR)와 별개 컬럼.
+    // CSV에 컬럼이 없으면 빈 배열(기존 케이스 불변).
+    requiredTools: (row.required_tools ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
     behavior: (row.expected_behavior ?? "").trim() || null,
     asOf: (row.as_of ?? "").trim() || null,
   };
