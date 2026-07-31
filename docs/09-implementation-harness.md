@@ -642,6 +642,23 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 |------|------|--------|-----------|------|
 | H16-1 | 점유 영속화(백엔드+웹) | ①마이그레이션: `spot_no text NULL`·`entry_at timestamptz NULL`·`household_id` NULL 완화·부분 유니크 `(tenant_id, spot_no) WHERE spot_no IS NOT NULL`([03 §4.11](03-database-design.md)) ②`seed_parking.py` 확장: 결정적 배정(고정 시드 — 규칙은 구 parking-sim과 동일, 비트 일치 불요) + 외부 차량 8대 생성 ③API: `ParkingVehicleItem`에 `spot_no`·`entry_at`·`external` 추가(dong·ho nullable) ④웹: `simulateParking` 삭제, API 데이터로 `bySpot` 구성(2D·3D·목록·필터·경과시간 유지), "점유는 시뮬레이션" 문구 제거 | 부분 유니크·RLS(CRITICAL) + 시드 멱등(재실행 개수 동일) + 게이트 그린 + 주차장 대시보드 2D/3D 시각 실측 | ✅ 완료 — 마이그레이션 `b4c5d6e7f8a9`. 시드 실측(첫마을): 주차 256면(입주민 248+외부 8)·빈 186, 2회 실행 356행 동일(멱등)·spot_no 중복 0·장애인면 배정 0·비EV 전기차면 0. 웹은 `occupancyFromVehicles`로 인덱싱만(sim PRNG 전량 삭제). 테스트 db 171·api 478·web 362. 시각 실측: 2D 면 클릭 상세(002면—401동 1103호·카니발·경과 8h28m)·3D·목록·동별 칩·콘솔 0. mypy override 1건(scripts 직접 import 관행 — 기존 5건 포함 해소) |
 
+### 8.20 H17 체크리스트 (AI 비서 에이전트 확충 — 민원 트리아지 · 입주민 주차맵)
+
+> 근거: 사용자 요청(2026-08-01) — "AI 비서에 에이전트로 구현: ①공지·문서 답변 ②민원성 질문이면 접수 연결 또는
+> 이전 유사 민원 답변 제시, 시설·설비 고장 신고도 접수 ③빈 주차자리를 입주자 동에서 가까운 순으로, **주차위치
+> 버튼 클릭 시 주차맵 표시**".
+> 인터뷰 확정(2026-08-01): ①은 `search_documents`로 이미 충족 — 최근 공지 전용 도구는 추가하지 않음(8B 라우팅
+> 예산) · ②는 [ADR-0024](adr/0024-assistant-inquiry-triage.md) — 판정은 도구 라우팅, 노출은 제목·분류·처리결과
+> 요약만, 접수는 딥링크 프리필(AI가 INSERT 안 함) · ③ 최근접 빈자리 도구는 H15-4·H16으로 이미 충족, **신규는
+> 입주민 주차맵 화면**(입주민 앱에 주차 화면 자체가 없었음).
+> **불변**: 도구는 전량 읽기 전용(ADR-0007) · 민원 분류·우선순위는 사람이(ADR-0018) · 시설 정식 연결은 담당자
+> 승인(H13-2) · 타 입주민 차량정보·민원 본문 미노출(규칙 2) · tenant 격리(규칙 3) · 인가는 서버(규칙 4).
+
+| 순서 | 작업 | 산출물 | 완료 기준 | 상태 |
+|------|------|--------|-----------|------|
+| H17-1 | 민원 트리아지 도구 + 접수 딥링크 | ①마이그레이션: `CREATE EXTENSION pg_trgm` ②ai-core 도구 `search_similar_inquiries`(RESIDENT — `word_similarity` 정렬, 같은 tenant `done` 건 + 본인 진행중 건, 반환은 제목·카테고리 라벨·담당자 reply 발췌 120자, 상한 5) ③`default_registry` 등록(9→10종) ④web-resident: SSE done의 `tool_path` 파싱 추가 → 도구 호출 or 폴백 시 "민원 접수하기" CTA → `/inquiries?compose=1&title=&body=` ⑤`InquiryCenter` searchParams 프리필(compose=1이면 접수 탭 + 제목·본문 초기값) ⑥골든셋 민원 케이스 + `required_tools` | tenant 격리·본인 외 민원의 작성자·본문 미노출(CRITICAL) + 도구 라우팅 회귀(골든셋 pass·라우팅률 기존 범위 내) + 게이트 그린 + 시각 실측 | ⏳ |
+| H17-2 | 입주민 주차맵 | ①API `GET /parking/map`(RESIDENT — layout + 면별 점유 여부 **불리언만** + 본인 세대 차량의 `spot_no`·`entry_at`. 타 세대 번호판·동호수 미포함) ②`ParkingMap` 2D를 `@liviq/ui`로 승격(FloorPlanViewer 선례 — 면 상태·툴팁을 props로 일반화, admin은 어댑터로 기존 표시 유지) ③web-resident `/parking` 화면(빈/점유·본인 차 위치·추천 면 강조, `?spot=` 딥링크로 포커스) ④어시스턴트 답변의 `find_nearest_available_parking` 결과에 "주차위치 보기" CTA → `/parking?spot=<면번호>` | 타 세대 차량정보 미노출(CRITICAL) + RESIDENT 인가·tenant 격리 + admin 주차뷰 회귀 없음 + 게이트 그린 + 2D 맵 시각 실측(375px 포함) | ⏳ |
+
 ## 9. 정의: "완료(Done)"
 
 

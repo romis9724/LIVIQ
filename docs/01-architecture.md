@@ -108,8 +108,12 @@
 | `search_facility_graph` | Neo4j 벡터매칭 + 그래프 확장 | 유사 장애·연결 설비·정비 이력 → 원인 후보 | tenant + 시설 역할 |
 | `get_fees` | 고정 SQL(`fees`) | 본인 세대 관리비·항목·전월 대비 | tenant + 본인 세대 소유권 |
 | `get_my_inquiries` | 고정 SQL(`inquiries`) | 본인 민원 접수·처리 상태 | tenant + 본인 소유권 |
+| `search_similar_inquiries` | 고정 SQL(`inquiries`+`inquiry_events`, pg_trgm) | 유사 민원의 제목·분류·처리결과 요약([ADR-0024](adr/0024-assistant-inquiry-triage.md)) | tenant + RESIDENT(요약 컬럼만) |
 | `get_facilities` | 고정 SQL(`facilities`) | 설비 목록·현재 상태 | tenant + 역할 |
 | `get_overdue_checks` | 고정 SQL(`facilities`) | 점검 기한 임박·초과 설비 | tenant + 역할 |
+| `find_in_floor_plan` | 고정 SQL(`floor_plans`) | 본인 세대 평면도에서 기기·공간 위치 | tenant + 본인 세대 |
+| `trace_home_device_issue` | Neo4j 그래프 추적 | 세대 기기 → 연결 설비 → 인과 연쇄 | tenant + 본인 세대 |
+| `find_nearest_available_parking` | 고정 SQL(`parking_*`) + 기하 | 본인 동에서 가까운 빈 주차면([ADR-0023](adr/0023-parking-occupancy-persisted.md)) | tenant + 본인 세대 |
 
 > 캐시는 에이전트 앞단에서 먼저 확인([08](08-llm-token-optimization.md)) — 히트면 에이전트에 진입하지 않는다. 도구 결과도 문서 인용과 동일 원칙으로 **출처 카드**에 표기하고(예: "근거: 관리비 2026-06 확정 데이터"), 어떤 도구를 왜 호출했는지 **경로를 로깅**해 골든셋 회귀 평가에 활용한다([07](07-testing-strategy.md) §AI eval).
 > 시설형 질의의 그래프 질의·Neo4j 벡터 인덱스·데이터 배치는 [11-data-architecture.md](11-data-architecture.md).
