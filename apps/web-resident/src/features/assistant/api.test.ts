@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSseBuffer } from "./api";
+import { parseSseBuffer, toEvent } from "./api";
 
 describe("parseSseBuffer", () => {
   it("완결 프레임을 파싱하고 미완결 버퍼를 남긴다", () => {
@@ -43,5 +43,31 @@ describe("parseSseBuffer", () => {
     [frames, rest] = parseSseBuffer(buffer);
     expect(frames).toHaveLength(1);
     expect(frames[0]?.event).toBe("citation");
+  });
+});
+
+describe("toEvent — done 이벤트", () => {
+  const doneFrame = (payload: Record<string, unknown>) => ({
+    event: "done",
+    data: JSON.stringify({
+      conversation_id: "c1",
+      status: "answered",
+      confidence: 0.9,
+      needs_review: false,
+      ...payload,
+    }),
+  });
+
+  it("tool_path 를 toolPath 로 옮긴다", () => {
+    const event = toEvent(doneFrame({ tool_path: ["search_similar_inquiries"] }));
+    expect(event?.type).toBe("done");
+    expect(event?.type === "done" && event.result.toolPath).toEqual([
+      "search_similar_inquiries",
+    ]);
+  });
+
+  it("tool_path 가 없으면 빈 배열이다", () => {
+    const event = toEvent(doneFrame({}));
+    expect(event?.type === "done" && event.result.toolPath).toEqual([]);
   });
 });

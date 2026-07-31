@@ -2,6 +2,7 @@
 
 import { Button, EmptyState, Skeleton, StatusPill, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -24,6 +25,12 @@ import {
   sortEvents,
   statusPill,
 } from "./data";
+import {
+  EMPTY_PREFILL,
+  INQUIRY_BODY_MAX,
+  INQUIRY_TITLE_MAX,
+  readComposePrefill,
+} from "./prefill";
 import "./inquiries.css";
 
 const TOAST_DURATION_MS = 3200;
@@ -64,7 +71,11 @@ function categoryLabelOf(
 }
 
 export function InquiryCenter() {
-  const [view, setView] = useState<View>("list");
+  // AI 비서 딥링크(`?compose=1&title=…&body=…`) 프리필. 마운트 시 1회만 읽는다 —
+  // 매 렌더 동기화하면 사용자가 고친 입력이 덮이고 한글 IME 조합이 씹힌다.
+  const searchParams = useSearchParams();
+  const [prefill, setPrefill] = useState(() => readComposePrefill(searchParams));
+  const [view, setView] = useState<View>(prefill.isCompose ? "submit" : "list");
   const [selected, setSelected] = useState<Inquiry | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [categories, setCategories] = useState<InquiryCategory[]>([]);
@@ -116,14 +127,20 @@ export function InquiryCenter() {
     [],
   );
 
+  // 프리필은 1회성 — 목록으로 돌아가면 버린다(다시 접수 탭을 열 때 옛 질문이 남지 않게).
+  const showList = useCallback(() => {
+    setView("list");
+    setPrefill(EMPTY_PREFILL);
+  }, []);
+
   const handleSubmitted = useCallback(
     async (created: Inquiry) => {
       showToast("민원을 접수했습니다.");
-      setView("list");
+      showList();
       setInquiries((prev) => [created, ...prev]);
       await load();
     },
-    [load, showToast],
+    [load, showToast, showList],
   );
 
   if (selected) {
@@ -156,7 +173,7 @@ export function InquiryCenter() {
             aria-selected={view === "list"}
             className="inq-seg__btn"
             data-active={view === "list" || undefined}
-            onClick={() => setView("list")}
+            onClick={showList}
           >
             내 민원
           </button>
@@ -188,6 +205,8 @@ export function InquiryCenter() {
       ) : (
         <SubmitForm
           categories={categories}
+          initialTitle={prefill.title}
+          initialBody={prefill.body}
           onSubmitted={handleSubmitted}
           onError={(m) => showToast(m, "danger")}
         />
@@ -281,13 +300,23 @@ function InquiryList({
 
 interface SubmitFormProps {
   categories: readonly InquiryCategory[];
+  /** 딥링크 프리필 초기값. 이후 동기화 없음 — 사용자가 고친 값이 정본이다. */
+  initialTitle: string;
+  initialBody: string;
   onSubmitted: (created: Inquiry) => void | Promise<void>;
   onError: (message: string) => void;
 }
 
-function SubmitForm({ categories, onSubmitted, onError }: SubmitFormProps) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
+function SubmitForm({
+  categories,
+  initialTitle,
+  initialBody,
+  onSubmitted,
+  onError,
+}: SubmitFormProps) {
+  const [title, setTitle] = useState(initialTitle);
+  const [body, setBody] = useState(initialBody);
+  // 분류는 프리필하지 않는다 — 사람이 고른다(ADR-0018).
   const [categoryCodeId, setCategoryCodeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -347,7 +376,7 @@ function SubmitForm({ categories, onSubmitted, onError }: SubmitFormProps) {
             id="inq-title"
             className="inq-input"
             value={title}
-            maxLength={200}
+            maxLength={INQUIRY_TITLE_MAX}
             required
             onChange={(e) => setTitle(e.target.value)}
             placeholder="예: 1203동 엘리베이터 소음"
@@ -362,7 +391,7 @@ function SubmitForm({ categories, onSubmitted, onError }: SubmitFormProps) {
             id="inq-body"
             className="inq-textarea"
             rows={4}
-            maxLength={4000}
+            maxLength={INQUIRY_BODY_MAX}
             required
             aria-describedby="inq-body-help"
             value={body}

@@ -75,6 +75,7 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
     "find_in_floor_plan": frozenset({"RESIDENT"}),
     "trace_home_device_issue": frozenset({"RESIDENT"}),
     "find_nearest_available_parking": frozenset({"RESIDENT"}),
+    "search_similar_inquiries": frozenset({"RESIDENT"}),  # H17-1, ADR-0024
 }
 
 # 최근접 빈자리 top_k — 도구(parking.py `_TOP_K`)와 동일해야 라벨이 도구 출력과 일치.

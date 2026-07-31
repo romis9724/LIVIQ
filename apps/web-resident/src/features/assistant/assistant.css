@@ -200,6 +200,11 @@
   color: var(--color-text-muted);
 }
 
+/* 민원 접수 CTA — 세로 flex 안에서 폭을 늘리지 않고 내용만큼만 차지 */
+.ai-row__cta {
+  align-self: flex-start;
+}
+
 /* handoff */
 .handoff-contact {
   font-size: var(--text-sm);

@@ -27,6 +27,11 @@ export interface DoneResult {
    * 최종본이다. 없으면 누적 텍스트가 그대로 정본.
    */
   answer: string | null;
+  /**
+   * 이번 답변에서 호출된 도구 이름 순서. 프론트는 민원성 질의 판정에만 쓴다
+   * (`search_similar_inquiries` 포함 → 접수 CTA 렌더, ADR-0024).
+   */
+  toolPath: string[];
 }
 
 export type AssistantEvent =
@@ -63,7 +68,8 @@ export function parseSseBuffer(buffer: string): [SseFrame[], string] {
   return [frames, rest];
 }
 
-function toEvent(frame: SseFrame): AssistantEvent | null {
+/** SSE 프레임 → 앱 이벤트. 알 수 없는 event 명·깨진 JSON 은 null(무시). */
+export function toEvent(frame: SseFrame): AssistantEvent | null {
   try {
     const d = JSON.parse(frame.data);
     switch (frame.event) {
@@ -94,6 +100,7 @@ function toEvent(frame: SseFrame): AssistantEvent | null {
             needsReview: d.needs_review,
             fallbackReason: d.fallback_reason ?? null,
             answer: d.answer ?? null,
+            toolPath: d.tool_path ?? [],
           },
         };
       default:

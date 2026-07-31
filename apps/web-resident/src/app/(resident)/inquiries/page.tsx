@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { InquiryCenter } from "@/features/inquiries/InquiryCenter";
 
 export const metadata: Metadata = {
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function InquiriesPage() {
-  return <InquiryCenter />;
+  // InquiryCenter 가 useSearchParams(접수 딥링크 프리필)를 쓴다 — App Router 는 Suspense 경계 필수.
+  return (
+    <Suspense>
+      <InquiryCenter />
+    </Suspense>
+  );
 }

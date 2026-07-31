@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
 import { getMe } from "@/lib/api";
+import { buildComposeHref } from "@/features/inquiries/prefill";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
@@ -16,6 +18,9 @@ const STAGE_HINT: Record<string, string> = {
 
 const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 관리사무소 담당자에게 연결해 드릴게요.";
 
+/** 이 도구가 호출됐다는 것 = 모델이 민원성 질의로 라우팅했다는 뜻(ADR-0024). */
+const INQUIRY_TOOL = "search_similar_inquiries";
+
 const FALLBACK_TEXT: Record<string, string> = {
   no_evidence: "근거 문서에서 정확한 내용을 찾지 못했어요. 추측하지 않고 관리사무소 담당자에게 연결해 드릴게요.",
   llm_unavailable: "AI 요약이 일시적으로 어려워 검색된 근거만 안내해요. 잠시 후 다시 시도해 주세요.",
@@ -25,6 +30,18 @@ const FALLBACK_TEXT: Record<string, string> = {
 
 function fallbackText(reason: string | null): string {
   return (reason ? FALLBACK_TEXT[reason] : undefined) ?? FALLBACK_DEFAULT;
+}
+
+/**
+ * index 위치의 AI 답변이 어떤 질문에 대한 것인지 — 바로 앞의 user 메시지를 거슬러 찾는다.
+ * 접수 링크 프리필에 **질문 원문**을 쓰기 위한 것(AI 답변은 쓰지 않는다).
+ */
+function questionBefore(messages: readonly ChatMessage[], index: number): string {
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const m = messages[i];
+    if (m?.role === "user") return m.text;
+  }
+  return "";
 }
 
 export function AssistantChat() {
@@ -88,13 +105,18 @@ export function AssistantChat() {
             </div>
           </div>
         ) : (
-          messages.map((m: ChatMessage) =>
+          messages.map((m: ChatMessage, i: number) =>
             m.role === "user" ? (
               <div key={m.id} className="bubble-user">
                 {m.text}
               </div>
             ) : (
-              <AiRow key={m.id} message={m} onChip={submit} />
+              <AiRow
+                key={m.id}
+                message={m}
+                question={questionBefore(messages, i)}
+                onChip={submit}
+              />
             ),
           )
         )}
@@ -132,9 +154,18 @@ export function AssistantChat() {
   );
 }
 
-function AiRow({ message, onChip }: { message: AiMessage; onChip: (q: string) => void }) {
+interface AiRowProps {
+  message: AiMessage;
+  /** 이 답변을 유발한 질문 원문 — 민원 접수 링크 프리필용. */
+  question: string;
+  onChip: (q: string) => void;
+}
+
+function AiRow({ message, question, onChip }: AiRowProps) {
   const streaming = message.status === "streaming";
   const answered = message.result?.status === "answered" && !message.error;
+  const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
+  const composeHref = buildComposeHref(question);
 
   return (
     <div className="ai-row">
@@ -171,6 +202,11 @@ function AiRow({ message, onChip }: { message: AiMessage; onChip: (q: string) =>
             {message.result?.needsReview ? (
               <p className="ai-row__review-note">관리사무소 확인 예정인 답변이에요.</p>
             ) : null}
+            {isInquiry ? (
+              <Link href={composeHref} className="btn btn--secondary btn--sm ai-row__cta">
+                민원 접수하기
+              </Link>
+            ) : null}
             <FeedbackButtons />
             <div className="ai-row__followups">
               <span className="ai-row__followups-label">이어서 물어보기</span>
@@ -201,9 +237,10 @@ function AiRow({ message, onChip }: { message: AiMessage; onChip: (q: string) =>
                 <button type="button" className="btn btn--primary">
                   담당자 연결
                 </button>
-                <button type="button" className="btn btn--secondary">
-                  1:1 문의 남기기
-                </button>
+                {/* AI 가 답하지 못한 건은 접수로 넘긴다 — 질문 원문이 프리필된 폼으로(ADR-0024). */}
+                <Link href={composeHref} className="btn btn--secondary">
+                  민원 접수하기
+                </Link>
               </div>
             </div>
           </>
