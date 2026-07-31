@@ -932,7 +932,7 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
             {
                 "role": "RESIDENT",
                 "user_ref": inquiry_author or "",
-                "turn_1": "엘리베이터가 덜컹거려요",
+                "turn_1": "온수가 미지근해요",
             },
         ),
         ("facilities:count:EL", {"role": "MANAGER"}),

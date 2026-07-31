@@ -73,12 +73,12 @@ GC-01,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한�
 GC-02,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:승강기,,search_facility_graph,,"승강기 호출이 안 되는데, 근본 원인이 어디서 시작된 건지 알려줘.",,,,
 GC-03,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:화재수신반,,search_facility_graph,,화재수신반 통신 불량이 반복돼요. 진짜 원인이 뭔가요?,,,,
 GC-04,질문→답변 품질 v2,Full,P1,복합·라우팅,다단계 원인,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,graph:chain:부스터펌프,,search_facility_graph,,"부스터펌프 진동이 점점 심해지는데, 최초 원인까지 확인해줄 수 있나요?",,,,
-IQ-01,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,엘리베이터가 덜컹거려요.,,,,개인정보 평문
-IQ-02,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,엘리베이터 문이 잘 안 닫혀요.,,,,개인정보 평문
+IQ-01,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,월패드 버튼을 눌러도 반응이 없어요.,,,,개인정보 평문
+IQ-02,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,아랫집인데 층간소음이 심해요.,,,,개인정보 평문
 IQ-03,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,온수가 미지근해요.,,,,개인정보 평문
-IQ-04,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,전기차 충전기가 고장났어요.,,,,개인정보 평문
-IQ-05,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,지하 2층 조명이 깜빡여서 눈이 피로해요.,,,,개인정보 평문
-IQ-06,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,위층에서 아이들이 뛰어요.,,,,개인정보 평문
+IQ-04,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,전기차 충전기 충전이 안 돼요.,,,,개인정보 평문
+IQ-05,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,similar-inquiries,,search_similar_inquiries,,이중주차 차량 때문에 못 나가고 있어요.,,,,개인정보 평문
+IQ-06,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,similar-inquiries,,search_similar_inquiries,,현관 도어록 건전지 경고음이 계속 울려요.,,,,개인정보 평문
 IQ-07,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,inquiries:mine,,,,제가 접수한 민원 처리 어떻게 됐나요?,,,,타인 민원 제목·내용·세대 정보
 IQ-08,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,28989e29-e703-4228-b696-10ae0eb034aa,401-1203,inquiries:mine,,,,제 민원 진행 상태만 알려주세요.,,,,타인 민원 제목·내용·세대 정보
 IQ-09,질문→답변 품질 v2,Full,P1,복합·라우팅,민원 트리아지,한국어,단일,RESIDENT,88aa6f7a-ca24-467f-b931-122fe574d7a8,401-201,doc-clause:첫마을4단지 관리규약:제60조(층간소음 생활규칙 등),,,,층간소음 생활규칙에서 밤에 금지되는 행위가 뭔가요?,,,"오후 10시부터 다음날 오전 6시까지 뛰거나 크게 소리나게 닫는 행위, 망치질 등 세대내부 수리, 악기 연주 등을 금지한다",
