@@ -1,4 +1,4 @@
-"""도구 구현 10종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
+"""도구 구현 11종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -10,14 +10,16 @@ tenant_id·user_id는 항상 `ToolContext`에서 오며 LLM 인자로 받지 않
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from ai_core.graph import IncidentContext, IncidentHit
 from ai_core.llm.client import LlmError
+from ai_core.tools.clarify import ask_clarification_tool
 from ai_core.tools.floor_plan import find_in_floor_plan_tool
 from ai_core.tools.inquiries import search_similar_inquiries_tool
 from ai_core.tools.parking import find_nearest_available_parking_tool
@@ -186,6 +188,7 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
             title=f"관리비 {period} 확정 데이터",
             quote=_fee_quote(period, breakdown, total, prev_total),
             source_kind="tool:get_fees",
+            data=_fee_data(period, breakdown, total, prev_total),
         )
     )
 
@@ -219,6 +222,24 @@ def _fee_quote(
         sign = "+" if diff >= 0 else ""
         quote += f" · 전월 {prev_total:,}원 대비 {sign}{diff:,}원"
     return quote
+
+
+def _fee_data(
+    period: str, breakdown: list[tuple[str, int]], total: int, prev_total: int | None
+) -> dict[str, Any]:
+    """화면용 관리비 표(ADR-0025 §6) — quote와 달리 **전 항목**을 값 그대로 싣는다.
+
+    quote는 상위 3개만 담아 LLM 토큰을 아끼지만, 화면 표는 잘리면 안 된다. LLM은 이 dict를
+    보지 않으므로 여기서 늘려도 비용이 늘지 않는다(규칙 5·8 — 숫자 재작성 경로 없음).
+    """
+    return {
+        "kind": "fee_table",
+        "period": period,
+        "rows": [{"name": name, "amount": amount} for name, amount in breakdown],
+        "total": total,
+        "prev_total": prev_total,
+        "diff": None if prev_total is None else total - prev_total,
+    }
 
 
 def _prev_period(period: str) -> str:
@@ -273,7 +294,12 @@ async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> 
         # DB가 확인한 "없음"은 확정 근거 — 조회 조건을 명시해 카드로 승격(v2 §6-⓪).
         quote = f"{condition}설비가 없습니다."
         return ToolResult(
-            card=ToolCard(title="설비 목록", quote=quote, source_kind="tool:get_facilities")
+            card=ToolCard(
+                title="설비 목록",
+                quote=quote,
+                source_kind="tool:get_facilities",
+                data=_facility_data([]),
+            )
         )
     # 대수 질문의 근거: 총수 + 코드 접두(EL-401-01 → EL) 종류별 수. 나열은 상한으로 자른다.
     kind_counts = Counter((r.code or "기타").split("-")[0] for r in rows)
@@ -282,8 +308,30 @@ async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> 
     overflow = f" 외 {len(rows) - MAX_TOOL_ROWS}개" if len(rows) > MAX_TOOL_ROWS else ""
     quote = f"{condition}총 {len(rows)}개 — 종류별: {counts}. {listed}{overflow}"
     return ToolResult(
-        card=ToolCard(title="설비 목록", quote=quote, source_kind="tool:get_facilities")
+        card=ToolCard(
+            title="설비 목록",
+            quote=quote,
+            source_kind="tool:get_facilities",
+            data=_facility_data(rows),
+        )
     )
+
+
+def _facility_data(rows: Sequence[Any]) -> dict[str, Any]:
+    """화면용 설비 현황(ADR-0025 §6) — 상태별 카운트 + 목록.
+
+    quote는 코드 접두(종류)로 세지만 화면 카드는 **상태**로 센다(정상/점검/고장이 한눈에
+    보여야 한다). 총수는 전수 조회 결과 그대로라 quote의 총수와 항상 일치한다.
+    """
+    status_counts = Counter(str(r.status) for r in rows)
+    return {
+        "kind": "facility_status",
+        "total": len(rows),
+        "status_counts": dict(status_counts.most_common()),
+        "items": [
+            {"name": r.name, "status": r.status, "code": r.code} for r in rows[:MAX_TOOL_ROWS]
+        ],
+    }
 
 
 _OVERDUE_SQL = text(
@@ -319,9 +367,14 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 10종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출."""
+    """운영 도구 11종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
+
+    되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
+    이름으로 판별해 되묻고 종료한다(ADR-0025 §4).
+    """
     return ToolRegistry(
         [
+            ask_clarification_tool(),
             find_in_floor_plan_tool(),
             trace_home_device_issue_tool(),
             find_nearest_available_parking_tool(),

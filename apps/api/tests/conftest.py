@@ -85,6 +85,13 @@ async def db_session(pg_dsn: str) -> AsyncIterator[AsyncSession]:
             await engine.dispose()
 
 
+# 필수 인자가 있는 도구의 고정 인자(나머지는 빈 객체) — 인자 검증을 통과시키기 위한 것.
+_TOOL_ARGS = {
+    "search_documents": '{"query": "질의"}',
+    "ask_clarification": '{"question": "어느 달 관리비를 말씀하시나요?"}',
+}
+
+
 @pytest.fixture
 def fake_llm() -> LlmClient:
     """도구호출 에이전트용 가짜 LLM(ADR-0007).
@@ -129,10 +136,7 @@ def fake_llm() -> LlmClient:
             {
                 "id": f"call_{name}",
                 "type": "function",
-                "function": {
-                    "name": name,
-                    "arguments": "{}" if name != "search_documents" else '{"query": "질의"}',
-                },
+                "function": {"name": name, "arguments": _TOOL_ARGS.get(name, "{}")},
             }
             for name in tool_names
             if name

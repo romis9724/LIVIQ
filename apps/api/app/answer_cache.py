@@ -38,6 +38,7 @@ from ai_core.orchestrator import (
     ToolCitation,
     ToolCitationEvent,
 )
+from ai_core.suggestions import suggest_next_actions
 from ai_core.tools import ToolContext
 from app.config import get_settings
 
@@ -219,6 +220,9 @@ async def replay(cached: CachedAnswer, *, tenant_id: uuid.UUID) -> AsyncIterator
         tool_citations=cached.tool_citations,
         answer=cached.answer,
         tool_path=cached.tool_path,
+        # 제안은 tool_path의 순수 함수라 저장하지 않고 재계산한다 — 규칙이 바뀌면 캐시된
+        # 답변에도 새 규칙이 곧바로 적용된다(ADR-0025 §7).
+        suggestions=suggest_next_actions(cached.tool_path, status=cached.status),
     )
 
 
@@ -247,7 +251,14 @@ def _encode(done: DoneEvent, tenant_id: uuid.UUID) -> str:
             for c in done.citations
         ],
         "tool_citations": [
-            {"ref": tc.ref, "title": tc.title, "quote": tc.quote, "source_kind": tc.source_kind}
+            {
+                "ref": tc.ref,
+                "title": tc.title,
+                "quote": tc.quote,
+                "source_kind": tc.source_kind,
+                # 구조화 페이로드도 함께 보존 — 재생 답변만 표가 사라지면 안 된다(ADR-0025 §6).
+                "data": tc.data,
+            }
             for tc in done.tool_citations
         ],
     }
@@ -269,7 +280,14 @@ def _decode(raw: str) -> CachedAnswer:
         for c in data["citations"]
     )
     tool_citations = tuple(
-        ToolCitation(ref=t["ref"], title=t["title"], quote=t["quote"], source_kind=t["source_kind"])
+        # data는 .get — 이 필드 이전에 저장된 키가 TTL 안에 남아 있을 수 있다(하위호환).
+        ToolCitation(
+            ref=t["ref"],
+            title=t["title"],
+            quote=t["quote"],
+            source_kind=t["source_kind"],
+            data=t.get("data"),
+        )
         for t in data["tool_citations"]
     )
     return CachedAnswer(

@@ -1,7 +1,7 @@
 """search_similar_inquiries — 같은 단지의 유사 민원 처리 사례 (H17-1, ADR-0024).
 
-`pg_trgm.word_similarity`로 제목+본문을 랭킹한다(임계 0.3·상한 5건). 읽기 전용 SELECT뿐이고
-**AI는 민원을 생성하지 않는다** — 접수는 사용자가 폼에서 한다(규칙 8, 프론트가 딥링크 CTA).
+`pg_trgm.word_similarity`로 제목+본문을 랭킹한다(임계는 아래 상수·상한 5건). 읽기 전용
+SELECT뿐이고 **AI는 민원을 생성하지 않는다** — 접수는 사용자가 폼에서 한다(규칙 8, 딥링크 CTA).
 
 노출은 제목·카테고리 라벨·담당자 답변 발췌(120자)로 제한한다. 작성자·동호수·본문은 컬럼
 자체를 읽지 않는다 — 안 읽으면 마스킹 실패 경로도 없다(규칙 2). 남의 민원은 `status='done'`
@@ -12,6 +12,7 @@ tenant_id·user_id는 ToolContext에서 오며 LLM 인자로 받지 않는다(�
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 from pydantic import BaseModel, Field
@@ -117,7 +118,30 @@ async def _search_similar_inquiries(
         if rows
         else _NO_MATCH_QUOTE
     )
-    return ToolResult(card=ToolCard(title=_CARD_TITLE, quote=quote, source_kind=_SOURCE_KIND))
+    return ToolResult(
+        card=ToolCard(title=_CARD_TITLE, quote=quote, source_kind=_SOURCE_KIND, data=_data(rows))
+    )
+
+
+def _data(rows: Sequence[Any]) -> dict[str, Any]:
+    """화면용 사례 목록(ADR-0025 §6) — quote와 같은 값을 필드로 쪼갠 것뿐.
+
+    노출 범위는 quote와 동일하다(제목·분류·상태·처리결과 발췌). 작성자·동호수·본문은 SQL이
+    읽지도 않으므로 여기에 들어올 수 없다(규칙 2 — 안 읽으면 마스킹 실패 경로도 없다).
+    """
+    return {
+        "kind": "inquiry_cases",
+        "cases": [
+            {
+                "title": r.title,
+                "category": r.category_label or "분류없음",
+                "status": _STATUS_LABEL.get(r.status, r.status),
+                "resolution": _summary(r.reply_body, r.status),
+                "is_mine": bool(r.is_mine),
+            }
+            for r in rows
+        ],
+    }
 
 
 def search_similar_inquiries_tool() -> Tool:

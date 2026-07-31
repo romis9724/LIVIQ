@@ -139,6 +139,34 @@ async def test_ask_without_evidence_falls_back(
     assert done["token_estimated"] is True
 
 
+async def test_sse_new_fields_are_additive(seeded_client: httpx.AsyncClient) -> None:
+    """ADR-0025 §5 — 이벤트 종류 4종 불변, 기존 필드 유지, 새 필드는 기본값으로 붙는다.
+
+    기존 소비자(stage·tool_path만 읽는 웹)는 새 필드를 몰라도 그대로 동작해야 한다.
+    """
+    response = await seeded_client.post("/assistant/ask", json={"question": "주차장 언제 열어요?"})
+    events = _parse_sse(response.text)
+    assert {name for name, _ in events} <= {"status", "token", "citation", "done"}
+
+    statuses = [p for name, p in events if name == "status"]
+    assert all(p["stage"] in {"searching", "generating", "verifying"} for p in statuses)
+    assert statuses[0]["tool"] is None  # 첫 searching은 도구 미상
+    assert [p["tool"] for p in statuses if p["tool"]] == ["search_documents", "get_fees"]
+
+    citations = [p for name, p in events if name == "citation"]
+    assert citations, "문서 인용이 있어야 하위호환을 검증할 수 있다"
+    for payload in citations:
+        assert {"ref", "document_id", "document_title", "quote", "page", "clause"} <= set(payload)
+        if payload["document_id"] is not None:
+            assert payload["data"] is None  # 문서 인용은 구조화 페이로드가 없다
+
+    done = events[-1][1]
+    assert {"message_id", "conversation_id", "status", "confidence", "needs_review"} <= set(done)
+    assert done["tool_path"] == ["search_documents", "get_fees"]
+    # 제안은 호출한 도구에서 나온다(고정 칩 아님).
+    assert done["suggestions"] == ["원문 문서 열어보기", "지난달과 비교하기"]
+
+
 async def test_ask_rejects_oversized_question(seeded_client: httpx.AsyncClient) -> None:
     response = await seeded_client.post("/assistant/ask", json={"question": "가" * 3000})
     assert response.status_code == 422

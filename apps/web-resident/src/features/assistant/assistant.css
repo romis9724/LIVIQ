@@ -137,6 +137,12 @@
   margin: 0;
 }
 
+/* 되묻기 — 답변이 아니라 되던지는 질문이라 강조 테두리로 구분한다(색 단독 전달 아님:
+   본문이 물음표로 끝나고 안내 문구가 함께 붙는다). */
+.bubble-ai--clarify {
+  border-left: 3px solid var(--color-accent);
+}
+
 .caret {
   display: inline-block;
   width: 8px;

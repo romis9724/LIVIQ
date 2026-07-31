@@ -10,6 +10,7 @@ import {
   buildParkingHref,
   spotNosFromCitations,
 } from "@/features/parking/links";
+import { answerKind } from "./api";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
@@ -53,10 +54,18 @@ export function AssistantChat() {
   // 헤더 부제용 소속 단지명. 실패하면 단지명 없이 기본 문구만.
   const [tenantName, setTenantName] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // 되묻기로 끝났으면 바로 답할 수 있게 입력창에 포커스를 준다.
+  const last = messages[messages.length - 1];
+  const awaitingAnswer = last?.role === "ai" && answerKind(last) === "clarify";
+  useEffect(() => {
+    if (awaitingAnswer) inputRef.current?.focus();
+  }, [awaitingAnswer]);
 
   useEffect(() => {
     let alive = true;
@@ -124,6 +133,7 @@ export function AssistantChat() {
         </label>
         <input
           id="assistant-ask"
+          ref={inputRef}
           type="text"
           className="composer__input"
           placeholder="단지 규약·관리비·시설 무엇이든"
@@ -151,8 +161,7 @@ interface AiRowProps {
 }
 
 function AiRow({ message, question }: AiRowProps) {
-  const streaming = message.status === "streaming";
-  const answered = message.result?.status === "answered" && !message.error;
+  const kind = answerKind(message);
   const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
   const composeHref = buildComposeHref(question);
   // 주차 도구가 호출됐으면 지도로 보낸다. 추천 면은 도구 결과 카드에서만 뽑고,
@@ -166,7 +175,7 @@ function AiRow({ message, question }: AiRowProps) {
         L
       </span>
       <div className="ai-row__body">
-        {streaming ? (
+        {kind === "streaming" ? (
           <>
             <div className="bubble-ai">
               {message.text}
@@ -176,7 +185,13 @@ function AiRow({ message, question }: AiRowProps) {
               <span aria-hidden="true">📄</span> {STAGE_HINT[message.stage] ?? "처리 중…"}
             </div>
           </>
-        ) : answered ? (
+        ) : kind === "clarify" ? (
+          // 되묻기: 출처·신뢰도·피드백을 붙이지 않는다 — 근거 있는 답변이 아니라 질문이다.
+          <div className="bubble-ai bubble-ai--clarify">
+            <p>{message.text}</p>
+            <p className="ai-row__hint">답을 알려주시면 이어서 찾아볼게요.</p>
+          </div>
+        ) : kind === "answered" ? (
           <>
             <ConfidenceBadge status={message.result?.needsReview ? "review" : "answered"} />
             <div className="bubble-ai">

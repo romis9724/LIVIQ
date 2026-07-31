@@ -18,7 +18,8 @@ export interface Citation {
 export interface DoneResult {
   messageId: string | null;
   conversationId: string;
-  status: "answered" | "fallback";
+  /** `clarify` = 되묻기(ADR-0025 §4) — 답변이 아니라 **질문**이라 폴백으로 취급하지 않는다. */
+  status: "answered" | "fallback" | "clarify";
   confidence: number;
   needsReview: boolean;
   fallbackReason: string | null;
@@ -110,6 +111,25 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
   } catch {
     return null;
   }
+}
+
+/** AI 말풍선이 취할 수 있는 표시 형태. 렌더 분기의 단일 출처(컴포넌트 밖에서 테스트 가능). */
+export type AnswerKind = "streaming" | "answered" | "clarify" | "fallback";
+
+/**
+ * AI 메시지를 어떤 형태로 그릴지 판정한다.
+ * 되묻기를 따로 빼는 이유: 기존 분기는 `answered` 가 아니면 전부 폴백 UI(담당자 연결)로
+ * 떨어뜨리는데, 되묻기는 실패가 아니라 사용자에게 되던지는 질문이다.
+ */
+export function answerKind(message: {
+  status: "streaming" | "done";
+  error?: boolean;
+  result?: Pick<DoneResult, "status">;
+}): AnswerKind {
+  if (message.status === "streaming") return "streaming";
+  if (message.error) return "fallback";
+  if (message.result?.status === "clarify") return "clarify";
+  return message.result?.status === "answered" ? "answered" : "fallback";
 }
 
 export interface AskOptions {

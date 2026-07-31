@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSseBuffer, toEvent } from "./api";
+import { type DoneResult, answerKind, parseSseBuffer, toEvent } from "./api";
 
 describe("parseSseBuffer", () => {
   it("완결 프레임을 파싱하고 미완결 버퍼를 남긴다", () => {
@@ -69,5 +69,35 @@ describe("toEvent — done 이벤트", () => {
   it("tool_path 가 없으면 빈 배열이다", () => {
     const event = toEvent(doneFrame({}));
     expect(event?.type === "done" && event.result.toolPath).toEqual([]);
+  });
+
+  it("clarify 상태를 그대로 옮긴다", () => {
+    const event = toEvent(doneFrame({ status: "clarify", answer: "몇 월 관리비인가요?" }));
+    expect(event?.type === "done" && event.result.status).toBe("clarify");
+    expect(event?.type === "done" && event.result.answer).toBe("몇 월 관리비인가요?");
+  });
+});
+
+describe("answerKind — 되묻기 분기", () => {
+  const result = (status: DoneResult["status"]) => ({ status });
+
+  it("되묻기는 폴백이 아니라 clarify 로 분기한다", () => {
+    expect(answerKind({ status: "done", result: result("clarify") })).toBe("clarify");
+  });
+
+  it("스트리밍 중에는 상태와 무관하게 streaming 이다", () => {
+    expect(answerKind({ status: "streaming", result: result("clarify") })).toBe("streaming");
+  });
+
+  it("네트워크 오류는 되묻기보다 우선해 폴백이다", () => {
+    expect(answerKind({ status: "done", error: true, result: result("clarify") })).toBe(
+      "fallback",
+    );
+  });
+
+  it("기존 두 상태는 그대로 분기한다(회귀)", () => {
+    expect(answerKind({ status: "done", result: result("answered") })).toBe("answered");
+    expect(answerKind({ status: "done", result: result("fallback") })).toBe("fallback");
+    expect(answerKind({ status: "done" })).toBe("fallback"); // done 이벤트 없이 끝난 경우
   });
 });

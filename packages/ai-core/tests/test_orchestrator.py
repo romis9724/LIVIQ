@@ -28,6 +28,7 @@ from ai_core.orchestrator import (
     AssistantEvent,
     CitationEvent,
     DoneEvent,
+    StatusEvent,
     TokenEvent,
     ToolCitationEvent,
     answer_question,
@@ -395,6 +396,169 @@ async def test_no_tool_calls_falls_back_no_evidence(settings: AiCoreSettings) ->
     done = _done(events)
     assert done.fallback_reason == FALLBACK_NO_EVIDENCE
     assert not any(isinstance(e, TokenEvent) for e in events)
+
+
+# ── 계획 turn (ADR-0025 §2) ────────────────────────────────────────────
+
+
+async def test_plan_turn_is_kept_and_loop_continues_to_tool_call(
+    settings: AiCoreSettings,
+) -> None:
+    """content만 있는 무-도구 turn = 계획. 대화에 남기고 다음 turn에서 도구를 부른다."""
+    retriever = FakeRetriever([_chunk()])
+    plan = "먼저 관리규약에서 주차장 개방 시간을 찾겠습니다."
+    seen_plan_in_next_turn = False
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        nonlocal seen_plan_in_next_turn
+        if any(m.get("role") == "tool" for m in messages):
+            return _decision(content="")  # 근거 확보 → 종료
+        if any(m.get("role") == "assistant" and m.get("content") == plan for m in messages):
+            seen_plan_in_next_turn = True
+            return _decision(tool_calls=[_tc("search_documents", {"query": "주차"})])
+        return _decision(content=plan)  # 1턴째: 계획만
+
+    done = _done(await _run(_agent_llm(settings, decide), retriever))
+    assert seen_plan_in_next_turn  # 계획이 다음 turn 컨텍스트에 실렸다
+    assert done.status == "answered"
+    assert done.tool_path == ("search_documents",)
+
+
+async def test_second_toolless_turn_terminates_loop(settings: AiCoreSettings) -> None:
+    """계획은 1회 한정 — 계속 계획만 내놓는 모델도 2번째 무-도구 turn에서 끝난다.
+
+    무한 루프(=스텝 상한까지 빈 turn) 방지선. 상한을 올려도 결정 turn은 2회여야 한다.
+    """
+    retriever = FakeRetriever([_chunk()])
+    turns = 0
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        nonlocal turns
+        turns += 1
+        return _decision(content="계획만 반복합니다.")
+
+    done = _done(await _run(_agent_llm(settings, decide), retriever))
+    assert turns == 2  # 계획 1 + 종료 판정 1 (MAX_TOOL_STEPS까지 돌지 않는다)
+    assert turns < MAX_TOOL_STEPS
+    assert done.fallback_reason == FALLBACK_NO_EVIDENCE  # 근거 0 → 지어내지 않음
+
+
+async def test_empty_toolless_turn_terminates_immediately(settings: AiCoreSettings) -> None:
+    """content도 tool_calls도 없으면 계획이 아니다 — 기존대로 즉시 종료(회귀)."""
+    retriever = FakeRetriever([_chunk()])
+    turns = 0
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        nonlocal turns
+        turns += 1
+        return _decision(content="")
+
+    done = _done(await _run(_agent_llm(settings, decide), retriever))
+    assert turns == 1
+    assert done.fallback_reason == FALLBACK_NO_EVIDENCE
+
+
+async def test_tool_loop_without_plan_is_unchanged(settings: AiCoreSettings) -> None:
+    """계획 없이 바로 도구를 부르는 기존 경로는 결정 turn 2회 그대로(회귀)."""
+    retriever = FakeRetriever([_chunk()])
+    turns = 0
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        nonlocal turns
+        turns += 1
+        if any(m.get("role") == "tool" for m in messages):
+            return _decision(content="")
+        return _decision(tool_calls=[_tc("search_documents", {"query": "주차"})])
+
+    done = _done(await _run(_agent_llm(settings, decide), retriever))
+    assert turns == 2
+    assert done.status == "answered" and done.tool_path == ("search_documents",)
+
+
+async def test_status_event_names_running_tool(settings: AiCoreSettings) -> None:
+    """도구 실행 직전 status(stage=searching, tool=<이름>) — stage 리터럴은 확장하지 않는다."""
+    retriever = FakeRetriever([_chunk()])
+    llm = _agent_llm(
+        settings, _calls_then_stop(_tc("search_documents", {"query": "주차"}), _tc("get_fees", {}))
+    )
+    events = await _run(llm, retriever)
+    statuses = [e for e in events if isinstance(e, StatusEvent)]
+    assert {s.stage for s in statuses} <= {"searching", "generating", "verifying"}
+    assert [s.tool for s in statuses if s.tool] == ["search_documents", "get_fees"]
+    assert statuses[0].tool is None  # 첫 searching은 도구 미상 — 기존 소비자 하위호환
+
+
+# ── 구조화 응답 (ADR-0025 §6) ──────────────────────────────────────────
+
+
+async def test_tool_card_data_never_reaches_the_llm(settings: AiCoreSettings) -> None:
+    """`data`는 화면 전용이다 — 8B가 표를 재작성하면 숫자가 틀린다(규칙 5·8).
+
+    LLM으로 나간 요청 본문 전량에서 data 고유 키(`fee_table`·`prev_total`)를 찾지 못해야
+    한다. 같은 숫자를 담은 quote는 그대로 가므로 근거는 유지된다.
+    """
+    sent_bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent_bodies.append(request.content.decode())
+        body = json.loads(request.content)
+        if request.url.path.endswith("/embeddings"):
+            data = [{"index": 0, "embedding": [0.05] * settings.embedding_dimensions}]
+            return httpx.Response(200, json={"data": data})
+        if body.get("stream"):
+            chunk = {"choices": [{"delta": {"content": "이번 달 관리비는 100,000원입니다."}}]}
+            sse = "\n\n".join([f"data: {json.dumps(chunk)}", "data: [DONE]", ""])
+            return httpx.Response(200, content=sse.encode())
+        if any(m.get("role") == "tool" for m in body["messages"]):
+            return httpx.Response(200, json=_decision(content=""))
+        return httpx.Response(200, json=_decision(tool_calls=[_tc("get_fees", {})]))
+
+    llm = LlmClient(settings, transport=httpx.MockTransport(handler), retry_backoff_s=0.0)
+    done = _done(await _run(llm, FakeRetriever([])))
+
+    card_data = done.tool_citations[0].data
+    assert card_data is not None and card_data["kind"] == "fee_table"
+    assert sent_bodies  # 실제로 LLM을 불렀다(공허한 단언 방지)
+    for body_text in sent_bodies:
+        assert "fee_table" not in body_text
+        assert "prev_total" not in body_text
+    # quote(=LLM이 본 근거)에는 같은 총액이 살아 있다 — 근거를 뺀 게 아니라 형식만 분리했다.
+    assert f"{card_data['total']:,}원" in done.tool_citations[0].quote
+
+
+async def test_tool_citation_data_is_the_tool_value_unchanged(settings: AiCoreSettings) -> None:
+    """화면에 갈 값 == 도구가 낸 값. 오케스트레이터는 재가공하지 않는다."""
+    llm = _agent_llm(
+        settings, _calls_then_stop(_tc("get_fees", {})), answer="이번 달 관리비는 100,000원입니다."
+    )
+    events = await _run(llm, FakeRetriever([]))
+    done = _done(events)
+    emitted = [e for e in events if isinstance(e, ToolCitationEvent)]
+    assert emitted[0].citation.data == done.tool_citations[0].data
+    assert done.tool_citations[0].data == {
+        "kind": "fee_table",
+        "period": "2026-06",
+        "rows": [{"name": "일반관리비", "amount": 50000}, {"name": "청소비", "amount": 20000}],
+        "total": 100000,
+        "prev_total": None,  # 전월 데이터 없음(fake handler)
+        "diff": None,
+    }
+
+
+async def test_done_carries_context_dependent_suggestions(settings: AiCoreSettings) -> None:
+    """제안은 tool_path에 달린다 — 고정 칩이 아니다(ADR-0025 §7)."""
+    llm = _agent_llm(
+        settings, _calls_then_stop(_tc("get_fees", {})), answer="이번 달 관리비는 100,000원입니다."
+    )
+    done = _done(await _run(llm, FakeRetriever([])))
+    assert done.suggestions == ("지난달과 비교하기",)
+
+
+async def test_fallback_suggests_the_desk(settings: AiCoreSettings) -> None:
+    llm = _agent_llm(settings, lambda messages: _decision(content=""))
+    done = _done(await _run(llm, FakeRetriever([])))
+    assert done.status == "fallback"
+    assert done.suggestions == ("관리사무소에 문의하기",)
 
 
 async def test_no_evidence_marker_followed_by_answer_streams_nothing(

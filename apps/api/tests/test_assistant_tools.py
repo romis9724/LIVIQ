@@ -179,6 +179,26 @@ async def test_get_fees_tool_answers_with_persisted_tool_citation(
     assert kind == "tool:get_fees"
 
 
+async def test_tool_citation_carries_structured_data(fee_client: httpx.AsyncClient) -> None:
+    """citation.data = 도구가 확정한 값 그대로(ADR-0025 §6) — LLM을 거치지 않는다.
+
+    화면에 뿌려질 숫자는 fees 행의 값과 같아야 한다(규칙 5 — 확정 업로드 데이터가 단일 출처).
+    """
+    response = await fee_client.post("/assistant/ask", json={"question": "이번 달 관리비 알려줘"})
+    citation = [data for name, data in _parse_sse(response.text) if name == "citation"][0]
+    assert citation["data"] == {
+        "kind": "fee_table",
+        "period": "2026-06",
+        "rows": [
+            {"name": "일반관리비", "amount": 80000},
+            {"name": "청소비", "amount": 20000},
+        ],
+        "total": 100000,
+        "prev_total": None,  # 2026-05 행 없음
+        "diff": None,
+    }
+
+
 async def test_tool_path_does_not_mutate_domain_data(
     fee_client: httpx.AsyncClient, db_session: AsyncSession
 ) -> None:

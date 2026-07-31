@@ -69,6 +69,17 @@ def _cores(layout: dict[str, Any]) -> list[Core]:
     ]
 
 
+def _data(nearest: list[Any]) -> dict[str, Any]:
+    """화면용 자리 목록(ADR-0025 §6) — 도구가 계산한 면·종류·거리를 값 그대로.
+
+    LLM은 이 dict를 보지 않는다. 거리·면번호를 모델이 재작성하면 실제 자리와 어긋난다(규칙 8).
+    """
+    return {
+        "kind": "parking_spots",
+        "spots": [{"no": n.no, "kind": n.kind, "distance_m": n.distance_m} for n in nearest],
+    }
+
+
 def _quote(nearest: list[Any]) -> str:
     lines = [
         f"{_CIRCLED[i]} {n.no}면 ({n.kind}, 약 {n.distance_m}m)" for i, n in enumerate(nearest)
@@ -107,7 +118,9 @@ async def _find_nearest_parking(ctx: ToolContext, deps: ToolDeps, args: BaseMode
     )
     # 빈자리 없음도 확정 근거 → note가 아니라 카드로 승격(⓪ 계약, trace_home_device 관례).
     quote = _quote(nearest) if nearest else _NO_SPOT_NOTE
-    return ToolResult(card=ToolCard(title=_CARD_TITLE, quote=quote, source_kind=_SOURCE_KIND))
+    return ToolResult(
+        card=ToolCard(title=_CARD_TITLE, quote=quote, source_kind=_SOURCE_KIND, data=_data(nearest))
+    )
 
 
 def find_nearest_available_parking_tool() -> Tool:
