@@ -30,6 +30,7 @@ from ai_core.backend_config import DEFAULT_TOOL_CONFIDENCE
 from ai_core.budget import ScoredChunk, fit_chunks
 from ai_core.citations import Citation, verify_citations
 from ai_core.confidence import assess
+from ai_core.history import HISTORY_INJECT_TURNS, select_relevant_messages
 from ai_core.llm.client import (
     ChatUsage,
     LlmError,
@@ -72,9 +73,10 @@ MAX_PLAN_TURNS = 1
 # 확정 데이터·도구 결과만으로 답할 때의 신뢰도(검색 점수 아님 — fee_explain와 동일 원칙).
 # 정본은 backend_config(관리자 노브 `tool_confidence`의 기본값과 같은 값이어야 한다, H15-3).
 TOOL_ONLY_CONFIDENCE = DEFAULT_TOOL_CONFIDENCE
-# 멀티턴 컨텍스트(ADR-0025 §3) — 직전 3턴(user/assistant 쌍)만, 턴당 400자.
+# 멀티턴 컨텍스트(ADR-0025 §3) — 최대 3턴(user/assistant 쌍), 턴당 400자.
 # 더 넣으면 도구 결정 turn의 입력이 선형으로 불어난다(질의 원가의 대부분이 이 turn — H15-2).
-HISTORY_MAX_TURNS = 3
+# 어느 3턴인지는 관련성 필터가 고른다(ADR-0027 결정 2) — 상한 자체는 ai_core.history가 정본.
+HISTORY_MAX_TURNS = HISTORY_INJECT_TURNS
 HISTORY_MAX_CHARS = 400
 
 
@@ -172,7 +174,7 @@ async def answer_question(
     # PII 잔존 신호이므로 질문과 똑같이 LLM 호출을 중단해야 한다.
     try:
         masked_question = ensure_masked(question, extra_names=extra_names).masked_text
-        recent = _prepare_history(history, extra_names)
+        recent = _prepare_history(question, history, extra_names)
     except MaskingFailedError:
         yield _fallback(FALLBACK_MASKING, needs_review=True)
         return
@@ -416,17 +418,20 @@ def _fallback(
 
 
 def _prepare_history(
-    history: Sequence[tuple[str, str]], extra_names: Sequence[str]
+    question: str, history: Sequence[tuple[str, str]], extra_names: Sequence[str]
 ) -> tuple[tuple[str, str], ...]:
-    """직전 턴을 상한만큼 자른 뒤 마스킹(규칙 2 — 실패는 MaskingFailedError로 전파).
+    """관련 턴을 골라 상한만큼 자른 뒤 마스킹(규칙 2 — 실패는 MaskingFailedError로 전파).
 
+    선별(ADR-0027 결정 2)은 **마스킹 전 원문 질문**으로 한다 — 마스킹 플레이스홀더가
+    유사도를 왜곡하지 않게(ai_core.history docstring 참조).
     자르기를 마스킹보다 **먼저** 한다: 게이트를 통과해야 하는 것은 실제로 전송할 문자열
     그대로다(마스킹 후 자르면 플레이스홀더가 잘려 원문이 되살아날 수 있다).
     턴 = user/assistant 쌍이라 메시지 상한은 그 2배. 빈 본문(폴백 메시지 등)은 버린다 —
     답변 본문이 없는 턴은 맥락을 주지 않고 토큰만 먹는다.
     """
+    selected = select_relevant_messages(question, history)
     turns: list[tuple[str, str]] = []
-    for role, content in tuple(history)[-HISTORY_MAX_TURNS * 2 :]:
+    for role, content in selected[-HISTORY_MAX_TURNS * 2 :]:
         body = content.strip()[:HISTORY_MAX_CHARS]
         if not body:
             continue

@@ -19,9 +19,9 @@ from sse_starlette.sse import EventSourceResponse
 
 from ai_core.backend_config import AiTuning
 from ai_core.graph import GraphClient
+from ai_core.history import HISTORY_CANDIDATE_TURNS
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import (
-    HISTORY_MAX_TURNS,
     CitationEvent,
     DoneEvent,
     StatusEvent,
@@ -60,8 +60,9 @@ from app.session import get_redis
 from liviq_db.models import Citation, Conversation, Household, Message, User
 
 _REGISTRY = default_registry()
-# 한 턴 = user+assistant 두 메시지 — 자르기·마스킹 상한 자체는 ai-core가 단일 출처(H18-1).
-_HISTORY_MESSAGE_LIMIT = HISTORY_MAX_TURNS * 2
+# 한 턴 = user+assistant 두 메시지. 여기는 **후보 풀**만 나른다 — 어느 턴을 실제로 주입할지
+# 고르는 것도, 자르기·마스킹 상한도 ai-core가 단일 출처(H18-1, ADR-0027 결정 2).
+_HISTORY_MESSAGE_LIMIT = HISTORY_CANDIDATE_TURNS * 2
 # 복원 상한 — 프론트 `MAX_STORED_MESSAGES`(session-store.ts)와 같은 값이어야 두 복원 경로의
 # 대화 길이가 갈라지지 않는다(ADR-0027 결정 1).
 RESTORE_MESSAGE_LIMIT = 40
