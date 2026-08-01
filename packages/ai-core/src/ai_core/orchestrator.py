@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 from collections.abc import AsyncIterator, Sequence
@@ -40,9 +41,9 @@ from ai_core.llm.client import (
 from ai_core.llm.tokens import estimate_tokens
 from ai_core.masking import MaskingFailedError, ensure_masked, unmask
 from ai_core.rag.prompt import (
-    AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
     NO_EVIDENCE_MARKER,
+    agent_system_prompt,
     build_context_block,
 )
 from ai_core.rag.retrieval import MIN_SCORE, RetrievedChunk
@@ -67,6 +68,8 @@ CONTEXT_BUDGET_TOKENS = 2400
 # 도구 결정 turn 상한(ADR-0007) — 초과 시 현재 근거로 답변/폴백.
 # 3 → 4(ADR-0025 §2): 계획 turn 1회가 도구 turn 예산을 먹지 않게 한 칸 늘렸다(계획 1 + 도구 3).
 MAX_TOOL_STEPS = 4
+# 단지 시간대 — "이번 달" 해석의 기준(agent_system_prompt). 단지는 전부 국내라 고정.
+_KST = datetime.timezone(datetime.timedelta(hours=9))
 # 계획 turn 상한 — 무-도구 turn을 계획으로 재해석하는 횟수. 1로 고정한다: 2회 이상 허용하면
 # 도구를 안 부르는 모델이 상한까지 빈 turn을 돌며 토큰만 태운다(무한 루프 방지).
 MAX_PLAN_TURNS = 1
@@ -182,7 +185,9 @@ async def answer_question(
     specs = registry.specs_for(ctx.roles, graph_available=deps.graph_available)
     if not allow_clarify:
         specs = [s for s in specs if s["function"]["name"] != CLARIFY_TOOL_NAME]
-    messages: list[dict[str, object]] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
+    # 오늘 날짜는 단지 시간대(KST) 기준 — 서버가 UTC로 돌면 자정~09시 사이 날짜가 어긋난다.
+    today = datetime.datetime.now(_KST).date()
+    messages: list[dict[str, object]] = [{"role": "system", "content": agent_system_prompt(today)}]
     # 히스토리는 OpenAI 규약대로 개별 user/assistant 메시지로 넣는다(도구 결정 turn).
     for role, content in recent:
         messages.append({"role": role, "content": content})
@@ -260,6 +265,13 @@ async def answer_question(
             # 진행 중인 도구를 화면에 노출(ADR-0025 §5) — stage는 searching 그대로.
             yield StatusEvent(stage="searching", tool=call.name)
             execution = await execute_tool(call, ctx=ctx, deps=deps, registry=registry)
+            if not execution.ok:
+                # 인자 검증 실패·빈 결과의 원인 추적용 — 인자는 마스킹된 질문에서 파생되고
+                # detail은 분류 문자열뿐이라 PII 없음. 폴백만 보고는 원인을 못 가른다(실측).
+                logger.info(
+                    "assistant tool_not_ok",
+                    extra={"tool": call.name, "detail": execution.detail or "empty_result"},
+                )
             tool_path.append(call.name)
             content = _absorb_and_mask(
                 execution.result, doc_chunks, seen_chunk_ids, cards, seen_cards, extra_names
