@@ -108,6 +108,8 @@
 | `search_facility_graph` | Neo4j 벡터매칭 + 그래프 확장 | 유사 장애·연결 설비·정비 이력 → 원인 후보 | tenant + 시설 역할 |
 | `get_fees` | 고정 SQL(`fees`) | 본인 세대 관리비·항목·전월 대비 | tenant + 본인 세대 소유권 |
 | `get_my_inquiries` | 고정 SQL(`inquiries`) | 본인 민원 접수·처리 상태 | tenant + 본인 소유권 |
+| `get_recent_notices` | 고정 SQL(`notices`) | 게시판 최근 공지 목록(최신 5건) — 유사도 검색이 못 잡는 "공지사항" 메타 질의용 | tenant + 전 역할 |
+| `ask_clarification` | 없음(되묻기 전용) | 대상이 갈릴 때 되묻고 종료([ADR-0025](adr/0025-agent-depth-plan-clarify-structured.md)) — 문장은 코드가 생성 | tenant + 전 역할 |
 | `search_similar_inquiries` | 고정 SQL(`inquiries`+`inquiry_events`, pg_trgm) | 유사 민원의 제목·분류·처리결과 요약([ADR-0024](adr/0024-assistant-inquiry-triage.md)) | tenant + RESIDENT(요약 컬럼만) |
 | `get_facilities` | 고정 SQL(`facilities`) | 설비 목록·현재 상태 | tenant + 역할 |
 | `get_overdue_checks` | 고정 SQL(`facilities`) | 점검 기한 임박·초과 설비 | tenant + 역할 |
