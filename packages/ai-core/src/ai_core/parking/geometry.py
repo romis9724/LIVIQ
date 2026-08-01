@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 from math import hypot
+from typing import Any
 
 # 배치도 축척 — 면 1개 34x64px = 2.5m x 5.0m (13px/m). 프론트 parking-sim.ts와 동일해야 한다.
 SPOT_W = 34
@@ -82,6 +83,28 @@ class NearestSpot:
     no: str
     kind: str
     distance_m: int
+
+
+def spots_from_layout(layout: dict[str, Any]) -> list[Spot]:
+    """`parking_layouts.layout` JSON → 면 목록. 도구 두 곳이 같은 파싱을 쓴다."""
+    return [
+        Spot(no=str(s["no"]), kind=str(s["kind"]), x=float(s["x"]), y=float(s["y"]))
+        for s in layout.get("spots", [])
+    ]
+
+
+def cores_from_layout(layout: dict[str, Any]) -> list[Core]:
+    """`parking_layouts.layout` JSON → 동 코어 목록."""
+    return [
+        Core(
+            name=str(c["name"]),
+            x=float(c["x"]),
+            y=float(c["y"]),
+            w=float(c["w"]),
+            h=float(c["h"]),
+        )
+        for c in layout.get("cores", [])
+    ]
 
 
 def spot_center(s: Spot) -> tuple[float, float]:

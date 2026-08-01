@@ -17,9 +17,11 @@ from ai_core.parking.geometry import (
     VehicleRef,
     assign_occupancy,
     core_center,
+    cores_from_layout,
     distance_px,
     nearest_available_spots,
     spot_center,
+    spots_from_layout,
 )
 
 __all__ = [
@@ -33,7 +35,9 @@ __all__ = [
     "VehicleRef",
     "assign_occupancy",
     "core_center",
+    "cores_from_layout",
     "distance_px",
     "nearest_available_spots",
     "spot_center",
+    "spots_from_layout",
 ]

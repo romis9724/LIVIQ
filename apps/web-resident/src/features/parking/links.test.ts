@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Citation } from "@/features/assistant/api";
 import {
+  MY_VEHICLE_CARD_TITLE,
+  MY_VEHICLE_TOOL,
   PARKING_CARD_TITLE,
+  PARKING_TOOL,
   buildParkingHref,
+  isParkingAnswer,
   readSpotParam,
   spotNosFromCitations,
 } from "./links";
@@ -44,6 +48,38 @@ describe("spotNosFromCitations", () => {
 
   it("returns an empty list when there is no citation at all", () => {
     expect(spotNosFromCitations([])).toEqual([]);
+  });
+
+  it("extracts the spot from the my-vehicle card quote (H19-2)", () => {
+    const card = citation({
+      documentTitle: MY_VEHICLE_CARD_TITLE,
+      quote:
+        "내 차량 1대:\n- 아이오닉5: 012면 (3시간 전 입차 · 401동 승강기까지 약 12m)\n(데모 데이터 · 출처: parking_vehicles 등록·점유 현황)",
+    });
+
+    expect(spotNosFromCitations([card])).toEqual(["012"]);
+  });
+
+  it("returns an empty list when my vehicle is not parked", () => {
+    const card = citation({
+      documentTitle: MY_VEHICLE_CARD_TITLE,
+      quote: "내 차량 1대:\n- 아이오닉5: 주차장에 없음(등록만 됨)",
+    });
+
+    expect(spotNosFromCitations([card])).toEqual([]);
+  });
+});
+
+describe("isParkingAnswer", () => {
+  it("is true for both parking tools", () => {
+    expect(isParkingAnswer([PARKING_TOOL])).toBe(true);
+    expect(isParkingAnswer(["search_documents", MY_VEHICLE_TOOL])).toBe(true);
+  });
+
+  it("is false for other tools or a missing tool path", () => {
+    expect(isParkingAnswer(["search_documents"])).toBe(false);
+    expect(isParkingAnswer([])).toBe(false);
+    expect(isParkingAnswer(undefined)).toBe(false);
   });
 });
 
