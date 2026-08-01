@@ -120,11 +120,15 @@ async def test_history_reaches_both_decision_and_final_turn(settings: AiCoreSett
 
 
 async def test_history_is_capped_by_turns_and_chars(settings: AiCoreSettings) -> None:
-    """직전 3턴(=6메시지)·턴당 400자 상한 — 초과분은 잘린다(토큰=비용)."""
+    """최대 3턴(=6메시지)·턴당 400자 상한 — 초과분은 잘린다(토큰=비용).
+
+    전 턴이 질문과 관련되게 두어(관련성 필터는 test_history.py 담당) 상한만 본다 —
+    동점이면 최신이 이기므로 남는 것은 마지막 3턴이다.
+    """
     rec = Recorded()
     llm = _recording_llm(settings, _doc_then_stop, rec)
     history = tuple(
-        (role, f"{i}번째{'가' * 500}")
+        (role, f"{i}번째 언제까지{'가' * 500}")
         for i, role in enumerate(["user", "assistant"] * 5)  # 10메시지 = 5턴
     )
     _done(await _run(llm, FakeRetriever([_chunk()]), history=history))
