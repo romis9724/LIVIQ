@@ -283,7 +283,7 @@ function ExplainPanel({ state }: { state: ReturnType<typeof useFeeExplain>["stat
       )}
 
       {state.citations.map((c, i) => (
-        <CitationCard key={`${c.documentTitle}-${i}`} title={c.documentTitle} meta={c.quote} href="#" />
+        <CitationCard key={`${c.documentTitle}-${i}`} title={c.documentTitle} meta={c.quote} />
       ))}
 
       {done && isFallback ? (

@@ -53,6 +53,11 @@ class ToolCard:
     title: str
     quote: str
     source_kind: str  # tool:<이름>
+    # 화면 전용 구조화 페이로드(ADR-0025 §6) — 표·목록을 값 그대로 렌더하기 위한 것.
+    # **LLM에는 절대 보내지 않는다**: llm_text()·최종 프롬프트는 title/quote만 쓴다. 8B가 표를
+    # 재작성하면 숫자가 틀린다(규칙 5·8 — 확정 데이터는 도구가 낸 값이 단일 출처).
+    # 스키마는 도구마다 다르다 — 프론트가 분기할 수 있게 `kind` 키를 반드시 넣는다.
+    data: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

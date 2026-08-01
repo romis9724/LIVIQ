@@ -7,17 +7,25 @@ export type Stage = "searching" | "generating" | "verifying";
 
 export interface Citation {
   ref: number;
-  documentId: string;
+  /** 문서 인용은 문서 id, **도구 결과 카드는 null**(제목·quote 로 식별 — 주차 CTA 가 쓴다). */
+  documentId: string | null;
   documentTitle: string;
   quote: string;
   page: number | null;
   clause: string | null;
+  /**
+   * 도구 결과의 구조화 페이로드(ADR-0025 §6). 문서 인용은 항상 null.
+   * 서버가 확정한 값이지만 와이어에서 온 JSON 이라 여기서는 좁히지 않는다 —
+   * `structured.ts` 의 `toStructured` 가 kind 별로 검사해 좁힌다(모르는 kind 는 무시).
+   */
+  data: unknown;
 }
 
 export interface DoneResult {
   messageId: string | null;
   conversationId: string;
-  status: "answered" | "fallback";
+  /** `clarify` = 되묻기(ADR-0025 §4) — 답변이 아니라 **질문**이라 폴백으로 취급하지 않는다. */
+  status: "answered" | "fallback" | "clarify";
   confidence: number;
   needsReview: boolean;
   fallbackReason: string | null;
@@ -27,10 +35,21 @@ export interface DoneResult {
    * 최종본이다. 없으면 누적 텍스트가 그대로 정본.
    */
   answer: string | null;
+  /**
+   * 이번 답변에서 호출된 도구 이름 순서. 프론트는 민원성 질의 판정에만 쓴다
+   * (`search_similar_inquiries` 포함 → 접수 CTA 렌더, ADR-0024).
+   */
+  toolPath: string[];
+  /**
+   * 맥락 기반 다음 행동 제안 최대 3개(ADR-0025 §7 — 코드 규칙 생성, LLM 미개입).
+   * 비어 있으면 칩을 렌더하지 않는다.
+   */
+  suggestions: string[];
 }
 
 export type AssistantEvent =
-  | { type: "status"; stage: Stage }
+  /** `tool` = 지금 실행 중인 도구 이름. 도구 없는 단계(첫 searching·generating·verifying)는 null. */
+  | { type: "status"; stage: Stage; tool: string | null }
   | { type: "token"; text: string }
   | { type: "citation"; citation: Citation }
   | { type: "done"; result: DoneResult };
@@ -63,12 +82,13 @@ export function parseSseBuffer(buffer: string): [SseFrame[], string] {
   return [frames, rest];
 }
 
-function toEvent(frame: SseFrame): AssistantEvent | null {
+/** SSE 프레임 → 앱 이벤트. 알 수 없는 event 명·깨진 JSON 은 null(무시). */
+export function toEvent(frame: SseFrame): AssistantEvent | null {
   try {
     const d = JSON.parse(frame.data);
     switch (frame.event) {
       case "status":
-        return { type: "status", stage: d.stage };
+        return { type: "status", stage: d.stage, tool: d.tool ?? null };
       case "token":
         return { type: "token", text: d.text };
       case "citation":
@@ -76,11 +96,12 @@ function toEvent(frame: SseFrame): AssistantEvent | null {
           type: "citation",
           citation: {
             ref: d.ref,
-            documentId: d.document_id,
+            documentId: d.document_id ?? null,
             documentTitle: d.document_title,
             quote: d.quote,
             page: d.page ?? null,
             clause: d.clause ?? null,
+            data: d.data ?? null,
           },
         };
       case "done":
@@ -94,6 +115,8 @@ function toEvent(frame: SseFrame): AssistantEvent | null {
             needsReview: d.needs_review,
             fallbackReason: d.fallback_reason ?? null,
             answer: d.answer ?? null,
+            toolPath: d.tool_path ?? [],
+            suggestions: d.suggestions ?? [],
           },
         };
       default:
@@ -102,6 +125,25 @@ function toEvent(frame: SseFrame): AssistantEvent | null {
   } catch {
     return null;
   }
+}
+
+/** AI 말풍선이 취할 수 있는 표시 형태. 렌더 분기의 단일 출처(컴포넌트 밖에서 테스트 가능). */
+export type AnswerKind = "streaming" | "answered" | "clarify" | "fallback";
+
+/**
+ * AI 메시지를 어떤 형태로 그릴지 판정한다.
+ * 되묻기를 따로 빼는 이유: 기존 분기는 `answered` 가 아니면 전부 폴백 UI(담당자 연결)로
+ * 떨어뜨리는데, 되묻기는 실패가 아니라 사용자에게 되던지는 질문이다.
+ */
+export function answerKind(message: {
+  status: "streaming" | "done";
+  error?: boolean;
+  result?: Pick<DoneResult, "status">;
+}): AnswerKind {
+  if (message.status === "streaming") return "streaming";
+  if (message.error) return "fallback";
+  if (message.result?.status === "clarify") return "clarify";
+  return message.result?.status === "answered" ? "answered" : "fallback";
 }
 
 export interface AskOptions {

@@ -21,6 +21,9 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic import ValidationError
 
 from ai_core.backend_config import DEFAULT_TOOL_CONFIDENCE
 from ai_core.budget import ScoredChunk, fit_chunks
@@ -41,6 +44,8 @@ from ai_core.rag.prompt import (
     build_context_block,
 )
 from ai_core.rag.retrieval import MIN_SCORE, RetrievedChunk
+from ai_core.suggestions import suggest_next_actions
+from ai_core.tools.clarify import CLARIFY_TOOL_NAME, ClarificationArgs, build_clarification
 from ai_core.tools.registry import (
     ToolCard,
     ToolContext,
@@ -58,10 +63,18 @@ logger = logging.getLogger("ai_core.orchestrator")
 # p95 +17% — 8B 모델은 근거를 더 줘도 선별을 못 한다(lost-in-the-middle). 2400 유지.
 CONTEXT_BUDGET_TOKENS = 2400
 # 도구 결정 turn 상한(ADR-0007) — 초과 시 현재 근거로 답변/폴백.
-MAX_TOOL_STEPS = 3
+# 3 → 4(ADR-0025 §2): 계획 turn 1회가 도구 turn 예산을 먹지 않게 한 칸 늘렸다(계획 1 + 도구 3).
+MAX_TOOL_STEPS = 4
+# 계획 turn 상한 — 무-도구 turn을 계획으로 재해석하는 횟수. 1로 고정한다: 2회 이상 허용하면
+# 도구를 안 부르는 모델이 상한까지 빈 turn을 돌며 토큰만 태운다(무한 루프 방지).
+MAX_PLAN_TURNS = 1
 # 확정 데이터·도구 결과만으로 답할 때의 신뢰도(검색 점수 아님 — fee_explain와 동일 원칙).
 # 정본은 backend_config(관리자 노브 `tool_confidence`의 기본값과 같은 값이어야 한다, H15-3).
 TOOL_ONLY_CONFIDENCE = DEFAULT_TOOL_CONFIDENCE
+# 멀티턴 컨텍스트(ADR-0025 §3) — 직전 3턴(user/assistant 쌍)만, 턴당 400자.
+# 더 넣으면 도구 결정 turn의 입력이 선형으로 불어난다(질의 원가의 대부분이 이 turn — H15-2).
+HISTORY_MAX_TURNS = 3
+HISTORY_MAX_CHARS = 400
 
 
 # ── 이벤트 (SSE 계약과 1:1) ─────────────────────────────────────────────
@@ -70,6 +83,9 @@ TOOL_ONLY_CONFIDENCE = DEFAULT_TOOL_CONFIDENCE
 @dataclass(frozen=True)
 class StatusEvent:
     stage: str  # searching | generating | verifying
+    # 지금 실행 중인 도구 이름(ADR-0025 §5) — additive 필드, stage 리터럴 3종은 불변.
+    # 기존 소비자는 stage만 읽으면 그대로 동작한다.
+    tool: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +106,8 @@ class ToolCitation:
     title: str
     quote: str
     source_kind: str
+    # 화면 전용 구조화 페이로드 — ToolCard.data 그대로(재가공 금지, ADR-0025 §6).
+    data: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -99,7 +117,7 @@ class ToolCitationEvent:
 
 @dataclass(frozen=True)
 class DoneEvent:
-    status: str  # answered | fallback
+    status: str  # answered | fallback | clarify(되묻기 — ADR-0025 §4)
     confidence: float
     needs_review: bool
     # 질의 1건의 **전 turn 합산**(도구 결정 turn + 최종 답변 turn, H15-2). LLM 호출 0회면 None.
@@ -111,6 +129,8 @@ class DoneEvent:
     answer: str = ""
     # 호출한 도구 이름 순서(골든셋 회귀·규칙 8 관측용, H3-4). additive 필드 — SSE 4종 불변.
     tool_path: tuple[str, ...] = field(default_factory=tuple)
+    # 다음 행동 제안(ADR-0025 §7) — tool_path 기반 코드 규칙, LLM 호출 0. 빈 튜플이면 렌더 안 함.
+    suggestions: tuple[str, ...] = field(default_factory=tuple)
 
 
 AssistantEvent = StatusEvent | TokenEvent | CitationEvent | ToolCitationEvent | DoneEvent
@@ -127,12 +147,18 @@ async def answer_question(
     registry: ToolRegistry,
     deps: ToolDeps,
     ctx: ToolContext,
+    history: Sequence[tuple[str, str]] = (),
+    allow_clarify: bool = True,
     extra_names: Sequence[str] = (),
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
     tool_confidence: float = TOOL_ONLY_CONFIDENCE,
 ) -> AsyncIterator[AssistantEvent]:
     """질의 1건 처리(도구 에이전트). 항상 마지막에 DoneEvent를 낸다.
 
+    history: 직전 턴의 `(role, text)`(오래된 것 → 최신). 답변 **본문만** 넣는다 — 도구
+    카드·인용 원문을 재전송하면 토큰이 폭증한다(ADR-0025 §3). 상한은 HISTORY_MAX_*.
+    allow_clarify: 되묻기 도구 노출 여부. 직전 턴이 되묻기였으면 False로 넘겨 스펙에서
+    빼야 한다 — 연속 되묻기 금지(ADR-0025 §4). LLM 인자로 받지 않는다.
     answer_prompt: 최종 답변 turn의 시스템 프롬프트(기본 = 일반 응대). 시설 도우미(H3-4)는
     FACILITY_ANSWER_SYSTEM_PROMPT를 주입해 원인 후보 형식을 강제한다 — 나머지 경로는 공유.
     tool_confidence: 도구 결과만으로 답할 때의 신뢰도(관리자 노브, 기본=코드 상수 H15-3).
@@ -140,22 +166,29 @@ async def answer_question(
     llm = deps.llm
     yield StatusEvent(stage="searching")
 
-    # 질문 마스킹(fail-closed, 규칙 2) — 실패면 즉시 폴백.
+    # 질문·히스토리 마스킹(fail-closed, 규칙 2) — 실패면 즉시 폴백.
+    # 히스토리라고 조용히 버리지 않는다: 마스킹 실패는 컨텍스트 품질 문제가 아니라
+    # PII 잔존 신호이므로 질문과 똑같이 LLM 호출을 중단해야 한다.
     try:
         masked_question = ensure_masked(question, extra_names=extra_names).masked_text
+        recent = _prepare_history(history, extra_names)
     except MaskingFailedError:
         yield _fallback(FALLBACK_MASKING, needs_review=True)
         return
 
     specs = registry.specs_for(ctx.roles, graph_available=deps.graph_available)
-    messages: list[dict[str, object]] = [
-        {"role": "system", "content": AGENT_SYSTEM_PROMPT},
-        {"role": "user", "content": masked_question},
-    ]
+    if not allow_clarify:
+        specs = [s for s in specs if s["function"]["name"] != CLARIFY_TOOL_NAME]
+    messages: list[dict[str, object]] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
+    # 히스토리는 OpenAI 규약대로 개별 user/assistant 메시지로 넣는다(도구 결정 turn).
+    for role, content in recent:
+        messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": masked_question})
 
     doc_chunks: list[RetrievedChunk] = []
     seen_chunk_ids: set[str] = set()
     cards: list[ToolCard] = []
+    seen_cards: set[tuple[str, str]] = set()
     tool_path: list[str] = []
     llm_down = False
     # turn별 usage — 도구 결정 turn이 비용의 대부분(도구 결과가 다음 turn에 재전송된다).
@@ -163,6 +196,7 @@ async def answer_question(
     usage_turns: list[ChatUsage] = []
 
     # ── 도구 결정 루프(스텝 상한) ──────────────────────────────────────
+    plan_turns = 0
     for _step in range(MAX_TOOL_STEPS):
         try:
             decision = await llm.chat(messages, tools=specs, tool_choice="auto")
@@ -173,13 +207,40 @@ async def answer_question(
             break
         usage_turns.append(decision.usage)
         if not decision.tool_calls:
+            # 무-도구 turn 재해석(ADR-0025 §2): content가 있으면 "계획"으로 보고 대화에 남긴 뒤
+            # 계속 돈다. 계획은 MAX_PLAN_TURNS회 한정 — 그 다음 무-도구 turn은 종료 신호로
+            # 되돌아간다(도구를 안 부르는 모델이 상한까지 빈 turn을 도는 것을 막는다).
+            plan = decision.text.strip()
+            if plan and plan_turns < MAX_PLAN_TURNS:
+                plan_turns += 1
+                messages.append({"role": "assistant", "content": plan})
+                continue
             break
+        # 되묻기는 실행하지 않고 즉시 종료한다(ADR-0025 §4). 같은 turn에 다른 도구가 함께
+        # 호출돼도 되묻기가 우선 — 되물을 것이 있으면 나머지 조회 결과는 어차피 못 쓴다.
+        # 근거 조립·인용 검증을 타지 않는다: 되묻기는 답변이 아니라 질문이라 인용할 근거가
+        # 없다(규칙 1 저촉 아님).
+        clarify = _clarify_question(decision.tool_calls) if allow_clarify else None
+        if clarify is not None:
+            tool_path.append(CLARIFY_TOOL_NAME)
+            yield DoneEvent(
+                status="clarify",
+                confidence=0.0,
+                needs_review=False,
+                # 여기까지 쓴 결정 turn 토큰은 반드시 실어 보낸다(폴백 경로와 같은 원칙).
+                usage=_sum_usage(usage_turns),
+                answer=clarify,
+                tool_path=tuple(tool_path),
+            )
+            return
         messages.append(_assistant_tool_calls_message(decision.tool_calls))
         for call in decision.tool_calls:
+            # 진행 중인 도구를 화면에 노출(ADR-0025 §5) — stage는 searching 그대로.
+            yield StatusEvent(stage="searching", tool=call.name)
             execution = await execute_tool(call, ctx=ctx, deps=deps, registry=registry)
             tool_path.append(call.name)
             content = _absorb_and_mask(
-                execution.result, doc_chunks, seen_chunk_ids, cards, extra_names
+                execution.result, doc_chunks, seen_chunk_ids, cards, seen_cards, extra_names
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
 
@@ -200,7 +261,7 @@ async def answer_question(
         yield _fallback(FALLBACK_NO_EVIDENCE, usage=spent, tool_path=path)
         return
 
-    final_user = _build_final_user_message(question, evidence, cards)
+    final_user = _build_final_user_message(question, evidence, cards, recent)
     try:
         masked_final = ensure_masked(final_user, extra_names=extra_names)
     except MaskingFailedError:
@@ -303,6 +364,7 @@ async def answer_question(
         tool_citations=tool_citations,
         answer=answer,
         tool_path=path,
+        suggestions=suggest_next_actions(path, status="answered"),
     )
 
 
@@ -324,7 +386,51 @@ def _fallback(
         usage=usage,
         fallback_reason=reason,
         tool_path=tuple(tool_path),
+        suggestions=suggest_next_actions(tool_path, status="fallback"),
     )
+
+
+def _prepare_history(
+    history: Sequence[tuple[str, str]], extra_names: Sequence[str]
+) -> tuple[tuple[str, str], ...]:
+    """직전 턴을 상한만큼 자른 뒤 마스킹(규칙 2 — 실패는 MaskingFailedError로 전파).
+
+    자르기를 마스킹보다 **먼저** 한다: 게이트를 통과해야 하는 것은 실제로 전송할 문자열
+    그대로다(마스킹 후 자르면 플레이스홀더가 잘려 원문이 되살아날 수 있다).
+    턴 = user/assistant 쌍이라 메시지 상한은 그 2배. 빈 본문(폴백 메시지 등)은 버린다 —
+    답변 본문이 없는 턴은 맥락을 주지 않고 토큰만 먹는다.
+    """
+    turns: list[tuple[str, str]] = []
+    for role, content in tuple(history)[-HISTORY_MAX_TURNS * 2 :]:
+        body = content.strip()[:HISTORY_MAX_CHARS]
+        if not body:
+            continue
+        # OpenAI 규약이 허용하는 역할로 접는다(system 등은 사용자 발화로 취급).
+        speaker = "assistant" if role == "assistant" else "user"
+        turns.append((speaker, ensure_masked(body, extra_names=extra_names).masked_text))
+    return tuple(turns)
+
+
+def _clarify_question(calls: Sequence[ToolCallRequest]) -> str | None:
+    """ask_clarification 호출이면 되물을 문장, 아니면 None.
+
+    ToolResult에 판별 필드를 더하지 않고 **도구 이름 상수**로 판별한다 — 나머지 도구의
+    결과 계약을 건드리지 않는 쪽이 diff가 작고, "이 도구만 실행 경로가 다르다"는 사실도
+    한 곳(오케스트레이터)에만 남는다. 인자는 다른 도구와 동일하게 Pydantic으로 검증하며,
+    검증 실패(빈 항목·문장 통째 투입 등)면 되묻기를 포기한다(None → 일반 도구 경로로
+    계속) — 빈 문장으로 되묻느니 낫다.
+
+    문장은 모델이 아니라 build_clarification이 만든다(H18-3: 8B가 원 질문을 복사했다).
+    """
+    for call in calls:
+        if call.name != CLARIFY_TOOL_NAME:
+            continue
+        try:
+            args = ClarificationArgs.model_validate_json(call.arguments or "{}")
+        except ValidationError:
+            return None
+        return build_clarification(args.missing, args.context)
+    return None
 
 
 def _no_evidence_gate(parts: Sequence[str]) -> str:
@@ -374,12 +480,16 @@ def _absorb_and_mask(
     doc_chunks: list[RetrievedChunk],
     seen_chunk_ids: set[str],
     cards: list[ToolCard],
+    seen_cards: set[tuple[str, str]],
     extra_names: Sequence[str],
 ) -> str:
     """도구 결과를 근거에 누적하고, LLM에 되먹일 텍스트를 마스킹해 반환(규칙 2).
 
     마스킹 불가한 근거는 사용하지 않는다(evidence에도 추가하지 않음) — 최종 답변 rebuild가
     2차 게이트지만, 루프 turn에도 원문 PII가 새면 안 되므로 여기서 fail-closed.
+
+    문서 청크·도구 카드 **양쪽 모두** 중복이면 근거에 쌓지 않고 안내만 되돌린다 —
+    같은 내용을 컨텍스트에 다시 실으면 토큰만 태운다(규칙 7).
     """
     if result.doc_chunks:
         new = [c for c in result.doc_chunks if str(c.chunk_id) not in seen_chunk_ids]
@@ -394,9 +504,19 @@ def _absorb_and_mask(
         doc_chunks.extend(new)
         return masked
     if result.card is not None:
+        # 카드 중복 제거 키 = (source_kind, quote). 8B는 같은 도구를 2~3회 반복 호출한다
+        # (측정 로그: search_similar_inquiries 3연속) — 걸러내지 않으면 같은 카드가 출처로
+        # 2~3개 뜬다. 인자를 키로 쓰지 않는 이유: 인자가 달라도 같은 결과가 나오는 호출이
+        # 실재하고(예: period 생략 vs 최신월 명시) 사용자에겐 같은 근거다. 반대로 인자가
+        # 달라 결과가 다르면 quote가 달라 별개 출처로 남는다(과도한 병합 방지).
+        # title은 quote와 함께 움직이므로 키에 더해도 판별력이 늘지 않는다.
+        key = (result.card.source_kind, result.card.quote)
+        if key in seen_cards:
+            return "이미 조회한 결과입니다."
         masked, ok = _safe_mask(result.llm_text(), extra_names)
         if not ok:
             return "(민감정보 포함으로 생략됨)"
+        seen_cards.add(key)
         cards.append(result.card)
         return masked
     # 데이터 없음/오류 안내 — 근거 아님(카드·청크 생성 안 함)이나 그대로도 마스킹.
@@ -414,9 +534,19 @@ def _safe_mask(text_value: str, extra_names: Sequence[str]) -> tuple[str, bool]:
 
 
 def _build_final_user_message(
-    question: str, chunks: Sequence[RetrievedChunk], cards: Sequence[ToolCard]
+    question: str,
+    chunks: Sequence[RetrievedChunk],
+    cards: Sequence[ToolCard],
+    history: Sequence[tuple[str, str]] = (),
 ) -> str:
     parts: list[str] = []
+    if history:
+        # 최종 답변 turn은 user 메시지 하나로 조립되므로, 히스토리도 블록으로 넣는다
+        # (후속 질문의 지시어 — "그럼 언제까지야?" — 를 풀려면 이 turn에도 맥락이 필요).
+        lines = "\n".join(
+            f"{'AI' if role == 'assistant' else '사용자'}: {content}" for role, content in history
+        )
+        parts.append("[이전 대화]\n" + lines)
     if chunks:
         parts.append("[문서 근거]\n" + build_context_block(chunks))
     if cards:
@@ -428,7 +558,14 @@ def _build_final_user_message(
 
 def _tool_citations(cards: Sequence[ToolCard], *, start: int) -> tuple[ToolCitation, ...]:
     return tuple(
-        ToolCitation(ref=start + i, title=c.title, quote=c.quote, source_kind=c.source_kind)
+        ToolCitation(
+            ref=start + i,
+            title=c.title,
+            quote=c.quote,
+            source_kind=c.source_kind,
+            # 도구가 확정한 값을 그대로 통과시킨다 — 재가공하면 화면 숫자가 갈라진다(규칙 5·8).
+            data=c.data,
+        )
         for i, c in enumerate(cards)
     )
 
@@ -458,6 +595,7 @@ async def _excerpt_fallback(
         citations=doc_citations,
         tool_citations=tool_citations,
         tool_path=tuple(tool_path),
+        suggestions=suggest_next_actions(tool_path, status="fallback"),
     )
 
 

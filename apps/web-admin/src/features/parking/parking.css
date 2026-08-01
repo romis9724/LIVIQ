@@ -1,7 +1,8 @@
 /*
  * 주차장 대시보드 — 현황 카드 + 지하주차장 2D 배치도 + 차량 목록. (H9-5)
- * DOM 크롬은 전부 디자인 토큰. 배치도(SVG) 상태 색만 프로토타입 팔레트를 CSS 변수로 고정한다
- * (twin-data RGB 상수와 같은 설계 예외 — docs/05 §5: 캔버스/배치도 색은 토큰 외 허용).
+ * 2D 배치도(SVG) 자체의 스타일·팔레트(--pk-*)는 공용 컴포넌트로 옮겼다
+ * (@liviq/ui parking-map.css — H17-2). 여기 남은 건 관리자 전용 크롬(카드·칩·목록·범례)이다.
+ * 범례 스와치는 그 팔레트 변수를 그대로 참조한다(지도와 같은 출처).
  */
 
 /* ---- 3D 뷰 팔레트 (H14-4) ----
@@ -33,27 +34,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-
-  /* ---- 배치도 팔레트(프로토타입 유지 — 토큰 예외) · 지도와 범례가 같은 출처를 쓴다 ---- */
-  --pk-frame-fill: #fafbfc;
-  --pk-frame-stroke: #8b929c;
-  --pk-box-fill: #fef3c7;
-  --pk-box-stroke: #d9a92c;
-  --pk-box-text: #8a6d1a;
-  --pk-building-fill: #e8edf4;
-  --pk-building-stroke: #94a3b8;
-  --pk-building-text: #475569;
-  --pk-empty-fill: #e8f7ee;
-  --pk-empty-stroke: #34a05e;
-  --pk-resident-fill: #dbeafe;
-  --pk-resident-stroke: #60a5fa;
-  --pk-resident-glyph: #3b82f6;
-  --pk-external-fill: #ffedd5;
-  --pk-external-stroke: #ea580c;
-  --pk-accessible-fill: #e3edfd;
-  --pk-accessible-stroke: #3b82f6;
-  --pk-label: #94a3b8;
-  --pk-select: #ef4444;
 }
 
 /* ---- 현황 카드 5종 — 카드 크롬은 전부 중립, 상태 강조는 값 색만(docs/05 §5A StatCard) ---- */
@@ -255,51 +235,6 @@
   padding: var(--space-3);
 }
 
-/* 배치도 — 배율 1이면 viewBox 3020x1082 전체가 컨테이너 폭에 맞춰 축소(스크롤 없음). */
-.pk-map {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  border-radius: var(--radius-md);
-}
-.pk-map__viewport {
-  border-radius: var(--radius-md);
-}
-/* 확대 상태 — 면 번호를 읽을 배율로 키우고, 이동은 드래그 팬(스크롤 오프셋을 직접 옮긴다). */
-/* overflow:auto 를 유지해 키보드 방향키 이동(WCAG 2.1.1)은 살리고, 스크롤바만 숨긴다. */
-.pk-map__viewport[data-zoomed] {
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  max-height: 70vh;
-  background: var(--pk-frame-fill);
-  cursor: grab;
-  touch-action: none; /* 터치 드래그를 팬으로 쓴다 — 브라우저 기본 스크롤에 넘기지 않음 */
-}
-.pk-map__viewport[data-zoomed]::-webkit-scrollbar {
-  display: none;
-}
-.pk-map__viewport[data-dragging] {
-  cursor: grabbing;
-}
-/* 드래그 중에는 면 텍스트가 선택되지 않게. */
-.pk-map__viewport[data-dragging] .pk-map__svg {
-  pointer-events: none;
-}
-.pk-map__viewport[data-zoomed]:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.pk-map__svg {
-  display: block;
-  height: auto;
-  user-select: none;
-}
-/* 전역 svg 리셋의 max-width:100% 가 확대 배율(인라인 width)을 잘라내므로 줌 상태에서만 해제. */
-.pk-map__viewport[data-zoomed] .pk-map__svg {
-  max-width: none;
-}
-
 /* ---- 3D 뷰 무대 — 캔버스 크기는 컨테이너 실측(ResizeObserver)에 맞춘다 ---- */
 .pk-view3d {
   position: relative;
@@ -323,166 +258,6 @@
   background: var(--color-surface-sunken);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
-}
-
-/* 줌 컨트롤 — 배치도 위 우측. 전체 보기(1x)에서 축소 버튼은 비활성. */
-.pk-zoom {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  align-self: flex-end;
-}
-.pk-zoom__btn,
-.pk-zoom__reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  /* 입력·버튼은 md radius (docs/05 §5A radius 3종). */
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  transition:
-    background-color var(--duration-fast) ease,
-    border-color var(--duration-fast) ease;
-}
-.pk-zoom__btn {
-  width: 2rem;
-  height: 2rem;
-  font-size: var(--text-base);
-  line-height: 1;
-}
-.pk-zoom__reset {
-  height: 2rem;
-  padding: 0 var(--space-3);
-  font-size: var(--text-sm);
-}
-.pk-zoom__btn:hover:not(:disabled),
-.pk-zoom__reset:hover {
-  background: var(--color-surface-sunken);
-  border-color: var(--color-text-muted);
-}
-.pk-zoom__btn:focus-visible,
-.pk-zoom__reset:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-.pk-zoom__btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.pk-zoom__value {
-  min-width: 3rem;
-  text-align: center;
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
-}
-.pk-zoom__hint {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.pk-frame {
-  fill: var(--pk-frame-fill);
-  stroke: var(--pk-frame-stroke);
-  stroke-width: 3;
-}
-.pk-box {
-  fill: var(--pk-box-fill);
-  stroke: var(--pk-box-stroke);
-}
-.pk-box__label {
-  font-size: 12px;
-  fill: var(--pk-box-text);
-}
-.pk-building {
-  fill: var(--pk-building-fill);
-  stroke: var(--pk-building-stroke);
-  stroke-width: 2;
-}
-.pk-building__name {
-  font-size: 17px;
-  font-weight: 700;
-  fill: var(--pk-building-text);
-}
-.pk-building__core {
-  font-size: 17px;
-}
-
-/* 면 — 상태별 채움/테두리. 장애인 빈면은 연청(아이콘 ♿ 병기). */
-.pk-spot {
-  cursor: pointer;
-  stroke-width: 1.5;
-  fill: var(--pk-empty-fill);
-  stroke: var(--pk-empty-stroke);
-  transition: fill var(--duration-fast) var(--ease-out);
-}
-.pk-spot[data-state="empty"][data-kind="장애인"] {
-  fill: var(--pk-accessible-fill);
-  stroke: var(--pk-accessible-stroke);
-}
-.pk-spot[data-state="resident"] {
-  fill: var(--pk-resident-fill);
-  stroke: var(--pk-resident-stroke);
-}
-.pk-spot[data-state="external"] {
-  fill: var(--pk-external-fill);
-  stroke: var(--pk-external-stroke);
-}
-/* hover 는 채움을 바꾸지 않는다(상태 색 유지) — 선택 예고로 붉은 테두리만 굵게. */
-.pk-spot:hover {
-  stroke: var(--pk-select);
-  stroke-width: 3;
-}
-
-.pk-car__body {
-  fill: var(--pk-resident-glyph);
-}
-.pk-car[data-state="external"] .pk-car__body {
-  fill: var(--pk-external-stroke);
-}
-.pk-car__glass {
-  fill: #fff;
-  opacity: 0.55;
-}
-.pk-spot__icon {
-  font-size: 13px;
-}
-.pk-spot__icon--ev {
-  font-size: 11px;
-}
-.pk-spot__no {
-  font-size: 8px;
-  fill: var(--pk-label);
-}
-
-/* 소속 필터가 걸리면 해당 없는 면을 흐리게(강조는 남은 면). */
-.pk-cell[data-dim] {
-  opacity: 0.3;
-}
-
-/* 선택 면 — 붉은 테두리 펄스(모션 축소 설정에서는 정지). */
-.pk-hl {
-  fill: none;
-  stroke: var(--pk-select);
-  stroke-width: 3;
-  animation: pk-hl-pulse 1.2s ease-in-out infinite;
-}
-@keyframes pk-hl-pulse {
-  0%,
-  100% {
-    stroke-opacity: 1;
-  }
-  50% {
-    stroke-opacity: 0.3;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pk-hl {
-    animation: none;
-  }
 }
 
 /* ---- 범례 ---- */

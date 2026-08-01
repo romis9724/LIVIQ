@@ -112,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(households.household_router)
     app.include_router(twin.router)
     app.include_router(parking.router)
+    app.include_router(parking.resident_router)
     app.include_router(floor_plans.router)
     return app
 

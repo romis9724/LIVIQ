@@ -1830,6 +1830,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/parking/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Parking Map
+         * @description 배치도 + 점유 면 번호 + 본인 세대 차량 위치.
+         *
+         *     타 세대 정보는 "면이 찼다"는 사실만 나간다 — 번호판·동호수·세대 식별자는 조회조차
+         *     하지 않는다(규칙 2, 복호 경로 없음 → 감사 로그도 불필요). 본인 세대는 세션의
+         *     `users.household_id`로 정하고 클라이언트 입력을 받지 않는다(규칙 4 — 우회 표면 없음).
+         *     배치도 미적재는 404가 아니라 layout=null(관리자 /layout 과 같은 관례).
+         */
+        get: operations["get_parking_map_parking_map_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/ai-config": {
         parameters: {
             query?: never;
@@ -3402,6 +3427,16 @@ export interface components {
             devices: components["schemas"]["PlanDeviceOut"][];
             plan: components["schemas"]["FloorPlanOut"];
         };
+        /**
+         * MyParkingVehicleOut
+         * @description 본인 세대 차량 중 **주차 중인** 1대. 번호판은 넣지 않는다(복호할 이유가 없다).
+         */
+        MyParkingVehicleOut: {
+            /** Entry At */
+            entry_at: string | null;
+            /** Spot No */
+            spot_no: string;
+        };
         /** NoticeCreateIn */
         NoticeCreateIn: {
             /**
@@ -3584,6 +3619,20 @@ export interface components {
             layout: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * ParkingMapOut
+         * @description 배치도 + 점유 면 번호 + 본인 세대 차량 위치. 배치도 미적재면 layout=null.
+         */
+        ParkingMapOut: {
+            /** Layout */
+            layout: {
+                [key: string]: unknown;
+            } | null;
+            /** My Vehicles */
+            my_vehicles: components["schemas"]["MyParkingVehicleOut"][];
+            /** Occupied Spot Nos */
+            occupied_spot_nos: string[];
         };
         /**
          * ParkingVehicleItem
@@ -8023,6 +8072,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProfileOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_parking_map_parking_map_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParkingMapOut"];
                 };
             };
             /** @description Validation Error */

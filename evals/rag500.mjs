@@ -19,8 +19,9 @@
  * 측정 한계(결과 meta에도 기록):
  *   - `--auth=dev`(기본)의 dev 헤더는 역할이 DEV_ROLES 고정(deps.py) — 케이스 role 컬럼을
  *     재현하지 못한다. 역할 차단·인가 케이스는 `--auth=session`으로 실제 역할을 태운다.
- *   - 서버는 conversation_id로 대화를 묶기만 하고 이전 턴을 LLM에 넣지 않는다(orchestrator
- *     answer_question은 질문 1건만 받음) → 다중 턴은 "같은 대화의 독립 질의" 측정이다.
+ *   - 다중 턴은 conversation_id로 이어 보내고, 서버가 직전 3턴을 LLM에 주입한다(H18-1,
+ *     ADR-0025 §3) → 후속 질문("그럼 언제까지야?")이 맥락으로 풀린다. 히스토리가 붙은
+ *     턴은 답변 캐시를 우회하므로 다중 턴 케이스의 지연은 늘 콜드 경로다.
  *   - 답변 캐시(cache:ans:*)는 백엔드별 키라 백엔드 간 오염은 없지만, 같은 백엔드 재실행은
  *     캐시 재생으로 지연이 왜곡된다 — 지연을 다시 재려면 Redis에서 키를 비운다(캐시 히트는
  *     LLM 호출이 없어 토큰 0으로 기록되므로 원가도 같이 왜곡된다).
@@ -251,7 +252,9 @@ const snapshot = {
       auth === "session"
         ? "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출"
         : "dev headers (X-Dev-*) — 역할은 DEV_ROLES 고정, 케이스 role 컬럼 미반영",
-    multi_turn: "conversation_id 순차 호출 — 서버가 이전 턴을 LLM에 넣지 않음(독립 질의)",
+    multi_turn:
+      "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3)." +
+      " 히스토리가 있는 턴은 답변 캐시를 우회한다",
     id_convention: "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
     citation_scoring: "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
     token_usage:
@@ -317,6 +320,13 @@ if ((summary.overall?.tool_scored ?? 0) > 0) {
       (o.required_cases > 0
         ? ` · 복합 완전호출률 ${pct(o.required_call_rate)} (${o.required_hit_sum}/${o.required_total_sum}, ${o.required_cases}건)`
         : ""),
+  );
+}
+// 되묻기 오남용률(H18-4 완료 기준 10% 미만) — 되묻기가 정답이 아닌 케이스 중 clarify로 끝난 비율.
+if ((summary.overall?.clarify_scored ?? 0) > 0) {
+  const o = summary.overall;
+  console.log(
+    `되묻기 오남용 ${pct(o.clarify_misuse_rate)} (${o.clarify_misuse}/${o.clarify_scored})`,
   );
 }
 // GraphRAG 비교(§6) — 백엔드별 집계·병렬 쌍 head-to-head. 비교 케이스가 없으면(비-graphrag

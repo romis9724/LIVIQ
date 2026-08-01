@@ -178,7 +178,6 @@ export function FacilityAssistantPanel() {
                   meta={[c.quote, c.clause, c.page != null ? `${c.page}p` : null]
                     .filter(Boolean)
                     .join(" · ")}
-                  href="#"
                 />
               ))}
             </>
@@ -191,7 +190,6 @@ export function FacilityAssistantPanel() {
                   key={c.ref}
                   title={c.documentTitle}
                   meta={[c.quote, c.clause].filter(Boolean).join(" · ")}
-                  href="#"
                 />
               ))}
             </>

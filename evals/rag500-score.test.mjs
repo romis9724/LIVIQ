@@ -236,6 +236,116 @@ test("집계 — required_tools 케이스 없으면 required_call_rate null(회�
   assert.equal(agg.overall.required_call_rate, null);
 });
 
+// ── 되묻기·멀티턴(H18-4, ADR-0025 §3·§4) ────────────────────────────────────
+
+test("clarify — 되묻기가 정답인 케이스는 status=clarify여야 pass", () => {
+  const r = scoreCase(
+    v2row({ expected_behavior: "clarify", expected_tool: "ask_clarification" }),
+    [
+      turn({
+        text: "", // 되묻기는 token 스트림이 없다 — 문장은 done.answer
+        done: {
+          status: "clarify",
+          tool_path: ["ask_clarification"],
+          answer: "어떤 설비가 고장 났는지 알려주시겠어요?",
+        },
+      }),
+    ],
+    DOCS,
+  );
+  assert.equal(r.checks.behavior_ok, true);
+  assert.equal(r.checks.completed, true); // token 0이어도 되물었으면 완주
+  assert.equal(r.checks.tool_selection, true);
+  assert.equal(r.checks.citation_hit, null); // 되묻기는 인용 미채점
+  assert.equal(r.verdict, "pass");
+  assert.equal(r.actual.clarify_question, "어떤 설비가 고장 났는지 알려주시겠어요?");
+});
+
+test("clarify — 되묻기 기대인데 답변하면 fail", () => {
+  const r = scoreCase(v2row({ expected_behavior: "clarify" }), [turn()], DOCS);
+  assert.equal(r.checks.behavior_ok, false);
+  assert.equal(r.verdict, "fail");
+});
+
+test("되묻기 품질 — 원 질문을 그대로 되던지면 notes에 남는다", () => {
+  const r = scoreCase(
+    v2row({ expected_behavior: "clarify", turn_1: "그거 언제 하나요?" }),
+    [
+      turn({
+        text: "",
+        done: { status: "clarify", tool_path: ["ask_clarification"], answer: "그거 언제 하나요" },
+      }),
+    ],
+    DOCS,
+  );
+  assert.ok(r.notes.some((n) => n.includes("원 질문을 그대로 반복")));
+});
+
+test("되묻기 오남용 — 명확한 질의에 clarify면 fail + misuse 표시", () => {
+  const r = scoreCase(
+    v2row({ expected_behavior: "answered", expected_tool: "get_fees" }),
+    [
+      turn({
+        text: "",
+        done: { status: "clarify", tool_path: ["ask_clarification"], answer: "어느 달인가요?" },
+      }),
+    ],
+    DOCS,
+  );
+  assert.equal(r.checks.clarify_misuse, true);
+  assert.equal(r.verdict, "fail");
+  assert.ok(r.notes.some((n) => n.includes("되묻기 오남용")));
+});
+
+test("집계 — 오남용률 분모는 되묻기가 정답이 아닌 케이스만", () => {
+  const misuse = scoreCase(
+    v2row({ case_id: "N1", expected_behavior: "answered" }),
+    [turn({ text: "", done: { status: "clarify", tool_path: [], answer: "언제요?" } })],
+    DOCS,
+  );
+  const clean = scoreCase(v2row({ case_id: "N2", expected_behavior: "answered" }), [turn()], DOCS);
+  const legit = scoreCase(
+    v2row({ case_id: "C1", expected_behavior: "clarify" }),
+    [turn({ text: "", done: { status: "clarify", tool_path: [], answer: "어느 동인가요?" } })],
+    DOCS,
+  );
+  const agg = aggregate([misuse, clean, legit]);
+  assert.equal(agg.overall.clarify_scored, 2); // 되묻기 정답 케이스(C1)는 분모 제외
+  assert.equal(agg.overall.clarify_misuse, 1);
+  assert.equal(agg.overall.clarify_misuse_rate, 0.5);
+});
+
+test("멀티턴 — behavior는 마지막 턴, 도구·인용은 전 턴 합산", () => {
+  const r = scoreCase(
+    v2row({
+      conversation_type: "다중 턴",
+      expected_behavior: "answered",
+      expected_citations: "tool:get_fees",
+      expected_tool: "get_fees",
+      turn_1: "이번 달 관리비 얼마 나왔어요?",
+      turn_2: "지난달보다 오른 건가요?",
+    }),
+    [
+      turn({ text: "총 152,300원입니다", done: { status: "answered", tool_path: ["get_fees"] } }),
+      turn({ text: "지난달보다 8,100원 올랐습니다", done: { status: "answered", tool_path: [] } }),
+    ],
+    DOCS,
+  );
+  assert.equal(r.checks.behavior_ok, true);
+  assert.equal(r.checks.citation_hit, true); // 1턴의 도구 호출로 충족
+  assert.equal(r.verdict, "pass");
+  assert.equal(r.latency.turns.length, 2);
+});
+
+test("멀티턴 — 마지막 턴이 폴백이면 answered 기대는 fail", () => {
+  const r = scoreCase(
+    v2row({ conversation_type: "다중 턴", expected_behavior: "answered" }),
+    [turn(), turn({ text: "", done: { status: "fallback", tool_path: [] } })],
+    DOCS,
+  );
+  assert.equal(r.checks.behavior_ok, false);
+});
+
 // ── GraphRAG 비교(§6) ────────────────────────────────────────────────────────
 
 test("deriveBackend — expected_tool → 비교 백엔드 매핑", () => {

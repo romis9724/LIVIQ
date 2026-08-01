@@ -45,7 +45,7 @@ class Message(IdMixin, TenantMixin, CreatedAtMixin, Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[str | None] = mapped_column(String, nullable=True)  # ai|handoff
     confidence: Mapped[decimal.Decimal | None] = mapped_column(Numeric, nullable=True)
-    # answered|fallback|handed_off
+    # answered|fallback|handed_off|clarify(되묻기 — 다음 턴 히스토리·연속 되묻기 차단 근거)
     status: Mapped[str | None] = mapped_column(String, nullable=True)
     # needs_review|None — 저신뢰 답변 플래그(대시보드 검수 필요율). 검수 큐 제거(H8-7)로
     # approved/rejected 전이는 없어짐(ADR-0015 개정 노트).

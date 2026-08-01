@@ -1,4 +1,4 @@
-"""parking 계약 — 지하주차장 배치도·차량 조회 (H9-5 · 점유 H16, MANAGER 전용).
+"""parking 계약 — 지하주차장 배치도·차량 조회 (H9-5 · 점유 H16) + 입주민 주차맵(H17-2).
 
 배치도는 렌더 페이로드(JSONB)를 그대로 통과시킨다 — 서버는 내용을 해석하지 않는다(YAGNI).
 차량은 DB엔 암호문(plate_enc)만 있고 응답의 plate는 복호 평문이다(규칙 2 — 이 라우터는
@@ -39,3 +39,24 @@ class ParkingVehicleItem(BaseModel):
 class ParkingVehicleListOut(BaseModel):
     vehicles: list[ParkingVehicleItem]
     total: int
+
+
+# ── 입주민 주차맵 (H17-2) ─────────────────────────────────────────────────────
+# 관리자 계약과 **다른 모델**을 쓴다. 입주민에겐 타 세대 차량의 번호판·동호수는 물론
+# 세대 식별자·소속(입주민/외부) 구분도 주지 않는다(규칙 2) — 필드 자체를 두지 않아
+# 실수로 채워질 여지를 없앤다. 노출은 "그 면이 찼는가"와 "내 차가 어디 있는가"뿐이다.
+
+
+class MyParkingVehicleOut(BaseModel):
+    """본인 세대 차량 중 **주차 중인** 1대. 번호판은 넣지 않는다(복호할 이유가 없다)."""
+
+    spot_no: str
+    entry_at: datetime.datetime | None
+
+
+class ParkingMapOut(BaseModel):
+    """배치도 + 점유 면 번호 + 본인 세대 차량 위치. 배치도 미적재면 layout=null."""
+
+    layout: dict | None
+    occupied_spot_nos: list[str]
+    my_vehicles: list[MyParkingVehicleOut]

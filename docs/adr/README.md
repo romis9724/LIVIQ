@@ -33,3 +33,5 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0021](0021-gitlab-ci-single-host-wsl.md) | 사내 단일 호스트 배포 — GitLab CI + WSL Docker(0020 형상에 추가) | Accepted |
 | [0022](0022-facility-graph-dashboard.md) | 시설관리 메인 = 3D 시설 그래프 — Neo4j 파생 그래프의 첫 읽기 소비자 | Accepted |
 | [0023](0023-parking-occupancy-persisted.md) | 주차 점유 PG 영속화 — 프론트 시뮬 폐기, 최근접 빈자리 도구의 SoR | Accepted |
+| [0024](0024-assistant-inquiry-triage.md) | AI 비서 민원 트리아지 — 유사 민원 조회 도구 + 접수 딥링크(AI 직접 생성 금지) | Accepted |
+| [0025](0025-agent-depth-plan-clarify-structured.md) | 에이전트 심화 — 계획 turn·멀티턴·되묻기·구조화 응답(LangChain 미도입) | Accepted |

@@ -18,6 +18,7 @@ test("@llm 승인된 입주민의 비서 질의가 출처 카드 또는 폴백�
 
   // 지어내지 않고 종결: 근거 있으면 출처 카드, 없으면 담당자 연결.
   const citation = page.locator(".citation-card, [data-citation]");
-  const handoff = page.getByRole("button", { name: "담당자 연결" });
+  // H17 UI 정리로 "담당자 연결" 버튼은 사라졌고 상태 배지가 폴백의 표식이다.
+  const handoff = page.locator(".confidence-badge--handoff");
   await expect(citation.or(handoff).first()).toBeVisible({ timeout: 60_000 });
 });

@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Citation, type DoneResult, type Stage, streamAsk } from "./api";
+import { appendProgress } from "./progress";
+import { persistableMessages, readThread, writeThread } from "./session-store";
 
 export interface AiMessage {
   id: string;
   role: "ai";
   status: "streaming" | "done";
   stage: Stage;
+  /** 지금 실행 중인 도구 — 스트리밍 중 한 줄 힌트에만 쓴다(끝나면 steps 가 기록). */
+  tool: string | null;
   text: string;
   citations: Citation[];
+  /** 지나온 진행 단계 라벨. 답변 후 접이식 "답변 과정"으로 되짚는다(H18-3 ①). */
+  steps: string[];
   result?: DoneResult;
   error?: boolean;
 }
@@ -33,6 +39,27 @@ export function useAssistantStream() {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // 탭 저장소에서 직전 대화 복원(주차맵 등에서 뒤로가기). useState 초기값이 아니라 effect 인
+  // 이유는 SSR 프리렌더에는 sessionStorage 가 없어서다 — 초기값으로 읽으면 hydration 불일치.
+  useEffect(() => {
+    const thread = readThread();
+    if (thread.messages.length === 0) return;
+    conversationId.current = thread.conversationId;
+    // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
+    seq = Math.max(seq, thread.messages.length);
+    setMessages(thread.messages);
+  }, []);
+
+  // 완료된 메시지만 저장. 빈 대화는 저장하지 않는다 — 마운트 직후 복원 전 스냅샷이
+  // 저장본을 지워버리는 순서 문제를 애초에 만들지 않기 위함.
+  useEffect(() => {
+    // 스트리밍 중에는 건너뛴다 — 토큰마다 직렬화할 이유가 없고, 저장 대상도 그대로다.
+    if (messages.some((m) => m.role === "ai" && m.status === "streaming")) return;
+    const done = persistableMessages(messages);
+    if (done.length === 0) return;
+    writeThread({ messages: done, conversationId: conversationId.current });
+  }, [messages]);
+
   // aiId 메시지에 대한 함수형 갱신(이전 상태 기반 누적 안전).
   const updateAi = useCallback(
     (aiId: string, fn: (m: AiMessage) => AiMessage) => {
@@ -55,7 +82,16 @@ export function useAssistantStream() {
       setMessages((prev) => [
         ...prev,
         { id: nextId(), role: "user", text },
-        { id: aiId, role: "ai", status: "streaming", stage: "searching", text: "", citations: [] },
+        {
+          id: aiId,
+          role: "ai",
+          status: "streaming",
+          stage: "searching",
+          tool: null,
+          text: "",
+          citations: [],
+          steps: [],
+        },
       ]);
       setPending(true);
 
@@ -66,7 +102,12 @@ export function useAssistantStream() {
         })) {
           switch (event.type) {
             case "status":
-              updateAi(aiId, (m) => ({ ...m, stage: event.stage }));
+              updateAi(aiId, (m) => ({
+                ...m,
+                stage: event.stage,
+                tool: event.tool,
+                steps: appendProgress(m.steps, event.stage, event.tool),
+              }));
               break;
             case "token":
               updateAi(aiId, (m) => ({ ...m, text: m.text + event.text }));

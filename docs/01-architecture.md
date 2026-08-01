@@ -108,8 +108,14 @@
 | `search_facility_graph` | Neo4j 벡터매칭 + 그래프 확장 | 유사 장애·연결 설비·정비 이력 → 원인 후보 | tenant + 시설 역할 |
 | `get_fees` | 고정 SQL(`fees`) | 본인 세대 관리비·항목·전월 대비 | tenant + 본인 세대 소유권 |
 | `get_my_inquiries` | 고정 SQL(`inquiries`) | 본인 민원 접수·처리 상태 | tenant + 본인 소유권 |
+| `get_recent_notices` | 고정 SQL(`notices`) | 게시판 최근 공지 목록(최신 5건) — 유사도 검색이 못 잡는 "공지사항" 메타 질의용 | tenant + 전 역할 |
+| `ask_clarification` | 없음(되묻기 전용) | 대상이 갈릴 때 되묻고 종료([ADR-0025](adr/0025-agent-depth-plan-clarify-structured.md)) — 문장은 코드가 생성 | tenant + 전 역할 |
+| `search_similar_inquiries` | 고정 SQL(`inquiries`+`inquiry_events`, pg_trgm) | 유사 민원의 제목·분류·처리결과 요약([ADR-0024](adr/0024-assistant-inquiry-triage.md)) | tenant + RESIDENT(요약 컬럼만) |
 | `get_facilities` | 고정 SQL(`facilities`) | 설비 목록·현재 상태 | tenant + 역할 |
 | `get_overdue_checks` | 고정 SQL(`facilities`) | 점검 기한 임박·초과 설비 | tenant + 역할 |
+| `find_in_floor_plan` | 고정 SQL(`floor_plans`) | 본인 세대 평면도에서 기기·공간 위치 | tenant + 본인 세대 |
+| `trace_home_device_issue` | Neo4j 그래프 추적 | 세대 기기 → 연결 설비 → 인과 연쇄 | tenant + 본인 세대 |
+| `find_nearest_available_parking` | 고정 SQL(`parking_*`) + 기하 | 본인 동에서 가까운 빈 주차면([ADR-0023](adr/0023-parking-occupancy-persisted.md)) | tenant + 본인 세대 |
 
 > 캐시는 에이전트 앞단에서 먼저 확인([08](08-llm-token-optimization.md)) — 히트면 에이전트에 진입하지 않는다. 도구 결과도 문서 인용과 동일 원칙으로 **출처 카드**에 표기하고(예: "근거: 관리비 2026-06 확정 데이터"), 어떤 도구를 왜 호출했는지 **경로를 로깅**해 골든셋 회귀 평가에 활용한다([07](07-testing-strategy.md) §AI eval).
 > 시설형 질의의 그래프 질의·Neo4j 벡터 인덱스·데이터 배치는 [11-data-architecture.md](11-data-architecture.md).
@@ -197,6 +203,7 @@
 | [0007](adr/0007-readonly-tool-agent.md) | 읽기 전용 도구호출 에이전트 + 스텝 상한(정적 라우터 대체) | 정적 라우터 유지 / 자유 ReAct 루프 | 복합 질의 커버 + 비용·평가 통제. 쓰기는 도구 제외로 규칙 8 유지 |
 | [0013](adr/0013-python-backend.md) | 백엔드 전면 Python(FastAPI·arq·SQLAlchemy+Alembic·ai-core) | 기존 TS 백엔드 스택 유지 | AI/데이터 생태계 정합, mcp 자산 재사용, 웹↔api 타입은 OpenAPI 생성 |
 | [0015](adr/0015-notice-board-replaces-ai-draft.md) | 공지 AI 초안 제거·일반 게시판 전환(첨부·예약 발행) | AI 초안→검수→발행 흐름 유지 | 운영 실무는 정형 문서 직접 작성, 첨부가 실요구·AI 불요 |
+| [0024](adr/0024-assistant-inquiry-triage.md) | AI 비서 민원 트리아지 — 읽기 도구 1종 + 접수 딥링크 프리필 | 챗 안 확인 버튼→코드가 POST / 분류 LLM turn 추가 / 민원 임베딩 색인 | 기존 접수 폼 재사용(규칙 8), 질의당 호출 +0, trigram으로 먼저 재고 |
 
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
