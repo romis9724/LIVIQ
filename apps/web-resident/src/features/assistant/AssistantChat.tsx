@@ -229,7 +229,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             <div className="ai-row__actions">
               {isInquiry ? (
                 <Link href={composeHref} className="btn btn--secondary btn--sm">
-                  민원 접수하기
+                  <span aria-hidden="true">📝</span> 민원 접수하기
                 </Link>
               ) : null}
               {isParking ? (
