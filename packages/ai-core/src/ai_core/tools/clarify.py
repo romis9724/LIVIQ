@@ -54,28 +54,29 @@ _TEMPLATES: tuple[tuple[tuple[str, ...], str], ...] = (
 )
 
 
+# 아는 항목이 아닐 때의 문구. **모델이 준 낱말을 문장에 넣지 않는다** — dev 실측에서
+# 모델이 항목이 아니라 주제어를 넣어("온수") "온수에 대해 온수를 알려주시겠어요?" 같은
+# 문장이 나왔다. 낱말을 끼워 넣는 템플릿은 입력이 조금만 어긋나도 무너진다.
+_GENERIC_QUESTION = "어떤 것을 말씀하시는지 조금 더 알려주시겠어요? (예: 기간, 설비, 동·호수)"
+
+
 def build_clarification(missing: str, context: str | None = None) -> str:
     """모델이 지목한 항목(missing)으로 되물을 문장 1개를 만든다.
 
-    아는 항목은 전용 문구, 모르는 항목은 일반 템플릿으로 폴백한다. 주제(context)는
-    조사 없이 '~에 대해'로 붙인다 — 어떤 명사 뒤에도 어색하지 않은 유일한 접속이라
-    조사 선택 로직을 하나 줄인다.
+    아는 항목은 전용 문구, 모르는 항목은 **낱말을 쓰지 않는 일반 문구**로 폴백한다.
+    주제(context)는 조사 없이 '~에 대해'로 붙인다 — 어떤 명사 뒤에도 어색하지 않은
+    유일한 접속이라 조사 선택 로직을 하나 줄인다. 단 주제가 항목과 같은 말이면
+    "온수에 대해 온수를"처럼 겹치므로 붙이지 않는다.
     """
     item = missing.strip()
     question = next(
         (text for keys, text in _TEMPLATES if any(key in item for key in keys)),
-        f"{item}{_object_particle(item)} 알려주시겠어요?",
+        _GENERIC_QUESTION,
     )
     topic = (context or "").strip()
-    return f"{topic}에 대해 {question}" if topic else question
-
-
-def _object_particle(word: str) -> str:
-    """받침 유무로 목적격 조사 을/를 선택 — '을(를)' 병기는 사람이 읽는 문장이 아니다."""
-    last = word[-1] if word else ""
-    if not ("가" <= last <= "힣"):
-        return "를"  # 숫자·영문 등은 받침 판정 불가 → 무난한 쪽
-    return "을" if (ord(last) - 0xAC00) % 28 else "를"
+    if not topic or topic == item or topic in item or item in topic:
+        return question
+    return f"{topic}에 대해 {question}"
 
 
 class ClarificationArgs(BaseModel):

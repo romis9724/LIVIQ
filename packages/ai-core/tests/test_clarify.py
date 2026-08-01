@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from ai_core.tools.clarify import _GENERIC_QUESTION as GENERIC
 from ai_core.tools.clarify import (
     ClarificationArgs,
     ask_clarification_tool,
@@ -25,8 +26,12 @@ from ai_core.tools.clarify import (
         ("동/호수", None, "어느 동·호수를 말씀하시나요? (예: 401동 201호)"),
         ("차량", "주차 위치", "주차 위치에 대해 어떤 차량을 말씀하시나요? (예: 12가3456)"),
         # 모르는 항목 — 일반 템플릿 폴백. 받침에 따라 을/를이 갈린다.
-        ("방문 목적", None, "방문 목적을 알려주시겠어요?"),
-        ("담당 부서", "민원 이관", "민원 이관에 대해 담당 부서를 알려주시겠어요?"),
+        # 모르는 항목은 낱말을 문장에 넣지 않는다 — 모델이 항목 대신 주제어를 넣는
+        # 실측 사례("온수")에서 "온수에 대해 온수를…"로 무너졌다.
+        ("방문 목적", None, GENERIC),
+        ("담당 부서", "민원 이관", f"민원 이관에 대해 {GENERIC}"),
+        # 주제가 항목과 겹치면 붙이지 않는다(같은 말 반복 방지).
+        ("온수", "온수", GENERIC),
         # 모델이 원 질문을 그대로 넣어도(H18-3 실패 사례) 문장은 코드 것이 나간다.
         ("그거 언제 하나요?", None, "어느 기간을 말씀하시나요? (예: 이번 달, 지난달)"),
     ],
