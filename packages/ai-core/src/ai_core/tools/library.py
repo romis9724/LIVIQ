@@ -1,4 +1,4 @@
-"""도구 구현 11종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
+"""도구 구현 12종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -22,6 +22,7 @@ from ai_core.llm.client import LlmError
 from ai_core.tools.clarify import ask_clarification_tool
 from ai_core.tools.floor_plan import find_in_floor_plan_tool
 from ai_core.tools.inquiries import search_similar_inquiries_tool
+from ai_core.tools.notices import get_recent_notices_tool
 from ai_core.tools.parking import find_nearest_available_parking_tool
 from ai_core.tools.registry import (
     Tool,
@@ -367,7 +368,7 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 11종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
+    """운영 도구 12종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
 
     되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
     이름으로 판별해 되묻고 종료한다(ADR-0025 §4).
@@ -379,9 +380,15 @@ def default_registry() -> ToolRegistry:
             trace_home_device_issue_tool(),
             find_nearest_available_parking_tool(),
             search_similar_inquiries_tool(),
+            get_recent_notices_tool(),
             Tool(
                 name="search_documents",
-                description="공지·규약·회의록 등 단지 문서에서 근거를 검색한다.",
+                # get_recent_notices와 갈리는 축은 "목록이냐 내용이냐"다 — 뒷문장 한 줄만
+                # 덧대 내용 질의 쪽을 못박는다(기존 문구는 그대로 — 라우팅 회귀 위험).
+                description=(
+                    "공지·규약·회의록 등 단지 문서에서 근거를 검색한다. "
+                    "점검 일자·규정처럼 문서에 뭐라고 적혀 있는지를 물을 때 쓴다."
+                ),
                 args_model=QueryArgs,
                 run=_search_documents,
             ),

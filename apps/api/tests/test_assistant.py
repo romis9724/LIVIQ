@@ -163,8 +163,9 @@ async def test_sse_new_fields_are_additive(seeded_client: httpx.AsyncClient) -> 
     done = events[-1][1]
     assert {"message_id", "conversation_id", "status", "confidence", "needs_review"} <= set(done)
     assert done["tool_path"] == ["search_documents", "get_fees"]
-    # 제안은 호출한 도구에서 나온다(고정 칩 아님).
-    assert done["suggestions"] == ["원문 문서 열어보기", "지난달과 비교하기"]
+    # 제안은 호출한 도구에서 나온다(고정 칩 아님). search_documents 는 다음이 "원문 열기"라
+    # 이동 문구뿐이라 칩이 없다 — 칩은 그대로 새 질문이 되므로 질문형만 남긴다.
+    assert done["suggestions"] == ["지난달과 비교하기"]
 
 
 async def test_ask_rejects_oversized_question(seeded_client: httpx.AsyncClient) -> None:

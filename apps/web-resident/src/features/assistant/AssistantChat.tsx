@@ -16,7 +16,6 @@ import { progressLabel } from "./progress";
 import { StructuredBlock } from "./StructuredBlock";
 import { structuredBlocks } from "./structured";
 import { groupCitations } from "./sources";
-import { visibleSuggestions } from "./suggestions";
 import { type AiMessage, type ChatMessage, useAssistantStream } from "./useAssistantStream";
 import "./assistant.css";
 
@@ -177,13 +176,8 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
   const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
   const blocks = structuredBlocks(message.citations);
   // 폴백에는 칩을 달지 않는다 — 담당자 연락처 안내가 그 자리의 유일한 행동이다.
-  const chips =
-    kind === "answered"
-      ? visibleSuggestions(message.result?.suggestions ?? [], {
-          inquiry: isInquiry,
-          parking: isParking,
-        })
-      : [];
+  // 서버가 이미 질문형만 중복 없이 보낸다(ai_core/suggestions.py) — 프론트 필터는 없앴다.
+  const chips = kind === "answered" ? (message.result?.suggestions ?? []) : [];
 
   return (
     <div className="ai-row">
@@ -227,7 +221,6 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             {message.result?.needsReview ? (
               <p className="ai-row__review-note">관리사무소 확인 예정인 답변이에요.</p>
             ) : null}
-            <SuggestionChips chips={chips} onAsk={onAsk} />
             {/* CTA 와 피드백은 한 줄. CTA 는 왼쪽, 피드백은 오른쪽 끝으로 민다. */}
             <div className="ai-row__actions">
               {isInquiry ? (
@@ -242,6 +235,9 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
               ) : null}
               <FeedbackButtons className="ai-row__feedback" />
             </div>
+            {/* 칩은 액션 줄 **아래**(사용자 지시) — 이어서 물어보기는 이 답변을 다 읽고
+                평가까지 한 다음의 행동이다. */}
+            <SuggestionChips chips={chips} onAsk={onAsk} />
           </>
         ) : (
           <>
@@ -307,26 +303,26 @@ function ProgressSteps({ steps }: { steps: readonly string[] }) {
 }
 
 /**
- * 출처 우선 배치(H18-3 ③) — 답변 위 가로 스크롤 한 줄. 카드는 기존 CitationCard 그대로 쓴다
- * (H17 에서 이미 줄인 것을 다시 키우지 않는다). 375px 에서는 이 줄 안에서만 스크롤된다.
+ * 출처 우선 배치(H18-3 ③) — 답변 위 가로 스크롤 **한 줄**. 375px 에서는 이 줄 안에서만 스크롤된다.
+ *
+ * "출처 N건" 라벨 줄은 없앴다(사용자 지적) — 라벨 줄 + 카드 줄 + 카드 안 "출처" 배지로 같은
+ * 말이 세 번 나오면서 두 줄을 먹었다. 건수는 카드가 눈에 보이고, 스크린리더에는 이 섹션의
+ * aria-label 이 그대로 전달한다.
  */
 function SourceStrip({ citations }: { citations: readonly Citation[] }) {
   // 같은 문서의 청크가 각각 카드로 뜨면 "출처가 중복"으로 읽힌다 — 표시만 묶는다(sources.ts).
   const sources = groupCitations(citations);
   if (sources.length === 0) return null;
   return (
-    <section className="ai-sources" aria-label={`출처 ${sources.length}건`}>
-      <p className="ai-sources__label">출처 {sources.length}건</p>
-      <div className="ai-sources__strip" tabIndex={0}>
-        {sources.map((s) => (
-          <CitationCard
-            key={s.ref}
-            className="ai-sources__card"
-            title={s.title}
-            meta={s.details.join(" · ")}
-          />
-        ))}
-      </div>
+    <section className="ai-sources" aria-label={`출처 ${sources.length}건`} tabIndex={0}>
+      {sources.map((s) => (
+        <CitationCard
+          key={s.ref}
+          className="ai-sources__card"
+          title={s.title}
+          meta={s.details.join(" · ")}
+        />
+      ))}
     </section>
   );
 }
