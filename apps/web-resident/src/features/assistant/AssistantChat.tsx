@@ -56,8 +56,15 @@ export function AssistantChat() {
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 복원된 대화의 첫 표시는 **즉시** 맨 아래로(사용자 지시 2026-08-01) — 진입하자마자
+  // 최신 메시지가 보여야 하고, 긴 대화를 애니메이션으로 훑어 내리면 그만큼 기다리게 된다.
+  // 이후 대화 중 추가되는 메시지는 기존대로 부드럽게 따라간다.
+  const hasScrolledRef = useRef(false);
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" });
+    const el = threadRef.current;
+    if (!el || messages.length === 0) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: hasScrolledRef.current ? "smooth" : "auto" });
+    hasScrolledRef.current = true;
   }, [messages]);
 
   // 되묻기로 끝났으면 바로 답할 수 있게 입력창에 포커스를 준다.
