@@ -1,0 +1,5492 @@
+{
+  "label": "v2-tune6-gemma4",
+  "set": "all",
+  "case_ids": [
+    "V2-QA-0001",
+    "V2-QA-0002",
+    "V2-QA-0003",
+    "V2-QA-0004",
+    "V2-QA-0005",
+    "V2-QA-0006",
+    "V2-QA-0007",
+    "V2-QA-0008",
+    "V2-QA-0009",
+    "V2-QA-0010",
+    "V2-QA-0011",
+    "V2-QA-0012",
+    "V2-QA-0014",
+    "V2-QA-0016",
+    "V2-QA-0017",
+    "V2-QA-0018",
+    "V2-QA-0019",
+    "V2-QA-0020",
+    "V2-QA-0021",
+    "V2-QA-0024",
+    "V2-QA-0025",
+    "V2-QA-0027",
+    "V2-QA-0029",
+    "V2-QA-0030",
+    "V2-QA-0032",
+    "V2-QA-0033",
+    "V2-QA-0034",
+    "V2-QA-0035",
+    "V2-QA-0038",
+    "V2-QA-0040",
+    "V2-QA-0044",
+    "V2-QA-0045",
+    "V2-QA-0047",
+    "V2-QA-0053",
+    "V2-QA-0054",
+    "V2-QA-0056",
+    "V2-QA-0057",
+    "V2-QA-0061",
+    "V2-QA-0066",
+    "V2-QA-0067",
+    "V2-QA-0069",
+    "V2-QA-0071",
+    "V2-QA-0073",
+    "V2-QA-0077",
+    "V2-QA-0078",
+    "V2-QA-0079",
+    "V2-QA-0081",
+    "V2-QA-0083",
+    "V2-QA-0085",
+    "V2-QA-0086",
+    "V2-QA-0087",
+    "V2-QA-0089",
+    "V2-QA-0092",
+    "V2-QA-0093",
+    "V2-QA-0098",
+    "V2-QA-0103",
+    "V2-QA-0107",
+    "V2-QA-0108",
+    "V2-QA-0118",
+    "V2-QA-0122",
+    "V2-QA-0126",
+    "V2-QA-0134",
+    "V2-QA-0135",
+    "V2-QA-0142",
+    "V2-QA-0146",
+    "V2-QA-0191",
+    "V2-QA-0195",
+    "V2-QA-0198",
+    "V2-QA-0207",
+    "V2-QA-0208",
+    "V2-QA-0211",
+    "V2-QA-0213",
+    "V2-QA-0215",
+    "V2-QA-0216",
+    "V2-QA-0231",
+    "V2-QA-0235",
+    "V2-QA-0236",
+    "V2-QA-0242",
+    "V2-QA-0245",
+    "V2-QA-0335",
+    "V2-QA-0336",
+    "V2-QA-0340",
+    "V2-QA-0341"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-01T23:36:21.744Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 추정 혼입 80/83건(최종 답변 turn은 스트리밍이라 usage 미제공 → 추정치), 원가는 참고값"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 83,
+      "pass": 10,
+      "citation_scored": 83,
+      "citation_hit": 33,
+      "citation_hit_rate": 0.39759036144578314,
+      "fallback_scored": 83,
+      "fallback_ok": 10,
+      "fallback_accuracy": 0.12048192771084337,
+      "tool_scored": 83,
+      "tool_hit": 83,
+      "tool_accuracy": 1,
+      "required_cases": 0,
+      "required_hit_sum": 0,
+      "required_total_sum": 0,
+      "required_call_rate": null,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "clarify_scored": 83,
+      "clarify_misuse": 0,
+      "clarify_misuse_rate": 0,
+      "total_p50_ms": 19159,
+      "total_p95_ms": 36659,
+      "ttft_p50_ms": 46,
+      "ttft_p95_ms": 50,
+      "token_input_sum": 1215025,
+      "token_output_sum": 30264,
+      "token_estimated_cases": 80,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "관리규약 조항",
+        "n": 30,
+        "pass": 0,
+        "citation_scored": 30,
+        "citation_hit": 0,
+        "citation_hit_rate": 0,
+        "fallback_scored": 30,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 30,
+        "tool_hit": 30,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 30,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 20955,
+        "total_p95_ms": 40021,
+        "ttft_p50_ms": 46,
+        "ttft_p95_ms": 50,
+        "token_input_sum": 617337,
+        "token_output_sum": 13550,
+        "token_estimated_cases": 30
+      },
+      {
+        "key": "지침·매뉴얼",
+        "n": 15,
+        "pass": 9,
+        "citation_scored": 15,
+        "citation_hit": 9,
+        "citation_hit_rate": 0.6,
+        "fallback_scored": 15,
+        "fallback_ok": 9,
+        "fallback_accuracy": 0.6,
+        "tool_scored": 15,
+        "tool_hit": 15,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 15,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 17918,
+        "total_p95_ms": 25002,
+        "ttft_p50_ms": 46,
+        "ttft_p95_ms": 264,
+        "token_input_sum": 229388,
+        "token_output_sum": 5026,
+        "token_estimated_cases": 15
+      },
+      {
+        "key": "회의록",
+        "n": 14,
+        "pass": 0,
+        "citation_scored": 14,
+        "citation_hit": 0,
+        "citation_hit_rate": 0,
+        "fallback_scored": 14,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 14,
+        "tool_hit": 14,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 14,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 23240,
+        "total_p95_ms": 26389,
+        "ttft_p50_ms": 47,
+        "ttft_p95_ms": 53,
+        "token_input_sum": 210489,
+        "token_output_sum": 6005,
+        "token_estimated_cases": 14
+      },
+      {
+        "key": "공지",
+        "n": 3,
+        "pass": 1,
+        "citation_scored": 3,
+        "citation_hit": 3,
+        "citation_hit_rate": 1,
+        "fallback_scored": 3,
+        "fallback_ok": 1,
+        "fallback_accuracy": 0.3333333333333333,
+        "tool_scored": 3,
+        "tool_hit": 3,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 3,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 22770,
+        "total_p95_ms": 25363,
+        "ttft_p50_ms": 48,
+        "ttft_p95_ms": 52,
+        "token_input_sum": 42987,
+        "token_output_sum": 1165,
+        "token_estimated_cases": 3
+      },
+      {
+        "key": "관리비",
+        "n": 7,
+        "pass": 0,
+        "citation_scored": 7,
+        "citation_hit": 7,
+        "citation_hit_rate": 1,
+        "fallback_scored": 7,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 7,
+        "tool_hit": 7,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 7,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 16885,
+        "total_p95_ms": 17613,
+        "ttft_p50_ms": 46,
+        "ttft_p95_ms": 48,
+        "token_input_sum": 37391,
+        "token_output_sum": 1459,
+        "token_estimated_cases": 7
+      },
+      {
+        "key": "시설·설비",
+        "n": 9,
+        "pass": 0,
+        "citation_scored": 9,
+        "citation_hit": 9,
+        "citation_hit_rate": 1,
+        "fallback_scored": 9,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 9,
+        "tool_hit": 9,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 9,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 16393,
+        "total_p95_ms": 17613,
+        "ttft_p50_ms": 45,
+        "ttft_p95_ms": 46,
+        "token_input_sum": 47252,
+        "token_output_sum": 1712,
+        "token_estimated_cases": 9
+      },
+      {
+        "key": "평면도",
+        "n": 5,
+        "pass": 0,
+        "citation_scored": 5,
+        "citation_hit": 5,
+        "citation_hit_rate": 1,
+        "fallback_scored": 5,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 5,
+        "tool_hit": 5,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 5,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 5143,
+        "total_p95_ms": 33671,
+        "ttft_p50_ms": 45,
+        "ttft_p95_ms": 47,
+        "token_input_sum": 30181,
+        "token_output_sum": 1347,
+        "token_estimated_cases": 2
+      }
+    ],
+    "by_backend": [
+      {
+        "key": "backend:pgvector",
+        "n": 62,
+        "pass": 10,
+        "citation_scored": 62,
+        "citation_hit": 12,
+        "citation_hit_rate": 0.1935483870967742,
+        "fallback_scored": 62,
+        "fallback_ok": 10,
+        "fallback_accuracy": 0.16129032258064516,
+        "tool_scored": 62,
+        "tool_hit": 62,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 62,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 22138,
+        "total_p95_ms": 36997,
+        "ttft_p50_ms": 46,
+        "ttft_p95_ms": 52,
+        "token_input_sum": 1100201,
+        "token_output_sum": 25746,
+        "token_estimated_cases": 62
+      },
+      {
+        "key": "backend:neo4j",
+        "n": 1,
+        "pass": 0,
+        "citation_scored": 1,
+        "citation_hit": 1,
+        "citation_hit_rate": 1,
+        "fallback_scored": 1,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 1,
+        "tool_hit": 1,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 1,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 17613,
+        "total_p95_ms": 17613,
+        "ttft_p50_ms": 44,
+        "ttft_p95_ms": 44,
+        "token_input_sum": 5617,
+        "token_output_sum": 315,
+        "token_estimated_cases": 1
+      }
+    ],
+    "pairs": []
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "V2-QA-0001",
+      "category": "관리규약 조항",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제5조(전용부분 및 공용부분의 범위)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "주거공용부분 승강기 계단 현관"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 31486,
+        "token_output": 498,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 38697,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 17946
+          },
+          {
+            "ttft_ms": 49,
+            "total_ms": 20751
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0002",
+      "category": "관리규약 조항",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제3조(용어 정의)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "소유자 배우자 직계 임차"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 17713,
+        "token_output": 344,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 20955,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 20955
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0003",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제12조(의결권 행사)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "1세대 하나 의결권 서면"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 36726,
+        "token_output": 780,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 36659,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 15353
+          },
+          {
+            "ttft_ms": 47,
+            "total_ms": 21306
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0004",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제13조(입주자 등의 의무)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "전유부분 출입 특별한 사유 거부"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13974,
+        "token_output": 407,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 14793,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 14793
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0005",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제15조(배상책임 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "누수 손해 배상 원상"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18974,
+        "token_output": 687,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 22086,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 22086
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0006",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제16조(권리․의무의 승계)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "체납 승계 부담"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 14901,
+        "token_output": 385,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 19159,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 19159
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0007",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제17조(동별 대표자의 선출)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "선거구 5명 401동 405동"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 33794,
+        "token_output": 670,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 38,
+        "total_ms": 40021,
+        "turns": [
+          {
+            "ttft_ms": 38,
+            "total_ms": 22055
+          },
+          {
+            "ttft_ms": 49,
+            "total_ms": 17966
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0008",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제18조(동별 대표자의 임기)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "임기 2년 중임"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12794,
+        "token_output": 241,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 13796,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 13796
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0009",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제19조(임원의 구성)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "회장 1인 감사 2인 이사"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18992,
+        "token_output": 354,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 23117,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 23117
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0010",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제21조(보궐선거)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "60일 이내 잔여기간"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12428,
+        "token_output": 321,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 15397,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 15397
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0011",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제23조(회의개최)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "정기회의 매월 1회 임시회의"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 39124,
+        "token_output": 491,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 36997,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 21804
+          },
+          {
+            "ttft_ms": 47,
+            "total_ms": 15193
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0012",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제24조(회의방청)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "방청 신청 발언"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18737,
+        "token_output": 300,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 16044,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 16044
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0014",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제26조(안건의 제안)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "안건 제안 서면"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18241,
+        "token_output": 300,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 16180,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 16180
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0016",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제14조의2(공동주택 내 괴롭힘의 금지 및 발생 시 조치에 관한 사항)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "폭언 폭행 괴롭힘 조치"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 17124,
+        "token_output": 267,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 15742,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 15742
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0017",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제14조(업무방해 금지)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "근로자 부당한 지시 금지"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 11758,
+        "token_output": 367,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 16659,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 16659
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0018",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제9조(입주자 등의 자격)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "입주자 명부 관리주체 제출"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 19967,
+        "token_output": 292,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 16843,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 16843
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0019",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제10조(입주자 등의 권리)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "전용부분 주거 목적 선거권"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 17720,
+        "token_output": 484,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 50,
+        "total_ms": 24892,
+        "turns": [
+          {
+            "ttft_ms": 50,
+            "total_ms": 24892
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0020",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제20조(동별 대표자 등의 해임 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "해임 위반 횡령"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 29783,
+        "token_output": 600,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 30103,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 15251
+          },
+          {
+            "ttft_ms": 45,
+            "total_ms": 14852
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0021",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제22조(동별 대표자 등의 선출공고)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "임기만료 60일 전 공고"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 22754,
+        "token_output": 764,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 23449,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 23449
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0024",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제4조(관리대상물)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "관리대상물 별표"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 15846,
+        "token_output": 213,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 16069,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 16069
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0025",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제6조(입주자대표회의 및 공동주택관리기구)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "공동주택단지 관리사무소"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18982,
+        "token_output": 212,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 20499,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 20499
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0027",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제8조(규약의 효력)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "승계 효력"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 19556,
+        "token_output": 266,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 22104,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 22104
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0029",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제28조(의결방법)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "직접 출석 의결권 대리 부결"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 16479,
+        "token_output": 413,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 63,
+        "total_ms": 23551,
+        "turns": [
+          {
+            "ttft_ms": 63,
+            "total_ms": 23551
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0030",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제29조(재심의)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "재심의 요청서 관계규정 위반"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18148,
+        "token_output": 567,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 19864,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 19864
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0032",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제30조의2(전자적 방법을 통한 의사결정 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "전자투표 선출 해임 본인확인"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 15421,
+        "token_output": 281,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 21197,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 21197
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0033",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제31조(겸임금지)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "회장 감사 이사 상호간 겸임"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 17866,
+        "token_output": 269,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 14141,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 14141
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0034",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제33조(입주자대표회의 의무와 책임)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "선량한 관리자 손해 배상 윤리교육"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13243,
+        "token_output": 300,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 22138,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 22138
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0035",
+      "category": "관리규약 조항",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제34조(공동주택 활성화 단체 구성 및 활동지원)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "10인 이상 공동체 활성화 단체 신고서"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12796,
+        "token_output": 308,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 14968,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 14968
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0038",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "ebe0bc4f-aace-4416-8142-0b7c149f72bf#제13조(지적사항 조치)",
+        "document_ids": [
+          "ebe0bc4f-aace-4416-8142-0b7c149f72bf"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "지적사항 조치"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 14066,
+        "token_output": 377,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 22632,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 22632
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: ebe0bc4f-aace-4416-8142-0b7c149f72bf"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0040",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "ebe0bc4f-aace-4416-8142-0b7c149f72bf#제19조(연락처  게시)",
+        "document_ids": [
+          "ebe0bc4f-aace-4416-8142-0b7c149f72bf"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "연락처 게시"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.815,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "ebe0bc4f-aace-4416-8142-0b7c149f72bf"
+        ],
+        "citation_titles": [
+          "승강기 자체점검 지침"
+        ],
+        "answer_chars": 123,
+        "token_input": 13130,
+        "token_output": 361,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 16594,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 16594
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0044",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "681c2861-0fdf-4e32-a985-c0b468a402df",
+        "document_ids": [
+          "681c2861-0fdf-4e32-a985-c0b468a402df"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "25ppm 고속 30ppm 출입 제한"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 16967,
+        "token_output": 503,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 24763,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 24763
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 681c2861-0fdf-4e32-a985-c0b468a402df"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0045",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "681c2861-0fdf-4e32-a985-c0b468a402df",
+        "document_ids": [
+          "681c2861-0fdf-4e32-a985-c0b468a402df"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "심야 저속 운전"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.783,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "681c2861-0fdf-4e32-a985-c0b468a402df"
+        ],
+        "citation_titles": [
+          "지하주차장 환기설비 운전 매뉴얼"
+        ],
+        "answer_chars": 38,
+        "token_input": 17576,
+        "token_output": 385,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 17109,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 17109
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0047",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "e5a54cd4-8a79-44ca-8422-4186d6d11274",
+        "document_ids": [
+          "e5a54cd4-8a79-44ca-8422-4186d6d11274"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "7일 전 1일 전 공지"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.767,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "e5a54cd4-8a79-44ca-8422-4186d6d11274"
+        ],
+        "citation_titles": [
+          "수변전설비(전기실) 안전관리 지침"
+        ],
+        "answer_chars": 108,
+        "token_input": 16222,
+        "token_output": 294,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 13439,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 13439
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0053",
+      "category": "지침·매뉴얼",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "69c183aa-8403-4fb9-93ce-c96a972fe530",
+        "document_ids": [
+          "69c183aa-8403-4fb9-93ce-c96a972fe530"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "3일 전 공지"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.741,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "69c183aa-8403-4fb9-93ce-c96a972fe530"
+        ],
+        "citation_titles": [
+          "기계실 열교환기(지역난방) 운전 지침"
+        ],
+        "answer_chars": 19,
+        "token_input": 14530,
+        "token_output": 260,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 14389,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 14389
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0054",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "69c183aa-8403-4fb9-93ce-c96a972fe530",
+        "document_ids": [
+          "69c183aa-8403-4fb9-93ce-c96a972fe530"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "외기 보상 0도 55도 65도"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.758,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "69c183aa-8403-4fb9-93ce-c96a972fe530"
+        ],
+        "citation_titles": [
+          "기계실 열교환기(지역난방) 운전 지침"
+        ],
+        "answer_chars": 73,
+        "token_input": 18014,
+        "token_output": 301,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 17687,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 17687
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0056",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "7df72434-8258-4874-bf21-db5f0ad82c8c",
+        "document_ids": [
+          "7df72434-8258-4874-bf21-db5f0ad82c8c"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "수질검사 탁도"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 15752,
+        "token_output": 512,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 25002,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 25002
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 7df72434-8258-4874-bf21-db5f0ad82c8c"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0057",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "7df72434-8258-4874-bf21-db5f0ad82c8c",
+        "document_ids": [
+          "7df72434-8258-4874-bf21-db5f0ad82c8c"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "맨홀 방충망 침전물"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 15609,
+        "token_output": 318,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 21996,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 21996
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 7df72434-8258-4874-bf21-db5f0ad82c8c"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0061",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "8402d3ec-61be-4708-90a9-ac2d4ad45d65",
+        "document_ids": [
+          "8402d3ec-61be-4708-90a9-ac2d4ad45d65"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "주 1회 도통 시험"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.776,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "8402d3ec-61be-4708-90a9-ac2d4ad45d65"
+        ],
+        "citation_titles": [
+          "R형 화재수신기 운영 매뉴얼"
+        ],
+        "answer_chars": 15,
+        "token_input": 12618,
+        "token_output": 259,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 17626,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 17626
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0066",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+        "document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "14일 전 예약"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.815,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "citation_titles": [
+          "커뮤니티시설 이용 지침",
+          "커뮤니티시설 이용 지침"
+        ],
+        "answer_chars": 109,
+        "token_input": 11604,
+        "token_output": 263,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 12338,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 12338
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0067",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+        "document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "반려동물 출입 보조견"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.797,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "citation_titles": [
+          "커뮤니티시설 이용 지침"
+        ],
+        "answer_chars": 43,
+        "token_input": 16919,
+        "token_output": 267,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 18128,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 18128
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0069",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "a871b4e9-8f76-4ac1-b608-1b8ff6ba96f6",
+        "document_ids": [
+          "a871b4e9-8f76-4ac1-b608-1b8ff6ba96f6"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "열람 요구 신분증"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 21,
+        "token_input": 17844,
+        "token_output": 315,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 21860,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 21860
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: a871b4e9-8f76-4ac1-b608-1b8ff6ba96f6"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0071",
+      "category": "회의록",
+      "execution_set": "Smoke",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b252a915-f457-4566-a1b8-7e4cfe7300f3",
+        "document_ids": [
+          "b252a915-f457-4566-a1b8-7e4cfe7300f3"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "401동 1호기 404동 2호기 주로프 마모 교체"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12937,
+        "token_output": 595,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 26389,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 26389
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: b252a915-f457-4566-a1b8-7e4cfe7300f3"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0073",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "0623e4cd-3e7e-4875-99ab-b11d0a5181c5",
+        "document_ids": [
+          "0623e4cd-3e7e-4875-99ab-b11d0a5181c5"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "인건비 3.5% 세대당 5,200원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12173,
+        "token_output": 395,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 23172,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 23172
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 0623e4cd-3e7e-4875-99ab-b11d0a5181c5"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0077",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "f2b77b9f-adc6-4645-8c15-e1e01d191a70",
+        "document_ids": [
+          "f2b77b9f-adc6-4645-8c15-e1e01d191a70"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "동시 교체 장기수선충당금"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13678,
+        "token_output": 569,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 26327,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 26327
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: f2b77b9f-adc6-4645-8c15-e1e01d191a70"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0078",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "f2b77b9f-adc6-4645-8c15-e1e01d191a70",
+        "document_ids": [
+          "f2b77b9f-adc6-4645-8c15-e1e01d191a70"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "충전 완료 2시간 스티커"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13077,
+        "token_output": 405,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 23562,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 23562
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: f2b77b9f-adc6-4645-8c15-e1e01d191a70"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0079",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "f44c6040-8eb8-403a-ae66-ab32dd05a004",
+        "document_ids": [
+          "f44c6040-8eb8-403a-ae66-ab32dd05a004"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "370,000원 재계약"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13052,
+        "token_output": 360,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 22915,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 22915
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: f44c6040-8eb8-403a-ae66-ab32dd05a004"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0081",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "32a91ab4-6b4a-4c4a-b45d-0cafb46def4c",
+        "document_ids": [
+          "32a91ab4-6b4a-4c4a-b45d-0cafb46def4c"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "4기 11,600,000원 보조사업"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 20006,
+        "token_output": 543,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 25928,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 25928
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 32a91ab4-6b4a-4c4a-b45d-0cafb46def4c"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0083",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "bc369b68-81e2-49ce-b8d6-ec277631688a",
+        "document_ids": [
+          "bc369b68-81e2-49ce-b8d6-ec277631688a"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "342등 10,300,000원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13050,
+        "token_output": 486,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 24816,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 24816
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: bc369b68-81e2-49ce-b8d6-ec277631688a"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0085",
+      "category": "회의록",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "7315c989-39d0-4b9e-851d-48ee0e964061",
+        "document_ids": [
+          "7315c989-39d0-4b9e-851d-48ee0e964061"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "26도 소등"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13217,
+        "token_output": 350,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 22699,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 22699
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 7315c989-39d0-4b9e-851d-48ee0e964061"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0086",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "7315c989-39d0-4b9e-851d-48ee0e964061",
+        "document_ids": [
+          "7315c989-39d0-4b9e-851d-48ee0e964061"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "코딩교실 정규 생활체조 격주"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_recent_notices",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 21139,
+        "token_output": 317,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 22734,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 22734
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 7315c989-39d0-4b9e-851d-48ee0e964061"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0087",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b2373650-0d9b-4947-8015-fede9b7a7ac3",
+        "document_ids": [
+          "b2373650-0d9b-4947-8015-fede9b7a7ac3"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "재활용품 매각 1,520,000원 경쟁입찰"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13249,
+        "token_output": 531,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 25503,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 25503
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: b2373650-0d9b-4947-8015-fede9b7a7ac3"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0089",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "d283cb9d-d3e4-49a8-9768-2ec8b12820fc",
+        "document_ids": [
+          "d283cb9d-d3e4-49a8-9768-2ec8b12820fc"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유도등 교체 2,740,000원 수선유지비"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 18988,
+        "token_output": 345,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 22687,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 22687
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: d283cb9d-d3e4-49a8-9768-2ec8b12820fc"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0092",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "28f4c4a2-4524-4ae8-b528-2179be51b3a5",
+        "document_ids": [
+          "28f4c4a2-4524-4ae8-b528-2179be51b3a5"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "모래 보충 소독 이물질 선별"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12867,
+        "token_output": 395,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 53,
+        "total_ms": 23293,
+        "turns": [
+          {
+            "ttft_ms": 53,
+            "total_ms": 23293
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 28f4c4a2-4524-4ae8-b528-2179be51b3a5"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0093",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "69942055-9d7b-4bfd-8d1a-04d6643ca413",
+        "document_ids": [
+          "69942055-9d7b-4bfd-8d1a-04d6643ca413"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "책임 유지관리 부품비 계약 갱신"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 19185,
+        "token_output": 350,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 22906,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 22906
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 69942055-9d7b-4bfd-8d1a-04d6643ca413"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0098",
+      "category": "회의록",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "23dc8049-913b-49fc-8efa-b4b311b9a8d2",
+        "document_ids": [
+          "23dc8049-913b-49fc-8efa-b4b311b9a8d2"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "적격심사 경쟁입찰 재발주"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 13871,
+        "token_output": 364,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 23240,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 23240
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 23dc8049-913b-49fc-8efa-b4b311b9a8d2"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0103",
+      "category": "공지",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "notice:a0af8aa7-dfae-4097-8892-69c970c04a5b",
+        "document_ids": [],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "아이창 대국환경 선정"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 12804,
+        "token_output": 528,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 25363,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 25363
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0107",
+      "category": "공지",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "notice:60e343e8-46ca-416f-94d9-574fd9ff304f",
+        "document_ids": [],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "7월 2일 창문 지상 주차"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 15076,
+        "token_output": 388,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 52,
+        "total_ms": 22770,
+        "turns": [
+          {
+            "ttft_ms": 52,
+            "total_ms": 22770
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0108",
+      "category": "공지",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "notice:60e343e8-46ca-416f-94d9-574fd9ff304f",
+        "document_ids": [],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "산책 자제"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.76,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "단지 내 수목소독 실시 안내"
+        ],
+        "answer_chars": 31,
+        "token_input": 15107,
+        "token_output": 249,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 15562,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 15562
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0118",
+      "category": "관리비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 207,306원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5279,
+        "token_output": 186,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 16614,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 16614
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0122",
+      "category": "관리비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 161,081원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5276,
+        "token_output": 186,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 16524,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 16524
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0126",
+      "category": "관리비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 166,151원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5276,
+        "token_output": 183,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 16593,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 16593
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0134",
+      "category": "관리비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 159,314원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5445,
+        "token_output": 233,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 17125,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 17125
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0135",
+      "category": "관리비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-07",
+        "facts": "2026-07 관리비 총액 186,480원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5562,
+        "token_output": 264,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 17613,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 17613
+          }
+        ]
+      },
+      "notes": [
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0142",
+      "category": "관리비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 209,457원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5276,
+        "token_output": 191,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 16885,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 16885
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0146",
+      "category": "관리비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-03",
+        "facts": "2026-03 관리비 총액 212,861원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5277,
+        "token_output": 216,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 16922,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 16922
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-03 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의",
+        "forbidden '타 세대 금액·미확정 추정 금액·임의 계산' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0191",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "EL 계열 설비 12개"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5570,
+        "token_output": 89,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 15651,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 15651
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0195",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "WT 계열 설비 4개"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5663,
+        "token_output": 228,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 17270,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 17270
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0198",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 fault 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4972,
+        "token_output": 116,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 15496,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 15496
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0207",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5076,
+        "token_output": 187,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 16393,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 16393
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0208",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5073,
+        "token_output": 168,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 16144,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 16144
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0211",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5093,
+        "token_output": 244,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 17229,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 17229
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0213",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5094,
+        "token_output": 173,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 16280,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 16280
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0215",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5094,
+        "token_output": 192,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 16470,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 16470
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-08-01 vs 측정 2026-07-30 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0216",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5617,
+        "token_output": 315,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 17613,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 17613
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0231",
+      "category": "평면도",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_in_floor_plan",
+        "document_ids": [],
+        "expected_tool": "find_in_floor_plan",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "403-1002 평면도 내 '에어컨 배관' 2개 (방: 거실, 안방)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan",
+          "find_in_floor_plan"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 10452,
+        "token_output": 436,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 33671,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 16561
+          },
+          {
+            "ttft_ms": 48,
+            "total_ms": 17110
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0235",
+      "category": "평면도",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_in_floor_plan",
+        "document_ids": [],
+        "expected_tool": "find_in_floor_plan",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "404-1502 평면도 내 '온도조절기' 1개 (방: 거실)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4849,
+        "token_output": 357,
+        "token_estimated": false
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 5143,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 5143
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0236",
+      "category": "평면도",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_in_floor_plan",
+        "document_ids": [],
+        "expected_tool": "find_in_floor_plan",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "401-201 평면도 내 '온도조절기' 1개 (방: 거실)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4849,
+        "token_output": 206,
+        "token_estimated": false
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 2950,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 2950
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0242",
+      "category": "평면도",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_in_floor_plan",
+        "document_ids": [],
+        "expected_tool": "find_in_floor_plan",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "405-1303 평면도 내 '콘센트' 17개 (방: 거실, 다용도실, 발코니(전면), 안방, 욕실1, 욕실2, 주방, 침실1, 침실2, 팬트리)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5165,
+        "token_output": 133,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 15534,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 15534
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0245",
+      "category": "평면도",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_in_floor_plan",
+        "document_ids": [],
+        "expected_tool": "find_in_floor_plan",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "404-1502 평면도 내 '에어컨 배관' 2개 (방: 거실, 안방)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4866,
+        "token_output": 215,
+        "token_estimated": false
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 3152,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 3152
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0335",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+        "document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "일출 후부터 21:00까지"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "citation_titles": [
+          "커뮤니티시설 이용 지침",
+          "커뮤니티시설 이용 지침"
+        ],
+        "answer_chars": 62,
+        "token_input": 12360,
+        "token_output": 270,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 17918,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 17918
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0336",
+      "category": "지침·매뉴얼",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+        "document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "커뮤니티동: 09:00~21:00"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 16177,
+        "token_output": 341,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 264,
+        "total_ms": 22381,
+        "turns": [
+          {
+            "ttft_ms": 264,
+            "total_ms": 22381
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: b6499adf-9c59-4ab3-a6fa-f2186408e210"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0340",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제18조(동별 대표자의 임기)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "임기 2년 중임"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees",
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 30808,
+        "token_output": 687,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 28947,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 2040
+          },
+          {
+            "ttft_ms": 33,
+            "total_ms": 9802
+          },
+          {
+            "ttft_ms": 46,
+            "total_ms": 17105
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0341",
+      "category": "관리규약 조항",
+      "execution_set": "Critical",
+      "priority": "P2",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제15조(배상책임 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "누수 손해 배상 원상"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees",
+          "get_fees",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 31202,
+        "token_output": 1482,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 66656,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 16861
+          },
+          {
+            "ttft_ms": 47,
+            "total_ms": 22561
+          },
+          {
+            "ttft_ms": 45,
+            "total_ms": 27234
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    }
+  ]
+}

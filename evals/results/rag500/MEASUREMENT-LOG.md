@@ -1117,3 +1117,11 @@ Qwen2.5-14B-AWQ(vLLM, R25 컨테이너를 `--kv-cache-memory` 보정으로 재�
 hard_fail 0. R27 결론(14B도 인용 규율 못 뚫음) 재확인 → 전량 재측정 생략(조기 종료). GPU·DB 원복 완료.
 교훈: 최신 vllm-openai 이미지에서 gpu-util 0.92 단독 지정은 warmup OOM — vLLM 자가 처방대로
 `--kv-cache-memory` 명시가 안전. 응답률 순위 확정: **qwen3:8b 77.4% > llama 69.6% > 14B(열세)**.
+
+### R35d — gemma-4-12b 실측 (llama.cpp --jinja) · 최하위 확정
+
+Ollama gemma3 tools 미지원 우회 — GPU 서버 gemma-4-12b-it Q4_K_M GGUF를 llama.cpp `--jinja`로 기동
+(tool calling 동작·thinking `reasoning_content` 분리). 잔존 101건 회복 **10건(9.9%)** — 재샘플링
+기준선(14.4%) 미달, 91건 no_evidence(인용 마커 전멸), 코어 돌파 1/39, hard_fail 0.
+**시험 순위: qwen3:8b 59.4% > 14B 36.6% > top_k8 23.8% > 기준선 14.4% > gemma4 9.9%**(+gemma3 측정불가).
+전면 원복 완료. 결론 불변 — 로컬 8B~14B로 95% 불가, 돌파는 OpenAI 축.
