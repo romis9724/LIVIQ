@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from ai_core.suggestions import (
     FALLBACK_SUGGESTION,
     TOOL_SUGGESTIONS,
     suggest_next_actions,
 )
+
+
+def _from(path: list[str], mapping: dict[str, str], *, status: str = "answered") -> tuple[str, ...]:
+    """매핑을 갈아끼고 규칙을 검증한다 — 매핑이 빈 지금도 순서·중복 규칙은 살아 있어야 한다."""
+    with patch.dict(TOOL_SUGGESTIONS, mapping, clear=True):
+        return suggest_next_actions(path, status=status)
+
 
 # 칩 문구는 그대로 새 질문이 된다 — 이동·행동 문구가 매핑에 다시 들어오면 이 테스트가 막는다.
 NAVIGATION_LABELS = frozenset(
@@ -21,8 +30,14 @@ NAVIGATION_LABELS = frozenset(
 )
 
 
-def test_maps_tool_to_its_next_question() -> None:
-    assert suggest_next_actions(["get_fees"], status="answered") == ("지난달과 비교하기",)
+def test_tool_map_is_empty_for_now() -> None:
+    """맥락을 못 읽는 고정 문구를 전부 뺐다 — 매핑이 비어도 계약(빈 튜플)은 살아 있다.
+
+    마지막으로 뺀 것은 get_fees "지난달과 비교하기"다: "6,7월 평균"을 물어 답을 받은
+    화면에 또 비교를 권했다(2026-08-01 사용자 실측).
+    """
+    assert TOOL_SUGGESTIONS == {}
+    assert suggest_next_actions(["get_fees"], status="answered") == ()
 
 
 def test_navigation_labels_are_never_suggested() -> None:
@@ -47,17 +62,14 @@ def test_navigation_only_tools_give_nothing() -> None:
 
 
 def test_keeps_tool_call_order() -> None:
-    """매핑 없는 도구는 건너뛰고 남은 것만 호출 순서대로."""
-    assert suggest_next_actions(["search_documents", "get_fees"], status="answered") == (
-        "지난달과 비교하기",
-    )
+    """매핑 없는 도구는 건너뛰고 남은 것만 호출 순서대로(매핑이 다시 찰 때를 위한 계약)."""
+    mapping = {"tool_b": "질문 B", "tool_c": "질문 C"}
+    assert _from(["tool_a", "tool_c", "tool_b"], mapping) == ("질문 C", "질문 B")
 
 
 def test_deduplicates_repeated_calls() -> None:
     """같은 도구를 두 번 부른 경로에도 칩은 하나만 나간다."""
-    assert suggest_next_actions(["get_fees", "get_fees"], status="answered") == (
-        "지난달과 비교하기",
-    )
+    assert _from(["tool_b", "tool_b"], {"tool_b": "질문 B"}) == ("질문 B",)
 
 
 def test_no_tool_answered_gives_nothing() -> None:
@@ -70,8 +82,10 @@ def test_no_tool_fallback_gives_only_the_desk_contact() -> None:
 
 
 def test_fallback_puts_desk_contact_first() -> None:
-    suggestions = suggest_next_actions(["get_fees"], status="fallback")
-    assert suggestions == (FALLBACK_SUGGESTION, "지난달과 비교하기")
+    assert _from(["tool_b"], {"tool_b": "질문 B"}, status="fallback") == (
+        FALLBACK_SUGGESTION,
+        "질문 B",
+    )
 
 
 def test_unknown_tool_is_ignored() -> None:

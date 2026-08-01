@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
@@ -189,6 +190,8 @@ async def answer_question(
     seen_chunk_ids: set[str] = set()
     cards: list[ToolCard] = []
     seen_cards: set[tuple[str, str]] = set()
+    # 이미 실행한 (도구, 정규화 인자) — 같은 호출의 재실행을 막는다(아래 루프 주석).
+    seen_calls: set[tuple[str, str]] = set()
     tool_path: list[str] = []
     llm_down = False
     # turn별 usage — 도구 결정 turn이 비용의 대부분(도구 결과가 다음 turn에 재전송된다).
@@ -234,7 +237,24 @@ async def answer_question(
             )
             return
         messages.append(_assistant_tool_calls_message(decision.tool_calls))
+        executed_any = False
         for call in decision.tool_calls:
+            # 같은 도구를 **같은 인자로** 다시 부르면 실행하지 않는다(2026-08-01 dev 실측:
+            # find_in_floor_plan 4연속 호출로 스텝 상한을 전부 태웠다 — 지연·토큰 낭비).
+            # 인자가 다른 재호출은 정당할 수 있어(다른 달·다른 기기) 키에 인자를 넣는다.
+            # 프로토콜상 tool_call마다 응답 메시지가 있어야 하므로 안내만 되돌린다.
+            key = (call.name, _args_key(call.arguments))
+            if key in seen_calls:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": "이미 같은 조건으로 조회했습니다. 조회한 결과로 답변하십시오.",
+                    }
+                )
+                continue
+            seen_calls.add(key)
+            executed_any = True
             # 진행 중인 도구를 화면에 노출(ADR-0025 §5) — stage는 searching 그대로.
             yield StatusEvent(stage="searching", tool=call.name)
             execution = await execute_tool(call, ctx=ctx, deps=deps, registry=registry)
@@ -243,6 +263,11 @@ async def answer_question(
                 execution.result, doc_chunks, seen_chunk_ids, cards, seen_cards, extra_names
             )
             messages.append({"role": "tool", "tool_call_id": call.id, "content": content})
+        if not executed_any:
+            # 이번 turn이 전부 중복 = 모델이 같은 자리를 맴돈다. 남은 스텝을 태워도 새 근거가
+            # 생기지 않으므로 지금 근거로 답변 turn으로 넘어간다. 루프 종료는 스텝 상한과
+            # 이 조기 종료 둘 다로 보장된다(무한 루프 없음 — 상한은 그대로 4, ADR-0025 §2).
+            break
 
     logger.info(
         "assistant tool_path", extra={"tool_path": tool_path, "tenant_id": str(ctx.tenant_id)}
@@ -431,6 +456,19 @@ def _clarify_question(calls: Sequence[ToolCallRequest]) -> str | None:
             return None
         return build_clarification(args.missing, args.context)
     return None
+
+
+def _args_key(arguments: str) -> str:
+    """도구 인자 정규화 키 — 키 순서·공백이 달라도 같은 호출이면 같은 문자열.
+
+    JSON이 아니면(모델이 깨진 인자를 낼 수 있다) 원문 그대로 키로 쓴다. 깨진 인자를 반복해도
+    결과는 똑같이 검증 실패라 재실행할 이유가 없다.
+    """
+    try:
+        parsed = json.loads(arguments or "{}")
+    except json.JSONDecodeError:
+        return arguments
+    return json.dumps(parsed, sort_keys=True, ensure_ascii=False)
 
 
 def _no_evidence_gate(parts: Sequence[str]) -> str:

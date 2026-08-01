@@ -177,9 +177,9 @@ async def test_sse_new_fields_are_additive(seeded_client: httpx.AsyncClient) -> 
     done = events[-1][1]
     assert {"message_id", "conversation_id", "status", "confidence", "needs_review"} <= set(done)
     assert done["tool_path"] == ["search_documents", "get_fees"]
-    # 제안은 호출한 도구에서 나온다(고정 칩 아님). search_documents 는 다음이 "원문 열기"라
-    # 이동 문구뿐이라 칩이 없다 — 칩은 그대로 새 질문이 되므로 질문형만 남긴다.
-    assert done["suggestions"] == ["지난달과 비교하기"]
+    # suggestions 필드는 계약으로 남지만(키 존재) 지금 도구 매핑은 비어 있다 —
+    # 고정 문구가 맥락을 못 읽어 전부 제거했다(2026-08-01 "지난달과 비교하기" 실측).
+    assert done["suggestions"] == []
 
 
 async def test_ask_rejects_oversized_question(seeded_client: httpx.AsyncClient) -> None:

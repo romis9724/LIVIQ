@@ -12,10 +12,28 @@
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
+.inq__headrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+/* 어시스턴트 딥링크 진입에만 보이는 뒤로가기 — 평면도(.floor-plan__back)와 같은 형태. */
+.inq__back {
+  flex: none;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  margin-left: calc(-1 * var(--space-2));
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
 .inq__title {
   font-size: var(--text-lg);
   font-weight: 700;
-  margin-bottom: var(--space-3);
 }
 .inq__seg {
   display: inline-flex;

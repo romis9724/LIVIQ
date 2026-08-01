@@ -14,13 +14,30 @@ export interface FeeRow {
   amount: number;
 }
 
+export interface FeeMonth {
+  period: string;
+  total: number;
+}
+
 export interface FeeTableData {
   kind: "fee_table";
   period: string;
   rows: FeeRow[];
-  total: number;
+  /** 단일 월 합계. 다중 월 조회에는 없다(합계가 아니라 월별 값이 온다). */
+  total: number | null;
   prevTotal: number | null;
   diff: number | null;
+  /** 다중 월 조회일 때만 채워진다(단일 월은 빈 배열). */
+  months: FeeMonth[];
+  /**
+   * 서버(SQL)가 확정한 평균 총액. 요청한 달이 하나라도 비면 null 이고, 그때 화면은 평균을
+   * 그리지 않는다 — 프론트가 대신 나누지 않는다(규칙 5).
+   */
+  averageTotal: number | null;
+  /** 관리비 내역이 없어 평균에서 빠진 달. */
+  missingPeriods: string[];
+  /** 입주 승인 이전이라 조회에서 빠진 달. */
+  excludedPeriods: string[];
 }
 
 export interface ParkingSpot {
@@ -88,6 +105,8 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const numOrNull = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
+const strings = (v: unknown): string[] =>
+  Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : [];
 
 /**
  * `citation.data` → 렌더 가능한 구조화 블록. 알 수 없는 형태·kind 는 null(= 텍스트 인용만).
@@ -102,9 +121,16 @@ export function toStructured(data: unknown): StructuredData | null {
         kind: "fee_table",
         period: str(raw.period),
         rows: asRows(raw.rows).map((r) => ({ name: str(r.name), amount: num(r.amount) })),
-        total: num(raw.total),
+        total: numOrNull(raw.total),
         prevTotal: numOrNull(raw.prev_total),
         diff: numOrNull(raw.diff),
+        months: asRows(raw.months).map((m) => ({
+          period: str(m.period),
+          total: num(m.total),
+        })),
+        averageTotal: numOrNull(raw.average_total),
+        missingPeriods: strings(raw.missing_periods),
+        excludedPeriods: strings(raw.excluded_periods),
       };
     case "parking_spots":
       return {
