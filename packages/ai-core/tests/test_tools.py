@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import httpx
 from conftest import FakeSession, row
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.config import AiCoreSettings
@@ -331,6 +332,111 @@ async def test_get_fees_before_approval_is_blocked(settings: AiCoreSettings) -> 
     ).result
     assert result.card is None
     assert "조회할 수 없습니다" in result.note
+
+
+# ── get_fees 여러 달 조회·평균 (2026-08-01 사고 회귀) ───────────────────
+
+
+def _multi_fee_handler(
+    totals: dict[str, int], *, approved: datetime = datetime(2020, 1, 1, tzinfo=UTC)
+) -> Any:
+    """요청 월 중 totals에 있는 달만 행으로 돌려주는 가짜 세션.
+
+    avg_total은 실제로는 SQL 윈도우 집계(`avg(...) OVER ()`)가 내는 값이라, 가짜 세션이
+    그 자리를 대신 채운다 — 도구 코드는 이 값을 그대로 싣기만 해야 한다(파이썬 산술 금지).
+    """
+
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        s = sql.lower()
+        if "from users" in s:
+            return [row(household_id=HOUSEHOLD, approved_at=approved)]
+        if "any(:periods)" in s:
+            found = [p for p in params["periods"] if p in totals]
+            avg = round(sum(totals[p] for p in found) / len(found)) if found else None
+            return [row(period=p, total_amount=totals[p], avg_total=avg) for p in found]
+        return []
+
+    return handler
+
+
+async def _multi_fee_result(settings: AiCoreSettings, handler: Any, period: str) -> Any:
+    return (
+        await execute_tool(
+            _call("get_fees", {"period": period}),
+            ctx=CTX_RESIDENT,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+
+
+async def test_get_fees_multi_month_average_is_confirmed_by_the_tool(
+    settings: AiCoreSettings,
+) -> None:
+    """여러 달을 물으면 도구가 평균을 확정해 카드에 담는다 — 모델이 나눌 거리가 없다.
+
+    사고 재현: 단일 월만 받던 시절 "6,7월 평균"에 모델이 7월 값 하나를 2로 나눠 답했다.
+    """
+    handler = _multi_fee_handler({"2026-06": 100_000, "2026-07": 120_000})
+    result = await _multi_fee_result(settings, handler, "2026-06,2026-07")
+    assert result.card is not None
+    assert "2026-06 합계 100,000원" in result.card.quote
+    assert "2026-07 합계 120,000원" in result.card.quote
+    assert "2개월 평균 총액 110,000원" in result.card.quote
+    assert result.card.data is not None
+    assert result.card.data["months"] == [
+        {"period": "2026-06", "total": 100_000},
+        {"period": "2026-07", "total": 120_000},
+    ]
+    assert result.card.data["average_total"] == 110_000
+    # 평균을 "합계" 칸에 넣지 않는다 — 화면이 total을 합계로 읽는다.
+    assert result.card.data["total"] is None
+
+
+async def test_get_fees_multi_month_refuses_average_when_a_month_is_missing(
+    settings: AiCoreSettings,
+) -> None:
+    """요청한 달이 하나라도 비면 평균을 내지 않고, 뭐가 없는지 카드에 밝힌다."""
+    handler = _multi_fee_handler({"2026-07": 120_000})  # 6월 데이터 없음
+    result = await _multi_fee_result(settings, handler, "2026-06,2026-07")
+    assert result.card is not None
+    assert "평균 총액" not in result.card.quote
+    assert "2026-06 관리비 내역이 없어 평균을 내지 않았습니다" in result.card.quote
+    assert result.card.data is not None
+    assert result.card.data["average_total"] is None
+    assert result.card.data["missing_periods"] == ["2026-06"]
+
+
+async def test_get_fees_multi_month_excludes_pre_approval_month_and_says_so(
+    settings: AiCoreSettings,
+) -> None:
+    """승인 이전 달은 빼되(FR-FEE-03) 조용히 빼지 않는다 — 뺀 사실이 카드에 남는다."""
+    handler = _multi_fee_handler(
+        {"2026-06": 100_000, "2026-07": 120_000},
+        approved=datetime(2026, 7, 1, tzinfo=UTC),
+    )
+    result = await _multi_fee_result(settings, handler, "2026-06,2026-07")
+    assert result.card is not None
+    assert "2026-06는 입주 승인 이전이라 제외했습니다" in result.card.quote
+    assert "평균 총액" not in result.card.quote  # 한 달만 남으면 평균이 아니다
+    assert result.card.data is not None
+    assert result.card.data["excluded_periods"] == ["2026-06"]
+    assert result.card.data["months"] == [{"period": "2026-07", "total": 120_000}]
+
+
+async def test_get_fees_multi_month_all_before_approval_returns_note(
+    settings: AiCoreSettings,
+) -> None:
+    handler = _multi_fee_handler({"2026-06": 100_000}, approved=datetime(2026, 12, 1, tzinfo=UTC))
+    result = await _multi_fee_result(settings, handler, "2026-06,2026-07")
+    assert result.card is None
+    assert "입주 승인 이전" in result.note
+
+
+async def test_get_fees_multi_month_no_data_returns_note(settings: AiCoreSettings) -> None:
+    result = await _multi_fee_result(settings, _multi_fee_handler({}), "2026-06,2026-07")
+    assert result.card is None
+    assert "관리비 내역이 없습니다" in result.note
 
 
 # ── get_fees 같은 평형 평균 비교 (ADR-0026 결정 3) ──────────────────────
@@ -691,3 +797,17 @@ async def test_search_facility_graph_no_hits_returns_note(settings: AiCoreSettin
 def test_get_fees_args_optional_period() -> None:
     assert GetFeesArgs.model_validate({}).period is None
     assert GetFeesArgs(period="2026-06").period == "2026-06"
+    assert GetFeesArgs.model_validate({}).requested_periods() == []
+    assert GetFeesArgs(period="2026-06").requested_periods() == ["2026-06"]
+
+
+def test_get_fees_args_accept_comma_separated_months() -> None:
+    """여러 달은 쉼표로 — 중복은 합치고 오름차순으로 정규화한다(공백 허용)."""
+    assert GetFeesArgs(period="2026-07, 2026-06").requested_periods() == ["2026-06", "2026-07"]
+    assert GetFeesArgs(period="2026-06,2026-06").requested_periods() == ["2026-06"]
+    for bad in ("2026/06", "2026-06;2026-07", "6월"):
+        try:
+            GetFeesArgs(period=bad)
+        except ValidationError:
+            continue
+        raise AssertionError(f"형식 검증이 통과하면 안 됨: {bad}")

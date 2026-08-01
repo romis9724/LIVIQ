@@ -35,7 +35,9 @@ export function StructuredBlock({ data }: { data: StructuredData }) {
 }
 
 function FeeTable({ data }: { data: FeeTableData }) {
-  if (data.rows.length === 0) return null;
+  // 다중 월 조회는 월별 표 + 평균 — 항목표는 월마다 갈라져 한 표로 못 합친다.
+  if (data.months.length > 0) return <FeeMonths data={data} />;
+  if (data.rows.length === 0 || data.total === null) return null;
   // 증감은 색만으로 전하지 않는다 — "늘었어요/줄었어요"를 글자로 함께 쓴다(WCAG 1.4.1).
   const trend =
     data.diff === null ? null : data.diff >= 0 ? "늘었어요" : "줄었어요";
@@ -72,6 +74,56 @@ function FeeTable({ data }: { data: FeeTableData }) {
       {data.prevTotal !== null && data.diff !== null ? (
         <p className="sb__note">
           전월 {won(data.prevTotal)} 대비 {won(Math.abs(data.diff))} {trend}
+        </p>
+      ) : null}
+    </figure>
+  );
+}
+
+/**
+ * 여러 달 관리비 — 월별 합계와 **서버가 낸 평균**. 평균이 null 이면 줄을 그리지 않는다.
+ * 여기서 나눗셈을 하면 AI 가 하던 계산을 프론트가 대신하는 것뿐이다(규칙 5).
+ */
+function FeeMonths({ data }: { data: FeeTableData }) {
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">{data.period} 관리비</figcaption>
+      <div className="sb__scroll" tabIndex={0} role="group" aria-label="월별 관리비 표">
+        <table className="sb__table">
+          <thead>
+            <tr>
+              <th scope="col">월</th>
+              <th scope="col" className="sb__num">
+                합계
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.months.map((month) => (
+              <tr key={month.period}>
+                <th scope="row">{month.period}</th>
+                <td className="sb__num">{won(month.total)}</td>
+              </tr>
+            ))}
+          </tbody>
+          {data.averageTotal !== null ? (
+            <tfoot>
+              <tr>
+                <th scope="row">{data.months.length}개월 평균</th>
+                <td className="sb__num">{won(data.averageTotal)}</td>
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+      {data.missingPeriods.length > 0 ? (
+        <p className="sb__note">
+          {data.missingPeriods.join(", ")} 관리비 내역이 없어 평균을 내지 않았어요
+        </p>
+      ) : null}
+      {data.excludedPeriods.length > 0 ? (
+        <p className="sb__note">
+          {data.excludedPeriods.join(", ")}은(는) 입주 승인 이전이라 제외했어요
         </p>
       ) : null}
     </figure>

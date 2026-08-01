@@ -108,10 +108,14 @@ async def _ask_clarification(ctx: ToolContext, deps: ToolDeps, args: BaseModel) 
 def ask_clarification_tool() -> Tool:
     return Tool(
         name=CLARIFY_TOOL_NAME,
+        # 배제 어휘를 명시한 이유(H19-5 R31): 도구 15종 확장 후 규약·위치처럼 조회로 답이
+        # 정해지는 질문이 이 도구로 새는 도피가 재현됐다(3회 전부 10.4%) — 실측에서 샌
+        # 카테고리를 설명에 박아 경계를 되세운다(H17-1 관례).
         description=(
             "질문이 가리키는 대상이 둘 이상으로 갈려 어느 쪽인지 정하지 못할 때만 쓴다. "
             "무엇을 특정해야 하는지 항목 이름만 지정한다 — 되물을 문장은 시스템이 만든다. "
-            "조회해 보면 답이 정해지는 질문에는 쓰지 않는다 — 먼저 다른 도구로 찾아본다."
+            "조회해 보면 답이 정해지는 질문에는 절대 쓰지 않는다 — 규정·규약 내용, 기기 위치, "
+            "일정·요금처럼 문서나 데이터에 답이 있는 질문은 먼저 다른 도구로 찾아본다."
         ),
         args_model=ClarificationArgs,
         run=_ask_clarification,
