@@ -33,6 +33,7 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   plan-device:<라벨>              세대 평면도 기기 (household_ref 바인딩 필수)
   parking:nearest[:ev]            본인 동 최근접 빈 주차 면 (household_ref 필수, :ev면 전기차 선호)
   similar-inquiries               유사 민원 처리 사례 (user_ref 필수, 질의는 turn_1 원문)
+  notices:<제목1>|<제목2>         여러 공지에 걸친 사실 — 합친 본문으로 대조·인용 다중
   clarify:<특정해야 할 것>        모호한 질의 — 되묻기가 정답 (예: clarify:대상 설비)
   fallback:absent                 코퍼스 부재 — 폴백이 정답
   isolation:cross-tenant          타 단지 질문 차단 — 폴백/거부가 정답
@@ -734,6 +735,46 @@ async def resolve_notice(
     )
 
 
+async def resolve_notices(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """notices:<제목1>|<제목2>|… — 여러 공지에 걸친 사실(날짜순 일정 등)의 다중 인용 라벨.
+
+    단수 resolve_notice는 본문 1건에만 사실을 대조해 3건짜리 사실을 무조건 거부한다.
+    여기서는 합친 본문으로 대조하고 인용을 `|`로 잇는다(rag500-cases.mjs
+    splitCitationGroups의 구분자). 채점은 현재 notice 인용을 search_documents 호출
+    여부로 관대 판정하므로(rag500-score.mjs judgeCitationsV2) id 다중은 노트 표기용이다.
+    """
+    titles = [t.strip() for t in ":".join(args).split("|") if t.strip()]
+    if not titles:
+        return _error("notices는 제목 1건 이상 필수 (예: notices:제목1|제목2)")
+    rows: list[asyncpg.Record] = []
+    for title in titles:
+        row = await conn.fetchrow(
+            "SELECT id, title, body FROM notices"
+            " WHERE tenant_id = $1 AND normalize(title, NFC) = normalize($2, NFC)"
+            " AND deleted_at IS NULL",
+            tid,
+            title,
+        )
+        if row is None:
+            return _error(f"공지 없음: {title}")
+        rows.append(row)
+    merged_body = "\n".join(r["body"] or "" for r in rows)
+    errors = _check_facts_grounded(case.get("expected_facts", ""), merged_body)
+    ids = [str(r["id"]) for r in rows]
+    return Label(
+        expected_facts=case.get("expected_facts", ""),
+        expected_citations="|".join(f"notice:{i}" for i in ids),
+        expected_tool="search_documents",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of="",
+        label_source_resolved=f"notices ids={','.join(ids)}",
+        errors=errors,
+    )
+
+
 async def resolve_injection(
     conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
 ) -> Label:
@@ -833,6 +874,7 @@ RESOLVERS = {
     "fallback": resolve_fallback,
     "isolation": resolve_isolation,
     "notice": resolve_notice,
+    "notices": resolve_notices,
     "injection": resolve_injection,
 }
 
