@@ -24,7 +24,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ai_core.backend_config import CONFIG_ROW_ID
 from ai_core.config import AiCoreSettings
 from ai_core.llm.client import LlmClient
-from liviq_db.models import AiBackendConfig, Building, Citation, Fee, Household, Tenant, User
+from ai_core.tools.library import MIN_PEER_SAMPLE
+from liviq_db.models import (
+    AiBackendConfig,
+    Building,
+    Citation,
+    Fee,
+    Household,
+    HouseholdGeometry,
+    Tenant,
+    User,
+)
 
 HOUSEHOLD_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
@@ -197,6 +207,173 @@ async def test_tool_citation_carries_structured_data(fee_client: httpx.AsyncClie
         "prev_total": None,  # 2026-05 행 없음
         "diff": None,
     }
+
+
+# ── 같은 평형 평균 비교 (H19-4 ①, ADR-0026 결정 3 — 실 PG 집계) ──────────────
+
+_UNIT_LABEL = "84M(공공임대)"
+_OTHER_LABEL = "59C(공공임대)"
+_OTHER_TENANT_ID = uuid.UUID("77777777-7777-7777-7777-777777777777")
+
+
+async def _add_geometry(session: AsyncSession, household_id: uuid.UUID, label: str) -> None:
+    session.add(
+        HouseholdGeometry(
+            tenant_id=TENANT_ID,
+            household_id=household_id,
+            polygon_2d=[],
+            polygon_3d=[],
+            base_z=0,
+            floor_height=3,
+            unit_type_label=label,
+        )
+    )
+    await session.flush()
+
+
+async def _seed_peer_group(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    building_id: uuid.UUID,
+    label: str,
+    amounts: list[int],
+    floor: int,
+) -> None:
+    """같은 평형 라벨을 가진 세대 + 2026-06 관리비를 amounts 만큼 만든다."""
+    for index, amount in enumerate(amounts):
+        household = Household(
+            tenant_id=tenant_id,
+            building_id=building_id,
+            floor=floor,
+            unit_no=index + 1,
+            status="active",
+        )
+        session.add(household)
+        await session.flush()
+        session.add(
+            HouseholdGeometry(
+                tenant_id=tenant_id,
+                household_id=household.id,
+                polygon_2d=[],
+                polygon_3d=[],
+                base_z=0,
+                floor_height=3,
+                unit_type_label=label,
+            )
+        )
+        session.add(
+            Fee(
+                tenant_id=tenant_id,
+                household_id=household.id,
+                period="2026-06",
+                breakdown=[],
+                total_amount=amount,
+                source="excel",
+            )
+        )
+    await session.flush()
+
+
+async def _seed_other_tenant_peers(session: AsyncSession) -> None:
+    """타 단지의 같은 평형 세대 — 집계에 절대 섞이면 안 된다(규칙 3)."""
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(_OTHER_TENANT_ID))
+    )
+    session.add(Tenant(id=_OTHER_TENANT_ID, name="단지B", status="active"))
+    await session.flush()
+    building = Building(tenant_id=_OTHER_TENANT_ID, name="901", floors=15)
+    session.add(building)
+    await session.flush()
+    await _seed_peer_group(
+        session,
+        tenant_id=_OTHER_TENANT_ID,
+        building_id=building.id,
+        label=_UNIT_LABEL,
+        amounts=[9_000_000] * 12,
+        floor=7,
+    )
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(TENANT_ID))
+    )
+
+
+async def _fee_citation(db_session: AsyncSession) -> dict[str, object]:
+    async with _client(db_session, _fee_agent_llm()) as client:
+        response = await client.post("/assistant/ask", json={"question": "관리비 비교해줘"})
+    citation = [data for name, data in _parse_sse(response.text) if name == "citation"][0]
+    return citation["data"]  # type: ignore[return-value]
+
+
+async def test_peer_average_aggregates_same_unit_type_in_own_tenant_only(
+    db_session: AsyncSession,
+) -> None:
+    """평균은 같은 단지·같은 평형만 — 타 평형·타 단지 금액은 섞이지 않는다.
+
+    본인 100,000 + 같은 평형 9세대 90,000 = 10세대 평균 91,000(SQL AVG 값 그대로).
+    """
+    await _seed_fee(db_session)
+    await _add_geometry(db_session, HOUSEHOLD_ID, _UNIT_LABEL)
+    await _seed_peer_group(
+        db_session,
+        tenant_id=TENANT_ID,
+        building_id=BUILDING_ID,
+        label=_UNIT_LABEL,
+        amounts=[90_000] * 9,
+        floor=5,
+    )
+    await _seed_peer_group(
+        db_session,
+        tenant_id=TENANT_ID,
+        building_id=BUILDING_ID,
+        label=_OTHER_LABEL,
+        amounts=[500_000] * 12,
+        floor=6,
+    )
+    await _seed_other_tenant_peers(db_session)
+
+    data = await _fee_citation(db_session)
+    assert data["peer"] == {
+        "unit_type": "84M",  # 라벨 접두만(seed_fees_demo와 같은 규칙)
+        "avg_total": 91_000,
+        "sample_size": 10,
+        "diff": 9_000,
+    }
+
+
+async def test_peer_average_omitted_below_min_sample(db_session: AsyncSession) -> None:
+    """표본 하한 미달이면 비교를 거부하고 본인 세대 값만 답한다(소표본 역산 방지)."""
+    await _seed_fee(db_session)
+    await _add_geometry(db_session, HOUSEHOLD_ID, _UNIT_LABEL)
+    await _seed_peer_group(
+        db_session,
+        tenant_id=TENANT_ID,
+        building_id=BUILDING_ID,
+        label=_UNIT_LABEL,
+        amounts=[90_000] * (MIN_PEER_SAMPLE - 2),  # 본인 포함 하한 -1
+        floor=5,
+    )
+
+    data = await _fee_citation(db_session)
+    assert "peer" not in data
+    assert data["total"] == 100_000  # 본인 값은 정상 반환
+
+
+async def test_peer_average_omitted_without_geometry(db_session: AsyncSession) -> None:
+    """본인 세대 평형 미상이면 비교만 생략 — 폴백이 아니다."""
+    await _seed_fee(db_session)
+    await _seed_peer_group(
+        db_session,
+        tenant_id=TENANT_ID,
+        building_id=BUILDING_ID,
+        label=_UNIT_LABEL,
+        amounts=[90_000] * 12,
+        floor=5,
+    )
+
+    data = await _fee_citation(db_session)
+    assert "peer" not in data
+    assert data["total"] == 100_000
 
 
 async def test_tool_path_does_not_mutate_domain_data(
