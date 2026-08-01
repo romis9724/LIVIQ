@@ -146,6 +146,18 @@ export function answerKind(message: {
   return message.result?.status === "answered" ? "answered" : "fallback";
 }
 
+/**
+ * GET /assistant/conversations/latest — 본인의 최근 대화(없으면 빈 응답).
+ * 형태 검증은 하지 않고 raw JSON 을 그대로 넘긴다 — 검증·매핑은 `restore.ts` 가 한다.
+ */
+export async function fetchLatestThread(): Promise<unknown> {
+  const response = await apiFetch(`${API_BASE_URL}/assistant/conversations/latest`, {
+    headers: DEV_HEADERS,
+  });
+  if (!response.ok) throw new Error(`대화 복원 실패: ${response.status}`);
+  return response.json();
+}
+
 export interface AskOptions {
   conversationId?: string | null;
   signal?: AbortSignal;

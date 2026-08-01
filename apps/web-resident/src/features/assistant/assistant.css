@@ -40,6 +40,11 @@
   font-size: 0.78rem;
   color: var(--color-text-muted);
 }
+/* 헤더 오른쪽 끝으로 — 제목과 겹치지 않게 줄이지 않는다. */
+.assistant__new {
+  margin-left: auto;
+  flex: none;
+}
 
 .assistant__thread {
   flex: 1;

@@ -49,7 +49,7 @@ function questionBefore(messages: readonly ChatMessage[], index: number): string
 }
 
 export function AssistantChat() {
-  const { messages, ask, pending } = useAssistantStream();
+  const { messages, ask, pending, startNew } = useAssistantStream();
   const [draft, setDraft] = useState("");
   // 헤더 부제용 소속 단지명. 실패하면 단지명 없이 기본 문구만.
   const [tenantName, setTenantName] = useState<string | null>(null);
@@ -95,6 +95,18 @@ export function AssistantChat() {
           {/* 부제는 소속 단지명만. 로드 실패하면 아무것도 쓰지 않는다(빈 줄만 남기지 않도록). */}
           {tenantName ? <span className="assistant__sub">{tenantName}</span> : null}
         </span>
+        {/* 대화가 서버에 남아 자동 복원되므로(ADR-0027) 끊고 시작할 수단이 필요하다.
+            빈 화면에서는 지울 것이 없어 숨긴다. */}
+        {isEmpty ? null : (
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm assistant__new"
+            onClick={startNew}
+            disabled={pending}
+          >
+            새 대화
+          </button>
+        )}
       </header>
 
       <div className="assistant__thread" ref={threadRef} aria-live="polite">

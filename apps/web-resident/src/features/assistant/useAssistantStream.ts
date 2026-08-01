@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type Citation, type DoneResult, type Stage, streamAsk } from "./api";
+import { type Citation, type DoneResult, type Stage, fetchLatestThread, streamAsk } from "./api";
 import { appendProgress } from "./progress";
-import { persistableMessages, readThread, writeThread } from "./session-store";
+import { parseLatestThread } from "./restore";
+import { clearThread, persistableMessages, readThread, writeThread } from "./session-store";
 
 export interface AiMessage {
   id: string;
@@ -41,13 +42,31 @@ export function useAssistantStream() {
 
   // 탭 저장소에서 직전 대화 복원(주차맵 등에서 뒤로가기). useState 초기값이 아니라 effect 인
   // 이유는 SSR 프리렌더에는 sessionStorage 가 없어서다 — 초기값으로 읽으면 hydration 불일치.
+  // 저장된 적이 없을 때(null — 새 탭·브라우저 재시작)만 서버에서 최근 대화를 가져온다 —
+  // 2차 폴백(ADR-0027 결정 1). 빈 스레드가 **저장돼 있으면** "새 대화" 마커라 서버 복원을
+  // 건너뛴다. 실패는 조용히 빈 대화: 복원은 편의 기능이고 화면을 막으면 안 된다.
   useEffect(() => {
     const thread = readThread();
-    if (thread.messages.length === 0) return;
-    conversationId.current = thread.conversationId;
-    // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
-    seq = Math.max(seq, thread.messages.length);
-    setMessages(thread.messages);
+    if (thread !== null) {
+      if (thread.messages.length === 0) return; // 새 대화 마커 — 옛 대화를 되살리지 않는다
+      conversationId.current = thread.conversationId;
+      // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
+      seq = Math.max(seq, thread.messages.length);
+      setMessages(thread.messages);
+      return;
+    }
+    let alive = true;
+    fetchLatestThread()
+      .then((raw) => {
+        const restored = parseLatestThread(raw);
+        if (!alive || restored.messages.length === 0) return;
+        conversationId.current = restored.conversationId;
+        setMessages(restored.messages);
+      })
+      .catch(() => {}); // 네트워크·비로그인 — 빈 대화로 시작한다
+    return () => {
+      alive = false;
+    };
   }, []);
 
   // 완료된 메시지만 저장. 빈 대화는 저장하지 않는다 — 마운트 직후 복원 전 스냅샷이
@@ -144,5 +163,15 @@ export function useAssistantStream() {
     [pending, updateAi],
   );
 
-  return { messages, ask, pending };
+  /** 새 대화 — 화면·대화 id·탭 저장본을 비운다. 서버 대화는 삭제하지 않는다(ADR-0027 결정 1). */
+  const startNew = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setPending(false);
+    setMessages([]);
+    conversationId.current = null;
+    clearThread();
+  }, []);
+
+  return { messages, ask, pending, startNew };
 }
