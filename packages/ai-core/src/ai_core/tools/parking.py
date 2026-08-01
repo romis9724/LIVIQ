@@ -10,6 +10,9 @@
 
 세대·tenant는 ToolContext에서 오며 LLM 인자로 받지 않는다(규칙 3·4 — get_fees와 동일).
 점유는 데모 데이터이므로 답변에 그 사실을 명시한다(규칙 1 — 출처=parking_vehicles).
+
+관리자용 장기주차 조회(`find_longterm_parking`, H19-3)는 같은 테이블을 읽지만 FACILITY_ROLES
+도구라 library.py에 있다(FACILITY_ROLES가 library에 있어 여기서 import하면 순환).
 """
 
 from __future__ import annotations

@@ -84,6 +84,9 @@ TOOL_ROLES: dict[str, frozenset[str]] = {
     "find_nearest_available_parking": frozenset({"RESIDENT"}),
     "search_similar_inquiries": frozenset({"RESIDENT"}),  # H17-1, ADR-0024
     "get_recent_notices": _ALL_ROLES,  # 최근 공지 목록 — 공지는 전 역할이 본다 (H18)
+    # H19-3, ADR-0026 결정 2 — 관리자 운영 도구 2종.
+    "find_longterm_parking": frozenset({"FACILITY", "MANAGER"}),
+    "summarize_inquiries": frozenset({"MANAGER", "STAFF"}),
     "ask_clarification": _ALL_ROLES,  # 되묻기 특수 도구 — H18-1, ADR-0025 §4
 }
 
