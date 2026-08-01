@@ -8,6 +8,7 @@ import type { Facility, FacilityDetail } from "@/lib/api";
 const listFacilities = vi.fn();
 const createFacility = vi.fn();
 const getFacility = vi.fn();
+const createIncident = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
@@ -15,7 +16,7 @@ vi.mock("@/lib/api", () => ({
   createFacility: (input: unknown) => createFacility(input),
   getFacility: (id: string) => getFacility(id),
   patchFacility: vi.fn(),
-  createIncident: vi.fn(),
+  createIncident: (id: string, input: unknown) => createIncident(id, input),
   createMaintenance: vi.fn(),
 }));
 
@@ -84,5 +85,44 @@ describe("FacilityManager 목록 응답 순서", () => {
 
     expect(screen.getByText(created.name)).toBeDefined();
     expect(screen.queryByText("시설이 없습니다")).toBeNull();
+  });
+});
+
+describe("FacilityManager 장애 기록", () => {
+  // E2E(admin-facilities.spec.ts)가 검증하던 계약을 단위로 내린다 — 토스트는 뜨는데 이력이
+  // 비어 있던 CI 간헐 실패는 진단 비용이 크다. "기록 후 상세를 재조회해 이력에 반영"이
+  // 깨지면 여기서 즉시 잡힌다.
+  it("장애를 기록하면 상세를 재조회해 장애 이력에 반영한다", async () => {
+    const item = facility("E2E 승강기", "f-1");
+    const symptom = "운행 중 덜컹 소음이 발생합니다.";
+    listFacilities.mockResolvedValue([item]);
+    createIncident.mockResolvedValue({ id: "i-1" });
+    // 2회차 상세 조회(기록 직후)부터 이력이 채워진 응답을 준다.
+    getFacility
+      .mockResolvedValueOnce(detailOf(item))
+      .mockResolvedValue({
+        ...detailOf(item),
+        incidents: [
+          {
+            id: "i-1",
+            occurredAt: "2026-07-27T10:00:00Z",
+            symptom,
+            resolution: null,
+            rootCause: null,
+          },
+        ],
+      });
+
+    render(<FacilityManager />);
+    await screen.findByText("장애 이력");
+
+    fireEvent.click(screen.getByRole("button", { name: "장애 기록" }));
+    fireEvent.change(screen.getByLabelText("증상"), { target: { value: symptom } });
+    // testing-library의 name은 기본 완전일치 — 상세 패널의 "장애 기록" 버튼과 섞이지 않는다.
+    fireEvent.click(screen.getByRole("button", { name: "기록" }));
+
+    await waitFor(() => expect(screen.getByText("장애를 기록했습니다.")).toBeDefined());
+    expect(createIncident).toHaveBeenCalledWith("f-1", expect.objectContaining({ symptom }));
+    expect(screen.getByText(symptom)).toBeDefined();
   });
 });

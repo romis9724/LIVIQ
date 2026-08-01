@@ -172,6 +172,23 @@ async function completeOnboarding(page: Page, person: Applicant): Promise<void> 
   await expect(page.getByText("관리소장 승인을 기다리고 있어요")).toBeVisible();
 }
 
+/**
+ * 주민 관리 → 회원 대기자 명단 모달 열기.
+ *
+ * 대기자 목록·빈 상태는 페이지 하단 상시 섹션이 아니라 '승인 대기' 카드의 [대기자 명단] 버튼으로
+ * 여는 모달 안에서만 렌더된다(H14 83ea9ef, Residents.tsx `queueOpen`). 클릭은 네트워크 요청을
+ * 만들지 않으므로 요청이 아니라 **모달 등장**으로 판정하고, 하이드레이션 경합은 toPass 재시도로
+ * 흡수한다(고정 sleep 없음 — 파일 헤더의 결정론 규율).
+ */
+async function openApprovalQueue(page: Page): Promise<void> {
+  await page.goto(`${ADMIN}/residents`);
+  const queue = page.getByRole("dialog", { name: "회원 대기자 명단" });
+  await expect(async () => {
+    await page.getByRole("button", { name: "대기자 명단" }).click();
+    await expect(queue).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 60_000 });
+}
+
 /** UI로 생성한 여정 단지의 id — 정리 로직이 중복을 막으므로 정확히 1건이어야 한다. */
 async function tenantIdByName(pg: Client, name: string): Promise<string> {
   const { rows } = await pg.query<{ id: string }>(`SELECT id FROM tenants WHERE name = $1`, [name]);
@@ -295,9 +312,15 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     expect(staffInvited.status(), "직원 초대가 202여야 함").toBe(202);
     await expect(mgrPage.getByText("초대됨")).toBeVisible();
 
-    // 명부 업로드(신규 1건 — 김입주/101동 3층 301호).
-    await mgrPage.goto(`${ADMIN}/residents`);
+    // 명부 업로드 전 대기 큐가 비어 있음을 확인(신규 1건 — 김입주/101동 3층 301호).
+    await openApprovalQueue(mgrPage);
     await expect(mgrPage.getByText("대기 중인 가입 신청이 없습니다")).toBeVisible();
+    // 모달을 닫아야 뒤 단계가 본문(업로드 패널)을 그대로 쓴다.
+    await mgrPage
+      .getByRole("dialog", { name: "회원 대기자 명단" })
+      .getByRole("button", { name: "닫기" })
+      .click();
+
     await mgrPage.setInputFiles('input[type="file"]', ROSTER_XLSX);
     await expect(mgrPage.getByText("신규 등록 1")).toBeVisible();
   });
@@ -317,7 +340,7 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
   });
 
   test("소장이 명부 일치를 승인하면 주민이 홈에 진입한다", async () => {
-    await mgrPage.goto(`${ADMIN}/residents`);
+    await openApprovalQueue(mgrPage);
     const matchedCard = mgrPage
       .locator(".apv-card")
       .filter({ hasText: maskName(ROSTER_PERSON.name) });
@@ -351,7 +374,7 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     );
     await completeOnboarding(mismatch, MISMATCH_PERSON);
 
-    await mgrPage.goto(`${ADMIN}/residents`);
+    await openApprovalQueue(mgrPage);
     const mismatchCard = mgrPage
       .locator(".apv-card")
       .filter({ hasText: maskName(MISMATCH_PERSON.name) });
