@@ -801,6 +801,13 @@ def test_get_fees_args_optional_period() -> None:
     assert GetFeesArgs(period="2026-06").requested_periods() == ["2026-06"]
 
 
+def test_get_fees_args_null_literal_means_omitted() -> None:
+    """8B가 "생략"을 문자열 "null"로 넘긴다(2026-08-01 로컬 실측 — 패턴 검증 실패로
+    카드 0 → no_evidence 폴백). 리터럴 null/none/빈 문자열은 미지정으로 접는다."""
+    for literal in ("null", "None", "NULL", "", "  "):
+        assert GetFeesArgs.model_validate({"period": literal}).period is None
+
+
 def test_get_fees_args_accept_comma_separated_months() -> None:
     """여러 달은 쉼표로 — 중복은 합치고 오름차순으로 정규화한다(공백 허용)."""
     assert GetFeesArgs(period="2026-07, 2026-06").requested_periods() == ["2026-06", "2026-07"]

@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import datetime
 from collections.abc import Sequence
 
 from ai_core.rag.retrieval import RetrievedChunk
@@ -35,6 +36,22 @@ AGENT_SYSTEM_PROMPT = """당신은 아파트 관리사무소의 AI 도우미입�
 이상으로 갈려 어느 쪽인지 정할 수 없을 때에 한해 되묻되, 문장을 쓰지 말고
 기간·동호수·대상 설비처럼 무엇을 정해야 하는지 항목 이름만 지정하십시오.
 도구 없이 추측하거나 지어내지 마십시오."""
+
+
+def agent_system_prompt(today: datetime.date) -> str:
+    """결정 turn 시스템 프롬프트 + 오늘 날짜.
+
+    모델은 오늘을 모른다(학습 컷오프) — 날짜가 없으면 "이번 달"·"8월"처럼 연도 없는
+    시점 표현을 엉뚱한 연도의 YYYY-MM으로 옮겨 존재하지 않는 월을 조회하고 폴백으로
+    샌다(2026-08-01 실측: "8월 관리비"에 get_fees 4회 공회전 → no_evidence, 연도를
+    붙여 물으면 정답). R23의 "상대날짜→period 매핑 실패 22%"의 뿌리가 이것이다.
+    날짜는 일 단위 문자열이라 같은 날의 프롬프트는 동일 — 프리픽스 캐시는 하루
+    단위로만 갈린다(캐시 접두부 원칙은 모듈 docstring).
+    """
+    return (
+        f"{AGENT_SYSTEM_PROMPT}\n오늘은 {today.isoformat()}입니다. "
+        "'이번 달'이나 '8월'처럼 연도가 없는 시점 표현은 이 날짜를 기준으로 해석하십시오."
+    )
 
 # 도구 결과(문서 근거 + 확정 데이터)를 근거로 최종 답변을 생성하는 turn용 프롬프트.
 # 규칙 4는 **분량이 아니라 형식** 지시다(H18-4, ADR-0025 §8) — "2~4문장" 상한은 구조화·다단계
