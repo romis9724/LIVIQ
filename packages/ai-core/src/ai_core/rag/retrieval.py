@@ -45,6 +45,7 @@ class Retriever(Protocol):
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
         top_k: int = DEFAULT_TOP_K,
+        building_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]: ...
 
 
@@ -66,7 +67,10 @@ _SEARCH_SQL = text(
         OR
         (c.source_type = 'notice'
            AND n.status = 'published'
-           AND n.deleted_at IS NULL)
+           AND n.deleted_at IS NULL
+           AND (CAST(:building_id AS text) IS NULL
+                OR jsonb_typeof(n.target_buildings) IS DISTINCT FROM 'array'
+                OR n.target_buildings @> to_jsonb(CAST(:building_id AS text))))
       )
     ORDER BY c.embedding <=> CAST(:query_embedding AS vector)
     LIMIT :top_k
@@ -75,6 +79,17 @@ _SEARCH_SQL = text(
 # 문서·공지 다형 검색(H8-3): document는 visibility 조인, notice는 published·미삭제 조인으로
 # 미발행 공지 청크를 원천 배제(인제스트 published-only와 함께 이중 방어, CRITICAL). notice
 # 청크는 document_id NULL → title은 notices.title로 COALESCE.
+#
+# 대상 동 필터(H19-1, ADR-0026 결정 1): 승강기·저수조 점검처럼 동별로 쪼개진 공지는 본문이
+# 거의 같아 유사도로 구분되지 않는다 — 401동 입주민에게 403동 일정이 근거로 붙는 것을 막는다.
+# 세 갈래를 SQL 안에서 처리한다: building_id 미상(관리자·비입주민)은 필터 미적용 ·
+# 전체동 공지는 항상 통과 · 그 외는 building id 스칼라 포함 검사.
+# 전체동 판정에 `IS NULL`이 아니라 `jsonb_typeof <> 'array'`를 쓰는 이유: 작성 경로(routers/
+# notices.py·seed_demo.py)가 파이썬 None을 그대로 넣고, JSONB 컬럼은 그것을 **SQL NULL이
+# 아니라 jsonb 'null'**로 저장한다(SQLAlchemy none_as_null 기본값). 두 형태가 섞여 있으므로
+# 배열이 아닌 값 전부를 전체동으로 본다.
+# 바인딩은 UUID가 아니라 text로 캐스팅한다 — target_buildings는 id **문자열** 배열이라
+# jsonb 스칼라 비교도 문자열이어야 맞는다.
 
 
 class PgVectorRetriever:
@@ -95,6 +110,7 @@ class PgVectorRetriever:
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
         top_k: int | None = None,
+        building_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         result = await self._session.execute(
             _SEARCH_SQL,
@@ -105,6 +121,7 @@ class PgVectorRetriever:
                 "tenant_id": tenant_id,
                 "visibilities": list(visibilities),
                 "top_k": top_k or self._default_top_k,
+                "building_id": str(building_id) if building_id else None,
             },
         )
         return [

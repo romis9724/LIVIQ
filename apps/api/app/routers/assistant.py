@@ -32,6 +32,7 @@ from ai_core.orchestrator import (
 from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
+from ai_core.tools.floor_plan import RESIDENT_ROLES
 from app import answer_cache
 from app.ai_backend import backend_id
 from app.deps import (
@@ -54,7 +55,7 @@ from app.schemas.assistant import (
     TokenData,
 )
 from app.session import get_redis
-from liviq_db.models import Citation, Conversation, Message
+from liviq_db.models import Citation, Conversation, Household, Message, User
 
 _REGISTRY = default_registry()
 # 한 턴 = user+assistant 두 메시지 — 자르기·마스킹 상한 자체는 ai-core가 단일 출처(H18-1).
@@ -152,6 +153,7 @@ async def _assistant_response(
         user_id=ctx.user_id,
         roles=ctx.roles,
         visibilities=ctx.visibilities,
+        building_id=await _building_id(session, ctx),
     )
     # 캐시 키의 백엔드 세그먼트 — 런타임에 바뀐 백엔드의 답변이 섞이지 않게(H15-1).
     backend = backend_id(llm.settings)
@@ -273,6 +275,30 @@ async def _load_or_create_conversation(
     session.add(conversation)
     await session.flush()
     return conversation
+
+
+async def _building_id(session: AsyncSession, ctx: RequestContext) -> uuid.UUID | None:
+    """로그인 사용자의 세대 동(H19-1) — None이면 공지 동 필터 미적용(전 동 검색).
+
+    면제는 **역할로 판정한다 — 세대 배정 여부와 독립**이다(docs/09 §8.22 ③). 관리자·직원은
+    업무로 전 동을 묻기 때문이다: 입주민을 겸해 세대가 있는 관리자가 "402동 점검 언제야"에
+    자기 동(401동) 답을 받으면 조용히 틀린다. 지금 관리자 계정에 세대가 없는 것은 시더의
+    우연일 뿐이라 그 성질에 기대지 않는다.
+    RESIDENT 외 역할이 하나라도 있으면 쿼리 없이 면제(요청당 DB 왕복도 1회 준다).
+    """
+    if set(ctx.roles) - RESIDENT_ROLES:
+        return None
+    # 여기부터 순수 입주민 — 세대 미배정이면 scalar가 None(역시 필터 미적용).
+    # tenant 조건은 RLS와 함께 이중 방어(규칙 3). 요청당 1회.
+    return await session.scalar(
+        select(Household.building_id)
+        .join(User, User.household_id == Household.id)
+        .where(
+            User.id == ctx.user_id,
+            User.tenant_id == ctx.tenant_id,
+            Household.tenant_id == ctx.tenant_id,
+        )
+    )
 
 
 @dataclass(frozen=True)

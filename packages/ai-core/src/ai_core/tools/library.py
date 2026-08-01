@@ -75,7 +75,11 @@ async def _search_documents(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -
     except LlmError:
         return ToolResult(note="문서 검색을 일시적으로 사용할 수 없습니다.")
     chunks = await deps.retriever.search(
-        query_vec, tenant_id=ctx.tenant_id, visibilities=ctx.visibilities
+        query_vec,
+        tenant_id=ctx.tenant_id,
+        visibilities=ctx.visibilities,
+        # 동별로 쪼개진 공지는 로그인 세대의 동만 근거로 삼는다(H19-1) — None이면 전 동 검색.
+        building_id=ctx.building_id,
     )
     if not chunks:
         return ToolResult(note="관련 문서를 찾지 못했습니다.")

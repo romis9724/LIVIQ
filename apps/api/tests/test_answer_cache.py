@@ -53,8 +53,15 @@ def _ctx(
     user: uuid.UUID = USER_ID,
     roles: tuple[str, ...] = ("RESIDENT",),
     visibilities: tuple[str, ...] = ("ALL", "RESIDENT"),
+    building: uuid.UUID | None = None,
 ) -> ToolContext:
-    return ToolContext(tenant_id=tenant, user_id=user, roles=roles, visibilities=visibilities)
+    return ToolContext(
+        tenant_id=tenant,
+        user_id=user,
+        roles=roles,
+        visibilities=visibilities,
+        building_id=building,
+    )
 
 
 def _done(
@@ -133,6 +140,28 @@ async def test_no_cross_tenant_propagation(fake_redis: FakeRedis) -> None:
         await answer_cache.lookup(fake_redis, ctx=ctx_other, question=QUESTION, backend=BACKEND)
         is None
     )
+
+
+async def test_no_cross_building_propagation(fake_redis: FakeRedis) -> None:
+    """동이 다르면 tenant 스코프 캐시가 새지 않는다(H19-1) — 캐시가 동 필터를 무력화하면
+    401동 답변이 403동에 그대로 재생된다."""
+    ctx_401 = _ctx(building=uuid.uuid4())
+    await answer_cache.store(
+        fake_redis,
+        ctx=ctx_401,
+        question=QUESTION,
+        backend=BACKEND,
+        done=_done(tool_path=("search_documents",)),
+    )
+    assert (
+        await answer_cache.lookup(fake_redis, ctx=ctx_401, question=QUESTION, backend=BACKEND)
+        is not None
+    )
+    for other in (_ctx(building=uuid.uuid4()), _ctx(building=None)):
+        assert (
+            await answer_cache.lookup(fake_redis, ctx=other, question=QUESTION, backend=BACKEND)
+            is None
+        )
 
 
 async def test_no_role_visibility_propagation(fake_redis: FakeRedis) -> None:

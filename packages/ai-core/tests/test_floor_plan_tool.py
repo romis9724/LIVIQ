@@ -126,6 +126,7 @@ class _NoopRetriever:
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
         top_k: int = 8,
+        building_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         return []
 

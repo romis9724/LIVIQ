@@ -10,13 +10,25 @@ import httpx
 import pytest_asyncio
 from app.deps import RequestContext, get_context, get_llm, get_tenant_session
 from app.main import create_app
+from app.routers.assistant import _building_id
 from conftest import EMBED_DIM, TENANT_ID, USER_ID
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.llm.client import LlmClient
-from liviq_db.models import Citation, Code, CodeGroup, ContentChunk, Document, Message, Tenant, User
+from liviq_db.models import (
+    Building,
+    Citation,
+    Code,
+    CodeGroup,
+    ContentChunk,
+    Document,
+    Household,
+    Message,
+    Tenant,
+    User,
+)
 
 
 async def _seed_indexed_document(session: AsyncSession) -> uuid.UUID:
@@ -171,3 +183,53 @@ async def test_sse_new_fields_are_additive(seeded_client: httpx.AsyncClient) -> 
 async def test_ask_rejects_oversized_question(seeded_client: httpx.AsyncClient) -> None:
     response = await seeded_client.post("/assistant/ask", json={"question": "가" * 3000})
     assert response.status_code == 422
+
+
+async def _assign_household(db_session: AsyncSession) -> uuid.UUID:
+    """USER_ID에 401동 세대를 배정하고 building_id 반환."""
+    building = Building(tenant_id=TENANT_ID, name="401")
+    db_session.add(building)
+    await db_session.flush()
+    household = Household(
+        tenant_id=TENANT_ID, building_id=building.id, floor=3, unit_no=301, status="active"
+    )
+    db_session.add(household)
+    await db_session.flush()
+    user = await db_session.get(User, USER_ID)
+    assert user is not None
+    user.household_id = household.id
+    await db_session.flush()
+    return building.id
+
+
+async def test_building_id_resolves_from_household(db_session: AsyncSession) -> None:
+    """ToolContext의 동은 로그인 세대에서 온다(H19-1) — 공지 검색 필터의 입력."""
+    await _seed_indexed_document(db_session)
+    building_id = await _assign_household(db_session)
+
+    ctx = RequestContext(TENANT_ID, USER_ID, roles=("RESIDENT",))
+    assert await _building_id(db_session, ctx) == building_id
+
+
+async def test_building_id_is_none_without_household(db_session: AsyncSession) -> None:
+    """세대 미배정이면 동이 없다 — 필터 미적용으로 전 동 검색을 유지한다."""
+    await _seed_indexed_document(db_session)
+
+    ctx = RequestContext(TENANT_ID, USER_ID, roles=("RESIDENT",))
+    assert await _building_id(db_session, ctx) is None
+
+
+async def test_building_id_exempts_admin_roles_even_with_household(
+    db_session: AsyncSession,
+) -> None:
+    """관리자 면제는 역할로 판정한다 — 세대가 배정돼 있어도 전 동 검색을 유지한다.
+
+    시더가 관리자에게 세대를 주지 않는 것은 우연이다(H19-1) — 입주민 겸 관리자가 생겨도
+    "402동 점검" 질문이 자기 동으로 조용히 좁혀지면 안 된다.
+    """
+    await _seed_indexed_document(db_session)
+    await _assign_household(db_session)
+
+    for roles in (("MANAGER",), ("STAFF",), ("RESIDENT", "MANAGER")):
+        ctx = RequestContext(TENANT_ID, USER_ID, roles=roles)
+        assert await _building_id(db_session, ctx) is None, roles
