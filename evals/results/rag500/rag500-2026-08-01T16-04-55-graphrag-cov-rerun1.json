@@ -1,0 +1,1919 @@
+{
+  "label": "graphrag-cov-rerun1",
+  "set": "all",
+  "case_ids": [
+    "V2-GR-0009",
+    "V2-GR-0010",
+    "V2-GR-0022",
+    "V2-GR-0023",
+    "V2-GR-0025",
+    "V2-GR-0026",
+    "V2-GR-0027",
+    "V2-GR-0028",
+    "V2-GR-0029",
+    "CX-R03",
+    "CX-M08",
+    "PK-01",
+    "PK-02",
+    "PK-06",
+    "PK-09",
+    "PK-10",
+    "GC-03",
+    "IQ-01",
+    "IQ-02",
+    "IQ-06",
+    "IQ-09",
+    "MT-01",
+    "MT-02",
+    "CL-N1",
+    "CX-R13",
+    "CX-R15"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-01T16:04:55.904Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 추정 혼입 20/26건(최종 답변 turn은 스트리밍이라 usage 미제공 → 추정치), 원가는 참고값"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 26,
+      "pass": 5,
+      "citation_scored": 26,
+      "citation_hit": 13,
+      "citation_hit_rate": 0.5,
+      "fallback_scored": 26,
+      "fallback_ok": 8,
+      "fallback_accuracy": 0.3076923076923077,
+      "tool_scored": 26,
+      "tool_hit": 16,
+      "tool_accuracy": 0.6153846153846154,
+      "required_cases": 13,
+      "required_hit_sum": 10,
+      "required_total_sum": 17,
+      "required_call_rate": 0.5882352941176471,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "clarify_scored": 26,
+      "clarify_misuse": 4,
+      "clarify_misuse_rate": 0.15384615384615385,
+      "total_p50_ms": 1201,
+      "total_p95_ms": 12361,
+      "ttft_p50_ms": 36,
+      "ttft_p95_ms": 177,
+      "token_input_sum": 266466,
+      "token_output_sum": 5940,
+      "token_estimated_cases": 20,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "시설·설비",
+        "n": 9,
+        "pass": 1,
+        "citation_scored": 9,
+        "citation_hit": 5,
+        "citation_hit_rate": 0.5555555555555556,
+        "fallback_scored": 9,
+        "fallback_ok": 2,
+        "fallback_accuracy": 0.2222222222222222,
+        "tool_scored": 9,
+        "tool_hit": 6,
+        "tool_accuracy": 0.6666666666666666,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 9,
+        "clarify_misuse": 1,
+        "clarify_misuse_rate": 0.1111111111111111,
+        "total_p50_ms": 1234,
+        "total_p95_ms": 12367,
+        "ttft_p50_ms": 35,
+        "ttft_p95_ms": 43,
+        "token_input_sum": 79383,
+        "token_output_sum": 2502,
+        "token_estimated_cases": 8
+      },
+      {
+        "key": "복합·라우팅",
+        "n": 14,
+        "pass": 3,
+        "citation_scored": 14,
+        "citation_hit": 6,
+        "citation_hit_rate": 0.42857142857142855,
+        "fallback_scored": 14,
+        "fallback_ok": 4,
+        "fallback_accuracy": 0.2857142857142857,
+        "tool_scored": 14,
+        "tool_hit": 7,
+        "tool_accuracy": 0.5,
+        "required_cases": 13,
+        "required_hit_sum": 10,
+        "required_total_sum": 17,
+        "required_call_rate": 0.5882352941176471,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 14,
+        "clarify_misuse": 3,
+        "clarify_misuse_rate": 0.21428571428571427,
+        "total_p50_ms": 905,
+        "total_p95_ms": 12361,
+        "ttft_p50_ms": 36,
+        "ttft_p95_ms": 280,
+        "token_input_sum": 104534,
+        "token_output_sum": 2878,
+        "token_estimated_cases": 9
+      },
+      {
+        "key": "대화·되묻기",
+        "n": 3,
+        "pass": 1,
+        "citation_scored": 3,
+        "citation_hit": 2,
+        "citation_hit_rate": 0.6666666666666666,
+        "fallback_scored": 3,
+        "fallback_ok": 2,
+        "fallback_accuracy": 0.6666666666666666,
+        "tool_scored": 3,
+        "tool_hit": 3,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 3,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 3453,
+        "total_p95_ms": 4460,
+        "ttft_p50_ms": 37,
+        "ttft_p95_ms": 160,
+        "token_input_sum": 82549,
+        "token_output_sum": 560,
+        "token_estimated_cases": 3
+      }
+    ],
+    "by_backend": [
+      {
+        "key": "backend:pgvector",
+        "n": 3,
+        "pass": 0,
+        "citation_scored": 3,
+        "citation_hit": 0,
+        "citation_hit_rate": 0,
+        "fallback_scored": 3,
+        "fallback_ok": 1,
+        "fallback_accuracy": 0.3333333333333333,
+        "tool_scored": 3,
+        "tool_hit": 3,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 3,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 3072,
+        "total_p95_ms": 4460,
+        "ttft_p50_ms": 40,
+        "ttft_p95_ms": 46,
+        "token_input_sum": 59182,
+        "token_output_sum": 556,
+        "token_estimated_cases": 3
+      },
+      {
+        "key": "backend:neo4j",
+        "n": 10,
+        "pass": 1,
+        "citation_scored": 10,
+        "citation_hit": 7,
+        "citation_hit_rate": 0.7,
+        "fallback_scored": 10,
+        "fallback_ok": 2,
+        "fallback_accuracy": 0.2,
+        "tool_scored": 10,
+        "tool_hit": 7,
+        "tool_accuracy": 0.7,
+        "required_cases": 2,
+        "required_hit_sum": 3,
+        "required_total_sum": 3,
+        "required_call_rate": 1,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 10,
+        "clarify_misuse": 1,
+        "clarify_misuse_rate": 0.1,
+        "total_p50_ms": 1068,
+        "total_p95_ms": 12367,
+        "ttft_p50_ms": 34,
+        "ttft_p95_ms": 43,
+        "token_input_sum": 76641,
+        "token_output_sum": 2492,
+        "token_estimated_cases": 9
+      }
+    ],
+    "pairs": [
+      {
+        "pair_id": "p05",
+        "pgvector": {
+          "citation_hit": false,
+          "fallback_ok": false,
+          "total_ms": 2518,
+          "pass": false
+        },
+        "neo4j": {
+          "citation_hit": false,
+          "fallback_ok": false,
+          "total_ms": 1201,
+          "pass": false
+        }
+      }
+    ]
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "V2-GR-0009",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": "p05",
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "4b3d746c-d409-4bdc-92e4-f2f7cb1269ba",
+        "document_ids": [
+          "4b3d746c-d409-4bdc-92e4-f2f7cb1269ba"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": ""
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 77,
+        "token_input": 11762,
+        "token_output": 115,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 40,
+        "total_ms": 2518,
+        "turns": [
+          {
+            "ttft_ms": 40,
+            "total_ms": 2518
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 4b3d746c-d409-4bdc-92e4-f2f7cb1269ba"
+      ]
+    },
+    {
+      "case_id": "V2-GR-0010",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": "p05",
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": false,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 77,
+        "token_input": 11762,
+        "token_output": 115,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 1201,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 1201
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_facility_graph"
+      ]
+    },
+    {
+      "case_id": "V2-GR-0022",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": false,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 부스터펌프 1호기 진동 증가 원인: 임펠러 마모·베어링 노후(13년) 조치: 정비 후 교체 의결; 증상: 부스터펌프 1호기 진동 재발 원인: 정비 후 재발(교체 필요) 조치: 1·2호기 동시 교체"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_similar_inquiries"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5201,
+        "token_output": 53,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 546,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 546
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:trace_home_device_issue"
+      ]
+    },
+    {
+      "case_id": "V2-GR-0023",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 열교환기 2차측 차압조절밸브 오작동 원인: 밸브 고착 조치: 정비로 해소"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 10305,
+        "token_output": 1391,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 12367,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 12367
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-GR-0025",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 중계기 통신불량 최초 징후 원인: 중계기 노후 초기 조치: 경보 확인·모니터링; 증상: R형 화재수신반 중계기 통신 불량 반복 원인: 중계기 노후(12년)·통신경보 6회 조치: 중계기 4개 교체"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "세대 기기 장애 이력"
+        ],
+        "answer_chars": 101,
+        "token_input": 5515,
+        "token_output": 140,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 39,
+        "total_ms": 1234,
+        "turns": [
+          {
+            "ttft_ms": 39,
+            "total_ms": 1234
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-GR-0026",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": true
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 홈네트워크 서버 고장·월패드 간헐 중단 원인: 서버 하드웨어 노후 조치: 미해소 — 임시 우회 운영 중, 8월 서버 교체 예정(as_of 2026-07-30); 증상: 월패드 승강기 호출 기능 불능 원인: 홈넷 서버 고장 연쇄 조치: 미해소 — 하드웨어 발주 상태, 우회 중"
+      },
+      "actual": {
+        "status": "clarify",
+        "fallback_reason": null,
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue",
+          "ask_clarification"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 7950,
+        "token_output": 273,
+        "token_estimated": false,
+        "clarify_question": "인터넷에 대해 어떤 설비를 말씀하시나요? (예: 승강기, 급수펌프)"
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 2435,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 2435
+          }
+        ]
+      },
+      "notes": [
+        "되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify"
+      ]
+    },
+    {
+      "case_id": "V2-GR-0027",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": false,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 열교환기 2차측 차압조절밸브 오작동 원인: 밸브 고착 조치: 정비로 해소"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_similar_inquiries",
+          "search_similar_inquiries"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 민원 처리 사례",
+          "유사 민원 처리 사례"
+        ],
+        "answer_chars": 78,
+        "token_input": 10724,
+        "token_output": 247,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 2140,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 2140
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:trace_home_device_issue"
+      ]
+    },
+    {
+      "case_id": "V2-GR-0028",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "과거 장애 이력 없음"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue",
+          "find_in_floor_plan",
+          "search_similar_inquiries",
+          "get_recent_notices"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 10943,
+        "token_output": 95,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 1068,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 1068
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-GR-0029",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "과거 장애 이력 없음"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5221,
+        "token_output": 73,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 714,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 714
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "CX-R03",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 2,
+          "total": 2,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking",
+          "get_fees"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "find_nearest_available_parking",
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 79,
+        "token_input": 2779,
+        "token_output": 80,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 31,
+        "total_ms": 879,
+        "turns": [
+          {
+            "ttft_ms": 31,
+            "total_ms": 879
+          }
+        ]
+      },
+      "notes": [
+        "forbidden '타 세대 정보' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "CX-M08",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 2,
+          "total": 2,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_facility_graph",
+          "get_facilities"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_facility_graph",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3237,
+        "token_output": 48,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 765,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 765
+          }
+        ]
+      },
+      "notes": [
+        "forbidden '타 세대 정보' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "PK-01",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": {
+          "hit": 1,
+          "total": 1,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "find_nearest_available_parking"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "가까운 빈 주차자리"
+        ],
+        "answer_chars": 29,
+        "token_input": 5244,
+        "token_output": 58,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 672,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 672
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "PK-02",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": {
+          "hit": 1,
+          "total": 1,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "find_nearest_available_parking"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "가까운 빈 주차자리"
+        ],
+        "answer_chars": 50,
+        "token_input": 7785,
+        "token_output": 96,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 177,
+        "total_ms": 937,
+        "turns": [
+          {
+            "ttft_ms": 177,
+            "total_ms": 937
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "PK-06",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4826,
+        "token_output": 74,
+        "token_estimated": false
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 733,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 733
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:find_nearest_available_parking"
+      ]
+    },
+    {
+      "case_id": "PK-09",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": true
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "clarify",
+        "fallback_reason": null,
+        "confidence": 0,
+        "tool_path": [
+          "find_in_floor_plan",
+          "ask_clarification"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4849,
+        "token_output": 56,
+        "token_estimated": false,
+        "clarify_question": "주차에 대해 어떤 것을 말씀하시는지 조금 더 알려주시겠어요? (예: 기간, 설비, 동·호수)"
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 839,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 839
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:find_nearest_available_parking",
+        "되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify"
+      ]
+    },
+    {
+      "case_id": "PK-10",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:find_nearest_available_parking",
+        "document_ids": [],
+        "expected_tool": "find_nearest_available_parking",
+        "acceptable_tools": [],
+        "required_tools": [
+          "find_nearest_available_parking"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "가장 가까운 빈자리: 217면·013면·133면"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4824,
+        "token_output": 101,
+        "token_estimated": false
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 905,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 905
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:find_nearest_available_parking"
+      ]
+    },
+    {
+      "case_id": "GC-03",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 1,
+          "total": 1,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_facility_graph"
+        ],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "R형 화재수신반 중계기 통신 불량 반복 ← 중계기 통신불량 최초 징후"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 5783,
+        "token_output": 57,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 950,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 950
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "IQ-01",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": true
+      },
+      "expected": {
+        "citations_raw": "tool:search_similar_inquiries",
+        "document_ids": [],
+        "expected_tool": "search_similar_inquiries",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_similar_inquiries"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "[설비] 월패드에서 엘리베이터 호출이 안 됩니다"
+      },
+      "actual": {
+        "status": "clarify",
+        "fallback_reason": null,
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue",
+          "ask_clarification"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 7942,
+        "token_output": 276,
+        "token_estimated": false,
+        "clarify_question": "월패드에 대해 어떤 설비를 말씀하시나요? (예: 승강기, 급수펌프)"
+      },
+      "latency": {
+        "ttft_ms": 53,
+        "total_ms": 2497,
+        "turns": [
+          {
+            "ttft_ms": 53,
+            "total_ms": 2497
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_similar_inquiries",
+        "되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify"
+      ]
+    },
+    {
+      "case_id": "IQ-02",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": true
+      },
+      "expected": {
+        "citations_raw": "tool:search_similar_inquiries",
+        "document_ids": [],
+        "expected_tool": "search_similar_inquiries",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_similar_inquiries"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "[분류없음] 층간소음이 심합니다."
+      },
+      "actual": {
+        "status": "clarify",
+        "fallback_reason": null,
+        "confidence": 0,
+        "tool_path": [
+          "ask_clarification"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 2400,
+        "token_output": 29,
+        "token_estimated": false,
+        "clarify_question": "어떤 것을 말씀하시는지 조금 더 알려주시겠어요? (예: 기간, 설비, 동·호수)"
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 342,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 342
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_similar_inquiries",
+        "되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify"
+      ]
+    },
+    {
+      "case_id": "IQ-06",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_similar_inquiries",
+        "document_ids": [],
+        "expected_tool": "search_similar_inquiries",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_similar_inquiries"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "[기타] 현관 도어록 건전지는 어디서 교체하나요"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 10315,
+        "token_output": 1403,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 12361,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 12361
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_similar_inquiries"
+      ]
+    },
+    {
+      "case_id": "IQ-09",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제60조(층간소음 생활규칙 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "오후 10시부터 다음날 오전 6시까지 뛰거나 크게 소리나게 닫는 행위, 망치질 등 세대내부 수리, 악기 연주 등을 금지한다"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 52,
+        "token_input": 18034,
+        "token_output": 211,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 3072,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 3072
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "MT-01",
+      "category": "대화·되묻기",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-07",
+        "facts": "2026-07 관리비 총액 176,601원"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_fees",
+          "search_documents",
+          "search_similar_inquiries",
+          "search_documents",
+          "get_fees",
+          "get_fees"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 민원 처리 사례",
+          "관리비 2026-07 확정 데이터",
+          "관리비 2026-06 확정 데이터"
+        ],
+        "answer_chars": 69,
+        "token_input": 31926,
+        "token_output": 221,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 3453,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 2375
+          },
+          {
+            "ttft_ms": 35,
+            "total_ms": 1078
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-07 vs 측정 2026-08-01 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "MT-02",
+      "category": "대화·되묻기",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "pgvector",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "542d3f8b-25ad-4008-8875-bff722562d5d#제60조(층간소음 생활규칙 등)",
+        "document_ids": [
+          "542d3f8b-25ad-4008-8875-bff722562d5d"
+        ],
+        "expected_tool": "search_documents",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": ""
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.719,
+        "tool_path": [
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210",
+          "b6499adf-9c59-4ab3-a6fa-f2186408e210"
+        ],
+        "citation_titles": [
+          "커뮤니티시설 이용 지침",
+          "커뮤니티시설 이용 지침"
+        ],
+        "answer_chars": 70,
+        "token_input": 29386,
+        "token_output": 230,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 4460,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 2617
+          },
+          {
+            "ttft_ms": 40,
+            "total_ms": 1843
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: 542d3f8b-25ad-4008-8875-bff722562d5d"
+      ]
+    },
+    {
+      "case_id": "CL-N1",
+      "category": "대화·되묻기",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-07",
+        "facts": "2026-07 관리비 총액 176,601원"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_fees",
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 21237,
+        "token_output": 109,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 160,
+        "total_ms": 2555,
+        "turns": [
+          {
+            "ttft_ms": 160,
+            "total_ms": 2555
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-07 vs 측정 2026-08-01 — 시간 의존 라벨 유효성 주의"
+      ]
+    },
+    {
+      "case_id": "CX-R13",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": {
+          "hit": 2,
+          "total": 2,
+          "pass": true
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [
+          "get_fees",
+          "search_documents"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-07",
+        "facts": "2026-07 관리비 총액 141,034원"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.77,
+        "tool_path": [
+          "get_fees",
+          "search_documents",
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "2026년 8월분 관리비 부과 및 납부 안내"
+        ],
+        "answer_chars": 126,
+        "token_input": 21263,
+        "token_output": 196,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 280,
+        "total_ms": 2791,
+        "turns": [
+          {
+            "ttft_ms": 280,
+            "total_ms": 2791
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-07 vs 측정 2026-08-01 — 시간 의존 라벨 유효성 주의",
+        "forbidden '임의 계산 금액·타 세대 금액' 자동 검출 불가 — 검수 대상"
+      ]
+    },
+    {
+      "case_id": "CX-R15",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P2",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": {
+          "hit": 1,
+          "total": 2,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": true,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_fees",
+        "document_ids": [],
+        "expected_tool": "get_fees",
+        "acceptable_tools": [],
+        "required_tools": [
+          "get_fees",
+          "search_documents"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-06",
+        "facts": "2026-06 관리비 총액 182,621원"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.823,
+        "tool_path": [
+          "search_documents",
+          "search_documents"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "2026년 6월분 관리비 부과 및 납부 안내"
+        ],
+        "answer_chars": 197,
+        "token_input": 5253,
+        "token_output": 193,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 49,
+        "total_ms": 2096,
+        "turns": [
+          {
+            "ttft_ms": 49,
+            "total_ms": 2096
+          }
+        ]
+      },
+      "notes": [
+        "as_of 불일치: 라벨 2026-06 vs 측정 2026-08-01 — 시간 의존 라벨 유효성 주의",
+        "forbidden '임의 계산 금액·타 세대 금액' 자동 검출 불가 — 검수 대상",
+        "v2 인용 미충족: tool:get_fees"
+      ]
+    }
+  ]
+}
