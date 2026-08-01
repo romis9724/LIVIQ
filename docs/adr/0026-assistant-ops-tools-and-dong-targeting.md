@@ -43,9 +43,19 @@
 
 로그인 세대의 동을 `ToolContext`(코드가 주입하고 LLM이 절대 지정할 수 없는 격리·소유권 값 — 기존
 `tenant_id`·`visibilities`와 같은 자리)에 실어, 검색 SQL의 notice 분기에서 대상 동이 다른 청크를 배제한다.
-`notices.target_buildings`(JSONB · `buildings.name` 배열 · NULL=전체동)는 이미 존재하고 검색 SQL이
+`notices.target_buildings`(JSONB · `buildings.id` **문자열** 배열 · 비어 있으면 전체동)는 이미 존재하고 검색 SQL이
 `notices`를 조인하고 있으므로 **스키마 신설 없이 조건 하나**로 끝난다. 관리자·동 미상 사용자에게는
 필터를 적용하지 않는다(전 동 검색 유지).
+
+구현 시 정정 2건(H19-1 실측). ①대상 동은 애초에 **동 이름이 아니라 building id 문자열**이다
+(모델 주석·작성 경로·시더 일치 — 이 문서와 09 §8.22의 "`buildings.name` 배열"이 오기였다).
+②전체동 판정은 `IS NULL`로 부족하다 — 작성 경로가 파이썬 `None`을 그대로 넣고 JSONB 컬럼은 그것을
+**SQL NULL이 아니라 jsonb `null`**로 저장한다(SQLAlchemy `none_as_null` 기본값). 두 형태가 섞이므로
+"배열이 아닌 값은 전체동"(`jsonb_typeof <> 'array'`)으로 판정한다. 실 PG 테스트가 이 함정을 잡았다
+(전체동 공지가 통째로 배제됨 — mock만 썼다면 통과했을 회귀).
+
+캐시도 같은 값으로 갈라야 한다: tenant 스코프 답변 캐시 키(`app/answer_cache.py`)에 동 세그먼트를
+넣지 않으면 401동 답변이 403동에 재생돼 SQL 필터가 무력화된다(roles·visibilities와 같은 이유).
 
 ### 결정 2 — 관리자 운영 집계 도구 2종, 노출은 집계·상태까지
 

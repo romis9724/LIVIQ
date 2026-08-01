@@ -37,6 +37,7 @@ CTX_MANAGER = ToolContext(TENANT, USER, roles=("MANAGER",), visibilities=("ALL",
 class FakeRetriever:
     def __init__(self, chunks: Sequence[RetrievedChunk]) -> None:
         self._chunks = list(chunks)
+        self.calls: list[dict[str, Any]] = []  # 격리 값(tenant·동)이 실제로 넘어갔는지 검증용
 
     async def search(
         self,
@@ -45,7 +46,9 @@ class FakeRetriever:
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
         top_k: int = 8,
+        building_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
+        self.calls.append({"tenant_id": tenant_id, "building_id": building_id})
         return list(self._chunks)
 
 
@@ -189,6 +192,35 @@ async def test_search_documents_returns_chunks(settings: AiCoreSettings) -> None
     )
     assert execution.ok is True
     assert len(execution.result.doc_chunks) == 1
+
+
+async def test_search_documents_passes_context_building_id(settings: AiCoreSettings) -> None:
+    """동은 ToolContext에서만 온다(H19-1) — LLM 인자가 아니라 코드가 넘긴다."""
+    building = uuid.uuid4()
+    deps = _deps(settings, chunks=[_chunk()])
+    retriever = cast(FakeRetriever, deps.retriever)
+    await execute_tool(
+        _call("search_documents", {"query": "8월 공지"}),
+        ctx=ToolContext(
+            TENANT, USER, roles=("RESIDENT",), visibilities=("ALL",), building_id=building
+        ),
+        deps=deps,
+        registry=default_registry(),
+    )
+    assert retriever.calls == [{"tenant_id": TENANT, "building_id": building}]
+
+
+async def test_search_documents_without_building_passes_none(settings: AiCoreSettings) -> None:
+    """세대 미배정·관리자는 동이 없다 — None이 그대로 내려가 필터가 꺼진다."""
+    deps = _deps(settings, chunks=[_chunk()])
+    retriever = cast(FakeRetriever, deps.retriever)
+    await execute_tool(
+        _call("search_documents", {"query": "8월 공지"}),
+        ctx=CTX_MANAGER,
+        deps=deps,
+        registry=default_registry(),
+    )
+    assert retriever.calls == [{"tenant_id": TENANT, "building_id": None}]
 
 
 async def test_search_documents_empty_returns_note(settings: AiCoreSettings) -> None:

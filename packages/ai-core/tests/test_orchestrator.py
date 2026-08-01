@@ -59,6 +59,7 @@ class FakeRetriever:
         tenant_id: uuid.UUID,
         visibilities: Sequence[str],
         top_k: int = 8,
+        building_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         self.calls.append({"tenant_id": tenant_id})
         return list(self._chunks)

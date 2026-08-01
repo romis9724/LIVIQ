@@ -30,6 +30,9 @@ class ToolContext:
     user_id: uuid.UUID
     roles: tuple[str, ...]
     visibilities: tuple[str, ...]
+    # 로그인 세대의 동(H19-1) — 공지 검색의 대상 동 필터에 쓴다. 세대 미배정·비입주민은 None
+    # (필터 미적용 = 전 동 검색). tenant_id·visibilities와 같은 격리 값이라 LLM 인자로 받지 않는다.
+    building_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)

@@ -99,7 +99,10 @@ def _user_key(ctx: ToolContext, gen: int, backend: str, qhash: str) -> str:
 def _tenant_key(ctx: ToolContext, gen: int, backend: str, qhash: str) -> str:
     roles = ",".join(sorted(ctx.roles))
     visibilities = ",".join(sorted(ctx.visibilities))
-    return f"{_KEY_PREFIX}t:{ctx.tenant_id}:{roles}:{visibilities}:{gen}:{backend}:{qhash}"
+    # 동은 검색 결과를 가르는 값이다(H19-1) — 키에서 빼면 401동 답변이 403동에 재생돼
+    # SQL 필터가 무력화된다(roles·visibilities와 같은 이유로 키 세그먼트).
+    scope = f"{roles}:{visibilities}:{ctx.building_id or '-'}"
+    return f"{_KEY_PREFIX}t:{ctx.tenant_id}:{scope}:{gen}:{backend}:{qhash}"
 
 
 def _gen_key(tenant_id: uuid.UUID) -> str:
