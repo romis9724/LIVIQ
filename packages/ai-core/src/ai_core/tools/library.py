@@ -14,7 +14,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple, cast
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 
 from ai_core.graph import IncidentContext, IncidentHit
@@ -81,6 +81,15 @@ class GetFeesArgs(BaseModel):
             "생략 시 최근 확정 월"
         ),
     )
+
+    @field_validator("period", mode="before")
+    @classmethod
+    def _fold_null_literal(cls, value: object) -> object:
+        # 8B가 "생략"을 문자열 "null"로 넘긴다(2026-08-01 실측: {"period":"null"} →
+        # 패턴 검증 실패 → 카드 0 → no_evidence 폴백). 리터럴 null/none/빈 값은 미지정으로.
+        if isinstance(value, str) and value.strip().lower() in ("", "null", "none"):
+            return None
+        return value
 
     def requested_periods(self) -> list[str]:
         """요청 월 목록(중복 제거·오름차순). 빈 목록 = 미지정(최근 확정 월)."""
