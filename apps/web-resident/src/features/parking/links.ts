@@ -11,8 +11,19 @@ import type { Citation } from "@/features/assistant/api";
 /** 이 도구가 호출됐다 = 모델이 빈자리 질의로 라우팅했다는 뜻. */
 export const PARKING_TOOL = "find_nearest_available_parking";
 
-/** 도구 결과 카드 제목 — ai_core tools/parking.py 의 `_CARD_TITLE` 과 같아야 한다. */
+/** 내 차 위치(H19-2) — 답변에 나온 면을 지도에서 강조하는 동선은 빈자리와 같다. */
+export const MY_VEHICLE_TOOL = "find_my_vehicle";
+
+/** 도구 결과 카드 제목 — ai_core tools/parking.py 의 `_CARD_TITLE`·`_MY_CARD_TITLE` 과 같아야 한다. */
 export const PARKING_CARD_TITLE = "가까운 빈 주차자리";
+export const MY_VEHICLE_CARD_TITLE = "내 차량 위치";
+
+const SPOT_CARD_TITLES: readonly string[] = [PARKING_CARD_TITLE, MY_VEHICLE_CARD_TITLE];
+
+/** 주차 도구가 하나라도 호출됐으면 "주차위치 보기" CTA 를 띄운다. */
+export function isParkingAnswer(toolPath: readonly string[] | undefined): boolean {
+  return toolPath?.some((t) => t === PARKING_TOOL || t === MY_VEHICLE_TOOL) ?? false;
+}
 
 /** 강조 상한 — 도구는 top_k 3면을 주지만 URL 은 신뢰할 수 없는 입력이라 상한을 둔다. */
 const MAX_SPOTS = 10;
@@ -34,7 +45,7 @@ function dedupe(nos: readonly string[]): string[] {
  */
 export function spotNosFromCitations(citations: readonly Citation[]): string[] {
   const card = citations.find(
-    (c) => c.documentId === null && c.documentTitle === PARKING_CARD_TITLE,
+    (c) => c.documentId === null && SPOT_CARD_TITLES.includes(c.documentTitle),
   );
   if (!card) return [];
   return dedupe([...card.quote.matchAll(SPOT_IN_QUOTE)].map((m) => m[1] as string));

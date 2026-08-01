@@ -1,4 +1,4 @@
-"""도구 구현 12종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
+"""도구 구현 13종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -23,7 +23,7 @@ from ai_core.tools.clarify import ask_clarification_tool
 from ai_core.tools.floor_plan import find_in_floor_plan_tool
 from ai_core.tools.inquiries import search_similar_inquiries_tool
 from ai_core.tools.notices import get_recent_notices_tool
-from ai_core.tools.parking import find_nearest_available_parking_tool
+from ai_core.tools.parking import find_my_vehicle_tool, find_nearest_available_parking_tool
 from ai_core.tools.registry import (
     Tool,
     ToolCard,
@@ -372,7 +372,7 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 12종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
+    """운영 도구 13종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
 
     되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
     이름으로 판별해 되묻고 종료한다(ADR-0025 §4).
@@ -383,6 +383,7 @@ def default_registry() -> ToolRegistry:
             find_in_floor_plan_tool(),
             trace_home_device_issue_tool(),
             find_nearest_available_parking_tool(),
+            find_my_vehicle_tool(),
             search_similar_inquiries_tool(),
             get_recent_notices_tool(),
             Tool(

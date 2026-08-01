@@ -5,11 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
 import { getMe } from "@/lib/api";
 import { buildComposeHref } from "@/features/inquiries/prefill";
-import {
-  PARKING_TOOL,
-  buildParkingHref,
-  spotNosFromCitations,
-} from "@/features/parking/links";
+import { buildParkingHref, isParkingAnswer, spotNosFromCitations } from "@/features/parking/links";
 import { type Citation, answerKind } from "./api";
 import { answerBlocks } from "./markdown";
 import { progressLabel } from "./progress";
@@ -170,9 +166,9 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
   const kind = answerKind(message);
   const isInquiry = message.result?.toolPath.includes(INQUIRY_TOOL) ?? false;
   const composeHref = buildComposeHref(question);
-  // 주차 도구가 호출됐으면 지도로 보낸다. 추천 면은 도구 결과 카드에서만 뽑고,
-  // 못 뽑아도 CTA 는 띄운다(면 강조 없이 지도만 — H17-2).
-  const isParking = message.result?.toolPath.includes(PARKING_TOOL) ?? false;
+  // 주차 도구(빈자리·내 차 위치)가 호출됐으면 지도로 보낸다. 면 번호는 도구 결과 카드에서만
+  // 뽑고, 못 뽑아도 CTA 는 띄운다(면 강조 없이 지도만 — H17-2·H19-2).
+  const isParking = isParkingAnswer(message.result?.toolPath);
   const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
   const blocks = structuredBlocks(message.citations);
   // 폴백에는 칩을 달지 않는다 — 담당자 연락처 안내가 그 자리의 유일한 행동이다.
