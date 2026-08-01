@@ -63,12 +63,19 @@ export function parseThread(raw: string | null): StoredThread {
   }
 }
 
-/** 복원 — SSR·프라이빗 모드 등 sessionStorage 가 없거나 던지는 환경도 빈 대화로 처리. */
-export function readThread(): StoredThread {
+/**
+ * 복원 — 저장 키 자체가 없으면 `null`. "저장된 적 없음(null)"과 "빈 스레드 저장됨"을
+ * 구분해야 한다: 전자는 서버 복원 폴백 대상이고, 후자는 "새 대화" 마커라 서버 복원을
+ * 건너뛰어야 한다(마커 없이는 새 대화 직후 리로드가 옛 대화를 되살린다 — ADR-0027 결정 1).
+ * SSR·프라이빗 모드 등 sessionStorage 가 없거나 던지는 환경은 null(저장된 적 없음)로 처리.
+ */
+export function readThread(): StoredThread | null {
   try {
-    return parseThread(window.sessionStorage.getItem(THREAD_STORAGE_KEY));
+    const raw = window.sessionStorage.getItem(THREAD_STORAGE_KEY);
+    if (raw === null) return null;
+    return parseThread(raw);
   } catch {
-    return EMPTY_THREAD;
+    return null;
   }
 }
 
@@ -79,4 +86,12 @@ export function writeThread(thread: StoredThread): void {
   } catch {
     // 보관은 편의 기능일 뿐 — 실패해도 화면 동작에는 영향 없다.
   }
+}
+
+/**
+ * "새 대화" — 빈 스레드를 **저장**해 마커로 남긴다(키 삭제가 아니다 — 지우면 다음 리로드의
+ * 서버 복원이 방금 끊은 대화를 되살린다). 서버 대화는 그대로다(삭제가 아니라 끊기, ADR-0027).
+ */
+export function clearThread(): void {
+  writeThread(EMPTY_THREAD);
 }

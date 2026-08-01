@@ -1201,6 +1201,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/assistant/conversations/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest Conversation
+         * @description 본인의 가장 최근 입주민 대화 1건 복원(ADR-0027 결정 1).
+         *
+         *     탭 저장소가 비었을 때(새 탭·브라우저 재시작)의 2차 복원 경로다. 대화가 없으면
+         *     빈 응답 — 첫 방문은 오류가 아니다. 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+         */
+        get: operations["latest_conversation_assistant_conversations_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/invite/accept": {
         parameters: {
             query?: never;
@@ -3336,6 +3359,13 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** LatestConversationResponse */
+        LatestConversationResponse: {
+            /** Conversation Id */
+            conversation_id: string | null;
+            /** Messages */
+            messages: components["schemas"]["RestoredMessage"][];
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -3784,6 +3814,23 @@ export interface components {
         RejectIn: {
             /** Reason */
             reason: string;
+        };
+        /**
+         * RestoredMessage
+         * @description 복원 메시지 — **텍스트 위주**. 구조화 표·CTA·진행 단계는 복원 대상이 아니다.
+         */
+        RestoredMessage: {
+            /** Content */
+            content: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Role */
+            role: string;
+            /** Status */
+            status: string | null;
         };
         /** RosterCounts */
         RosterCounts: {
@@ -6802,6 +6849,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    latest_conversation_assistant_conversations_latest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestConversationResponse"];
                 };
             };
             /** @description Validation Error */

@@ -50,6 +50,8 @@ from app.schemas.assistant import (
     AskRequest,
     CitationData,
     DoneData,
+    LatestConversationResponse,
+    RestoredMessage,
     StatusData,
     StatusStage,
     TokenData,
@@ -60,6 +62,9 @@ from liviq_db.models import Citation, Conversation, Household, Message, User
 _REGISTRY = default_registry()
 # 한 턴 = user+assistant 두 메시지 — 자르기·마스킹 상한 자체는 ai-core가 단일 출처(H18-1).
 _HISTORY_MESSAGE_LIMIT = HISTORY_MAX_TURNS * 2
+# 복원 상한 — 프론트 `MAX_STORED_MESSAGES`(session-store.ts)와 같은 값이어야 두 복원 경로의
+# 대화 길이가 갈라지지 않는다(ADR-0027 결정 1).
+RESTORE_MESSAGE_LIMIT = 40
 # 시설 AI 도우미 접근 역할(docs/04 §4) — 시설은 소장 전용(H7-2에서 FACILITY 제거).
 _FACILITY_ASSISTANT_ROLES = ("MANAGER",)
 
@@ -80,6 +85,52 @@ async def ask(
 ) -> EventSourceResponse:
     return await _assistant_response(
         body, ctx, session, llm, graph, redis, tuning, channel="resident"
+    )
+
+
+@router.get("/conversations/latest")
+async def latest_conversation(
+    ctx: Annotated[RequestContext, Depends(get_context)],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> LatestConversationResponse:
+    """본인의 가장 최근 입주민 대화 1건 복원(ADR-0027 결정 1).
+
+    탭 저장소가 비었을 때(새 탭·브라우저 재시작)의 2차 복원 경로다. 대화가 없으면
+    빈 응답 — 첫 방문은 오류가 아니다. 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+    """
+    conversation = await session.scalar(
+        select(Conversation)
+        .where(
+            Conversation.tenant_id == ctx.tenant_id,
+            Conversation.user_id == ctx.user_id,
+            Conversation.channel == "resident",
+        )
+        .order_by(Conversation.updated_at.desc())
+        .limit(1)
+    )
+    if conversation is None:
+        return LatestConversationResponse(conversation_id=None, messages=[])
+    rows = (
+        await session.scalars(
+            select(Message)
+            .where(
+                Message.tenant_id == ctx.tenant_id,
+                Message.conversation_id == conversation.id,
+            )
+            # _load_history와 같은 이유로 role 보조 정렬 — 같은 요청의 user/assistant는
+            # created_at이 동일해서, 이게 없으면 복원 화면에서 답변이 질문보다 위로 온다.
+            .order_by(Message.created_at.desc(), Message.role.asc())
+            .limit(RESTORE_MESSAGE_LIMIT)
+        )
+    ).all()
+    return LatestConversationResponse(
+        conversation_id=conversation.id,
+        messages=[
+            RestoredMessage(id=m.id, role=m.role, content=m.content, status=m.status)
+            for m in reversed(rows)
+            # system 롤·빈 본문은 화면에 그릴 것이 없다(폴백 미저장 답변 등).
+            if m.content and m.role in ("user", "assistant")
+        ],
     )
 
 

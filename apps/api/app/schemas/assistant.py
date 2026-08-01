@@ -68,3 +68,21 @@ class DoneData(BaseModel):
     # 다음 행동 제안(ADR-0025 §7) — tool_path 기반 코드 규칙, LLM 호출 0. additive 필드로
     # 빈 배열이 기본이라 기존 소비자는 몰라도 된다.
     suggestions: list[str] = Field(default_factory=list)
+
+
+# ── 서버 대화 복원 (ADR-0027 결정 1) ────────
+
+
+class RestoredMessage(BaseModel):
+    """복원 메시지 — **텍스트 위주**. 구조화 표·CTA·진행 단계는 복원 대상이 아니다."""
+
+    id: uuid.UUID
+    role: str  # user|assistant
+    content: str
+    status: str | None  # answered|fallback|handed_off|clarify|None(user 메시지)
+
+
+class LatestConversationResponse(BaseModel):
+    # 대화가 없으면 conversation_id=null + 빈 배열 — 첫 방문은 오류가 아니다.
+    conversation_id: uuid.UUID | None
+    messages: list[RestoredMessage]

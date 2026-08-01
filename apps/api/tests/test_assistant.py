@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -10,7 +11,7 @@ import httpx
 import pytest_asyncio
 from app.deps import RequestContext, get_context, get_llm, get_tenant_session
 from app.main import create_app
-from app.routers.assistant import _building_id
+from app.routers.assistant import RESTORE_MESSAGE_LIMIT, _building_id
 from conftest import EMBED_DIM, TENANT_ID, USER_ID
 from httpx import ASGITransport
 from sqlalchemy import func, select, text
@@ -23,6 +24,7 @@ from liviq_db.models import (
     Code,
     CodeGroup,
     ContentChunk,
+    Conversation,
     Document,
     Household,
     Message,
@@ -233,3 +235,182 @@ async def test_building_id_exempts_admin_roles_even_with_household(
     for roles in (("MANAGER",), ("STAFF",), ("RESIDENT", "MANAGER")):
         ctx = RequestContext(TENANT_ID, USER_ID, roles=roles)
         assert await _building_id(db_session, ctx) is None, roles
+
+
+# ── GET /assistant/conversations/latest — 서버 대화 복원(ADR-0027 결정 1) ────────
+
+OTHER_USER_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
+OTHER_TENANT_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
+OTHER_TENANT_USER_ID = uuid.UUID("77777777-7777-7777-7777-777777777777")
+
+_T0 = datetime.datetime(2026, 8, 1, 9, 0, tzinfo=datetime.UTC)
+
+
+async def _seed_conversation(
+    session: AsyncSession,
+    *,
+    messages: tuple[tuple[str, str, str | None], ...],
+    user_id: uuid.UUID = USER_ID,
+    tenant_id: uuid.UUID = TENANT_ID,
+    channel: str = "resident",
+    at: datetime.datetime = _T0,
+) -> uuid.UUID:
+    """대화 1건 + (role, content, status) 메시지 시드.
+
+    시각을 명시하는 이유: 한 트랜잭션에서는 server_default now()가 전부 같은 값이라
+    턴 순서가 사라진다(실사용은 턴마다 별도 트랜잭션). 같은 턴의 user/assistant는
+    같은 시각을 공유하게 둔다 — role 보조 정렬이 그때 순서를 지키는지 보려는 것이다.
+    """
+    conversation = Conversation(
+        tenant_id=tenant_id, user_id=user_id, channel=channel, created_at=at, updated_at=at
+    )
+    session.add(conversation)
+    await session.flush()
+    for i, (role, content, status) in enumerate(messages):
+        session.add(
+            Message(
+                tenant_id=tenant_id,
+                conversation_id=conversation.id,
+                role=role,
+                content=content,
+                status=status,
+                created_at=at + datetime.timedelta(minutes=i // 2),
+            )
+        )
+    await session.flush()
+    return conversation.id
+
+
+async def _set_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    await session.execute(
+        text("SELECT set_config('app.tenant_id', :t, true)").bindparams(t=str(tenant_id))
+    )
+
+
+async def test_latest_conversation_is_empty_without_history(
+    seeded_client: httpx.AsyncClient,
+) -> None:
+    """첫 방문은 오류가 아니다 — 200 + null + 빈 배열."""
+    response = await seeded_client.get("/assistant/conversations/latest")
+
+    assert response.status_code == 200
+    assert response.json() == {"conversation_id": None, "messages": []}
+
+
+async def test_latest_conversation_restores_messages_in_order(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """오래된 것 → 최신, 같은 턴은 user가 assistant보다 앞. 상태도 함께 복원한다."""
+    conversation_id = await _seed_conversation(
+        db_session,
+        messages=(
+            ("user", "관리비 얼마예요?", None),
+            ("assistant", "12만원입니다.", "answered"),
+            ("user", "주차 자리 있어요?", None),
+            ("assistant", "몇 동 근처인가요?", "clarify"),
+        ),
+    )
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert body["conversation_id"] == str(conversation_id)
+    assert [(m["role"], m["content"], m["status"]) for m in body["messages"]] == [
+        ("user", "관리비 얼마예요?", None),
+        ("assistant", "12만원입니다.", "answered"),
+        ("user", "주차 자리 있어요?", None),
+        ("assistant", "몇 동 근처인가요?", "clarify"),
+    ]
+
+
+async def test_latest_conversation_hides_other_users_conversation(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """CRITICAL 소유권(규칙 4) — 같은 단지의 남의 대화가 더 최신이어도 내 것만 나온다."""
+    db_session.add(User(id=OTHER_USER_ID, tenant_id=TENANT_ID, status="active"))
+    await db_session.flush()
+    mine = await _seed_conversation(db_session, messages=(("user", "내 질문", None),))
+    await _seed_conversation(
+        db_session,
+        user_id=OTHER_USER_ID,
+        at=_T0 + datetime.timedelta(hours=1),
+        messages=(("user", "남의 질문", None),),
+    )
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert body["conversation_id"] == str(mine)
+    assert [m["content"] for m in body["messages"]] == ["내 질문"]
+
+
+async def test_latest_conversation_hides_other_tenant_conversation(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """CRITICAL 단지 격리(규칙 3) — 타 단지 대화는 더 최신이어도 보이지 않는다.
+
+    user id는 전역 PK라 타 단지에서 같은 id를 쓸 수 없다 — 별도 유저로 시드한다.
+    """
+    await _set_tenant(db_session, OTHER_TENANT_ID)
+    db_session.add(Tenant(id=OTHER_TENANT_ID, name="단지B", status="active"))
+    await db_session.flush()
+    db_session.add(User(id=OTHER_TENANT_USER_ID, tenant_id=OTHER_TENANT_ID, status="active"))
+    await db_session.flush()
+    await _seed_conversation(
+        db_session,
+        tenant_id=OTHER_TENANT_ID,
+        user_id=OTHER_TENANT_USER_ID,
+        at=_T0 + datetime.timedelta(hours=1),
+        messages=(("user", "타 단지 질문", None),),
+    )
+    await _set_tenant(db_session, TENANT_ID)  # 컨텍스트 복귀(우리 단지)
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert body == {"conversation_id": None, "messages": []}
+
+
+async def test_latest_conversation_ignores_admin_channel(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """시설 도우미(admin 채널) 대화는 입주민 화면 복원 대상이 아니다."""
+    await _seed_conversation(
+        db_session, channel="admin", messages=(("user", "승강기 고장 이력", None),)
+    )
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert body == {"conversation_id": None, "messages": []}
+
+
+async def test_latest_conversation_caps_to_recent_messages(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """긴 대화는 최근 상한(프론트 저장 상한과 동일)까지만 복원한다."""
+    turns = tuple(
+        ("user", f"질문{i}", None) if i % 2 == 0 else ("assistant", f"답변{i}", "answered")
+        for i in range(50)
+    )
+    await _seed_conversation(db_session, messages=turns)
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert len(body["messages"]) == RESTORE_MESSAGE_LIMIT
+    assert body["messages"][0]["content"] == "질문10"
+    assert body["messages"][-1]["content"] == "답변49"
+
+
+async def test_latest_conversation_drops_system_and_empty_messages(
+    seeded_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """그릴 것이 없는 메시지는 내보내지 않는다 — 빈 말풍선이 생기면 안 된다."""
+    await _seed_conversation(
+        db_session,
+        messages=(
+            ("system", "프롬프트", None),
+            ("user", "관리비 얼마예요?", None),
+            ("assistant", "", "fallback"),
+        ),
+    )
+
+    body = (await seeded_client.get("/assistant/conversations/latest")).json()
+
+    assert [m["content"] for m in body["messages"]] == ["관리비 얼마예요?"]
