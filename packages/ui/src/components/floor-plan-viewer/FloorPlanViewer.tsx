@@ -8,6 +8,7 @@ import {
   ariaLabel,
   deviceCategory,
   dirRotation,
+  isHighlightedDevice,
   tableRows,
   toPercent,
   type FilterKey,
@@ -38,6 +39,11 @@ export interface FloorPlanViewerProps {
   devices: readonly FloorPlanViewerDevice[];
   /** 접근성 대체 표("목록으로 보기") 노출 여부. 기본 true. */
   showListToggle?: boolean;
+  /**
+   * 처음부터 강조할 기기 라벨(AI 비서 딥링크 `?device=`). 기기 종류·이름과 부분 일치하는
+   * 마커를 전부 강조하고 첫 마커를 선택 상태로 연다. 없으면(기본) 평소와 같다.
+   */
+  highlightLabels?: readonly string[];
   className?: string;
 }
 
@@ -49,10 +55,24 @@ export function FloorPlanViewer({
   plan,
   devices,
   showListToggle = true,
+  highlightLabels,
   className,
 }: FloorPlanViewerProps) {
+  const highlighted = useMemo(() => {
+    if (!highlightLabels || highlightLabels.length === 0) return new Set<string>();
+    return new Set(
+      devices
+        .filter((d) => d.deviceType !== "room" && isHighlightedDevice(d, highlightLabels))
+        .map((d) => d.id),
+    );
+  }, [devices, highlightLabels]);
+
   const [enabled, setEnabled] = useState<Set<FilterKey>>(() => new Set(CATEGORY_ORDER));
-  const [selected, setSelected] = useState<FloorPlanViewerDevice | null>(null);
+  // 강조 마커가 있으면 첫 마커를 열어 둔다(주차맵의 추천 면 선택과 같은 동선). 마운트 시 1회.
+  // ponytail: 이후 devices·highlightLabels 변경은 재선택하지 않는다 — 페이지가 매번 새로 마운트된다.
+  const [selected, setSelected] = useState<FloorPlanViewerDevice | null>(
+    () => devices.find((d) => highlighted.has(d.id)) ?? null,
+  );
   const [showList, setShowList] = useState(false);
 
   const toggle = (key: FilterKey): void => {
@@ -117,13 +137,16 @@ export function FloorPlanViewer({
 
         {markers.map((device) => {
           const rotation = dirRotation(device.dir);
+          const isFound = highlighted.has(device.id);
           return (
             <button
               key={device.id}
               type="button"
               className="floor-plan-viewer__marker"
               data-category={deviceCategory(device.deviceType)}
-              aria-label={ariaLabel(device)}
+              // 색 단독 전달 금지(WCAG 1.4.1) — 강조는 라벨에도 담는다.
+              data-highlight={isFound || undefined}
+              aria-label={isFound ? `${ariaLabel(device)} — 찾는 위치` : ariaLabel(device)}
               style={{
                 left: `${toPercent(device.x, plan.imageWidth)}%`,
                 top: `${toPercent(device.y, plan.imageHeight)}%`,

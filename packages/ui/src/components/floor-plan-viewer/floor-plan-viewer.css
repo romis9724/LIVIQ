@@ -114,6 +114,12 @@
 .floor-plan-viewer__marker[data-category="safety"] {
   background: var(--color-danger);
 }
+/* AI 비서가 찾아준 위치 — 링으로 띄운다(색만으로 전달하지 않게 aria-label·안내문 병기). */
+.floor-plan-viewer__marker[data-highlight] {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+  z-index: 1;
+}
 .floor-plan-viewer__arrow {
   color: var(--color-on-accent);
   font-size: 0.7rem;

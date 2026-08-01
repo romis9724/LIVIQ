@@ -44,3 +44,12 @@
   font-weight: 600;
   color: var(--color-text-muted);
 }
+
+/* AI 비서 딥링크 안내 — 강조를 색으로만 전하지 않기 위한 문구(주차맵 rpk__recommend 와 같은 역할). */
+.floor-plan__highlight {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}

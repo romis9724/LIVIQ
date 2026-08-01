@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { FloorPlanView } from "@/features/floor-plan/FloorPlanView";
 
 export const metadata: Metadata = {
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function FloorPlanPage() {
-  return <FloorPlanView />;
+  // FloorPlanView 가 useSearchParams(?device= AI 비서 딥링크)를 쓴다 — App Router 는 Suspense 경계 필수.
+  return (
+    <Suspense>
+      <FloorPlanView />
+    </Suspense>
+  );
 }

@@ -3,9 +3,7 @@ import { answerBlocks, stripMarkers } from "./markdown";
 
 describe("stripMarkers", () => {
   it("굵게·기울임·코드 기호를 표시에서 벗긴다", () => {
-    expect(stripMarkers("**관리비**는 *매월* 부과됩니다 `[1]`")).toBe(
-      "관리비는 매월 부과됩니다 [1]",
-    );
+    expect(stripMarkers("**관리비**는 *매월* 부과됩니다")).toBe("관리비는 매월 부과됩니다");
   });
 
   it("제목 기호를 벗기고 본문은 남긴다", () => {
@@ -21,8 +19,18 @@ describe("stripMarkers", () => {
     expect(stripMarkers("연락처 010-****-5678")).toBe("연락처 010-****-5678");
   });
 
-  it("인용 번호는 그대로 둔다", () => {
-    expect(stripMarkers("관리규약 제5조에 따릅니다 [2]")).toBe("관리규약 제5조에 따릅니다 [2]");
+  it("인용 마커를 표시에서 벗긴다 — 출처는 SourceStrip 카드가 보여준다(사용자 지적)", () => {
+    expect(stripMarkers("관리규약 제5조에 따릅니다 [2]")).toBe("관리규약 제5조에 따릅니다");
+    expect(stripMarkers("7월 1일 점검합니다. [1][3]")).toBe("7월 1일 점검합니다.");
+    expect(stripMarkers("납부기한은 8월 31일입니다 [1, 2]")).toBe("납부기한은 8월 31일입니다");
+  });
+
+  it("숫자 아닌 대괄호 텍스트는 남긴다", () => {
+    expect(stripMarkers("[별관] 이용 안내")).toBe("[별관] 이용 안내");
+  });
+
+  it("스트리밍 중 미완성 마커는 건드리지 않는다", () => {
+    expect(stripMarkers("점검합니다. [1")).toBe("점검합니다. [1");
   });
 });
 
@@ -36,7 +44,7 @@ describe("answerBlocks", () => {
 
     // Assert
     expect(blocks).toEqual([
-      { kind: "p", text: "납부 항목은 다음과 같습니다 [1]" },
+      { kind: "p", text: "납부 항목은 다음과 같습니다" },
       { kind: "ul", items: ["일반관리비", "청소비", "승강기유지비"] },
     ]);
   });
@@ -61,7 +69,7 @@ describe("answerBlocks", () => {
   it("목록 뒤 문단이 이어져도 순서를 지킨다", () => {
     expect(answerBlocks("- 항목\n마무리 문장 [1]")).toEqual([
       { kind: "ul", items: ["항목"] },
-      { kind: "p", text: "마무리 문장 [1]" },
+      { kind: "p", text: "마무리 문장" },
     ]);
   });
 

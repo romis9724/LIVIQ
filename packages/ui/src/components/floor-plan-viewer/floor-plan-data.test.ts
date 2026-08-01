@@ -3,6 +3,7 @@ import {
   ariaLabel,
   deviceCategory,
   dirRotation,
+  isHighlightedDevice,
   tableRows,
   toPercent,
 } from "./floor-plan-data";
@@ -58,6 +59,39 @@ describe("ariaLabel", () => {
 
   it("방이 없으면 종류만", () => {
     expect(ariaLabel({ room: null, deviceType: "콘센트" })).toBe("콘센트");
+  });
+});
+
+describe("isHighlightedDevice", () => {
+  const outlet = { room: "거실", deviceType: "콘센트", label: null };
+
+  it("방 한정 라벨은 그 방만 강조한다('거실 콘센트' — 시각 실측으로 과잉 강조 정정)", () => {
+    expect(isHighlightedDevice(outlet, ["거실 콘센트"])).toBe(true);
+    expect(isHighlightedDevice({ ...outlet, room: "안방" }, ["거실 콘센트"])).toBe(false);
+  });
+
+  it("방 없는 라벨은 전 방을 강조한다('안방 콘센트' ⊃ '콘센트')", () => {
+    expect(isHighlightedDevice(outlet, ["콘센트"])).toBe(true);
+    expect(isHighlightedDevice({ ...outlet, room: "안방" }, ["콘센트"])).toBe(true);
+  });
+
+  it("종류가 라벨을 포함해도 강조한다('조명 스위치' ⊃ '스위치')", () => {
+    expect(
+      isHighlightedDevice({ room: null, deviceType: "조명 스위치", label: null }, ["스위치"]),
+    ).toBe(true);
+  });
+
+  it("기기 이름(label)으로도 매칭한다", () => {
+    expect(
+      isHighlightedDevice({ room: "주방", deviceType: "콘센트", label: "냉장고용" }, ["냉장고용"]),
+    ).toBe(true);
+  });
+
+  it("관련 없는 라벨·빈 라벨은 강조하지 않는다(동의어 해석은 서버 도구 몫)", () => {
+    expect(isHighlightedDevice(outlet, ["보일러"])).toBe(false);
+    expect(isHighlightedDevice(outlet, ["두꺼비집"])).toBe(false);
+    expect(isHighlightedDevice(outlet, ["", "  "])).toBe(false);
+    expect(isHighlightedDevice(outlet, [])).toBe(false);
   });
 });
 
