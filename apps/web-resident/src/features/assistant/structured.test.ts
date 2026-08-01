@@ -28,7 +28,54 @@ describe("toStructured — kind 분기", () => {
       total: 84000,
       prevTotal: 90000,
       diff: -6000,
+      months: [],
+      averageTotal: null,
+      missingPeriods: [],
+      excludedPeriods: [],
     });
+  });
+
+  it("여러 달 payload 는 months·평균으로 좁힌다(서버가 확정한 값 그대로)", () => {
+    // Arrange — ai_core/tools/library.py `_fee_months_data`
+    const raw = {
+      kind: "fee_table",
+      period: "2026-06, 2026-07",
+      rows: [],
+      total: null,
+      prev_total: null,
+      diff: null,
+      months: [
+        { period: "2026-06", total: 100000 },
+        { period: "2026-07", total: 120000 },
+      ],
+      average_total: 110000,
+      missing_periods: [],
+      excluded_periods: ["2026-05"],
+    };
+
+    // Act
+    const data = toStructured(raw);
+
+    // Assert
+    expect(data).toMatchObject({
+      total: null,
+      months: [
+        { period: "2026-06", total: 100000 },
+        { period: "2026-07", total: 120000 },
+      ],
+      averageTotal: 110000,
+      excludedPeriods: ["2026-05"],
+    });
+  });
+
+  it("평균을 못 낸 달이 있으면 averageTotal 은 null 이다(프론트가 대신 나누지 않는다)", () => {
+    const data = toStructured({
+      kind: "fee_table",
+      months: [{ period: "2026-07", total: 120000 }],
+      average_total: null,
+      missing_periods: ["2026-06"],
+    });
+    expect(data).toMatchObject({ averageTotal: null, missingPeriods: ["2026-06"] });
   });
 
   it("전월 값이 없으면 null 로 남긴다(프론트가 0 으로 채우지 않는다)", () => {
@@ -125,7 +172,9 @@ describe("toStructured — kind 분기", () => {
     });
     expect(toStructured({ kind: "fee_table", rows: ["nope", { name: "청소비" }] })).toMatchObject({
       rows: [{ name: "청소비", amount: 0 }],
-      total: 0,
+      total: null,
+      months: [],
+      missingPeriods: [],
     });
   });
 });

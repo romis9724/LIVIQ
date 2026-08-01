@@ -160,6 +160,66 @@ async def test_get_fees_data_matches_quote_numbers(settings: AiCoreSettings) -> 
     assert f"{result.card.data['prev_total']:,}원 대비" in result.card.quote
 
 
+def _multi_fee_handler(sql: str, params: dict[str, Any]) -> list[Any]:
+    """여러 달 조회 — avg_total은 SQL 윈도우 집계 자리(가짜 세션이 대신 채운다)."""
+    s = sql.lower()
+    if "from users" in s:
+        return [row(household_id=HOUSEHOLD, approved_at=datetime(2020, 1, 1, tzinfo=UTC))]
+    if "any(:periods)" in s:
+        totals = {"2026-06": 100_000, "2026-07": 120_000}
+        return [
+            row(period=p, total_amount=totals[p], avg_total=110_000)
+            for p in params["periods"]
+            if p in totals
+        ]
+    return []
+
+
+async def test_get_fees_multi_month_data_extends_fee_table(settings: AiCoreSettings) -> None:
+    """다중 월도 kind는 fee_table — 단일 월 키를 지우지 않고 months·average_total만 더한다."""
+    data = await _data(
+        settings, "get_fees", {"period": "2026-06,2026-07"}, _multi_fee_handler, CTX_RESIDENT
+    )
+    assert data == {
+        "kind": "fee_table",
+        "period": "2026-06, 2026-07",
+        "rows": [],
+        "total": None,
+        "prev_total": None,
+        "diff": None,
+        "months": [
+            {"period": "2026-06", "total": 100_000},
+            {"period": "2026-07", "total": 120_000},
+        ],
+        "average_total": 110_000,
+        "missing_periods": [],
+        "excluded_periods": [],
+    }
+
+
+async def test_get_fees_multi_month_llm_text_has_nothing_left_to_compute(
+    settings: AiCoreSettings,
+) -> None:
+    """LLM에는 월별 원본 + **이미 확정된 평균**만 간다 — 모델이 계산할 필요가 없다(규칙 5).
+
+    2026-08-01 사고의 단위 고정: 프롬프트에 7월 값 하나만 갔기에 모델이 2로 나눴다.
+    """
+    result = (
+        await execute_tool(
+            _call("get_fees", {"period": "2026-06,2026-07"}),
+            ctx=CTX_RESIDENT,
+            deps=_deps(settings, _multi_fee_handler),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None and result.card.data is not None
+    llm_text = result.llm_text()
+    assert "100,000원" in llm_text and "120,000원" in llm_text  # 월별 원본
+    assert "2개월 평균 총액 110,000원" in llm_text  # 평균은 이미 계산된 값
+    assert json.dumps(result.card.data, ensure_ascii=False) not in llm_text
+    assert "months" not in llm_text and "average_total" not in llm_text
+
+
 # ── find_nearest_available_parking → parking_spots ─────────────────────
 
 _LAYOUT = {
