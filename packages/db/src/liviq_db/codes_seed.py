@@ -32,7 +32,24 @@ DEFAULT_CODE_GROUPS: tuple[CodeGroupSeed, ...] = (
     CodeGroupSeed(
         group_key="NOTICE_CATEGORY",
         name="공지 분류",
-        codes=_codes("일반", "시설점검", "방역소독", "회의결과", "주민행사", "시스템장애"),
+        # 신규 라벨은 **끝에만** 추가한다 — 기존 단지의 sort_order를 흔들지 않기 위해서다.
+        codes=_codes(
+            "일반",
+            "시설점검",
+            "방역소독",
+            "회의결과",
+            "주민행사",
+            "시스템장애",
+            "생활안전",
+            "안전점검",
+            "생활안내",
+            "관리비",
+            "환경정비",
+            "주차",
+            "재난안전",
+            "조경관리",
+            "관리정보",
+        ),
     ),
     CodeGroupSeed(
         group_key="DOC_CATEGORY",
