@@ -2,7 +2,7 @@
 
 import { Button, EmptyState, Skeleton, StatusPill, Toast } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
@@ -73,9 +73,12 @@ function categoryLabelOf(
 export function InquiryCenter() {
   // AI 비서 딥링크(`?compose=1&title=…&body=…`) 프리필. 마운트 시 1회만 읽는다 —
   // 매 렌더 동기화하면 사용자가 고친 입력이 덮이고 한글 IME 조합이 씹힌다.
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [prefill, setPrefill] = useState(() => readComposePrefill(searchParams));
   const [view, setView] = useState<View>(prefill.isCompose ? "submit" : "list");
+  // 딥링크로 들어온 방문에만 뒤로가기를 준다 — prefill 은 목록으로 가면 버려지므로 마운트 값을 붙잡는다.
+  const [fromAssistant] = useState(prefill.isCompose);
   const [selected, setSelected] = useState<Inquiry | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [categories, setCategories] = useState<InquiryCategory[]>([]);
@@ -164,9 +167,21 @@ export function InquiryCenter() {
   return (
     <div className="inq">
       <header className="inq__header">
-        <h1 id="main" className="inq__title">
-          민원·하자
-        </h1>
+        <div className="inq__headrow">
+          {fromAssistant ? (
+            <button
+              type="button"
+              className="inq__back"
+              aria-label="뒤로가기"
+              onClick={() => router.back()}
+            >
+              ←
+            </button>
+          ) : null}
+          <h1 id="main" className="inq__title">
+            민원·하자
+          </h1>
+        </div>
         <div className="inq__seg" role="tablist" aria-label="민원 보기">
           <button
             role="tab"
