@@ -82,6 +82,27 @@ export function ariaLabel(device: { room: string | null; deviceType: string }): 
   return device.room ? `${device.room} ${device.deviceType}` : device.deviceType;
 }
 
+/**
+ * 강조 대상 판정 — AI 비서가 넘긴 라벨("거실 콘센트")과 **방 한정 이름**의 양방향 부분 일치.
+ * 대조 대상에 방을 포함해야 한다("거실 콘센트"가 안방 콘센트까지 켜면 안 된다 — 시각 실측).
+ * 방 없는 질의("콘센트")는 "안방 콘센트" ⊃ "콘센트"로 전 방 매칭이 유지되고,
+ * 종류보다 짧은 질의("스위치" ⊂ "조명 스위치")도 성립한다.
+ * 동의어(두꺼비집 → 분전함)는 서버 도구가 이미 해석했으므로 여기서 다시 하지 않는다.
+ */
+export function isHighlightedDevice(
+  device: { room: string | null; deviceType: string; label: string | null },
+  labels: readonly string[],
+): boolean {
+  const targets = [ariaLabel(device), device.label].filter(
+    (t): t is string => typeof t === "string" && t.length > 0,
+  );
+  return labels.some((raw) => {
+    const label = raw.trim();
+    if (label.length === 0) return false;
+    return targets.some((target) => label.includes(target) || target.includes(label));
+  });
+}
+
 export interface DeviceRow {
   room: string;
   type: string;

@@ -29,14 +29,22 @@ const BOLD_RE = /\*\*(?=\S)([^*\n]+?)\*\*/g;
 const EMPHASIS_RE = /(^|[\s([])[*_](?=\S)([^*_\n]+?)[*_](?=$|[\s).,!?\]])/g;
 /** `` `코드` `` — 백틱은 이 도메인 평문에 나올 일이 없어 짝만 맞으면 벗긴다. */
 const CODE_RE = /`([^`\n]+)`/g;
+/**
+ * 인용 마커 `[1]`·`[1][2]`·`[1, 2]` — 서버 텍스트에는 남긴다(검증·측정이 [n]을 본다).
+ * **표시에서만** 벗긴다(사용자 지적 — 출처는 위 SourceStrip 카드가 이미 보여준다).
+ * 숫자만 매치하므로 날짜·호수 표기 `[별관]` 같은 텍스트 대괄호에는 걸리지 않고,
+ * 스트리밍 중 미완성 `[1`은 다음 청크에서 완성된 뒤 벗겨진다.
+ */
+const CITATION_MARKER_RE = /\s*\[\d+(?:\s*,\s*\d+)*\]/g;
 
-/** 한 줄에서 강조 기호만 제거. 텍스트 내용은 바꾸지 않는다. */
+/** 한 줄에서 강조 기호·인용 마커만 제거. 텍스트 내용은 바꾸지 않는다. */
 export function stripMarkers(line: string): string {
   return line
     .replace(HEADING_RE, "")
     .replace(BOLD_RE, "$1")
     .replace(EMPHASIS_RE, "$1$2")
     .replace(CODE_RE, "$1")
+    .replace(CITATION_MARKER_RE, "")
     .trimEnd();
 }
 

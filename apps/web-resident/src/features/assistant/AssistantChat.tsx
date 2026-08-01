@@ -5,6 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
 import { getMe } from "@/lib/api";
 import { buildComposeHref } from "@/features/inquiries/prefill";
+import {
+  buildFloorPlanHref,
+  deviceLabelsFromCitations,
+  isFloorPlanAnswer,
+} from "@/features/floor-plan/links";
 import { buildParkingHref, isParkingAnswer, spotNosFromCitations } from "@/features/parking/links";
 import { type Citation, answerKind } from "./api";
 import { answerBlocks } from "./markdown";
@@ -170,6 +175,9 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
   // 뽑고, 못 뽑아도 CTA 는 띄운다(면 강조 없이 지도만 — H17-2·H19-2).
   const isParking = isParkingAnswer(message.result?.toolPath);
   const parkingHref = buildParkingHref(spotNosFromCitations(message.citations));
+  // 세대 평면도 위치 답변은 실제 평면도 뷰어로 보낸다 — 강조 라벨도 도구 카드에서만 뽑는다(H19-6).
+  const isFloorPlan = isFloorPlanAnswer(message.result?.toolPath);
+  const floorPlanHref = buildFloorPlanHref(deviceLabelsFromCitations(message.citations));
   const blocks = structuredBlocks(message.citations);
   // 폴백에는 칩을 달지 않는다 — 담당자 연락처 안내가 그 자리의 유일한 행동이다.
   // 서버가 이미 질문형만 중복 없이 보낸다(ai_core/suggestions.py) — 프론트 필터는 없앴다.
@@ -227,6 +235,11 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
               {isParking ? (
                 <Link href={parkingHref} className="btn btn--secondary btn--sm">
                   <span aria-hidden="true">🅿️</span> 주차위치 보기
+                </Link>
+              ) : null}
+              {isFloorPlan ? (
+                <Link href={floorPlanHref} className="btn btn--secondary btn--sm">
+                  <span aria-hidden="true">🏠</span> 평면도 보기
                 </Link>
               ) : null}
               <FeedbackButtons className="ai-row__feedback" />

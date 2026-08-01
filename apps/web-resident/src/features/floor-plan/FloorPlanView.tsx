@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { EmptyState, FloorPlanViewer, Skeleton } from "@liviq/ui";
 import { getMyFloorPlan, type FloorPlanData } from "./api";
+import { readDeviceParam } from "./links";
 import "./floor-plan.css";
 
 type LoadState = "loading" | "empty" | "error" | "ready";
 
 export function FloorPlanView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [state, setState] = useState<LoadState>("loading");
   const [data, setData] = useState<FloorPlanData | null>(null);
 
@@ -26,6 +28,9 @@ export function FloorPlanView() {
       alive = false;
     };
   }, []);
+
+  // AI 비서가 찾은 위치(`?device=`) — 없으면 평소의 평면도 그대로다.
+  const highlightLabels = useMemo(() => readDeviceParam(searchParams), [searchParams]);
 
   return (
     <div className="floor-plan">
@@ -63,7 +68,17 @@ export function FloorPlanView() {
             {data.plan.unitTypeName ? (
               <p className="floor-plan__unit-type">{data.plan.unitTypeName} 타입</p>
             ) : null}
-            <FloorPlanViewer plan={data.plan} devices={data.devices} />
+            {highlightLabels.length > 0 ? (
+              <p className="floor-plan__highlight">
+                <span aria-hidden="true">📍</span> AI 비서가 찾은 위치 {highlightLabels.join(" · ")}{" "}
+                — 평면도에 강조 표시했어요.
+              </p>
+            ) : null}
+            <FloorPlanViewer
+              plan={data.plan}
+              devices={data.devices}
+              highlightLabels={highlightLabels}
+            />
           </>
         )}
       </main>
