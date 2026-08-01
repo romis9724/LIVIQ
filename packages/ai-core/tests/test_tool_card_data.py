@@ -127,6 +127,24 @@ async def test_get_fees_data_is_a_fee_table_with_total_and_diff(
     }
 
 
+async def test_get_fees_data_peer_block_is_aggregate_only(settings: AiCoreSettings) -> None:
+    """같은 평형 평균은 집계값만(ADR-0026 결정 3) — 개별 세대 금액 키는 존재하지 않는다."""
+
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        if "household_geometries" in sql.lower():
+            return [row(unit_type="84M", avg_total=95000, sample_size=120)]
+        return _fee_handler(sql, params)
+
+    data = await _data(settings, "get_fees", {"period": "2026-06"}, handler, CTX_RESIDENT)
+    assert data["peer"] == {
+        "unit_type": "84M",
+        "avg_total": 95000,
+        "sample_size": 120,
+        "diff": 5000,
+    }
+    assert set(data["peer"]) == {"unit_type", "avg_total", "sample_size", "diff"}
+
+
 async def test_get_fees_data_matches_quote_numbers(settings: AiCoreSettings) -> None:
     """화면 값(data)과 LLM에 준 값(quote)이 같은 숫자여야 한다 — 규칙 5(단일 출처)."""
     result = (

@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -39,6 +39,14 @@ MAX_TOOL_ROWS = 20
 GRAPH_SEARCH_K = 5
 # 점검 임박 판정 창(일).
 OVERDUE_WINDOW_DAYS = 7
+
+# 다음 정기점검 예정일(ADM-3) — 임박 창 밖의 향후 점검을 가까운 순으로 몇 건 덧붙인다.
+UPCOMING_CHECK_ROWS = 5
+# 같은 평형 평균 비교의 표본 하한(ADR-0026 결정 3). 미달이면 비교를 생략한다 — 소표본
+# 평균은 본인 값과 함께 특정 세대 금액을 역산시킨다(n=2면 상대 세대 금액이 그대로 나온다).
+# 첫마을 4단지는 322세대이고 소수 평형(59C)도 수십 세대라, 10이면 역산은 불가능하면서
+# 비교는 거의 항상 성립한다.
+MIN_PEER_SAMPLE = 10
 
 FACILITY_ROLES = frozenset({"FACILITY", "MANAGER"})
 _PERIOD_PATTERN = r"^\d{4}-\d{2}$"
@@ -160,6 +168,33 @@ _FEE_SQL = text(
     "SELECT breakdown, total_amount FROM fees "
     "WHERE tenant_id = :tid AND household_id = :hid AND period = :period"
 )
+# 같은 단지·같은 평형의 같은 월 평균(ADR-0026 결정 3) — **집계값만** SELECT한다. 개별 세대
+# 금액은 어떤 경로로도 나가지 않는다. 평형 키는 unit_type_label "84M(공공임대)" → "84M"
+# (seed_fees_demo._unit_type_of와 같은 규칙). 본인 세대 geometry가 없거나 라벨이 비면
+# me.unit_type이 NULL이라 조인이 성립하지 않고 → 결과 0행 = 비교 생략.
+_PEER_AVG_SQL = text(
+    "WITH me AS ("
+    "  SELECT nullif(btrim(split_part(unit_type_label, '(', 1)), '') AS unit_type"
+    "  FROM household_geometries WHERE tenant_id = :tid AND household_id = :hid"
+    ") "
+    "SELECT me.unit_type AS unit_type, round(avg(f.total_amount)) AS avg_total, "
+    "       count(*) AS sample_size "
+    "FROM me "
+    "JOIN household_geometries g ON g.tenant_id = :tid "
+    "  AND nullif(btrim(split_part(g.unit_type_label, '(', 1)), '') = me.unit_type "
+    "JOIN fees f ON f.tenant_id = :tid AND f.household_id = g.household_id "
+    "  AND f.period = :period "
+    "GROUP BY me.unit_type"
+)
+
+
+class PeerAverage(NamedTuple):
+    """같은 평형 평균 비교 결과 — 전부 집계값(세대 식별 정보 없음)."""
+
+    unit_type: str
+    avg_total: int
+    sample_size: int
+    diff: int
 
 
 async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
@@ -205,13 +240,39 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
         ).first()
         prev_total = int(prev.total_amount) if prev and prev.total_amount is not None else None
 
+    peer = await _peer_average(deps, ctx, urow.household_id, period, total)
+
     return ToolResult(
         card=ToolCard(
             title=f"관리비 {period} 확정 데이터",
-            quote=_fee_quote(period, breakdown, total, prev_total),
+            quote=_fee_quote(period, breakdown, total, prev_total, peer),
             source_kind="tool:get_fees",
-            data=_fee_data(period, breakdown, total, prev_total),
+            data=_fee_data(period, breakdown, total, prev_total, peer),
         )
+    )
+
+
+async def _peer_average(
+    deps: ToolDeps, ctx: ToolContext, household_id: Any, period: str, total: int
+) -> PeerAverage | None:
+    """같은 단지·같은 평형의 같은 월 평균. 평형 미상·표본 하한 미달이면 None(비교 생략).
+
+    평균·표본수는 SQL 집계가 낸 값 그대로다 — 파이썬이 다시 계산하지 않는다(규칙 5).
+    """
+    row = (
+        await deps.session.execute(
+            _PEER_AVG_SQL,
+            {"tid": ctx.tenant_id, "hid": household_id, "period": period},
+        )
+    ).first()
+    if row is None or row.avg_total is None or int(row.sample_size) < MIN_PEER_SAMPLE:
+        return None
+    avg_total = int(row.avg_total)
+    return PeerAverage(
+        unit_type=str(row.unit_type),
+        avg_total=avg_total,
+        sample_size=int(row.sample_size),
+        diff=total - avg_total,
     )
 
 
@@ -235,7 +296,11 @@ def _breakdown_items(raw: object) -> list[tuple[str, int]]:
 
 
 def _fee_quote(
-    period: str, breakdown: list[tuple[str, int]], total: int, prev_total: int | None
+    period: str,
+    breakdown: list[tuple[str, int]],
+    total: int,
+    prev_total: int | None,
+    peer: PeerAverage | None,
 ) -> str:
     top = ", ".join(f"{name} {amount:,}원" for name, amount in breakdown[:3])
     quote = f"{period} 합계 {total:,}원 (주요 항목: {top})"
@@ -243,18 +308,31 @@ def _fee_quote(
         diff = total - prev_total
         sign = "+" if diff >= 0 else ""
         quote += f" · 전월 {prev_total:,}원 대비 {sign}{diff:,}원"
+    if peer is not None:
+        sign = "+" if peer.diff >= 0 else ""
+        quote += (
+            f" · 같은 평형({peer.unit_type}) {peer.sample_size}세대 평균 "
+            f"{peer.avg_total:,}원 대비 {sign}{peer.diff:,}원"
+        )
     return quote
 
 
 def _fee_data(
-    period: str, breakdown: list[tuple[str, int]], total: int, prev_total: int | None
+    period: str,
+    breakdown: list[tuple[str, int]],
+    total: int,
+    prev_total: int | None,
+    peer: PeerAverage | None,
 ) -> dict[str, Any]:
     """화면용 관리비 표(ADR-0025 §6) — quote와 달리 **전 항목**을 값 그대로 싣는다.
 
     quote는 상위 3개만 담아 LLM 토큰을 아끼지만, 화면 표는 잘리면 안 된다. LLM은 이 dict를
     보지 않으므로 여기서 늘려도 비용이 늘지 않는다(규칙 5·8 — 숫자 재작성 경로 없음).
+
+    `peer`(같은 평형 평균)는 비교가 성립할 때만 실린다 — 표본 하한 미달·평형 미상이면
+    키 자체가 없다(ADR-0026 결정 3). 개별 세대 금액은 어떤 키로도 싣지 않는다.
     """
-    return {
+    data: dict[str, Any] = {
         "kind": "fee_table",
         "period": period,
         "rows": [{"name": name, "amount": amount} for name, amount in breakdown],
@@ -262,6 +340,14 @@ def _fee_data(
         "prev_total": prev_total,
         "diff": None if prev_total is None else total - prev_total,
     }
+    if peer is not None:
+        data["peer"] = {
+            "unit_type": peer.unit_type,
+            "avg_total": peer.avg_total,
+            "sample_size": peer.sample_size,
+            "diff": peer.diff,
+        }
+    return data
 
 
 def _prev_period(period: str) -> str:
@@ -362,6 +448,14 @@ _OVERDUE_SQL = text(
     "AND next_check_at IS NOT NULL AND next_check_at <= :threshold "
     "ORDER BY next_check_at LIMIT :lim"
 )
+# 임박 창 **밖**의 향후 점검 — "다음 점검 언제야?"(ADM-3)의 근거. 임박 목록과 LIMIT를
+# 나눠 쓴다(한 쿼리로 합치면 임박 건이 상한을 채웠을 때 예정일이 통째로 잘린다).
+_UPCOMING_SQL = text(
+    "SELECT name, next_check_at FROM facilities "
+    "WHERE tenant_id = :tid AND deleted_at IS NULL "
+    "AND next_check_at IS NOT NULL AND next_check_at > :threshold "
+    "ORDER BY next_check_at LIMIT :lim"
+)
 
 
 async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
@@ -371,15 +465,16 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
             _OVERDUE_SQL, {"tid": ctx.tenant_id, "threshold": threshold, "lim": MAX_TOOL_ROWS}
         )
     ).all()
-    # DB가 확인한 "없음"은 확정 근거 — note면 인용 카드가 없어 폴백된다(R22 실측, v2 §6-⓪).
-    if not rows:
-        quote = f"{OVERDUE_WINDOW_DAYS}일 이내 점검 예정이거나 기한을 넘긴 설비가 없습니다."
-    else:
-        quote = "; ".join(f"{r.name}: {r.next_check_at:%Y-%m-%d}" for r in rows)
+    upcoming = (
+        await deps.session.execute(
+            _UPCOMING_SQL,
+            {"tid": ctx.tenant_id, "threshold": threshold, "lim": UPCOMING_CHECK_ROWS},
+        )
+    ).all()
     return ToolResult(
         card=ToolCard(
-            title="점검 기한 임박·초과 설비",
-            quote=quote,
+            title="점검 일정(임박·초과 + 다음 예정)",
+            quote=_check_quote(rows, upcoming),
             source_kind="tool:get_overdue_checks",
         )
     )
@@ -434,6 +529,27 @@ def _elapsed_hours(now: datetime, entry_at: datetime) -> int:
     return int((now - entry_at).total_seconds() // 3600)
 
 
+def _check_quote(rows: Sequence[Any], upcoming: Sequence[Any]) -> str:
+    """임박·초과 목록 + 다음 점검 예정일.
+
+    DB가 확인한 "없음"도 확정 근거라 카드로 낸다(R22 실측, v2 §6-⓪). 다만 둘 다 비었으면
+    "점검이 없다"가 아니라 **예정일이 등록되지 않았다**고 말해야 한다 — 첫마을 시드는
+    next_check_at이 전부 NULL이라, 없는 일정을 지어내면 규칙 1 위반이다.
+    """
+    listed = "; ".join(f"{r.name}: {r.next_check_at:%Y-%m-%d}" for r in rows)
+    next_listed = "; ".join(f"{r.name}: {r.next_check_at:%Y-%m-%d}" for r in upcoming)
+    if not rows and not upcoming:
+        return "점검 예정일이 등록된 설비가 없습니다 — 다음 점검 예정일 미등록(일정 미상)."
+    parts = [
+        f"{OVERDUE_WINDOW_DAYS}일 이내 기한 임박·초과: {listed}"
+        if rows
+        else f"{OVERDUE_WINDOW_DAYS}일 이내 점검 예정이거나 기한을 넘긴 설비가 없습니다."
+    ]
+    if next_listed:
+        parts.append(f"다음 점검 예정: {next_listed}")
+    return " / ".join(parts)
+
+
 # ── 레지스트리 조립 ──────────────────────────────────────────────────────────
 
 
@@ -482,7 +598,12 @@ def default_registry() -> ToolRegistry:
             ),
             Tool(
                 name="get_fees",
-                description="본인 세대의 월 관리비 항목·합계·전월 대비를 조회한다.",
+                # 평균 비교는 별도 도구가 아니라 이 도구의 결과에 붙는다(ADR-0026 결정 3 —
+                # 도구 수는 8B 라우팅 예산). "다른 세대와 비교" 질의가 이리로 오도록 명시.
+                description=(
+                    "본인 세대의 월 관리비 항목·합계·전월 대비와 "
+                    "같은 평형 세대 평균 대비를 조회한다."
+                ),
                 args_model=GetFeesArgs,
                 run=_get_fees,
             ),
@@ -519,9 +640,9 @@ def default_registry() -> ToolRegistry:
                 # 용례를 명시한다 — 설명이 한 줄일 때 이 도구는 한 번도 선택되지 않았다(R22 0/3).
                 # 윈도우는 7일 — "이번 달"을 약속하면 월말에 정답이 어긋난다(v2 §6-⓪).
                 description=(
-                    "점검 기한이 지났거나 7일 이내로 임박한 설비 목록을 조회한다. 점검 "
-                    "기한·일정을 묻는 질문에 사용한다 — '점검 기한이 지난 설비', "
-                    "'점검이 임박한 설비'."
+                    "점검 기한이 지났거나 7일 이내로 임박한 설비와 그 다음 점검 예정일을 "
+                    "조회한다. 점검 기한·일정을 묻는 질문에 사용한다 — '점검 기한이 지난 "
+                    "설비', '점검이 임박한 설비', '다음 점검은 언제'."
                 ),
                 args_model=NoArgs,
                 run=_get_overdue_checks,

@@ -21,7 +21,7 @@ from ai_core.graph import GraphClient, IncidentContext, IncidentHit
 from ai_core.llm.client import LlmClient, ToolCallRequest
 from ai_core.rag.retrieval import RetrievedChunk, Retriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry, execute_tool
-from ai_core.tools.library import GetFeesArgs
+from ai_core.tools.library import MIN_PEER_SAMPLE, GetFeesArgs
 
 TENANT = uuid.uuid4()
 USER = uuid.uuid4()
@@ -333,6 +333,93 @@ async def test_get_fees_before_approval_is_blocked(settings: AiCoreSettings) -> 
     assert "조회할 수 없습니다" in result.note
 
 
+# ── get_fees 같은 평형 평균 비교 (ADR-0026 결정 3) ──────────────────────
+
+
+def _peer_handler(avg_total: object, sample_size: int) -> Any:
+    """_fee_handler + 같은 평형 평균 집계 응답. sample_size로 표본 하한 분기를 만든다."""
+
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        if "household_geometries" in sql.lower():
+            return [row(unit_type="84M", avg_total=avg_total, sample_size=sample_size)]
+        return _fee_handler(sql, params)
+
+    return handler
+
+
+async def _fee_card(settings: AiCoreSettings, handler: Any) -> Any:
+    result = (
+        await execute_tool(
+            _call("get_fees", {"period": "2026-06"}),
+            ctx=CTX_RESIDENT,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    return result.card
+
+
+async def test_get_fees_adds_peer_average_when_sample_is_enough(
+    settings: AiCoreSettings,
+) -> None:
+    card = await _fee_card(settings, _peer_handler(avg_total=95000, sample_size=MIN_PEER_SAMPLE))
+    # 평균·표본수는 SQL 집계값 그대로, 차액만 확정값끼리의 뺄셈(규칙 5).
+    assert "같은 평형(84M) 10세대 평균 95,000원 대비 +5,000원" in card.quote
+    assert card.data is not None
+    assert card.data["peer"] == {
+        "unit_type": "84M",
+        "avg_total": 95000,
+        "sample_size": 10,
+        "diff": 5000,
+    }
+
+
+async def test_get_fees_omits_peer_average_below_min_sample(settings: AiCoreSettings) -> None:
+    """표본 하한 미달 = 비교 거부(소표본 역산 방지) — 본인 값은 정상 반환한다."""
+    card = await _fee_card(
+        settings, _peer_handler(avg_total=95000, sample_size=MIN_PEER_SAMPLE - 1)
+    )
+    assert "평형" not in card.quote
+    assert "100,000원" in card.quote  # 본인 세대 값은 그대로
+    assert card.data is not None and "peer" not in card.data
+
+
+async def test_get_fees_omits_peer_average_without_geometry(settings: AiCoreSettings) -> None:
+    """평형 미상(household_geometries 없음)이면 집계가 0행 — 비교만 생략, 폴백 아님."""
+    card = await _fee_card(settings, _fee_handler)  # geometry 쿼리는 빈 결과
+    assert "평형" not in card.quote
+    assert "100,000원" in card.quote
+    assert card.data is not None and "peer" not in card.data
+
+
+async def test_get_fees_omits_peer_average_when_avg_is_null(settings: AiCoreSettings) -> None:
+    card = await _fee_card(settings, _peer_handler(avg_total=None, sample_size=50))
+    assert card.data is not None and "peer" not in card.data
+
+
+async def test_peer_average_sql_is_tenant_scoped_and_aggregate_only(
+    settings: AiCoreSettings,
+) -> None:
+    """격리(규칙 3)와 미노출(ADR-0026)을 SQL 문자열로 못박는다 — 개별 세대 금액 SELECT 금지."""
+    deps = _deps(settings, handler=_peer_handler(avg_total=95000, sample_size=30))
+    await execute_tool(
+        _call("get_fees", {"period": "2026-06"}),
+        ctx=CTX_RESIDENT,
+        deps=deps,
+        registry=default_registry(),
+    )
+    session = cast(FakeSession, deps.session)
+    peer_sql, peer_params = next(
+        (sql, params) for sql, params in session.executed if "household_geometries" in sql
+    )
+    assert peer_params["tid"] == TENANT
+    assert peer_sql.count("tenant_id = :tid") == 3  # me·geometry·fees 전부 같은 단지로 제한
+    select_clause = peer_sql.split("SELECT me.unit_type")[1].split("FROM me")[0]
+    assert "household_id" not in select_clause  # 세대 식별자 미노출
+    assert "f.total_amount" not in select_clause.replace("avg(f.total_amount)", "")
+
+
 # ── get_my_inquiries ───────────────────────────────────────────────────
 
 
@@ -452,7 +539,7 @@ async def test_get_overdue_checks_lists_due(settings: AiCoreSettings) -> None:
     due = datetime.now(UTC) + timedelta(days=2)
 
     def handler(sql: str, params: dict[str, Any]) -> list[Any]:
-        return [row(name="소방펌프", next_check_at=due)]
+        return [row(name="소방펌프", next_check_at=due)] if "<= :threshold" in sql else []
 
     result = (
         await execute_tool(
@@ -465,9 +552,33 @@ async def test_get_overdue_checks_lists_due(settings: AiCoreSettings) -> None:
     assert result.card is not None and "소방펌프" in result.card.quote
 
 
+async def test_get_overdue_checks_lists_next_scheduled_check(settings: AiCoreSettings) -> None:
+    """ADM-3 — 임박 창 밖의 다음 점검 예정일도 근거로 낸다(H19-4 ②)."""
+    later = datetime.now(UTC) + timedelta(days=60)
+
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        if "next_check_at > :threshold" in sql:
+            return [row(name="승강기1", next_check_at=later)]
+        return []
+
+    result = (
+        await execute_tool(
+            _call("get_overdue_checks", {}),
+            ctx=CTX_MANAGER,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+    assert result.card is not None
+    assert f"다음 점검 예정: 승강기1: {later:%Y-%m-%d}" in result.card.quote
+    assert "없습니다" in result.card.quote  # 임박·초과는 없음(확정 조회)
+
+
 async def test_get_overdue_checks_empty_returns_card(settings: AiCoreSettings) -> None:
     # R22 실측: 빈 결과가 note만 반환 → 인용 근거 없음 → 폴백. "DB가 확인한 없음"은
     # 절대 규칙 1의 확정 도구 결과이므로 카드로 승격한다(케이스셋 v2 §6-⓪, codex HIGH).
+    # 첫마을 시드는 next_check_at이 전부 NULL이라 임박·예정 둘 다 비는데, 이때 "점검
+    # 없음"이 아니라 **예정일 미등록**이라고 말해야 한다(규칙 1 — 없는 일정 지어내기 금지).
     result = (
         await execute_tool(
             _call("get_overdue_checks", {}),
@@ -478,7 +589,7 @@ async def test_get_overdue_checks_empty_returns_card(settings: AiCoreSettings) -
     ).result
     assert result.card is not None
     assert result.card.source_kind == "tool:get_overdue_checks"
-    assert "7일" in result.card.quote  # 조회 조건(윈도우) 명시
+    assert "예정일 미등록" in result.card.quote
     assert "없습니다" in result.card.quote
 
 
