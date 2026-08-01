@@ -11,7 +11,7 @@ import {
   isFloorPlanAnswer,
 } from "@/features/floor-plan/links";
 import { buildParkingHref, isParkingAnswer, spotNosFromCitations } from "@/features/parking/links";
-import { type Citation, answerKind } from "./api";
+import { answerKind } from "./api";
 import { answerBlocks } from "./markdown";
 import { progressLabel } from "./progress";
 import { StructuredBlock } from "./StructuredBlock";
@@ -223,11 +223,11 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
           </div>
         ) : kind === "answered" ? (
           <>
-            {/* 출처 우선(H18-3 ③): 답변 본문보다 근거를 먼저 인지시킨다.
-                과정 → 출처 → 답변 → 데이터 블록 순. */}
+            {/* 출처 카드·신뢰도 배지는 화면에서 뺐다(사용자 지시 2026-08-01) — 답변 한 줄에
+                머리말이 두 줄 붙어 정작 답이 밀렸다. **근거 자체를 없앤 게 아니다**: 본문의
+                [n] 인용은 그대로고, 근거 없는 답변을 막는 서버 게이트(규칙 1)도 그대로다.
+                무엇을 근거로 답했는지는 '답변 과정'을 펼치면 도구 단위로 보인다. */}
             <ProgressSteps steps={message.steps} />
-            <SourceStrip citations={message.citations} />
-            <ConfidenceBadge status={message.result?.needsReview ? "review" : "answered"} />
             <div className="bubble-ai">
               <AnswerBody text={message.text} />
               {blocks.map((b) => (
@@ -241,7 +241,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
             <div className="ai-row__actions">
               {isInquiry ? (
                 <Link href={composeHref} className="btn btn--secondary btn--sm">
-                  민원 접수하기
+                  <span aria-hidden="true">📝</span> 민원 접수하기
                 </Link>
               ) : null}
               {isParking ? (
@@ -330,23 +330,6 @@ function ProgressSteps({ steps }: { steps: readonly string[] }) {
  * 말이 세 번 나오면서 두 줄을 먹었다. 건수는 카드가 눈에 보이고, 스크린리더에는 이 섹션의
  * aria-label 이 그대로 전달한다.
  */
-function SourceStrip({ citations }: { citations: readonly Citation[] }) {
-  // 같은 문서의 청크가 각각 카드로 뜨면 "출처가 중복"으로 읽힌다 — 표시만 묶는다(sources.ts).
-  const sources = groupCitations(citations);
-  if (sources.length === 0) return null;
-  return (
-    <section className="ai-sources" aria-label={`출처 ${sources.length}건`} tabIndex={0}>
-      {sources.map((s) => (
-        <CitationCard
-          key={s.ref}
-          className="ai-sources__card"
-          title={s.title}
-          meta={s.details.join(" · ")}
-        />
-      ))}
-    </section>
-  );
-}
 
 /** 맥락 기반 후속 질문 칩 — 누르면 그 문구로 새 질문을 보낸다. 비면 아무것도 렌더하지 않는다. */
 function SuggestionChips({

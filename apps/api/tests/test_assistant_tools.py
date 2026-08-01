@@ -39,8 +39,10 @@ from liviq_db.models import (
 HOUSEHOLD_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 
 
-def _fee_agent_llm(*, answer: str = "이번 달 관리비는 100,000원입니다.") -> LlmClient:
-    """get_fees만 호출한 뒤 스트림 답변하는 가짜 도구호출 LLM."""
+def _fee_agent_llm(
+    *, answer: str = "이번 달 관리비는 100,000원입니다.", tool_args: str = "{}"
+) -> LlmClient:
+    """get_fees만 호출한 뒤 스트림 답변하는 가짜 도구호출 LLM(tool_args = 도구 인자)."""
     settings = AiCoreSettings(  # type: ignore[call-arg]
         LLM_BASE_URL="http://llm.test/v1",
         LLM_MODEL="test",
@@ -76,7 +78,10 @@ def _fee_agent_llm(*, answer: str = "이번 달 관리비는 100,000원입니다
                                 {
                                     "id": "call_fees",
                                     "type": "function",
-                                    "function": {"name": "get_fees", "arguments": "{}"},
+                                    "function": {
+                                        "name": "get_fees",
+                                        "arguments": tool_args,
+                                    },
                                 }
                             ],
                         }
@@ -207,6 +212,58 @@ async def test_tool_citation_carries_structured_data(fee_client: httpx.AsyncClie
         "prev_total": None,  # 2026-05 행 없음
         "diff": None,
     }
+
+
+# ── 여러 달 평균 (2026-08-01 사고 — 실 PG 집계) ────────────────────────────────
+
+
+async def _add_fee(session: AsyncSession, period: str, total: int) -> None:
+    session.add(
+        Fee(
+            tenant_id=TENANT_ID,
+            household_id=HOUSEHOLD_ID,
+            period=period,
+            breakdown=[{"name": "일반관리비", "level": 0, "amount": total}],
+            total_amount=total,
+            source="excel",
+        )
+    )
+    await session.flush()
+
+
+async def _multi_month_citation(db_session: AsyncSession, periods: str) -> dict[str, object]:
+    llm = _fee_agent_llm(tool_args=json.dumps({"period": periods}))
+    async with _client(db_session, llm) as client:
+        response = await client.post("/assistant/ask", json={"question": "6,7월 관리비 평균은?"})
+    citation = [data for name, data in _parse_sse(response.text) if name == "citation"][0]
+    return citation["data"]  # type: ignore[return-value]
+
+
+async def test_multi_month_average_comes_from_sql(db_session: AsyncSession) -> None:
+    """평균은 PG 집계(avg OVER)가 낸 값 — 파이썬도 LLM도 나누지 않는다(규칙 5).
+
+    사고 재현 방지: 6월 100,000 + 7월 120,000 → 평균 110,000이 도구 단계에서 확정된다.
+    """
+    await _seed_fee(db_session)  # 2026-06 = 100,000
+    await _add_fee(db_session, "2026-07", 120_000)
+
+    data = await _multi_month_citation(db_session, "2026-06,2026-07")
+    assert data["months"] == [
+        {"period": "2026-06", "total": 100_000},
+        {"period": "2026-07", "total": 120_000},
+    ]
+    assert data["average_total"] == 110_000
+    assert data["total"] is None  # 평균은 "합계" 칸에 들어가지 않는다
+
+
+async def test_multi_month_without_all_data_refuses_average(db_session: AsyncSession) -> None:
+    """있는 달로만 낸 평균은 주지 않는다 — 없는 달을 밝히고 평균은 비운다."""
+    await _seed_fee(db_session)  # 2026-06만 존재
+
+    data = await _multi_month_citation(db_session, "2026-06,2026-07")
+    assert data["average_total"] is None
+    assert data["missing_periods"] == ["2026-07"]
+    assert data["months"] == [{"period": "2026-06", "total": 100_000}]
 
 
 # ── 같은 평형 평균 비교 (H19-4 ①, ADR-0026 결정 3 — 실 PG 집계) ──────────────

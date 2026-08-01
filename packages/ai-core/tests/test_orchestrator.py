@@ -235,6 +235,41 @@ async def test_step_limit_forces_termination(settings: AiCoreSettings) -> None:
     assert len(retriever.calls) <= MAX_TOOL_STEPS
 
 
+async def test_identical_tool_call_runs_once_and_ends_the_loop(settings: AiCoreSettings) -> None:
+    """같은 도구를 같은 인자로 3연속 요청해도 실행은 1회, 루프는 유한 스텝에 끝난다.
+
+    2026-08-01 dev 실측: find_in_floor_plan을 4회 불러 스텝 상한을 전부 태웠다(지연·토큰).
+    """
+    retriever = FakeRetriever([_chunk()])
+    turns = 0
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        nonlocal turns
+        turns += 1
+        return _decision(tool_calls=[_tc("search_documents", {"query": "공유기"})])
+
+    done = _done(await _run(_agent_llm(settings, decide), retriever))
+    assert len(retriever.calls) == 1  # 재호출은 실행되지 않음
+    assert done.tool_path == ("search_documents",)
+    assert turns < MAX_TOOL_STEPS  # 상한을 태우지 않고 조기 종료
+    assert done.status == "answered"
+
+
+async def test_same_tool_with_different_args_still_runs(settings: AiCoreSettings) -> None:
+    """인자가 다른 재호출은 정당하다(다른 달·다른 기기) — 무조건 막지 않는다."""
+    retriever = FakeRetriever([_chunk()])
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        done_tools = sum(1 for m in messages if m.get("role") == "tool")
+        if done_tools >= 2:
+            return _decision(content="")
+        return _decision(tool_calls=[_tc("search_documents", {"query": f"질의{done_tools}"})])
+
+    events = await _run(_agent_llm(settings, decide), retriever)
+    assert len(retriever.calls) == 2
+    assert _done(events).status == "answered"
+
+
 async def test_invalid_tool_args_do_not_crash(settings: AiCoreSettings) -> None:
     retriever = FakeRetriever([_chunk()])
     # get_fees에 깨진 JSON, search_documents는 정상 → 크래시 없이 문서 근거로 답변.
@@ -547,12 +582,15 @@ async def test_tool_citation_data_is_the_tool_value_unchanged(settings: AiCoreSe
 
 
 async def test_done_carries_context_dependent_suggestions(settings: AiCoreSettings) -> None:
-    """제안은 tool_path에 달린다 — 고정 칩이 아니다(ADR-0025 §7)."""
+    """제안 필드는 계약으로 남는다 — 다만 지금 도구 매핑은 비어 있어 답변 경로엔 칩이 없다.
+
+    get_fees 칩("지난달과 비교하기")은 "6,7월 평균" 답변 화면에 떠서 제거했다(2026-08-01).
+    """
     llm = _agent_llm(
         settings, _calls_then_stop(_tc("get_fees", {})), answer="이번 달 관리비는 100,000원입니다."
     )
     done = _done(await _run(llm, FakeRetriever([])))
-    assert done.suggestions == ("지난달과 비교하기",)
+    assert done.suggestions == ()
 
 
 async def test_fallback_suggests_the_desk(settings: AiCoreSettings) -> None:

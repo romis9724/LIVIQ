@@ -49,7 +49,13 @@ UPCOMING_CHECK_ROWS = 5
 MIN_PEER_SAMPLE = 10
 
 FACILITY_ROLES = frozenset({"FACILITY", "MANAGER"})
-_PERIOD_PATTERN = r"^\d{4}-\d{2}$"
+# 조회할 월 — 한 달(2026-06) 또는 쉼표로 나열한 여러 달(2026-06,2026-07).
+# 배열 인자가 아니라 쉼표 문자열인 이유: 8B는 배열 인자 생성에 약하고, 인자 개수가 늘수록
+# 라우팅이 함께 무너진다(R22 계열 — LongtermParkingArgs와 같은 판단). 필드 이름을 그대로
+# 두면 기존 단일 월 호출·골든셋도 한 글자도 안 바뀐다.
+_PERIOD_PATTERN = r"^\d{4}-\d{2}(\s*,\s*\d{4}-\d{2})*$"
+# 평균은 2개월 이상일 때만 의미가 있다(1개월 평균 = 그 달 합계).
+MIN_AVERAGE_MONTHS = 2
 
 # 장기주차 기준 시간(H19-3) — 기본 하루, 상한 7일. 상한이 없으면 모델이 큰 값을 넣어
 # 사실상 필터가 사라진다(경계 검증은 Pydantic이 담당, 규칙: 경계 입력 검증).
@@ -67,8 +73,20 @@ class QueryArgs(BaseModel):
 
 class GetFeesArgs(BaseModel):
     period: str | None = Field(
-        None, pattern=_PERIOD_PATTERN, description="조회할 월(YYYY-MM). 생략 시 최근 확정 월"
+        None,
+        pattern=_PERIOD_PATTERN,
+        description=(
+            "조회할 월(YYYY-MM). 여러 달을 물으면 쉼표로 전부 나열한다"
+            "(예: 2026-06,2026-07) — 평균·합계는 이 도구가 계산해 돌려준다. "
+            "생략 시 최근 확정 월"
+        ),
     )
+
+    def requested_periods(self) -> list[str]:
+        """요청 월 목록(중복 제거·오름차순). 빈 목록 = 미지정(최근 확정 월)."""
+        if not self.period:
+            return []
+        return sorted({p.strip() for p in self.period.split(",")})
 
 
 class GetFacilitiesArgs(BaseModel):
@@ -168,6 +186,16 @@ _FEE_SQL = text(
     "SELECT breakdown, total_amount FROM fees "
     "WHERE tenant_id = :tid AND household_id = :hid AND period = :period"
 )
+# 여러 달 조회(2026-08-01 사고 대응) — 월별 확정값과 **평균을 한 번에 SQL이 낸다**.
+# 파이썬도 LLM도 나눗셈을 하지 않는다(규칙 5): 인자가 단일 월뿐이던 시절 "6,7월 평균"에
+# 모델이 7월 값 하나를 받아 2로 나눠 답했다(공용관리비 81,468 → 40,734). 평균을 도구가
+# 확정해 카드에 실으면 모델이 계산할 여지 자체가 없다.
+_FEES_MULTI_SQL = text(
+    "SELECT period, total_amount, round(avg(total_amount) OVER ()) AS avg_total "
+    "FROM fees "
+    "WHERE tenant_id = :tid AND household_id = :hid AND period = ANY(:periods) "
+    "ORDER BY period"
+)
 # 같은 단지·같은 평형의 같은 월 평균(ADR-0026 결정 3) — **집계값만** SELECT한다. 개별 세대
 # 금액은 어떤 경로로도 나가지 않는다. 평형 키는 unit_type_label "84M(공공임대)" → "84M"
 # (seed_fees_demo._unit_type_of와 같은 규칙). 본인 세대 geometry가 없거나 라벨이 비면
@@ -206,12 +234,27 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
         return ToolResult(note="세대가 배정되지 않아 관리비를 조회할 수 없습니다.")
     approved = urow.approved_at.strftime("%Y-%m") if urow.approved_at else "9999-12"
 
-    period = a.period
+    requested = a.requested_periods()
+    if len(requested) > 1:
+        return await _fees_multi_month(deps, ctx, urow.household_id, requested, approved)
+    return await _fees_single_month(
+        deps, ctx, urow.household_id, requested[0] if requested else None, approved
+    )
+
+
+async def _fees_single_month(
+    deps: ToolDeps,
+    ctx: ToolContext,
+    household_id: Any,
+    period: str | None,
+    approved: str,
+) -> ToolResult:
+    """한 달 조회(기존 계약 그대로) — 항목·합계·전월 대비·같은 평형 평균."""
     if period is None:
         latest = (
             await deps.session.execute(
                 _LATEST_FEE_SQL,
-                {"tid": ctx.tenant_id, "hid": urow.household_id, "approved": approved},
+                {"tid": ctx.tenant_id, "hid": household_id, "approved": approved},
             )
         ).first()
         if latest is None:
@@ -222,7 +265,7 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
 
     fee = (
         await deps.session.execute(
-            _FEE_SQL, {"tid": ctx.tenant_id, "hid": urow.household_id, "period": period}
+            _FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": period}
         )
     ).first()
     if fee is None or fee.total_amount is None:
@@ -235,12 +278,12 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
     if prev_period >= approved:
         prev = (
             await deps.session.execute(
-                _FEE_SQL, {"tid": ctx.tenant_id, "hid": urow.household_id, "period": prev_period}
+                _FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": prev_period}
             )
         ).first()
         prev_total = int(prev.total_amount) if prev and prev.total_amount is not None else None
 
-    peer = await _peer_average(deps, ctx, urow.household_id, period, total)
+    peer = await _peer_average(deps, ctx, household_id, period, total)
 
     return ToolResult(
         card=ToolCard(
@@ -250,6 +293,98 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
             data=_fee_data(period, breakdown, total, prev_total, peer),
         )
     )
+
+
+async def _fees_multi_month(
+    deps: ToolDeps,
+    ctx: ToolContext,
+    household_id: Any,
+    requested: list[str],
+    approved: str,
+) -> ToolResult:
+    """여러 달 조회 — 월별 확정값 + **SQL이 낸 평균**만 낸다(규칙 5).
+
+    빠진 달을 조용히 넘기지 않는다. 승인 이전이라 뺀 달·데이터가 없는 달은 카드에 적고,
+    요청한 달이 하나라도 비면 **평균 자체를 내지 않는다** — 있는 달로만 낸 평균은
+    "6,7월 평균"을 물은 사용자에게 거짓말이다(이번 사고의 본질).
+    """
+    excluded = [p for p in requested if p < approved]
+    eligible = [p for p in requested if p >= approved]
+    if not eligible:
+        return ToolResult(
+            note=f"{', '.join(requested)} 관리비는 조회할 수 없습니다(입주 승인 이전)."
+        )
+    rows = (
+        await deps.session.execute(
+            _FEES_MULTI_SQL, {"tid": ctx.tenant_id, "hid": household_id, "periods": eligible}
+        )
+    ).all()
+    months = [(str(r.period), int(r.total_amount)) for r in rows if r.total_amount is not None]
+    if not months:
+        return ToolResult(note=f"{', '.join(eligible)} 관리비 내역이 없습니다.")
+    found = {p for p, _ in months}
+    missing = [p for p in eligible if p not in found]
+    # 평균은 요청한 달이 전부 있을 때만. avg_total은 SQL 윈도우 집계값 그대로다.
+    avg_total = (
+        int(rows[0].avg_total)
+        if not missing and len(months) >= MIN_AVERAGE_MONTHS and rows[0].avg_total is not None
+        else None
+    )
+    return ToolResult(
+        card=ToolCard(
+            title=f"관리비 {', '.join(requested)} 확정 데이터",
+            quote=_fee_months_quote(months, avg_total, missing, excluded),
+            source_kind="tool:get_fees",
+            data=_fee_months_data(requested, months, avg_total, missing, excluded),
+        )
+    )
+
+
+def _fee_months_quote(
+    months: list[tuple[str, int]],
+    avg_total: int | None,
+    missing: list[str],
+    excluded: list[str],
+) -> str:
+    """LLM이 보는 유일한 관리비 텍스트. 평균은 **이미 계산된 값**으로만 들어간다.
+
+    개별 월 금액과 평균을 함께 주되, 모델이 할 일은 인용뿐이다(재계산 금지는 프롬프트 규칙 6).
+    """
+    quote = "; ".join(f"{period} 합계 {total:,}원" for period, total in months)
+    if avg_total is not None:
+        quote += f" · {len(months)}개월 평균 총액 {avg_total:,}원"
+    if missing:
+        quote += f" · {', '.join(missing)} 관리비 내역이 없어 평균을 내지 않았습니다"
+    if excluded:
+        quote += f" · {', '.join(excluded)}는 입주 승인 이전이라 제외했습니다"
+    return quote
+
+
+def _fee_months_data(
+    requested: list[str],
+    months: list[tuple[str, int]],
+    avg_total: int | None,
+    missing: list[str],
+    excluded: list[str],
+) -> dict[str, Any]:
+    """화면용 다중 월 관리비 표 — 단일 월 `_fee_data`의 확장(kind 동일, 키 additive).
+
+    단일 월 키(rows·total·prev_total·diff)는 형태만 유지하고 비운다. `total`에 평균을 넣지
+    않는 이유가 사고의 교훈이다 — 화면은 total을 "합계"로 읽는다. 평균은 average_total
+    하나뿐이고, 못 냈으면 None이라 화면이 평균 줄을 그리지 않는다(프론트가 대신 계산 금지).
+    """
+    return {
+        "kind": "fee_table",
+        "period": ", ".join(requested),
+        "rows": [],
+        "total": None,
+        "prev_total": None,
+        "diff": None,
+        "months": [{"period": period, "total": total} for period, total in months],
+        "average_total": avg_total,
+        "missing_periods": missing,
+        "excluded_periods": excluded,
+    }
 
 
 async def _peer_average(
@@ -602,7 +737,9 @@ def default_registry() -> ToolRegistry:
                 # 도구 수는 8B 라우팅 예산). "다른 세대와 비교" 질의가 이리로 오도록 명시.
                 description=(
                     "본인 세대의 월 관리비 항목·합계·전월 대비와 "
-                    "같은 평형 세대 평균 대비를 조회한다."
+                    "같은 평형 세대 평균 대비를 조회한다. "
+                    "여러 달의 평균·비교를 물으면 그 달을 모두 나열해 한 번에 조회한다 — "
+                    "직접 더하거나 나누지 않는다."
                 ),
                 args_model=GetFeesArgs,
                 run=_get_fees,

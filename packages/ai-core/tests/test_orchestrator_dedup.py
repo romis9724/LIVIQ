@@ -44,9 +44,32 @@ async def _echo(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult
     )
 
 
+LATEST = "echo_latest"
+
+
+class _LatestArgs(BaseModel):
+    period: str | None = None
+
+
+async def _latest(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
+    """인자가 달라도 같은 결과가 나오는 도구(예: period 생략 vs 최신월 명시)."""
+    return ToolResult(
+        card=ToolCard(
+            title="최근 관리비",
+            quote="2026-07 합계 100,000원",
+            source_kind=f"tool:{LATEST}",
+        )
+    )
+
+
 def _registry() -> ToolRegistry:
     return ToolRegistry(
-        [Tool(name=ECHO, description="테스트용 조회", args_model=_EchoArgs, run=_echo)]
+        [
+            Tool(name=ECHO, description="테스트용 조회", args_model=_EchoArgs, run=_echo),
+            Tool(
+                name=LATEST, description="테스트용 최신 조회", args_model=_LatestArgs, run=_latest
+            ),
+        ]
     )
 
 
@@ -88,23 +111,65 @@ def _tool_messages(messages: list[dict[str, Any]]) -> list[str]:
     return [str(m["content"]) for m in messages if m.get("role") == "tool"]
 
 
-async def test_same_tool_called_three_times_yields_one_card(settings: AiCoreSettings) -> None:
-    """같은 도구 3연속 호출 → 출처 카드 1개, 2·3번째는 컨텍스트에 재적재되지 않는다."""
+async def test_same_tool_called_three_times_runs_once(settings: AiCoreSettings) -> None:
+    """같은 도구·같은 인자 3연속 → **실행 1회**, 출처 카드 1개.
+
+    카드 중복 제거만 있던 시절에는 3번 다 실행됐다(DB 왕복·지연 낭비). 지금은 실행 자체를
+    막으므로 tool_path에도 1회만 남는다(2026-08-01 dev 실측 대응).
+    """
     events, seen = await _run(settings, ["온수", "온수", "온수"])
     done = _done(events)
 
     assert done.status == "answered"
-    assert done.tool_path == (ECHO, ECHO, ECHO)  # 호출 자체는 그대로 기록(관측 유지)
+    assert done.tool_path == (ECHO,)
     assert len(done.tool_citations) == 1
     assert done.tool_citations[0].quote == "온수 처리 완료 3건"
 
-    # LLM에는 첫 결과만 실리고 나머지는 "이미 조회한 결과입니다."로 대체된다(토큰 절약).
+    # LLM에는 첫 결과만 실리고 나머지 tool_call에는 안내만 돌아간다(규약상 응답은 필수).
     tool_messages = _tool_messages(seen[-1])
     assert tool_messages == [
         "온수 현황: 온수 처리 완료 3건",
-        "이미 조회한 결과입니다.",
-        "이미 조회한 결과입니다.",
+        "이미 같은 조건으로 조회했습니다. 조회한 결과로 답변하십시오.",
+        "이미 같은 조건으로 조회했습니다. 조회한 결과로 답변하십시오.",
     ]
+
+
+async def test_different_args_with_same_result_keep_one_card(settings: AiCoreSettings) -> None:
+    """인자가 달라 실행은 두 번 되지만 결과가 같으면 출처 카드는 하나다(카드 중복 제거 층).
+
+    호출 차단은 (도구, 인자) 키라 여기서는 걸리지 않는다 — 두 층이 각자 다른 것을 막는다.
+    """
+    seen: list[list[dict[str, Any]]] = []
+
+    def decide(messages: list[dict[str, Any]]) -> dict[str, Any]:
+        seen.append(messages)
+        if any(m.get("role") == "tool" for m in messages):
+            return _decision(content="")
+        return _decision(
+            tool_calls=[
+                {"id": "c-0", "type": "function", "function": {"name": LATEST, "arguments": "{}"}},
+                {
+                    "id": "c-1",
+                    "type": "function",
+                    "function": {"name": LATEST, "arguments": '{"period": "2026-07"}'},
+                },
+            ]
+        )
+
+    llm: LlmClient = _agent_llm(settings, decide, answer="확인된 내용을 안내드립니다.")
+    events = [
+        event
+        async for event in answer_question(
+            "이번 달 관리비 얼마예요?",
+            registry=_registry(),
+            deps=_deps(FakeRetriever([]), llm),
+            ctx=CTX,
+        )
+    ]
+    done = _done(events)
+    assert done.tool_path == (LATEST, LATEST)  # 인자가 다르니 실행은 막지 않는다
+    assert len(done.tool_citations) == 1
+    assert _tool_messages(seen[-1])[1] == "이미 조회한 결과입니다."
 
 
 async def test_different_args_keep_separate_cards(settings: AiCoreSettings) -> None:
