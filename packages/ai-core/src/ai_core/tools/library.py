@@ -1,4 +1,4 @@
-"""도구 구현 13종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
+"""도구 구현 15종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -21,7 +21,7 @@ from ai_core.graph import IncidentContext, IncidentHit
 from ai_core.llm.client import LlmError
 from ai_core.tools.clarify import ask_clarification_tool
 from ai_core.tools.floor_plan import find_in_floor_plan_tool
-from ai_core.tools.inquiries import search_similar_inquiries_tool
+from ai_core.tools.inquiries import search_similar_inquiries_tool, summarize_inquiries_tool
 from ai_core.tools.notices import get_recent_notices_tool
 from ai_core.tools.parking import find_my_vehicle_tool, find_nearest_available_parking_tool
 from ai_core.tools.registry import (
@@ -43,6 +43,12 @@ OVERDUE_WINDOW_DAYS = 7
 FACILITY_ROLES = frozenset({"FACILITY", "MANAGER"})
 _PERIOD_PATTERN = r"^\d{4}-\d{2}$"
 
+# 장기주차 기준 시간(H19-3) — 기본 하루, 상한 7일. 상한이 없으면 모델이 큰 값을 넣어
+# 사실상 필터가 사라진다(경계 검증은 Pydantic이 담당, 규칙: 경계 입력 검증).
+LONGTERM_PARKING_DEFAULT_HOURS = 24
+LONGTERM_PARKING_MIN_HOURS = 1
+LONGTERM_PARKING_MAX_HOURS = 168
+
 
 # ── 인자 모델 ────────────────────────────────────────────────────────────────
 
@@ -59,6 +65,17 @@ class GetFeesArgs(BaseModel):
 
 class GetFacilitiesArgs(BaseModel):
     status: str | None = Field(None, description="상태 필터(normal|check|fault|risk). 생략 시 전체")
+
+
+class LongtermParkingArgs(BaseModel):
+    # 인자는 이것 하나뿐 — 8B는 인자가 늘수록 라우팅·인자 생성이 함께 무너진다
+    # (R22 계열, tools/notices.py와 같은 판단). 동·차종 필터는 요청이 관측되면 그때(YAGNI).
+    hours: int = Field(
+        LONGTERM_PARKING_DEFAULT_HOURS,
+        ge=LONGTERM_PARKING_MIN_HOURS,
+        le=LONGTERM_PARKING_MAX_HOURS,
+        description="기준 경과 시간(시간). 하루 이상이면 24, 사흘 이상이면 72. 생략 시 24",
+    )
 
 
 class NoArgs(BaseModel):
@@ -368,11 +385,61 @@ async def _get_overdue_checks(ctx: ToolContext, deps: ToolDeps, args: BaseModel)
     )
 
 
+# ── 외부 차량 장기주차(시설 역할, H19-3 · ADR-0026 결정 2) ───────────────────
+
+# household_id IS NULL = 입주민 명부에 없는 외부 차량, spot_no IS NOT NULL = 주차 중(H16).
+# **plate_enc(차량번호 암호문)는 SELECT 자체를 하지 않는다** — 면 번호와 경과 시간이면 현장
+# 확인에 충분하고, 안 읽으면 복호·마스킹 실패 경로도 없다(규칙 2 · search_similar_inquiries 선례).
+_LONGTERM_PARKING_SQL = text(
+    "SELECT spot_no, entry_at FROM parking_vehicles "
+    "WHERE tenant_id = :tid AND household_id IS NULL "
+    "AND spot_no IS NOT NULL AND entry_at IS NOT NULL AND entry_at <= :threshold "
+    "ORDER BY entry_at LIMIT :lim"
+)
+
+
+async def _find_longterm_parking(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
+    a = cast(LongtermParkingArgs, args)
+    now = datetime.now(UTC)
+    rows = (
+        await deps.session.execute(
+            _LONGTERM_PARKING_SQL,
+            {
+                "tid": ctx.tenant_id,
+                "threshold": now - timedelta(hours=a.hours),
+                "lim": MAX_TOOL_ROWS,
+            },
+        )
+    ).all()
+    # 0건도 DB가 확인한 확정 근거 — note면 인용 카드가 없어 폴백된다(⓪ 계약, R22 실측).
+    if not rows:
+        quote = f"{a.hours}시간 이상 주차된 외부 차량이 없습니다."
+    else:
+        # 건수 머리말은 inquiries·notices와 같은 이유 — 목록만 주면 8B가 근거의 존재를 놓친다.
+        listed = "\n".join(
+            f"- {r.spot_no}면 ({_elapsed_hours(now, r.entry_at)}시간 경과)" for r in rows
+        )
+        quote = f"{a.hours}시간 이상 주차된 외부 차량 {len(rows)}대(오래된 순):\n{listed}"
+    return ToolResult(
+        card=ToolCard(
+            title="외부 차량 장기주차",
+            quote=quote,
+            source_kind="tool:find_longterm_parking",
+        )
+    )
+
+
+def _elapsed_hours(now: datetime, entry_at: datetime) -> int:
+    """입차 후 경과 시간(시간, 내림). 계산은 도구가 확정한다 — LLM은 시간을 재계산하지 않는다."""
+    return int((now - entry_at).total_seconds() // 3600)
+
+
 # ── 레지스트리 조립 ──────────────────────────────────────────────────────────
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 13종. 시설 도구는 FACILITY·MANAGER + 그래프 도구는 Neo4j 가용 시만 노출.
+    """운영 도구 15종. 시설 도구는 FACILITY·MANAGER, 민원 집계는 MANAGER·STAFF,
+    그래프 도구는 Neo4j 가용 시만 노출.
 
     되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
     이름으로 판별해 되묻고 종료한다(ADR-0025 §4).
@@ -385,6 +452,7 @@ def default_registry() -> ToolRegistry:
             find_nearest_available_parking_tool(),
             find_my_vehicle_tool(),
             search_similar_inquiries_tool(),
+            summarize_inquiries_tool(),
             get_recent_notices_tool(),
             Tool(
                 name="search_documents",
@@ -457,6 +525,22 @@ def default_registry() -> ToolRegistry:
                 ),
                 args_model=NoArgs,
                 run=_get_overdue_checks,
+                allowed_roles=FACILITY_ROLES,
+            ),
+            Tool(
+                name="find_longterm_parking",
+                # 경계는 두 축이다(R22 — 의미 중복이 라우팅을 무너뜨린다):
+                # ①빈자리 찾기(find_nearest_available_parking) ②내 차 위치. 둘 다 "주차"
+                # 어휘를 공유하므로, 이 도구는 **외부 차량·장기·단속** 어휘만 쓰고 나머지는
+                # 명시적으로 배제한다.
+                description=(
+                    "입주민 명부에 없는 외부 차량이 오래 세워져 있는 주차면을 찾는다"
+                    "(면 번호·경과 시간, 오래 세워진 순). 장기 주차·방치 차량 단속·"
+                    "무단 주차 점검을 물을 때 쓴다 — 주차할 빈자리를 찾거나 특정 차량이 "
+                    "어디 있는지 묻는 질문에는 쓰지 않는다."
+                ),
+                args_model=LongtermParkingArgs,
+                run=_find_longterm_parking,
                 allowed_roles=FACILITY_ROLES,
             ),
         ]
