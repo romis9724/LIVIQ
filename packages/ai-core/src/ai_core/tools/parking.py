@@ -54,6 +54,13 @@ _LAYOUT_SQL = text("SELECT layout FROM parking_layouts WHERE tenant_id = :tid")
 _OCCUPANCY_SQL = text(
     "SELECT spot_no FROM parking_vehicles WHERE tenant_id = :tid AND spot_no IS NOT NULL"
 )
+# 세대 EV 보유 여부 — 2026-08-03 사용자 신고(317면 전기차가 더 먼 일반 면보다 가까운데 누락).
+# 8B는 "충전" 언급 없이는 ev_preferred를 안 채우므로, 세대 차량 데이터로 전기차 면 포함을 판정한다.
+_HAS_EV_SQL = text(
+    "SELECT bool_or(v.is_ev) AS has_ev FROM parking_vehicles v "
+    "WHERE v.tenant_id = :tid AND v.household_id = "
+    "(SELECT u.household_id FROM users u WHERE u.id = :uid AND u.tenant_id = :tid)"
+)
 
 
 class NearestParkingArgs(BaseModel):
@@ -101,12 +108,17 @@ async def _find_nearest_parking(ctx: ToolContext, deps: ToolDeps, args: BaseMode
         for r in (await deps.session.execute(_OCCUPANCY_SQL, {"tid": ctx.tenant_id})).all()
     }
 
+    ev_row = (
+        await deps.session.execute(_HAS_EV_SQL, {"uid": ctx.user_id, "tid": ctx.tenant_id})
+    ).first()
+    household_has_ev = bool(ev_row.has_ev) if ev_row is not None else False
+
     nearest = nearest_available_spots(
         spots_from_layout(layout),
         cores_from_layout(layout),
         occupied,
         core_name,
-        ev_preferred=a.ev_preferred,
+        ev_preferred=a.ev_preferred or household_has_ev,
         top_k=_TOP_K,
     )
     # 빈자리 없음도 확정 근거 → note가 아니라 카드로 승격(⓪ 계약, trace_home_device 관례).

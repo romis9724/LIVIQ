@@ -119,6 +119,25 @@
   color: var(--color-text-muted);
 }
 
+/* 면 상세(H20-5) — 클릭한 면의 종류·상태·추천 순위·거리를 여러 줄로. */
+.rpk__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+.rpk__detail-title {
+  font-weight: 700;
+}
+.rpk__detail-line {
+  color: var(--color-text-muted);
+}
+
 /* ---- 범례 ---- */
 .rpk-legend {
   display: flex;

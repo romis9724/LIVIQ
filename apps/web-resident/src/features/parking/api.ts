@@ -11,10 +11,23 @@ export interface MyParkedVehicle {
   entryAt: string | null; // ISO8601
 }
 
+/** 동 코어(승강기 홀) 사각 영역 — 면 상세의 거리 계산 앵커(H20-5). */
+export interface ParkingCore {
+  name: string; // "401동"
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface ParkingMapData {
   layout: ParkingMapLayout | null;
+  /** 배치도의 동 코어 목록 — layout JSON에서 함께 파싱한다(지도 렌더에는 안 쓴다). */
+  cores: ParkingCore[];
   occupiedSpotNos: string[];
   myVehicles: MyParkedVehicle[];
+  /** 본인 동 코어 이름("401동") — 세대 미배정이면 null. */
+  myDong: string | null;
 }
 
 /** 상태코드를 담은 에러 — 화면 분기용(fees/api 와 동일 계약). */
@@ -51,6 +64,7 @@ interface RawLayout {
   buildings?: Record<string, RawBuilding>;
   boxes?: { label: string; x: number; y: number; w: number; h: number }[];
   spots?: { no: string; kind: string; x: number; y: number; dir: string }[];
+  cores?: { name: string; x: number; y: number; w: number; h: number }[];
 }
 
 /** buildings 는 동명 키 맵 — 렌더 순서를 고정하려고 동명 정렬 배열로 바꾼다(관리자와 동일). */
@@ -78,11 +92,14 @@ export async function getParkingMap(): Promise<ParkingMapData> {
   const response = await apiFetch(`${API_BASE_URL}/parking/map`, { headers: DEV_HEADERS });
   await ensureOk(response);
   const body = await response.json();
+  const raw = body.layout as RawLayout | null;
   return {
-    layout: body.layout ? toLayout(body.layout as RawLayout) : null,
+    layout: raw ? toLayout(raw) : null,
+    cores: (raw?.cores ?? []).map((c) => ({ name: c.name, x: c.x, y: c.y, w: c.w, h: c.h })),
     occupiedSpotNos: (body.occupied_spot_nos as string[]) ?? [],
     myVehicles: ((body.my_vehicles as { spot_no: string; entry_at: string | null }[]) ?? []).map(
       (v) => ({ spotNo: v.spot_no, entryAt: v.entry_at ?? null }),
     ),
+    myDong: (body.my_dong as string | null) ?? null,
   };
 }

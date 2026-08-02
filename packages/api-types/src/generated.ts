@@ -3714,6 +3714,8 @@ export interface components {
             layout: {
                 [key: string]: unknown;
             } | null;
+            /** My Dong */
+            my_dong?: string | null;
             /** My Vehicles */
             my_vehicles: components["schemas"]["MyParkingVehicleOut"][];
             /** Occupied Spot Nos */
