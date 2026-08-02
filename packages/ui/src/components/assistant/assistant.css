@@ -157,9 +157,8 @@
   font-weight: 700;
   color: var(--color-accent);
 }
+/* 되묻기 문장은 일반 답변과 같은 크기·굵기(사용자 지적) — 라벨만 구분자 역할. */
 .clarify__question {
-  font-size: var(--text-lg);
-  font-weight: 600;
   line-height: 1.5;
 }
 
