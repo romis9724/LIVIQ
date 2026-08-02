@@ -19,6 +19,7 @@ from sqlalchemy import text
 
 from ai_core.graph import IncidentContext, IncidentHit
 from ai_core.llm.client import LlmError
+from ai_core.synonyms import expand_query
 from ai_core.tools.clarify import ask_clarification_tool
 from ai_core.tools.fees_common import (
     COMPLEX_SCOPE,
@@ -148,7 +149,9 @@ class NoArgs(BaseModel):
 async def _search_documents(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolResult:
     a = cast(QueryArgs, args)
     try:
-        query_vec = (await deps.llm.embed([a.query]))[0]
+        # 생활어를 표준어로 넓혀 임베딩한다(H20-7) — 확장은 **임베딩 텍스트 한정**이고
+        # 인용·프롬프트에 나가는 값은 원문 그대로다.
+        query_vec = (await deps.llm.embed([expand_query(a.query)]))[0]
     except LlmError:
         return ToolResult(note="문서 검색을 일시적으로 사용할 수 없습니다.")
     chunks = await deps.retriever.search(
@@ -171,7 +174,7 @@ async def _search_facility_graph(ctx: ToolContext, deps: ToolDeps, args: BaseMod
     if deps.graph is None:
         return ToolResult(note="시설 그래프를 사용할 수 없습니다.")
     try:
-        query_vec = (await deps.llm.embed([a.query]))[0]
+        query_vec = (await deps.llm.embed([expand_query(a.query)]))[0]  # H20-7, 위와 동일
     except LlmError:
         return ToolResult(note="시설 그래프 검색을 일시적으로 사용할 수 없습니다.")
     tenant = str(ctx.tenant_id)
