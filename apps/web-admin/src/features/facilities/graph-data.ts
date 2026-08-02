@@ -331,6 +331,23 @@ export function facilitiesAtLocation(
   return nodes.filter((node) => node.label === "facility" && facilityIds.has(node.pgId));
 }
 
+/**
+ * 노드 클릭 → 상세를 열 시설 id. 시설은 자기 자신, 장애·정비 이력은 부모 시설(inbound 링크의
+ * source — 이력 노드엔 상세 엔드포인트가 없다), 도면 마커는 배선된 설비(outbound `LINKED_TO`
+ * 의 target — 그래프는 `plan_device --LINKED_TO--> facility` 방향으로 내려온다).
+ * 방·종류 허브는 상세 대상이 아니고(상위가 도면이라 시설로 올라갈 수 없다), 미배선 마커도 null.
+ */
+export function facilityIdForNode(node: GraphNode, links: readonly GraphLink[]): string | null {
+  if (node.label === "facility") return node.pgId;
+  if (node.label === "plan_room" || node.label === "plan_kind") return null;
+  if (node.label === "plan_device") {
+    return (
+      links.find((link) => link.kind === "LINKED_TO" && link.source === node.pgId)?.target ?? null
+    );
+  }
+  return links.find((link) => link.target === node.pgId)?.source ?? null;
+}
+
 export interface ComplexSummary {
   locationCount: number;
   facilityCount: number;

@@ -3,13 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import dynamic from "next/dynamic";
 import { Button, EmptyState } from "@liviq/ui";
-import {
-  ApiError,
-  getFacilityGraph,
-  type FacilityGraph,
-  type GraphNode,
-  type GraphNodeLabel,
-} from "@/lib/api";
+import { ApiError, getFacilityGraph, type FacilityGraph, type GraphNode } from "@/lib/api";
 import { FacilityGraphPanel, type GraphPanelSelection } from "./FacilityGraphPanel";
 import {
   COMPLEX_COLOR_VAR,
@@ -22,6 +16,7 @@ import {
   PLAN_KIND_COLOR_VAR,
   PLAN_ROOM_COLOR_VAR,
   complexSummary,
+  facilityIdForNode,
   findFacilityByName,
   lensColorVar,
   lensGroups,
@@ -75,9 +70,6 @@ const LENS_LEGEND_TITLE: Record<GraphLens, string> = {
   location: "위치(설비 노드)",
 };
 
-// 상세 엔드포인트가 없는 도면 하위 노드 — 클릭해도 패널을 열지 않는다(H14-1).
-const PLAN_SUBGRAPH_LABELS = new Set<GraphNodeLabel>(["plan_room", "plan_kind", "plan_device"]);
-
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
@@ -123,20 +115,11 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
   const groups = useMemo(() => lensGroups(lens, nodes), [lens, nodes]);
   const summary = useMemo(() => complexSummary(nodes), [nodes]);
 
-  // 장애·정비 노드 클릭은 부모 시설의 패널을 연다(이력 노드 자체엔 상세 엔드포인트가 없다).
-  const facilityIdOf = useCallback(
-    (node: GraphNode): string | null => {
-      if (node.label === "facility") return node.pgId;
-      return links.find((link) => link.target === node.pgId)?.source ?? null;
-    },
-    [links],
-  );
-
-  // location·floor_plan·complex 는 전용 패널(H13-7). 도면 하위 계층(방·종류 허브·마커)은
-  // 상세 엔드포인트가 없어 클릭을 조용히 무시한다(H14-1 — 잘못된 시설 패널을 여는 것보다 낫다).
+  // location·floor_plan·complex 는 전용 패널(H13-7). 그 밖의 노드는 시설 패널로 귀결되고
+  // (장애·정비는 부모 시설, 도면 마커는 LINKED_TO 로 배선된 설비 — facilityIdForNode),
+  // 시설을 못 찾는 노드(방·종류 허브·미배선 마커)만 클릭을 조용히 무시한다.
   const handleSelectNode = useCallback(
     (node: GraphNode) => {
-      if (PLAN_SUBGRAPH_LABELS.has(node.label)) return;
       if (node.label === "location") {
         setSelection({ kind: "location", node });
         return;
@@ -149,10 +132,10 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
         setSelection({ kind: "complex", node });
         return;
       }
-      const facilityId = facilityIdOf(node);
+      const facilityId = facilityIdForNode(node, links);
       if (facilityId) setSelection({ kind: "facility", facilityId });
     },
-    [facilityIdOf],
+    [links],
   );
 
   function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -276,7 +259,8 @@ export function FacilityGraphView({ onOpenList, onEditFloorPlan }: FacilityGraph
           </Button>
         </form>
         <p className="fac-graph__search-hint" role="status" aria-live="polite">
-          {searchError ?? "노드를 클릭하면 오른쪽에 상세가 열립니다."}
+          {searchError ??
+            "노드를 클릭하면 오른쪽에 상세가 열립니다 · 도면의 방·종류 허브는 상세가 없습니다."}
         </p>
 
         <Legend lens={lens} groups={groups} />

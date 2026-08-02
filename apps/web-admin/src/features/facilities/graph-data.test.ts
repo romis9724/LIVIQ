@@ -27,6 +27,7 @@ import {
   complexSummary,
   estimatedInquiries,
   facilitiesAtLocation,
+  facilityIdForNode,
   findFacilityByName,
   groupCenters,
   lensColorVar,
@@ -625,6 +626,51 @@ describe("facilitiesAtLocation", () => {
 
   it("연결이 없으면 빈 배열", () => {
     expect(facilitiesAtLocation([facilityNode("f1")], [], "없는위치")).toEqual([]);
+  });
+});
+
+describe("facilityIdForNode", () => {
+  const nodes = {
+    facility: facilityNode("f1"),
+    incident: incidentNode("i1", false),
+    maintenance: maintenanceNode("m1"),
+    device: planNode("d1", "plan_device", "월패드(거실)"),
+    room: planNode("p1:room:거실", "plan_room", "거실"),
+    kind: planNode("p1:kind:월패드", "plan_kind", "월패드"),
+  };
+  const links: GraphLink[] = [
+    { source: "f1", target: "i1", kind: "HAS_INCIDENT" },
+    { source: "f1", target: "m1", kind: "HAS_MAINTENANCE" },
+    { source: "p1", target: "p1:room:거실", kind: "HAS_ROOM" },
+    { source: "p1:kind:월패드", target: "d1", kind: "HAS_DEVICE" },
+    { source: "d1", target: "f1", kind: "LINKED_TO" },
+  ];
+
+  it("시설 노드는 자기 자신을 돌려준다", () => {
+    expect(facilityIdForNode(nodes.facility, links)).toBe("f1");
+  });
+
+  it("장애·정비 이력은 부모 시설(inbound 링크의 source)로 귀결된다", () => {
+    expect(facilityIdForNode(nodes.incident, links)).toBe("f1");
+    expect(facilityIdForNode(nodes.maintenance, links)).toBe("f1");
+  });
+
+  it("도면 마커는 outbound LINKED_TO 의 target 설비로 귀결된다", () => {
+    expect(facilityIdForNode(nodes.device, links)).toBe("f1");
+  });
+
+  it("배선되지 않은 마커는 null(상위 종류 허브를 시설로 오인하지 않는다)", () => {
+    const unlinked = planNode("d2", "plan_device", "스위치(주방)");
+    const linksWithoutWiring: GraphLink[] = [
+      { source: "p1:kind:스위치", target: "d2", kind: "HAS_DEVICE" },
+    ];
+
+    expect(facilityIdForNode(unlinked, linksWithoutWiring)).toBeNull();
+  });
+
+  it("방·종류 허브는 상세 대상이 아니라 null", () => {
+    expect(facilityIdForNode(nodes.room, links)).toBeNull();
+    expect(facilityIdForNode(nodes.kind, links)).toBeNull();
   });
 });
 
