@@ -24,6 +24,9 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   fees:<YYYY-MM|latest>           세대 관리비 (케이스 household_ref 바인딩 필수)
   inquiries:mine                  본인 민원 (user_ref 바인딩 필수)
   inquiries:other-block           타인 민원 차단 (폴백/거부가 정답)
+  inquiry-summary:recent|pending  관리자 민원 집계(H20-2 브리핑) — 리졸버 **미구현**.
+                                  dev gen 시 신설 여부 판정(H19-4의 V2-QA-0337 관례 —
+                                  낡은 라벨로 gen을 돌리면 구현된 기능이 실패로 채점된다)
   facilities:count[:<코드접두>]   설비 대수 (예: facilities:count:EL)
   facilities:status:<status>      상태 조회 (빈 결과면 "없음" 카드가 정답)
   overdue:window                  점검 임박·초과 (현 데이터 전부 NULL → "없음" 카드가 정답)
