@@ -24,6 +24,9 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   fees:<YYYY-MM|latest>           세대 관리비 (케이스 household_ref 바인딩 필수)
   fees-avg:dong:<동>:<YYYY-MM|latest>   동 평균 관리비 (집계 라벨 — household_ref 불필요)
   fees-avg:complex:<YYYY-MM|latest>     단지 전체 평균 관리비
+  fees-compare:<대상들>:<YYYY-MM|latest>[:<항목명>]
+                                  관리비 비교 (대상은 +로 나열 — 예 우리집+전체, 401동+402동).
+                                  본인 대상이 있으면 household_ref 필수, 항목을 주면 항목 비교
   inquiries:mine                  본인 민원 (user_ref 바인딩 필수)
   inquiries:other-block           타인 민원 차단 (폴백/거부가 정답)
   inquiry-summary:recent|pending  관리자 민원 집계(H20-2 브리핑) — 리졸버 **미구현**.
@@ -68,6 +71,10 @@ from ai_core.parking import Core, Spot, nearest_available_spots
 from ai_core.tools.inquiries import _LIMIT, _SIMILAR_SQL, _SIMILARITY_THRESHOLD
 
 # 표본 하한도 도구와 같은 값을 쓴다 — 도구가 평균을 거부하는 범위에 라벨을 만들면 거짓이다.
+# 비교 라벨은 대상 정규화·항목 매칭까지 도구 것을 그대로 빌린다(라벨과 도구가 다른 대상·
+# 다른 항목을 보면 채점이 거짓말이 된다).
+from ai_core.tools.fees_common import COMPLEX_SCOPE, SELF_SCOPE, fold_scope
+from ai_core.tools.fees_compare import MAX_TARGETS, MIN_TARGETS, _pick_item
 from ai_core.tools.library import MIN_PEER_SAMPLE
 
 TENANT_NAME = "첫마을 4단지 푸르지오"
@@ -342,6 +349,148 @@ async def resolve_fees_avg(
         expected_behavior=BEHAVIOR_ANSWERED,
         as_of=period,
         label_source_resolved=f"fees avg scope={label_text} period={period} n={sample}",
+        errors=[],
+    )
+
+
+async def _compare_self_amount(
+    conn: asyncpg.Connection, tid: str, href: str, period: str, item: str
+) -> tuple[int | None, str, str]:
+    """(금액, 매칭된 항목명, 오류) — 본인 세대 확정값. 항목을 주면 breakdown에서 찾는다."""
+    building, _, unit_no = href.partition("-")
+    row = await conn.fetchrow(
+        "SELECT f.total_amount, f.breakdown FROM fees f"
+        " JOIN households h ON h.id = f.household_id"
+        " JOIN buildings b ON b.id = h.building_id"
+        " WHERE f.tenant_id = $1 AND f.period = $2 AND b.name = $3 AND h.unit_no::text = $4",
+        tid,
+        period,
+        building,
+        unit_no,
+    )
+    if row is None or row["total_amount"] is None:
+        return None, "", f"관리비 없음: {href} {period}"
+    if not item:
+        return int(row["total_amount"]), "", ""
+    raw = row["breakdown"]
+    entries = json.loads(raw) if isinstance(raw, str) else raw
+    items = [
+        (str(e.get("name", "")), int(e.get("amount", 0)))
+        for e in (entries if isinstance(entries, list) else [])
+        if str(e.get("name", "")) and str(e.get("name", "")) != "합계"
+    ]
+    picked, candidates = _pick_item(item, items)
+    if picked is None:
+        detail = f"후보 {', '.join(candidates)}" if candidates else "일치 없음"
+        return None, "", f"'{item}' 항목 매칭 실패: {href} {period}({detail})"
+    return picked[1], picked[0], ""
+
+
+async def _compare_scope_amount(
+    conn: asyncpg.Connection, tid: str, token: str, period: str, item: str
+) -> tuple[int | None, int, str, str]:
+    """(금액, 표본수, 매칭된 항목명, 오류) — 동·단지 집계 평균. 도구와 같은 표본 하한."""
+    is_complex = token == COMPLEX_SCOPE
+    join = (
+        ""
+        if is_complex
+        else (
+            " JOIN households h ON h.id = f.household_id"
+            " JOIN buildings b ON b.id = h.building_id AND b.name = $3"
+        )
+    )
+    params: list[str] = [] if is_complex else [token.removesuffix("동")]
+    row = await conn.fetchrow(
+        "SELECT round(avg(f.total_amount)) AS avg_total, count(*) AS sample_size"
+        f" FROM fees f{join} WHERE f.tenant_id = $1 AND f.period = $2",
+        tid,
+        period,
+        *params,
+    )
+    sample = int(row["sample_size"]) if row and row["sample_size"] is not None else 0
+    if sample == 0 or row is None or row["avg_total"] is None:
+        return None, 0, "", f"관리비 데이터 없음: {token} {period}"
+    if sample < MIN_PEER_SAMPLE:
+        return None, sample, "", f"표본 미달: {token} {period} n={sample}(<{MIN_PEER_SAMPLE})"
+    if not item:
+        return int(row["avg_total"]), sample, "", ""
+    # 항목 평균은 도구와 같은 방식으로 SQL이 낸다(레벨 상한 2 — "전기료"는 level 2에 있다).
+    item_rows = await conn.fetch(
+        "SELECT elem->>'name' AS name, round(avg((elem->>'amount')::numeric)) AS avg_amount"
+        f" FROM fees f{join}"
+        " CROSS JOIN LATERAL jsonb_array_elements(f.breakdown) AS elem"
+        " WHERE f.tenant_id = $1 AND f.period = $2"
+        " AND jsonb_typeof(f.breakdown) = 'array'"
+        " AND (elem->>'level')::int <= 2 AND elem->>'name' <> '합계'"
+        " GROUP BY 1 ORDER BY 1",
+        tid,
+        period,
+        *params,
+    )
+    picked, candidates = _pick_item(
+        item,
+        [(str(r["name"]), int(r["avg_amount"])) for r in item_rows if r["avg_amount"] is not None],
+    )
+    if picked is None:
+        detail = f"후보 {', '.join(candidates)}" if candidates else "일치 없음"
+        return None, sample, "", f"'{item}' 항목 매칭 실패: {token} {period}({detail})"
+    return picked[1], sample, picked[0], ""
+
+
+async def resolve_fees_compare(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """관리비 비교(compare_fees) — 대상별 확정값과 첫 대상 기준 차액.
+
+    스펙: fees-compare:<대상들>:<YYYY-MM|latest>[:<항목명>] (대상은 `+`로 나열)
+    대상 표기·항목 매칭은 도구 코드를 그대로 빌린다. 하나라도 값을 못 내면 라벨을 만들지
+    않는다 — 도구가 "제외"로 답할 케이스에 비교 라벨을 붙이면 채점이 거짓이 된다.
+    """
+    if len(args) < 2:
+        return _error("fees-compare는 <대상들>과 <YYYY-MM|latest>가 필요")
+    tokens = list(dict.fromkeys(t for t in (fold_scope(p) for p in args[0].split("+")) if t))
+    if not MIN_TARGETS <= len(tokens) <= MAX_TARGETS:
+        return _error(f"비교 대상은 서로 다른 {MIN_TARGETS}~{MAX_TARGETS}개여야 함: {args[0]}")
+    period = args[1]
+    item = args[2] if len(args) > 2 else ""
+    if period == "latest":
+        period = await conn.fetchval("SELECT max(period) FROM fees WHERE tenant_id = $1", tid)
+    if not period:
+        return _error("관리비 비교 불가: 확정된 관리비가 없음")
+
+    parts: list[str] = []
+    amounts: list[int] = []
+    item_label = ""
+    for token in tokens:
+        if token == SELF_SCOPE:
+            href = case.get("household_ref", "")
+            if not href:
+                return _error("fees-compare에 본인 대상이 있으면 household_ref 바인딩 필수")
+            amount, matched, err = await _compare_self_amount(conn, tid, href, period, item)
+            if err:
+                return _error(err)
+            parts.append(f"우리집 {amount:,}원")
+        else:
+            amount, sample, matched, err = await _compare_scope_amount(
+                conn, tid, token, period, item
+            )
+            if err:
+                return _error(err)
+            label = "단지 전체" if token == COMPLEX_SCOPE else token
+            parts.append(f"{label} 평균 {amount:,}원(표본 {sample}세대)")
+        amounts.append(int(amount or 0))
+        item_label = item_label or matched
+
+    diff = amounts[0] - amounts[1]
+    facts = f"{period} 관리비 비교" + (f"({item_label})" if item_label else "")
+    return Label(
+        expected_facts=f"{facts} — {' · '.join(parts)} · 차이 {diff:+,}원",
+        expected_citations="tool:compare_fees",
+        expected_tool="compare_fees",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of=period,
+        label_source_resolved=f"fees compare targets={'+'.join(tokens)} period={period}",
         errors=[],
     )
 
@@ -932,6 +1081,7 @@ RESOLVERS = {
     "doc": resolve_doc,
     "fees": resolve_fees,
     "fees-avg": resolve_fees_avg,
+    "fees-compare": resolve_fees_compare,
     "inquiries": resolve_inquiries,
     "facilities": resolve_facilities,
     "overdue": resolve_overdue,

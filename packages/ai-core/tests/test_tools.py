@@ -1000,7 +1000,8 @@ def test_fee_quote_includes_detail_items_for_item_questions() -> None:
 
     화면 표는 level 0 그대로이므로 detail은 quote 전용이다.
     """
-    from ai_core.tools.library import _fee_detail_items, _fee_quote
+    from ai_core.tools.fees_common import fee_detail_items as _fee_detail_items
+    from ai_core.tools.library import _fee_quote
 
     raw = [
         {"name": "공용관리비", "level": 0, "amount": 91362},
@@ -1021,8 +1022,23 @@ def test_fee_quote_includes_detail_items_for_item_questions() -> None:
 
 
 def test_get_fees_scope_folds_self_synonyms_to_none() -> None:
-    """모델이 본인 질문에 scope='본인 세대'를 채우는 dev 실측 — 본인 동의어는 미지정."""
-    for word in ("본인 세대", "본인", "우리 집", "세대"):
+    """모델이 본인 질문에 scope='본인 세대'를 채우는 dev 실측 — 본인 동의어는 미지정.
+
+    1인칭 대명사까지 넓힌 건 "나의 관리비는?"이 scope="나"(동 이름 취급)로 샌 실측 때문.
+    """
+    for word in (
+        "본인 세대",
+        "본인",
+        "우리 집",
+        "세대",
+        "나",
+        "나의",
+        "나의 집",
+        "저",
+        "저희",
+        "우리",
+        "내",
+    ):
         assert GetFeesArgs(scope=word).scope is None, word
     # 동·전체 정규화는 불변.
     assert GetFeesArgs(scope="402").scope == "402동"
