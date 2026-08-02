@@ -78,6 +78,31 @@ describe("toStructured — kind 분기", () => {
     expect(data).toMatchObject({ averageTotal: null, missingPeriods: ["2026-06"] });
   });
 
+  it("범위 평균 payload 는 scope 로 좁힌다(동·표본수 그대로)", () => {
+    // Arrange — ai_core/tools/library.py `_fees_scope_average`
+    const raw = {
+      kind: "fee_table",
+      period: "2026-07",
+      rows: [{ name: "공용관리비", amount: 81468 }],
+      total: 141034,
+      scope: { kind: "dong", label: "402동", sample_size: 62 },
+    };
+
+    // Act
+    const data = toStructured(raw);
+
+    // Assert
+    expect(data).toMatchObject({
+      total: 141034,
+      scope: { kind: "dong", label: "402동", sampleSize: 62 },
+      prevTotal: null,
+    });
+  });
+
+  it("본인 세대 payload 에는 scope 가 없다", () => {
+    expect(toStructured(FEE_PAYLOAD)).toMatchObject({ scope: undefined });
+  });
+
   it("전월 값이 없으면 null 로 남긴다(프론트가 0 으로 채우지 않는다)", () => {
     const data = toStructured({ ...FEE_PAYLOAD, prev_total: null, diff: null });
     expect(data).toMatchObject({ prevTotal: null, diff: null });
@@ -183,7 +208,7 @@ describe("structuredBlocks", () => {
   const citation = (ref: number, data: unknown): AssistantCitation => ({
     ref,
     documentId: null,
-    documentTitle: "관리비 2026-07 확정 데이터",
+    documentTitle: "관리비 2026-07 내역",
     quote: "합계 84,000원",
     page: null,
     clause: null,
