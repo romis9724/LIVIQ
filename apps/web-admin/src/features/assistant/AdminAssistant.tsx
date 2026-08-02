@@ -52,14 +52,23 @@ export function AdminAssistant() {
   // 끼어들면 안 되므로 "빈 대화로 전이할 때마다"가 아니라 ref 로 한 번만 잠근다.
   // 판정은 messages state 가 아니라 탭 저장소를 직접 본다 — 복원도 effect 라 이 시점의
   // state 는 항상 빈 배열이고(레이스), state 로 보면 복원된 대화 위에 브리핑이 끼어든다.
+  // ask 는 타이머로 예약하고 cleanup 에서 취소한다 — StrictMode 의 effect→cleanup→effect 에서
+  // 즉시 ask 하면 첫 실행의 요청이 cleanup(abort)에 죽고, ref 가드가 재발동까지 막아
+  // "근거 검색 중"이 영구히 남는다(dev 실측). 타이머면 첫 실행은 시작 전에 취소된다.
   // 실패는 훅의 기존 오류 말풍선에 맡긴다 — 화면을 막지 않는다.
   const briefedRef = useRef(false);
   useEffect(() => {
     if (briefedRef.current) return;
-    briefedRef.current = true;
     const stored = readThread(ADMIN_ASSISTANT_STREAM_OPTIONS.storageKey);
-    if (!shouldBrief(stored === null ? null : stored.messages.length)) return;
-    void ask(briefingPrompt(new Date()));
+    if (!shouldBrief(stored === null ? null : stored.messages.length)) {
+      briefedRef.current = true;
+      return;
+    }
+    const timer = setTimeout(() => {
+      briefedRef.current = true;
+      void ask(briefingPrompt(new Date()));
+    }, 0);
+    return () => clearTimeout(timer);
   }, [ask]);
 
   // 새 메시지를 따라 맨 아래로.
