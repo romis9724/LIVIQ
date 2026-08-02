@@ -208,7 +208,7 @@ describe("structuredBlocks", () => {
   const citation = (ref: number, data: unknown): AssistantCitation => ({
     ref,
     documentId: null,
-    documentTitle: "관리비 2026-07 확정 데이터",
+    documentTitle: "관리비 2026-07 내역",
     quote: "합계 84,000원",
     page: null,
     clause: null,

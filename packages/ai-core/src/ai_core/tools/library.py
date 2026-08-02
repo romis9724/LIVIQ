@@ -369,7 +369,7 @@ async def _fees_single_month(
 
     return ToolResult(
         card=ToolCard(
-            title=f"관리비 {period} 확정 데이터",
+            title=f"관리비 {period} 내역",
             quote=_fee_quote(period, breakdown, total, prev_total, peer),
             source_kind="tool:get_fees",
             data=_fee_data(period, breakdown, total, prev_total, peer),
@@ -414,7 +414,7 @@ async def _fees_multi_month(
     )
     return ToolResult(
         card=ToolCard(
-            title=f"관리비 {', '.join(requested)} 확정 데이터",
+            title=f"관리비 {', '.join(requested)} 내역",
             quote=_fee_months_quote(months, avg_total, missing, excluded),
             source_kind="tool:get_fees",
             data=_fee_months_data(requested, months, avg_total, missing, excluded),

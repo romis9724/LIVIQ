@@ -36,8 +36,14 @@ const CODE_RE = /`([^`\n]+)`/g;
  * 스트리밍 중 미완성 `[1`은 다음 청크에서 완성된 뒤 벗겨진다.
  */
 const CITATION_MARKER_RE = /\s*\[\d+(?:\s*,\s*\d+)*\]/g;
+/**
+ * 프롬프트 내부 섹션 라벨 — 모델(특히 qwen3)이 답변에 그대로 따라 그리는 에코(사용자 지적).
+ * 서버 프롬프트(`ai_core/rag/prompt.py`)의 근거 구획 이름이라 입주민에게는 무의미한 내부 용어다.
+ * 인용 마커와 같은 원칙으로 **표시에서만** 벗긴다.
+ */
+const INTERNAL_LABEL_RE = /\[(?:문서 근거|확정 데이터·?도구 결과|확정 데이터|도구 결과)\]\s*/g;
 
-/** 한 줄에서 강조 기호·인용 마커만 제거. 텍스트 내용은 바꾸지 않는다. */
+/** 한 줄에서 강조 기호·인용 마커·내부 라벨만 제거. 텍스트 내용은 바꾸지 않는다. */
 export function stripMarkers(line: string): string {
   return line
     .replace(HEADING_RE, "")
@@ -45,6 +51,7 @@ export function stripMarkers(line: string): string {
     .replace(EMPHASIS_RE, "$1$2")
     .replace(CODE_RE, "$1")
     .replace(CITATION_MARKER_RE, "")
+    .replace(INTERNAL_LABEL_RE, "")
     .trimEnd();
 }
 
