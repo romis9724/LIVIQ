@@ -1,8 +1,8 @@
 // 관리비 — apps/api HTTP·SSE 클라이언트 (docs/01 §13, 규칙 5 — 표시 전용).
-// 조회는 서버 확정 데이터 그대로, AI 설명은 SSE 스트림. SSE 프레임 파싱은 assistant 재사용.
+// 조회는 서버 확정 데이터 그대로, AI 설명은 SSE 스트림. SSE 프레임 파싱은 @liviq/ui 공용(H20-2).
 
+import { parseSseBuffer } from "@liviq/ui";
 import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
-import { parseSseBuffer } from "../assistant/api";
 import type { BreakdownRow } from "./invoice";
 
 export interface FeeData {

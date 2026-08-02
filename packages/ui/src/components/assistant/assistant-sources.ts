@@ -9,7 +9,7 @@
  * 보내므로 여기서는 제목 기준으로만 묶는다.
  */
 
-import type { Citation } from "./api";
+import type { AssistantCitation } from "./assistant-events";
 
 export interface GroupedSource {
   /** 대표 인용 번호 — 그룹에서 가장 작은 ref(키·정렬용). */
@@ -22,7 +22,7 @@ export interface GroupedSource {
 }
 
 /** 인용 1건의 하위 표기(조항 · 페이지). 둘 다 없으면 빈 문자열. */
-export function citationDetail(c: Citation): string {
+export function citationDetail(c: AssistantCitation): string {
   return [c.clause, c.page != null ? `${c.page}p` : null].filter(Boolean).join(" · ");
 }
 
@@ -30,7 +30,7 @@ export function citationDetail(c: Citation): string {
  * 같은 출처끼리 묶는다. 키는 문서면 `documentId`, 도구 카드면 제목.
  * 입력 순서(= 서버가 보낸 근거 순서)를 유지한다 — 상위 근거가 앞에 오는 게 의미 있다.
  */
-export function groupCitations(citations: readonly Citation[]): GroupedSource[] {
+export function groupCitations(citations: readonly AssistantCitation[]): GroupedSource[] {
   const groups = new Map<string, GroupedSource>();
   for (const c of citations) {
     const key = c.documentId ?? `title:${c.documentTitle}`;

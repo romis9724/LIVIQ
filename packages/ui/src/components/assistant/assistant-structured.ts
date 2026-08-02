@@ -7,7 +7,7 @@
  * 추가해도 구버전 화면이 깨지지 않게 한다(전방 호환).
  */
 
-import type { Citation } from "./api";
+import type { AssistantCitation } from "./assistant-events";
 
 export interface FeeRow {
   name: string;
@@ -175,7 +175,7 @@ export function toStructured(data: unknown): StructuredData | null {
 
 /** 인용 목록에서 렌더 가능한 블록만 뽑는다. `ref` 는 어느 출처의 데이터인지 되짚는 키. */
 export function structuredBlocks(
-  citations: readonly Citation[],
+  citations: readonly AssistantCitation[],
 ): Array<{ ref: number; data: StructuredData }> {
   return citations.flatMap((c) => {
     const data = toStructured(c.data);

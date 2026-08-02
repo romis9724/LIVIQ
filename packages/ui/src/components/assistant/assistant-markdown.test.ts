@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerBlocks, stripMarkers } from "./markdown";
+import { answerBlocks, stripMarkers } from "./assistant-markdown";
 
 describe("stripMarkers", () => {
   it("굵게·기울임·코드 기호를 표시에서 벗긴다", () => {

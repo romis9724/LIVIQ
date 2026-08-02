@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Citation } from "@/features/assistant/api";
+import type { AssistantCitation } from "@liviq/ui";
 import {
   FLOOR_PLAN_CARD_TITLE,
   FLOOR_PLAN_TOOL,
@@ -9,7 +9,7 @@ import {
   readDeviceParam,
 } from "./links";
 
-function citation(overrides: Partial<Citation> = {}): Citation {
+function citation(overrides: Partial<AssistantCitation> = {}): AssistantCitation {
   return {
     ref: 1,
     documentId: null,

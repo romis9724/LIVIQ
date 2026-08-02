@@ -1,4 +1,6 @@
-/* AI 비서 대화 화면 — 디자인(입주민 AI 비서.dc.html) 이식. */
+/* AI 비서 대화 화면 — 디자인(입주민 AI 비서.dc.html) 이식.
+   @liviq/ui 공용(ADR-0028 결정 4) — 입주민·관리자 어시스턴트가 같은 말풍선·진행·구조화 블록을 쓴다.
+   `.sr-only` 는 여기서 뺐다 — styles/global.css 가 전역 정본이고 이 파일도 같은 번들에 실린다. */
 .assistant {
   height: 100%;
   display: flex;
@@ -508,13 +510,4 @@
 .composer__send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }

@@ -6,7 +6,7 @@
  * 끝난 뒤 접이식 목록에서는 그대로 "한 일"의 기록으로 읽혀야 한다 — 두 벌을 두지 않는다.
  */
 
-import type { Stage } from "./api";
+import type { AssistantStage } from "./assistant-events";
 
 /** 도구 이름 → 명사형 라벨. 도구 목록은 ai_core/tools/*.py 가 단일 출처. */
 export const TOOL_LABELS: Record<string, string> = {
@@ -24,7 +24,7 @@ export const TOOL_LABELS: Record<string, string> = {
 };
 
 /** 도구 없는 단계. 서버가 stage 3종만 보낸다는 계약(ADR-0025 §5)이라 폴백이 필요 없다. */
-const STAGE_LABELS: Record<Stage, string> = {
+const STAGE_LABELS: Record<AssistantStage, string> = {
   searching: "근거 검색",
   generating: "답변 작성",
   verifying: "출처 확인",
@@ -34,7 +34,7 @@ const STAGE_LABELS: Record<Stage, string> = {
 export const UNKNOWN_TOOL_LABEL = "단지 데이터 조회";
 
 /** 한 status 이벤트 → 표시 라벨. 도구가 있으면 도구가 이긴다(더 구체적이라). */
-export function progressLabel(stage: Stage, tool: string | null): string {
+export function progressLabel(stage: AssistantStage, tool: string | null): string {
   if (tool) return TOOL_LABELS[tool] ?? UNKNOWN_TOOL_LABEL;
   return STAGE_LABELS[stage] ?? UNKNOWN_TOOL_LABEL;
 }
@@ -45,7 +45,7 @@ export function progressLabel(stage: Stage, tool: string | null): string {
  */
 export function appendProgress(
   steps: readonly string[],
-  stage: Stage,
+  stage: AssistantStage,
   tool: string | null,
 ): string[] {
   const label = progressLabel(stage, tool);

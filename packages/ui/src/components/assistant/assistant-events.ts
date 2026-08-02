@@ -1,11 +1,12 @@
 // AI 비서 — api SSE 스트림 클라이언트 (docs/09 §1.1 이벤트 계약).
 // 브라우저 EventSource는 GET만 지원 → POST SSE는 fetch + ReadableStream으로 직접 파싱.
+//
+// 앱(web-resident·web-admin)이 공유하는 **메커니즘**만 둔다(ADR-0028 결정 4) — 엔드포인트·인증은
+// 앱이 정한다: URL 과 인증 fetch 래퍼(세션 쿠키·dev 헤더·401 유도)를 인자로 받는다.
 
-import { API_BASE_URL, DEV_HEADERS, apiFetch } from "@/lib/dev-context";
+export type AssistantStage = "searching" | "generating" | "verifying";
 
-export type Stage = "searching" | "generating" | "verifying";
-
-export interface Citation {
+export interface AssistantCitation {
   ref: number;
   /** 문서 인용은 문서 id, **도구 결과 카드는 null**(제목·quote 로 식별 — 주차 CTA 가 쓴다). */
   documentId: string | null;
@@ -16,12 +17,12 @@ export interface Citation {
   /**
    * 도구 결과의 구조화 페이로드(ADR-0025 §6). 문서 인용은 항상 null.
    * 서버가 확정한 값이지만 와이어에서 온 JSON 이라 여기서는 좁히지 않는다 —
-   * `structured.ts` 의 `toStructured` 가 kind 별로 검사해 좁힌다(모르는 kind 는 무시).
+   * `assistant-structured.ts` 의 `toStructured` 가 kind 별로 검사해 좁힌다(모르는 kind 는 무시).
    */
   data: unknown;
 }
 
-export interface DoneResult {
+export interface AssistantDoneResult {
   messageId: string | null;
   conversationId: string;
   /** `clarify` = 되묻기(ADR-0025 §4) — 답변이 아니라 **질문**이라 폴백으로 취급하지 않는다. */
@@ -49,10 +50,10 @@ export interface DoneResult {
 
 export type AssistantEvent =
   /** `tool` = 지금 실행 중인 도구 이름. 도구 없는 단계(첫 searching·generating·verifying)는 null. */
-  | { type: "status"; stage: Stage; tool: string | null }
+  | { type: "status"; stage: AssistantStage; tool: string | null }
   | { type: "token"; text: string }
-  | { type: "citation"; citation: Citation }
-  | { type: "done"; result: DoneResult };
+  | { type: "citation"; citation: AssistantCitation }
+  | { type: "done"; result: AssistantDoneResult };
 
 interface SseFrame {
   event: string;
@@ -115,7 +116,7 @@ export function toEvent(frame: SseFrame): AssistantEvent | null {
             needsReview: d.needs_review,
             fallbackReason: d.fallback_reason ?? null,
             answer: d.answer ?? null,
-            toolPath: d.tool_path ?? [],
+            toolPath: Array.isArray(d.tool_path) ? d.tool_path : [],
             suggestions: d.suggestions ?? [],
           },
         };
@@ -138,7 +139,7 @@ export type AnswerKind = "streaming" | "answered" | "clarify" | "fallback";
 export function answerKind(message: {
   status: "streaming" | "done";
   error?: boolean;
-  result?: Pick<DoneResult, "status">;
+  result?: Pick<AssistantDoneResult, "status">;
 }): AnswerKind {
   if (message.status === "streaming") return "streaming";
   if (message.error) return "fallback";
@@ -147,37 +148,26 @@ export function answerKind(message: {
 }
 
 /**
- * GET /assistant/conversations/latest — 본인의 최근 대화(없으면 빈 응답).
- * 형태 검증은 하지 않고 raw JSON 을 그대로 넘긴다 — 검증·매핑은 `restore.ts` 가 한다.
+ * 앱의 인증 fetch 래퍼(세션 쿠키 + dev 헤더 + 401 유도). ui 는 인증 정책을 모른다 —
+ * 각 앱 `src/lib` 의 `apiFetch` 가 그대로 들어온다.
  */
-export async function fetchLatestThread(): Promise<unknown> {
-  const response = await apiFetch(`${API_BASE_URL}/assistant/conversations/latest`, {
-    headers: DEV_HEADERS,
-  });
-  if (!response.ok) throw new Error(`대화 복원 실패: ${response.status}`);
-  return response.json();
-}
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export interface AskOptions {
-  conversationId?: string | null;
+export interface StreamAssistantOptions {
+  apiFetch: FetchLike;
   signal?: AbortSignal;
 }
 
-/** POST /assistant/ask → SSE 이벤트 스트림. */
-export async function* streamAsk(
-  question: string,
-  opts: AskOptions = {},
+/** POST {url} → SSE 이벤트 스트림. body 는 엔드포인트 계약 그대로(스네이크 키) 싣는다. */
+export async function* streamAssistant(
+  url: string,
+  body: Record<string, unknown>,
+  opts: StreamAssistantOptions,
 ): AsyncGenerator<AssistantEvent> {
-  const response = await apiFetch(`${API_BASE_URL}/assistant/ask`, {
+  const response = await opts.apiFetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...DEV_HEADERS,
-    },
-    body: JSON.stringify({
-      question,
-      conversation_id: opts.conversationId ?? null,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal: opts.signal,
   });
 
