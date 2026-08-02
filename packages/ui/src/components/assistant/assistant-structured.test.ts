@@ -268,4 +268,38 @@ describe("structuredBlocks", () => {
   it("인용이 없으면 빈 배열", () => {
     expect(structuredBlocks([])).toEqual([]);
   });
+
+  // 2026-08-03 사용자 신고: "이번 달 관리비 얼마 나왔어?"(본인 질의)에 8B가 get_fees(scope=전체)를
+  // 추가 호출해 본인 내역 + 단지 평균 카드가 같이 떴다 — 본인 카드가 있으면 범위 평균 카드는 숨긴다.
+  it("본인 fee_table 이 있으면 같은 답변의 범위 평균 fee_table 은 숨긴다", () => {
+    const scopePayload = {
+      ...FEE_PAYLOAD,
+      total: 168211,
+      scope: { kind: "complex", label: "단지 전체", sample_size: 322 },
+    };
+    const blocks = structuredBlocks([citation(1, FEE_PAYLOAD), citation(2, scopePayload)]);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.ref).toBe(1);
+  });
+
+  it("범위 평균 카드만 있으면(동·전체 질의) 그대로 보여준다", () => {
+    const scopePayload = {
+      ...FEE_PAYLOAD,
+      scope: { kind: "dong", label: "402동", sample_size: 58 },
+    };
+    const blocks = structuredBlocks([citation(1, scopePayload)]);
+    expect(blocks).toHaveLength(1);
+  });
+
+  it("fee_compare 카드는 본인 fee_table 과 공존한다(비교는 의도된 조합)", () => {
+    const compare = {
+      kind: "fee_compare",
+      period: "2026-07",
+      rows: [{ label: "우리집", kind: "self", amount: 176601, sample_size: null, note: "" }],
+      base_label: "우리집",
+      diffs: [],
+    };
+    const blocks = structuredBlocks([citation(1, FEE_PAYLOAD), citation(2, compare)]);
+    expect(blocks).toHaveLength(2);
+  });
 });

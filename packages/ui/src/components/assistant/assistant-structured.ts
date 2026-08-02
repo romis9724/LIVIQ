@@ -237,12 +237,21 @@ export function toStructured(data: unknown): StructuredData | null {
   }
 }
 
-/** 인용 목록에서 렌더 가능한 블록만 뽑는다. `ref` 는 어느 출처의 데이터인지 되짚는 키. */
+/**
+ * 인용 목록에서 렌더 가능한 블록만 뽑는다. `ref` 는 어느 출처의 데이터인지 되짚는 키.
+ *
+ * 예외 하나: 본인 세대 fee_table 이 있는 답변에서는 범위 평균(scope) fee_table 을 숨긴다 —
+ * 본인 질의("이번 달 관리비 얼마야?")에 8B 가 get_fees(scope=전체)를 덤으로 호출해 평균 카드가
+ * 섞이던 실측(2026-08-03 사용자 신고). 비교가 목적이면 fee_compare 카드가 오므로 잃는 것이 없다.
+ */
 export function structuredBlocks(
   citations: readonly AssistantCitation[],
 ): Array<{ ref: number; data: StructuredData }> {
-  return citations.flatMap((c) => {
+  const blocks = citations.flatMap((c) => {
     const data = toStructured(c.data);
     return data ? [{ ref: c.ref, data }] : [];
   });
+  const hasSelfFeeTable = blocks.some((b) => b.data.kind === "fee_table" && !b.data.scope);
+  if (!hasSelfFeeTable) return blocks;
+  return blocks.filter((b) => !(b.data.kind === "fee_table" && b.data.scope));
 }
