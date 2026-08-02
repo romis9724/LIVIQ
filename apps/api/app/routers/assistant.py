@@ -6,6 +6,7 @@ SSE 이벤트 4종: token(증분) · citation(근거 카드) · status(단계) �
 
 from __future__ import annotations
 
+import datetime
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -22,6 +23,7 @@ from ai_core.graph import GraphClient
 from ai_core.history import HISTORY_CANDIDATE_TURNS
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import (
+    KST,
     CitationEvent,
     DoneEvent,
     StatusEvent,
@@ -102,41 +104,9 @@ async def latest_conversation(
 
     탭 저장소가 비었을 때(새 탭·브라우저 재시작)의 2차 복원 경로다. 대화가 없으면
     빈 응답 — 첫 방문은 오류가 아니다. 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+    입주민은 **날짜 제한이 없다** — 어제 하던 문의를 오늘 이어 보는 편이 자연스럽다.
     """
-    conversation = await session.scalar(
-        select(Conversation)
-        .where(
-            Conversation.tenant_id == ctx.tenant_id,
-            Conversation.user_id == ctx.user_id,
-            Conversation.channel == "resident",
-        )
-        .order_by(Conversation.updated_at.desc())
-        .limit(1)
-    )
-    if conversation is None:
-        return LatestConversationResponse(conversation_id=None, messages=[])
-    rows = (
-        await session.scalars(
-            select(Message)
-            .where(
-                Message.tenant_id == ctx.tenant_id,
-                Message.conversation_id == conversation.id,
-            )
-            # _load_history와 같은 이유로 role 보조 정렬 — 같은 요청의 user/assistant는
-            # created_at이 동일해서, 이게 없으면 복원 화면에서 답변이 질문보다 위로 온다.
-            .order_by(Message.created_at.desc(), Message.role.asc())
-            .limit(RESTORE_MESSAGE_LIMIT)
-        )
-    ).all()
-    return LatestConversationResponse(
-        conversation_id=conversation.id,
-        messages=[
-            RestoredMessage(id=m.id, role=m.role, content=m.content, status=m.status)
-            for m in reversed(rows)
-            # system 롤·빈 본문은 화면에 그릴 것이 없다(폴백 미저장 답변 등).
-            if m.content and m.role in ("user", "assistant")
-        ],
-    )
+    return await _latest_conversation(session, ctx, channel="resident")
 
 
 @admin_assistant_router.post("/ask", dependencies=[Depends(enforce_rate_limit)])
@@ -152,11 +122,25 @@ async def admin_ask(
     """관리자 홈 AI 비서(ADR-0028 결정 2) — 입주민 ask와 같은 에이전트 경로, channel="admin".
 
     도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
-    서버 복원(`/assistant/conversations/latest`)은 **제공하지 않는다** — 진입 브리핑(로그인마다
-    인사+민원 현황 요약)이 요구사항의 본체인데 복원이 되면 브리핑이 뜨지 않는다. 탭 내
-    연속성은 프론트 sessionStorage가 담당.
+    서버 복원은 **당일 한정**으로 제공한다(아래 admin_latest_conversation, ADR-0028 결정 2 개정).
     """
     return await _assistant_response(body, ctx, session, llm, graph, redis, tuning, channel="admin")
+
+
+@admin_assistant_router.get("/conversations/latest")
+async def admin_latest_conversation(
+    ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ASSISTANT_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+) -> LatestConversationResponse:
+    """본인의 **당일(KST)** 관리자 대화 1건 복원(ADR-0028 결정 2 개정, H20-3).
+
+    "이전 대화를 기억하되 일자가 달라지면 새 대화"가 요구다. 마지막 메시지가 어제 것이면
+    빈 응답을 주고, 그러면 프론트는 새 대화 + 진입 브리핑으로 시작한다(같은 날 재로그인·새
+    탭은 대화가 이어져 브리핑이 뜨지 않는다). 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+    시설 도우미(`/admin/facilities/assistant`)도 channel="admin"이라 그 대화가 복원될 수
+    있다 — 같은 사용자의 같은 채널이라 격리 문제는 없고, 채널을 쪼개는 값은 아직 없다.
+    """
+    return await _latest_conversation(session, ctx, channel="admin", today_only=True)
 
 
 @facility_router.post("/assistant", dependencies=[Depends(enforce_rate_limit)])
@@ -265,7 +249,8 @@ async def _assistant_response(
                 ctx=tool_ctx,
                 history=history.turns,
                 # 직전 턴이 되묻기였으면 되묻기 도구를 감춘다 — 연속 되묻기 금지(ADR-0025 §4).
-                allow_clarify=not history.last_was_clarify,
+                # 요청이 끄고 들어온 경우(자동 발화 — 관리자 진입 브리핑)도 같이 감춘다.
+                allow_clarify=body.allow_clarify and not history.last_was_clarify,
                 answer_prompt=answer_prompt,
                 tool_confidence=tuning.tool_confidence,
             )
@@ -334,6 +319,62 @@ async def _assistant_response(
                     }
 
     return EventSourceResponse(stream())
+
+
+async def _latest_conversation(
+    session: AsyncSession,
+    ctx: RequestContext,
+    *,
+    channel: str,
+    today_only: bool = False,
+) -> LatestConversationResponse:
+    """본인의 최근 대화 1건 복원 — 채널·당일 필터만 다른 두 엔드포인트의 공유 본체.
+
+    `today_only`면 **마지막 메시지의 KST 날짜가 오늘일 때만** 대화를 준다(H20-3). 판정을
+    파이썬에서 하는 이유는 어차피 메시지를 읽어야 해서다 — 쿼리를 하나 더 만들 이유가 없다.
+    """
+    conversation = await session.scalar(
+        select(Conversation)
+        .where(
+            Conversation.tenant_id == ctx.tenant_id,
+            Conversation.user_id == ctx.user_id,
+            Conversation.channel == channel,
+        )
+        .order_by(Conversation.updated_at.desc())
+        .limit(1)
+    )
+    if conversation is None:
+        return LatestConversationResponse(conversation_id=None, messages=[])
+    rows = (
+        await session.scalars(
+            select(Message)
+            .where(
+                Message.tenant_id == ctx.tenant_id,
+                Message.conversation_id == conversation.id,
+            )
+            # _load_history와 같은 이유로 role 보조 정렬 — 같은 요청의 user/assistant는
+            # created_at이 동일해서, 이게 없으면 복원 화면에서 답변이 질문보다 위로 온다.
+            .order_by(Message.created_at.desc(), Message.role.asc())
+            .limit(RESTORE_MESSAGE_LIMIT)
+        )
+    ).all()
+    # rows[0]이 최신 메시지(created_at 내림차순). 메시지가 없는 대화도 어제 것과 같이 취급한다.
+    if today_only and not (rows and _is_today_kst(rows[0].created_at)):
+        return LatestConversationResponse(conversation_id=None, messages=[])
+    return LatestConversationResponse(
+        conversation_id=conversation.id,
+        messages=[
+            RestoredMessage(id=m.id, role=m.role, content=m.content, status=m.status)
+            for m in reversed(rows)
+            # system 롤·빈 본문은 화면에 그릴 것이 없다(폴백 미저장 답변 등).
+            if m.content and m.role in ("user", "assistant")
+        ],
+    )
+
+
+def _is_today_kst(moment: datetime.datetime) -> bool:
+    """단지 시간대(KST) 기준 오늘인가 — 서버가 UTC로 돌아도 날짜 경계가 어긋나지 않게."""
+    return moment.astimezone(KST).date() == datetime.datetime.now(KST).date()
 
 
 async def _load_or_create_conversation(

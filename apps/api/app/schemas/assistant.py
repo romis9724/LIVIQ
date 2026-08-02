@@ -18,6 +18,11 @@ AnswerStatus = Literal["answered", "fallback", "clarify"]
 class AskRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=QUESTION_MAX_CHARS)
     conversation_id: uuid.UUID | None = None
+    # 되묻기 허용 여부 — **자동 발화**(관리자 진입 브리핑)가 끄는 용도다(additive, 기본 True).
+    # 화면을 연 직후 코드가 보내는 질의라 되물어도 답할 사람이 없다 — 되묻기로 끝나면 그냥
+    # 빈손이다. 능력을 **줄이는** 방향만이라(도구를 감출 뿐 강제하지 않는다) 규칙 8 무관이고,
+    # 근거 규율도 그대로다: 되물을 수 없으면 답변 아니면 폴백으로 끝난다.
+    allow_clarify: bool = True
 
 
 # ── SSE data 페이로드 (이벤트 이름은 token|citation|status|done) ────────

@@ -1,8 +1,20 @@
 // 관리자 진입 브리핑 — 순수 로직만(테스트 대상). 발동·렌더는 AdminAssistant 가 한다.
 // ADR-0028 결정 3: 빈 대화면 프론트가 고정 질의 1회를 자동 전송하고, 그 사용자 말풍선은 숨긴다.
 
-/** 브리핑 질문의 고정 꼬리 — 날짜만 앞에 갈아 끼운다(숨김 판정도 이 꼬리로 한다). */
+/**
+ * 브리핑 질문의 고정 꼬리 — 날짜만 앞에 갈아 끼운다(숨김 판정도 이 꼬리로 한다).
+ * 기간("최근 7일")을 **선제 명시**한다: 안 주면 모델이 기간을 되물어 브리핑이 빈손으로 끝났다
+ * (사내 배포 실화면 보고, H20-3). "민원 현황" 키워드는 8B 라우팅 앵커라 유지 — 문장 구조를
+ * 크게 바꾸면 도구 라우팅이 무너진다(docs/09 H20-2 기각 실측).
+ */
 const BRIEFING_TAIL =
+  "관리소장에게 간단히 인사하고, 최근 7일 민원 현황을 요약한 뒤 오늘 우선 처리해야 할 일을 알려주세요.";
+
+/**
+ * 구 꼬리(기간 없는 버전) — 숨김 판정에만 쓴다. 당일 복원본(서버·탭 저장)에 이 문구로 보낸
+ * 브리핑이 남아 있을 수 있어서다. 대화는 당일치만 복원되므로 **배포 다음 날이면 제거해도 안전**.
+ */
+const LEGACY_BRIEFING_TAIL =
   "관리소장에게 간단히 인사하고, 현재 민원 현황을 요약한 뒤 오늘 우선 처리해야 할 일을 알려주세요.";
 
 /**
@@ -21,19 +33,17 @@ export function briefingPrompt(now: Date): string {
  * 날짜가 아니라 **꼬리**로 본다: sessionStorage 로 복원된 어제 대화도 그대로 숨겨야 한다.
  */
 export function isBriefingPrompt(text: string): boolean {
-  return text.trim().endsWith(BRIEFING_TAIL);
+  const trimmed = text.trim();
+  return trimmed.endsWith(BRIEFING_TAIL) || trimmed.endsWith(LEGACY_BRIEFING_TAIL);
 }
 
 /**
- * 마운트 직후 브리핑을 발동할지 — **탭 저장소**에 복원될 대화가 없을 때만.
- * 훅의 messages state 로 판정하면 안 된다: 복원도 effect 라 같은 커밋에서는 아직 빈
- * 배열이고(레이스), 복원된 대화 위에 브리핑이 끼어든다. 저장소를 직접(동기) 본다.
- * null = 저장된 적 없음(새 탭·로그인), 0건 = '새 대화' 마커 후 재진입 — 둘 다 브리핑 대상.
- * "빈 대화로 전이할 때마다"가 아니다: 사용자가 '새 대화'로 비운 화면에 자동 질의가
- * 끼어드는 UX 를 막으려고 호출부는 마운트 1회 ref 가드를 함께 쓴다.
+ * KST 날짜 키 "YYYY-MM-DD" — 탭 저장 키의 접미(H20-3, ADR-0028 결정 2 개정).
+ * 날이 바뀌면 저장 키가 달라져 자연히 빈 상태가 되고, 서버도 당일 대화만 주므로
+ * 새 대화 + 브리핑으로 시작한다. en-CA 로케일이 곧 ISO 날짜 표기다.
  */
-export function shouldBrief(storedMessageCount: number | null): boolean {
-  return storedMessageCount === null || storedMessageCount === 0;
+export function kstDateKey(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
 }
 
 /** 관리자 답변 CTA — 민원 집계 도구가 라우팅됐으면 민원현황으로 보낸다. */

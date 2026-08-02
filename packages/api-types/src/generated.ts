@@ -69,11 +69,35 @@ export interface paths {
          * @description 관리자 홈 AI 비서(ADR-0028 결정 2) — 입주민 ask와 같은 에이전트 경로, channel="admin".
          *
          *     도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
-         *     서버 복원(`/assistant/conversations/latest`)은 **제공하지 않는다** — 진입 브리핑(로그인마다
-         *     인사+민원 현황 요약)이 요구사항의 본체인데 복원이 되면 브리핑이 뜨지 않는다. 탭 내
-         *     연속성은 프론트 sessionStorage가 담당.
+         *     서버 복원은 **당일 한정**으로 제공한다(아래 admin_latest_conversation, ADR-0028 결정 2 개정).
          */
         post: operations["admin_ask_admin_assistant_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/assistant/conversations/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Latest Conversation
+         * @description 본인의 **당일(KST)** 관리자 대화 1건 복원(ADR-0028 결정 2 개정, H20-3).
+         *
+         *     "이전 대화를 기억하되 일자가 달라지면 새 대화"가 요구다. 마지막 메시지가 어제 것이면
+         *     빈 응답을 주고, 그러면 프론트는 새 대화 + 진입 브리핑으로 시작한다(같은 날 재로그인·새
+         *     탭은 대화가 이어져 브리핑이 뜨지 않는다). 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+         *     시설 도우미(`/admin/facilities/assistant`)도 channel="admin"이라 그 대화가 복원될 수
+         *     있다 — 같은 사용자의 같은 채널이라 격리 문제는 없고, 채널을 쪼개는 값은 아직 없다.
+         */
+        get: operations["admin_latest_conversation_admin_assistant_conversations_latest_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1239,6 +1263,7 @@ export interface paths {
          *
          *     탭 저장소가 비었을 때(새 탭·브라우저 재시작)의 2차 복원 경로다. 대화가 없으면
          *     빈 응답 — 첫 방문은 오류가 아니다. 소유권(규칙 4) + tenant 이중 방어(규칙 3).
+         *     입주민은 **날짜 제한이 없다** — 어제 하던 문의를 오늘 이어 보는 편이 자연스럽다.
          */
         get: operations["latest_conversation_assistant_conversations_latest_get"];
         put?: never;
@@ -2325,6 +2350,11 @@ export interface components {
         };
         /** AskRequest */
         AskRequest: {
+            /**
+             * Allow Clarify
+             * @default true
+             */
+            allow_clarify: boolean;
             /** Conversation Id */
             conversation_id?: string | null;
             /** Question */
@@ -4256,6 +4286,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_latest_conversation_admin_assistant_conversations_latest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-dev-tenant-id"?: string | null;
+                "x-dev-user-id"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                liviq_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestConversationResponse"];
                 };
             };
             /** @description Validation Error */

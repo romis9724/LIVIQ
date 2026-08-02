@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import datetime
 import typing
 from collections.abc import AsyncIterator
 
@@ -26,13 +27,14 @@ from app.session import get_redis
 from conftest import TENANT_ID, USER_ID
 from httpx import ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession
-from test_assistant import _parse_sse, _seed_indexed_document
+from test_assistant import _parse_sse, _seed_conversation, _seed_indexed_document
 
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import DoneEvent
 from ai_core.tools import ToolContext
 
 ADMIN_ASK = "/admin/assistant/ask"
+ADMIN_LATEST = "/admin/assistant/conversations/latest"
 QUESTION = "주차장 언제 열어요?"
 # 캐시에만 있고 가짜 LLM은 절대 내지 않는 문장 — 재생 여부를 답변 본문으로 가른다.
 CACHED_ANSWER = "캐시에 남아 있던 옛 답변입니다 [1]."
@@ -173,3 +175,74 @@ async def test_resident_ask_still_replays_same_seeded_key(
 
     assert done["answer"] == CACHED_ANSWER
     assert done["token_input"] == 0  # 재생은 LLM 호출 0
+
+
+# ── GET /admin/assistant/conversations/latest — 당일 한정 복원(ADR-0028 결정 2 개정) ──
+
+
+def _now() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
+
+
+async def test_admin_latest_restores_today_conversation(
+    manager_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """오늘(KST) 대화는 그대로 복원된다 — 같은 턴은 user가 assistant보다 앞."""
+    conversation_id = await _seed_conversation(
+        db_session,
+        channel="admin",
+        at=_now(),
+        messages=(
+            ("user", "미배정 민원 몇 건인가요?", None),
+            ("assistant", "3건입니다.", "answered"),
+        ),
+    )
+
+    body = (await manager_client.get(ADMIN_LATEST)).json()
+
+    assert body["conversation_id"] == str(conversation_id)
+    assert [(m["role"], m["content"]) for m in body["messages"]] == [
+        ("user", "미배정 민원 몇 건인가요?"),
+        ("assistant", "3건입니다."),
+    ]
+
+
+async def test_admin_latest_ignores_yesterday_conversation(
+    manager_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """일자가 바뀌면 새 대화다 — 어제 대화는 복원하지 않는다(그래야 브리핑이 다시 뜬다)."""
+    await _seed_conversation(
+        db_session,
+        channel="admin",
+        at=_now() - datetime.timedelta(days=1),
+        messages=(("user", "어제 물어본 것", None), ("assistant", "어제 답변", "answered")),
+    )
+
+    response = await manager_client.get(ADMIN_LATEST)
+
+    assert response.status_code == 200  # 빈 응답은 오류가 아니다
+    assert response.json() == {"conversation_id": None, "messages": []}
+
+
+async def test_admin_latest_ignores_resident_channel(
+    manager_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    """채널 격리 — 소장이 입주민 화면에서 나눈 오늘 대화는 관리자 홈에 나오지 않는다."""
+    await _seed_conversation(
+        db_session, channel="resident", at=_now(), messages=(("user", "내 관리비", None),)
+    )
+
+    body = (await manager_client.get(ADMIN_LATEST)).json()
+
+    assert body == {"conversation_id": None, "messages": []}
+
+
+async def test_resident_cannot_read_admin_latest(
+    db_session: AsyncSession, fake_llm: LlmClient, fake_redis: object
+) -> None:
+    """CRITICAL 인가(규칙 4) — 복원 경로도 소장 전용이다."""
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, fake_llm, fake_redis, roles=("RESIDENT",)) as c:
+        response = await c.get(ADMIN_LATEST)
+
+    assert response.status_code == 403

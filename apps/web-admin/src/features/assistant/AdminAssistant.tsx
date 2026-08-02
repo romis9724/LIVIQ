@@ -19,11 +19,10 @@ import {
   groupCitations,
   progressLabel,
   structuredBlocks,
-  readThread,
   useAssistantStream,
 } from "@liviq/ui";
 
-import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer, shouldBrief } from "./briefing";
+import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer } from "./briefing";
 import { ADMIN_ASSISTANT_STREAM_OPTIONS } from "./client";
 import { InquiryStatusPanel } from "./InquiryStatusPanel";
 import "./admin-assistant.css";
@@ -43,33 +42,37 @@ function fallbackText(reason: string | null): string {
 }
 
 export function AdminAssistant() {
-  const { messages, ask, pending, startNew } = useAssistantStream(ADMIN_ASSISTANT_STREAM_OPTIONS);
+  const { messages, ask, pending, startNew, restored } = useAssistantStream(
+    ADMIN_ASSISTANT_STREAM_OPTIONS,
+  );
   const [draft, setDraft] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 진입 브리핑 — **마운트 1회**만(ADR-0028 결정 3). '새 대화'로 비운 화면에 자동 질의가
   // 끼어들면 안 되므로 "빈 대화로 전이할 때마다"가 아니라 ref 로 한 번만 잠근다.
-  // 판정은 messages state 가 아니라 탭 저장소를 직접 본다 — 복원도 effect 라 이 시점의
-  // state 는 항상 빈 배열이고(레이스), state 로 보면 복원된 대화 위에 브리핑이 끼어든다.
+  // 게이트는 훅의 `restored` 다(H20-3): 복원(탭 저장 → 서버 당일 대화)이 **끝난 뒤**에도
+  // 대화가 비어 있을 때만 발동한다. restored 전에는 messages 가 항상 빈 배열이라(레이스)
+  // 그때 판정하면 복원된 대화 위에 브리핑이 끼어든다.
   // ask 는 타이머로 예약하고 cleanup 에서 취소한다 — StrictMode 의 effect→cleanup→effect 에서
   // 즉시 ask 하면 첫 실행의 요청이 cleanup(abort)에 죽고, ref 가드가 재발동까지 막아
   // "근거 검색 중"이 영구히 남는다(dev 실측). 타이머면 첫 실행은 시작 전에 취소된다.
   // 실패는 훅의 기존 오류 말풍선에 맡긴다 — 화면을 막지 않는다.
   const briefedRef = useRef(false);
+  const messageCount = messages.length;
   useEffect(() => {
-    if (briefedRef.current) return;
-    const stored = readThread(ADMIN_ASSISTANT_STREAM_OPTIONS.storageKey);
-    if (!shouldBrief(stored === null ? null : stored.messages.length)) {
-      briefedRef.current = true;
+    if (briefedRef.current || !restored) return;
+    if (messageCount > 0) {
+      briefedRef.current = true; // 복원된 대화가 있다 — 이후 '새 대화'로 비워도 발동 금지
       return;
     }
     const timer = setTimeout(() => {
       briefedRef.current = true;
-      void ask(briefingPrompt(new Date()));
+      // 되묻기를 끄고 보낸다 — 화면을 연 직후의 자동 질의라 되물어도 답할 사람이 없다(H20-3).
+      void ask(briefingPrompt(new Date()), { allow_clarify: false });
     }, 0);
     return () => clearTimeout(timer);
-  }, [ask]);
+  }, [ask, restored, messageCount]);
 
   // 새 메시지를 따라 맨 아래로.
   const hasScrolledRef = useRef(false);
@@ -101,10 +104,10 @@ export function AdminAssistant() {
       </h1>
 
       <section className="assistant adm-assist__chat" aria-label="AI 비서 대화">
+        {/* 관리자 헤더에는 L 마크를 두지 않는다 — AdminShell 사이드바가 이미 LIVIQ 마크를
+            그려서 모바일에선 두 개가 세로로 겹쳐 보였다(실화면 보고). 입주민은 셸에 로고가
+            없어 마크가 유일한 브랜딩이라 공용 assistant.css·AssistantChat 은 그대로 둔다. */}
         <header className="assistant__header">
-          <span className="assistant__mark" aria-hidden="true">
-            L
-          </span>
           <span className="assistant__heading">
             <span className="assistant__title">AI 비서</span>
             <span className="assistant__sub">관리소 운영 현황을 근거와 함께 알려드려요</span>

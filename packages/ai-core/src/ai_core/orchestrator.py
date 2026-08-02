@@ -70,7 +70,8 @@ CONTEXT_BUDGET_TOKENS = 2400
 # 3 → 4(ADR-0025 §2): 계획 turn 1회가 도구 turn 예산을 먹지 않게 한 칸 늘렸다(계획 1 + 도구 3).
 MAX_TOOL_STEPS = 4
 # 단지 시간대 — "이번 달" 해석의 기준(agent_system_prompt). 단지는 전부 국내라 고정.
-_KST = datetime.timezone(datetime.timedelta(hours=9))
+# api도 같은 기준을 쓴다(관리자 대화 당일 복원 — H20-3): 날짜 경계는 한 곳에서만 정한다.
+KST = datetime.timezone(datetime.timedelta(hours=9))
 # 계획 turn 상한 — 무-도구 turn을 계획으로 재해석하는 횟수. 1로 고정한다: 2회 이상 허용하면
 # 도구를 안 부르는 모델이 상한까지 빈 turn을 돌며 토큰만 태운다(무한 루프 방지).
 MAX_PLAN_TURNS = 1
@@ -187,7 +188,7 @@ async def answer_question(
     if not allow_clarify:
         specs = [s for s in specs if s["function"]["name"] != CLARIFY_TOOL_NAME]
     # 오늘 날짜는 단지 시간대(KST) 기준 — 서버가 UTC로 돌면 자정~09시 사이 날짜가 어긋난다.
-    today = datetime.datetime.now(_KST).date()
+    today = datetime.datetime.now(KST).date()
     messages: list[dict[str, object]] = [{"role": "system", "content": agent_system_prompt(today)}]
     # 히스토리는 OpenAI 규약대로 개별 user/assistant 메시지로 넣는다(도구 결정 turn).
     for role, content in recent:
