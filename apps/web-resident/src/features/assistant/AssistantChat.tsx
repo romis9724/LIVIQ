@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { CitationCard, ConfidenceBadge, FeedbackButtons } from "@liviq/ui";
+import { CitationCard, FeedbackButtons } from "@liviq/ui";
 import { getMe } from "@/lib/api";
 import { buildComposeHref } from "@/features/inquiries/prefill";
 import {
@@ -26,7 +26,7 @@ const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 관리사무�
 const INQUIRY_TOOL = "search_similar_inquiries";
 
 const FALLBACK_TEXT: Record<string, string> = {
-  no_evidence: "정확한 근거를 찾지 못해 관리사무소 담당자에게 연결해 드릴게요.",
+  no_evidence: "정확한 근거를 찾지 못해 관리사무소에 연락해주세요.",
   llm_unavailable: "AI 요약이 일시적으로 어려워 검색된 근거만 안내해요. 잠시 후 다시 시도해 주세요.",
   low_confidence: FALLBACK_DEFAULT,
   masking_failed: "개인정보 보호를 위해 이 질문은 담당자에게 직접 연결해 드릴게요.",
@@ -270,16 +270,13 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
         ) : (
           <>
             <ProgressSteps steps={message.steps} />
-            <ConfidenceBadge status="handoff" />
             <div className="bubble-ai">
               <p>{message.error ? message.text : fallbackText(message.result?.fallbackReason ?? null)}</p>
               {groupCitations(message.citations).map((s) => (
                 <CitationCard key={s.ref} title={s.title} meta={s.details.join(" · ")} />
               ))}
-              {/* 연락처 안내가 폴백의 본체이자 유일한 행동이다. 버튼은 두지 않는다 —
-                  "담당자 연결"은 연결해 줄 채널이 없었고, "민원 접수하기"는 답을 못 준 화면에서
-                  민원으로 떠넘기는 인상이라 뺐다(사용자 지시). 접수 CTA 는 답변 경로에만 남는다. */}
-              <div className="handoff-contact">관리사무소 · 평일 09:00~18:00 · 담당 김*수 소장</div>
+              {/* 폴백은 안내 문구 한 줄이 전부다 — 배지·연락처 카드·버튼을 모두 뺐다(사용자 지시).
+                  접수 CTA 는 답변 경로에만 남는다. */}
             </div>
           </>
         )}
