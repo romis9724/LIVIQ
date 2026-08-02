@@ -45,6 +45,7 @@ from ai_core.rag.prompt import (
     NO_EVIDENCE_MARKER,
     agent_system_prompt,
     build_context_block,
+    quote_first_prompt,
 )
 from ai_core.rag.retrieval import MIN_SCORE, RetrievedChunk
 from ai_core.suggestions import suggest_next_actions
@@ -309,8 +310,13 @@ async def answer_question(
 
     # ── 최종 답변(스트리밍) ────────────────────────────────────────────
     yield StatusEvent(stage="generating")
+    # quote-first 실험 노브(R36-B, 기본 off) — 활성 백엔드 설정에서 읽는다. 시설 도우미가
+    # 주입한 answer_prompt도 같은 변형을 탄다(둘 다 "…규칙:" 형태라 분기 불필요).
+    system_prompt = (
+        quote_first_prompt(answer_prompt) if llm.settings.prompt_quote_first else answer_prompt
+    )
     final_messages = [
-        {"role": "system", "content": answer_prompt},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": masked_final.masked_text},
     ]
     parts: list[str] = []

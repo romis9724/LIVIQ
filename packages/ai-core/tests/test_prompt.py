@@ -7,7 +7,16 @@ get_fees 4회 공회전 → no_evidence).
 
 import datetime
 
-from ai_core.rag.prompt import AGENT_SYSTEM_PROMPT, agent_system_prompt
+import pytest
+
+from ai_core.rag.prompt import (
+    AGENT_SYSTEM_PROMPT,
+    ANSWER_SYSTEM_PROMPT,
+    FACILITY_ANSWER_SYSTEM_PROMPT,
+    QUOTE_FIRST_RULE,
+    agent_system_prompt,
+    quote_first_prompt,
+)
 
 
 def test_agent_system_prompt_contains_today() -> None:
@@ -31,6 +40,19 @@ def test_agent_system_prompt_keeps_base_prompt() -> None:
 
     # Assert — 기존 결정 turn 지시(되묻기 조건 등)는 그대로 앞에 온다
     assert content.startswith(AGENT_SYSTEM_PROMPT)
+
+
+@pytest.mark.parametrize("base", [ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT])
+def test_quote_first_prompt_inserts_rule_zero_and_keeps_rules(base: str) -> None:
+    """일반·시설 이력 프롬프트 모두 규칙 1 앞에 인용 선행 지시가 들어가고 본문은 보존된다."""
+    # Act
+    variant = quote_first_prompt(base)
+
+    # Assert — 헤더("…규칙:") 다음 줄이 규칙 0, 기존 규칙은 그대로 뒤에 남는다
+    header, rule_zero, rest = variant.split("\n", 2)
+    assert header == base.split("\n", 1)[0]
+    assert rule_zero == QUOTE_FIRST_RULE
+    assert rest == base.split("\n", 1)[1]
 
 
 def test_agent_system_prompt_is_stable_within_a_day() -> None:

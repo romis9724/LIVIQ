@@ -84,6 +84,27 @@ FACILITY_ANSWER_SYSTEM_PROMPT = """당신은 아파트 시설관리 담당자를
 5. 간결한 한국어로 답하십시오(불필요한 서론·반복 금지)."""
 
 
+# 인용 선행(quote-first) 실험 노브(R36-B, `PROMPT_QUOTE_FIRST`). 무응답 코어 대책 —
+# 8B는 근거를 받고도 [n]을 안 붙여 답변이 통째로 폐기된다(H15-2). 답을 쓰기 전에 근거
+# 문장을 번호와 함께 옮겨 적게 해 [n] 부착을 답변 구조 자체에 넣는다.
+# 규칙 0으로 앞세우는 이유: 뒤에 붙이면 8B가 이미 답을 쓰기 시작한 뒤라 늦다.
+# 기본 off — 켜지 않으면 프롬프트 문자열은 기존과 완전히 동일하다(프리픽스 캐시 보존).
+QUOTE_FIRST_RULE = (
+    "0. 답하기 전에 첫 줄에 [문서 근거] 중 답의 근거가 되는 문장을 그 번호 [n]과 함께 "
+    "한 줄로 옮겨 적고, 그 다음 줄부터 옮겨 적은 근거만으로 답하십시오."
+)
+
+
+def quote_first_prompt(answer_prompt: str) -> str:
+    """최종 답변 프롬프트의 quote-first 변형 — 규칙 목록 맨 앞에 인용 선행 지시를 끼운다.
+
+    일반(ANSWER_SYSTEM_PROMPT)·시설 이력(FACILITY_ANSWER_SYSTEM_PROMPT) 둘 다 첫 줄이
+    "…규칙:"인 같은 형태라 변형을 따로 두지 않는다 — 규칙 번호만 0부터 시작한다.
+    """
+    header, _, rules = answer_prompt.partition("\n")
+    return f"{header}\n{QUOTE_FIRST_RULE}\n{rules}"
+
+
 def build_context_block(chunks: Sequence[RetrievedChunk], *, start: int = 1) -> str:
     """[n] 번호가 붙은 근거 블록. 번호는 start부터, 순서는 입력 순서(점수순) 유지."""
     lines = []

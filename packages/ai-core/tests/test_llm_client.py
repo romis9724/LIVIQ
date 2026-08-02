@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 
 from ai_core.config import AiCoreSettings
 from ai_core.llm.client import (
+    GUIDED_CITATION_REGEX,
     EmbeddingDimensionError,
     LlmClient,
     LlmError,
@@ -110,6 +112,66 @@ async def test_chat_stream_sends_reasoning_effort_when_configured(
     chunks = [t async for t in stream]
     assert chunks == ["ok"]
     assert captured["reasoning_effort"] == "none"
+
+
+# ── 인용 문법 강제(R36-A 실험 노브) ──────────────────────────────────────
+
+
+def _sse_handler(captured: dict[str, object]) -> Handler:
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            text='data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n',
+            headers={"content-type": "text/event-stream"},
+        )
+
+    return handler
+
+
+async def test_chat_stream_omits_guided_regex_by_default(settings: AiCoreSettings) -> None:
+    """기본 off — 노브를 켜지 않으면 페이로드는 기존과 동일하다."""
+    captured: dict[str, object] = {}
+
+    stream = _client(settings, _sse_handler(captured)).chat_stream(
+        [{"role": "user", "content": "q"}]
+    )
+    assert [t async for t in stream] == ["ok"]
+    assert "guided_regex" not in captured
+
+
+async def test_guided_citation_applies_to_stream_turn_only(settings: AiCoreSettings) -> None:
+    """노브 on이면 최종 답변(stream) turn에만 실린다 — 결정 turn은 tool_calls JSON이라 제외."""
+    tuned = settings.model_copy(update={"llm_guided_citation": True})
+    streamed: dict[str, object] = {}
+    decided: dict[str, object] = {}
+
+    stream = _client(tuned, _sse_handler(streamed)).chat_stream([{"role": "user", "content": "q"}])
+    assert [t async for t in stream] == ["ok"]
+
+    def decide(request: httpx.Request) -> httpx.Response:
+        decided.update(json.loads(request.content))
+        return httpx.Response(200, json=_chat_body("ok"))
+
+    await _client(tuned, decide).chat([{"role": "user", "content": "q"}])
+
+    assert streamed["guided_regex"] == GUIDED_CITATION_REGEX
+    assert "guided_regex" not in decided
+
+
+@pytest.mark.parametrize(
+    ("answer", "allowed"),
+    [
+        # 근거로 답할 수 없는 경우의 폴백 경로는 문법이 막으면 안 된다.
+        ("NO_EVIDENCE", True),
+        ("지하주차장은 24시간 개방합니다 [1].", True),
+        # 목록 답변은 줄바꿈을 포함한다 — `.` 대신 `[\s\S]`를 쓴 이유.
+        ("- 개방 시간: 24시간 [1]\n- 문의: 관리사무소 [2]", True),
+        ("인용 없는 평문 답변입니다.", False),
+    ],
+)
+def test_guided_citation_regex_allows_marker_or_citation(answer: str, allowed: bool) -> None:
+    assert bool(re.fullmatch(GUIDED_CITATION_REGEX, answer)) is allowed
 
 
 async def test_chat_retries_5xx_then_succeeds(settings: AiCoreSettings) -> None:
