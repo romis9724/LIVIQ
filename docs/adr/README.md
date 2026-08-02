@@ -37,3 +37,4 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0025](0025-agent-depth-plan-clarify-structured.md) | 에이전트 심화 — 계획 turn·멀티턴·되묻기·구조화 응답(LangChain 미도입) | Accepted |
 | [0026](0026-assistant-ops-tools-and-dong-targeting.md) | AI 비서 운영 도구 확충과 공지 동 타게팅 — 검색 필터·관리자 집계 도구·평균 비교 표본 하한 | Proposed |
 | [0027](0027-assistant-multiturn-restore-and-relevance.md) | 멀티턴 확장 — 서버 대화 복원(새 대화 버튼) + 히스토리 관련성 필터(lexical 1차) | Proposed |
+| [0028](0028-admin-assistant-home.md) | 관리자 홈 개편 — AI 비서 첫 진입(진입 브리핑)·대시보드→민원현황·어시스턴트 UI 공용 승격 | Proposed |

@@ -716,6 +716,18 @@ local 기본은 `MAIL_BACKEND=console`(발송 없이 API stdout에 링크 출력
 | H19-8 | 서버 대화 복원 | (사용자 결정 — 탭 수명 대신 서버 복원, [ADR-0027 결정 1](adr/0027-assistant-multiturn-restore-and-relevance.md)) ①`GET /assistant/conversations/latest` — 본인·`resident` 채널 최근 대화 1건 + 마지막 메시지 40건(프론트 `MAX_STORED_MESSAGES`와 동일), 없으면 `conversation_id: null`+빈 배열 ②프론트 복원 2단계 — sessionStorage 1차(탭 내 즉시 복원, steps 보존) → 비어 있으면 서버 폴백. **텍스트 위주**(본문·역할·상태만 — 구조화 표·CTA·steps 미복원, `citations: []`·`steps: []`로 렌더 계약 유지) ③"새 대화" 버튼 — 메시지·`conversation_id`·sessionStorage 클리어(서버 대화는 미삭제) ④매핑은 순수 함수로 분리해 단위 테스트 | **소유권·tenant 격리**(타 사용자 대화 404·타 tenant 미노출, CRITICAL) + 대화 없음 = 빈 응답(오류 아님) + 복원 실패 시 조용히 빈 대화(화면 차단 금지) + 게이트 그린 + 시각 검증 | ✅ 완료 — 설계에 없던 함정 하나: "새 대화"가 저장 키를 **지우면** 다음 리로드의 서버 복원이 방금 끊은 대화를 되살린다 → 삭제 대신 **빈 스레드 마커 저장**, `readThread`가 "저장된 적 없음(null — 서버 폴백)"과 "빈 스레드 저장됨(마커 — 폴백 스킵)"을 구분. 폴백 답변은 본문 미저장이라 복원에서 자연 제외. `conversations.updated_at`은 메시지 추가로는 안 갱신됨 — "최신"= 최근 생성 대화(현 동작 의도대로, 대화 목록 UI가 생기면 재검토). 시각 검증 4종 통과 |
 | H19-9 | 히스토리 관련성 필터 | ([ADR-0027 결정 2](adr/0027-assistant-multiturn-restore-and-relevance.md) — 대화 영구화의 전제 조건) ①`_prepare_history` 후보 풀 직전 3→10턴, 주입은 최대 3턴 유지: 직전 1턴 무조건(지시대명사 해소) + 관련성 상위 2턴 ②관련성은 lexical 순수 함수(문자 bigram 중첩 — LLM·임베딩 호출 0, 임베딩 승격은 실측이 한계를 보일 때만) ③골든셋 멀티턴 케이스 확충(3→15건+, 관련·무관 턴 혼합 대화 포함) ④dev 3회 측정 — 무관 턴 오염(도구 선택·인용) 없음 판정 | 무관 턴 혼합 대화에서 도구 선택·인용 비오염 + 기존 멀티턴 케이스 회귀 없음 + 마스킹 fail-closed 유지(히스토리도 질문과 동일, CRITICAL) + 3회 중위 비교(R30b 규율) + 게이트 그린 | ✅ 완료 — ①②는 PR #134, ③케이스 12건(V2-QA-0338~0349)+dev 라벨, ④R33(수정 전 기준선)·R34(H19-11 배포 후) 3회씩. 무관 턴 혼합 8건 중 5~6 통과, 잔여 2건(0340·0341)은 **후보 ≤3턴에선 마지막 턴 외 배제가 작동하지 않는 알려진 한계**(배제는 후보 풀>3에서 유효 — 실 대화는 서버 복원으로 10턴 축적) + 8B 인용 상한. 마스킹 fail-closed 회귀 없음. 상세 R34 §② |
 
+### 8.23 H20 체크리스트 (관리자 홈 개편 — AI 비서 첫 진입 · 대시보드→민원현황)
+
+> 근거: 사용자 요청(2026-08-02). 결정 전량 [ADR-0028](adr/0028-admin-assistant-home.md).
+> 인터뷰 확정: 구 대시보드는 **통째로** 관리소 운영>민원현황으로 이동(AI 도우미 현황 위젯만 삭제,
+> 대체 노출 없음) · AI 비서 우측 패널은 **상태 요약+최근 민원 목록**(민원 관리 전체 임베드 아님) ·
+> 진입 브리핑은 프론트 고정 질의 1회(`summarize_inquiries` 근거 — 규칙 1, 발송 아님 — 규칙 6 무관).
+> **H20-1(관리비 동·단지 평균 조회)은 병렬 브랜치**(`h20-1/fees-scope-average`)가 선점한 번호 — 이 단위는 H20-2다.
+
+| ID | 작업 단위 | 범위 | 완료 기준 | 상태 |
+|----|-----------|------|-----------|------|
+| H20-2 | 관리자 AI 비서 홈 | ①api: `POST /admin/assistant/ask`(`require_roles("MANAGER")`·`channel="admin"`·`_assistant_response` 재사용·답변 캐시 우회 — ADR-0028 결정 2) ②@liviq/ui: 어시스턴트 코어 승격(SSE 파서·스트림 훅·세션 저장·마크다운·StructuredBlock·진행 단계·출처 묶기 — 조립·CTA는 앱별 유지, ADR-0028 결정 4) + web-resident 재배선(동작 불변) ③web-admin: `/assistant` 신설(좌 채팅+우 민원현황 패널 — 상태 카운트·최근 목록) · `/dashboard`→`/inquiry-status` 개명·관리소 운영 그룹 이동·AI 도우미 현황 섹션 삭제 · `roleHome` MANAGER→`/assistant` · 진입 브리핑(빈 대화 자동 질의·말풍선 숨김·날짜 포함) | RESIDENT의 `/admin/assistant/ask` 403(CRITICAL) + admin 채널 캐시 미사용(resident 캐시 미혼입 테스트) + web-resident 회귀 없음(기존 테스트 그린) + 브리핑 실패 시 폴백(화면 차단 금지) + OpenAPI 재생성 + 게이트 그린 + 시각 검증 | 🚧 |
+
 ## 9. 정의: "완료(Done)"
 
 
