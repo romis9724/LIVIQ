@@ -1018,3 +1018,11 @@ def test_fee_quote_includes_detail_items_for_item_questions() -> None:
     assert "공과금중 전기료 12,345원" in quote
     # detail 없으면 기존 문구 그대로(회귀 없음).
     assert "세부 항목" not in _fee_quote("2026-07", [("공용관리비", 91362)], 176601, None, None)
+
+
+def test_get_fees_scope_folds_self_synonyms_to_none() -> None:
+    """모델이 본인 질문에 scope='본인 세대'를 채우는 dev 실측 — 본인 동의어는 미지정."""
+    for word in ("본인 세대", "본인", "우리 집", "세대"):
+        assert GetFeesArgs(scope=word).scope is None, word
+    # 동·전체 정규화는 불변.
+    assert GetFeesArgs(scope="402").scope == "402동"
