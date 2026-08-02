@@ -1,0 +1,433 @@
+{
+  "label": "r36-recovery-gr",
+  "set": "all",
+  "case_ids": [
+    "V2-GR-0027",
+    "IQ-03",
+    "IQ-06",
+    "CL-N2"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-02T11:48:28.612Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 추정 혼입 3/4건(최종 답변 turn은 스트리밍이라 usage 미제공 → 추정치), 원가는 참고값"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 4,
+      "pass": 0,
+      "citation_scored": 4,
+      "citation_hit": 2,
+      "citation_hit_rate": 0.5,
+      "fallback_scored": 4,
+      "fallback_ok": 1,
+      "fallback_accuracy": 0.25,
+      "tool_scored": 4,
+      "tool_hit": 2,
+      "tool_accuracy": 0.5,
+      "required_cases": 2,
+      "required_hit_sum": 0,
+      "required_total_sum": 2,
+      "required_call_rate": 0,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "clarify_scored": 4,
+      "clarify_misuse": 1,
+      "clarify_misuse_rate": 0.25,
+      "total_p50_ms": 1076,
+      "total_p95_ms": 3065,
+      "ttft_p50_ms": 35,
+      "ttft_p95_ms": 44,
+      "token_input_sum": 31581,
+      "token_output_sum": 775,
+      "token_estimated_cases": 3,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "시설·설비",
+        "n": 1,
+        "pass": 0,
+        "citation_scored": 1,
+        "citation_hit": 1,
+        "citation_hit_rate": 1,
+        "fallback_scored": 1,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 1,
+        "tool_hit": 1,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 1,
+        "clarify_misuse": 1,
+        "clarify_misuse_rate": 1,
+        "total_p50_ms": 722,
+        "total_p95_ms": 722,
+        "ttft_p50_ms": 44,
+        "ttft_p95_ms": 44,
+        "token_input_sum": 4790,
+        "token_output_sum": 64,
+        "token_estimated_cases": 0
+      },
+      {
+        "key": "복합·라우팅",
+        "n": 2,
+        "pass": 0,
+        "citation_scored": 2,
+        "citation_hit": 0,
+        "citation_hit_rate": 0,
+        "fallback_scored": 2,
+        "fallback_ok": 1,
+        "fallback_accuracy": 0.5,
+        "tool_scored": 2,
+        "tool_hit": 0,
+        "tool_accuracy": 0,
+        "required_cases": 2,
+        "required_hit_sum": 0,
+        "required_total_sum": 2,
+        "required_call_rate": 0,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 2,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 2757,
+        "total_p95_ms": 3065,
+        "ttft_p50_ms": 35,
+        "ttft_p95_ms": 36,
+        "token_input_sum": 19269,
+        "token_output_sum": 608,
+        "token_estimated_cases": 2
+      },
+      {
+        "key": "대화·되묻기",
+        "n": 1,
+        "pass": 0,
+        "citation_scored": 1,
+        "citation_hit": 1,
+        "citation_hit_rate": 1,
+        "fallback_scored": 1,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 1,
+        "tool_hit": 1,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 1,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 1076,
+        "total_p95_ms": 1076,
+        "ttft_p50_ms": 34,
+        "ttft_p95_ms": 34,
+        "token_input_sum": 7522,
+        "token_output_sum": 103,
+        "token_estimated_cases": 1
+      }
+    ],
+    "by_backend": [
+      {
+        "key": "backend:neo4j",
+        "n": 1,
+        "pass": 0,
+        "citation_scored": 1,
+        "citation_hit": 1,
+        "citation_hit_rate": 1,
+        "fallback_scored": 1,
+        "fallback_ok": 0,
+        "fallback_accuracy": 0,
+        "tool_scored": 1,
+        "tool_hit": 1,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 1,
+        "clarify_misuse": 1,
+        "clarify_misuse_rate": 1,
+        "total_p50_ms": 722,
+        "total_p95_ms": 722,
+        "ttft_p50_ms": 44,
+        "ttft_p95_ms": 44,
+        "token_input_sum": 4790,
+        "token_output_sum": 64,
+        "token_estimated_cases": 0
+      }
+    ],
+    "pairs": []
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "V2-GR-0027",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": true
+      },
+      "expected": {
+        "citations_raw": "tool:trace_home_device_issue",
+        "document_ids": [],
+        "expected_tool": "trace_home_device_issue",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "증상: 열교환기 2차측 차압조절밸브 오작동 원인: 밸브 고착 조치: 정비로 해소"
+      },
+      "actual": {
+        "status": "clarify",
+        "fallback_reason": null,
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue",
+          "ask_clarification"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 4790,
+        "token_output": 64,
+        "token_estimated": false,
+        "clarify_question": "난방에 대해 어떤 설비를 말씀하시나요? (예: 승강기, 급수펌프)"
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 722,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 722
+          }
+        ]
+      },
+      "notes": [
+        "되묻기 오남용 — 되묻기가 정답이 아닌 질의에 clarify"
+      ]
+    },
+    {
+      "case_id": "IQ-03",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_similar_inquiries",
+        "document_ids": [],
+        "expected_tool": "search_similar_inquiries",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_similar_inquiries"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "[설비] 온수가 미지근하게만 나옵니다"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 93,
+        "token_input": 9614,
+        "token_output": 317,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 36,
+        "total_ms": 3065,
+        "turns": [
+          {
+            "ttft_ms": 36,
+            "total_ms": 3065
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_similar_inquiries"
+      ]
+    },
+    {
+      "case_id": "IQ-06",
+      "category": "복합·라우팅",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": {
+          "hit": 0,
+          "total": 1,
+          "pass": false
+        },
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_similar_inquiries",
+        "document_ids": [],
+        "expected_tool": "search_similar_inquiries",
+        "acceptable_tools": [],
+        "required_tools": [
+          "search_similar_inquiries"
+        ],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "[기타] 현관 도어록 건전지는 어디서 교체하나요"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "trace_home_device_issue"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "세대 기기 장애 이력"
+        ],
+        "answer_chars": 66,
+        "token_input": 9655,
+        "token_output": 291,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 2757,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 2757
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:search_similar_inquiries"
+      ]
+    },
+    {
+      "case_id": "CL-N2",
+      "category": "대화·되묻기",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 7522,
+        "token_output": 103,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 34,
+        "total_ms": 1076,
+        "turns": [
+          {
+            "ttft_ms": 34,
+            "total_ms": 1076
+          }
+        ]
+      },
+      "notes": []
+    }
+  ]
+}
