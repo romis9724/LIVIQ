@@ -119,6 +119,83 @@
   color: var(--color-text-muted);
 }
 
+/* 2D/3D 보기 토글(H20-8) — 관리자 뷰 토글과 같은 패턴, 입주민 톤. */
+.rpk__viewtoggle {
+  display: flex;
+  gap: var(--space-2);
+}
+.rpk__viewbtn {
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.rpk__viewbtn[data-active] {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 700;
+}
+.rpk__viewbtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* 3D 뷰(H20-8) — 씬 캔버스 무대 + 상단 카메라 바. */
+.rpk3d {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.rpk3d__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.rpk3d__hint {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.rpk3d__chip {
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.rpk3d__chip:hover {
+  background: var(--color-citation);
+}
+.rpk3d__chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.rpk3d__chip--reset {
+  margin-left: auto;
+}
+.rpk3d__stage {
+  height: 22rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--pk3d-bg);
+}
+.rpk3d__stage canvas {
+  display: block;
+}
+.rpk3d__loading {
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
 /* 면 상세(H20-5) — 클릭한 면의 종류·상태·추천 순위·거리를 여러 줄로. */
 .rpk__detail {
   display: flex;

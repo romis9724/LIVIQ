@@ -1,13 +1,44 @@
 /**
  * 주차장 3D 뷰의 순수 변환 — 배치도 픽셀 좌표(13px/m)를 미터 바닥면(x,z)에 투영하고,
- * 점유 상태를 인스턴스 배열·카메라 샷으로 만든다. (H14-4)
- * 프로토타입 `parking_view3d.js` 의 좌표·상태 계산부 포팅.
+ * 점유 상태를 인스턴스 배열·카메라 샷으로 만든다.
+ * (H14-4 web-admin `parking-3d-data.ts` → H20-8 공용 승격 — 입주민 3D가 두 번째 소비자)
  *
- * three 를 import 하지 않는다 — 렌더는 parking-scene-3d.ts 가 맡고 여기는 테스트 대상이다.
+ * three 를 import 하지 않는다 — 렌더는 ParkingScene3D.ts 가 맡고 여기는 테스트 대상이다.
+ * 점유 표현은 앱 도메인(관리자 ParkedCar)에서 분리한 `SceneOccupant` 로 받는다 —
+ * 입주민은 타 세대 차량의 소속을 몰라야 하므로(규칙 2) 이 최소 형태가 공용 계약이다.
  */
 
-import type { ParkingSpot } from "@/lib/api";
-import { PX_TO_M, SPOT_H, SPOT_W, matchesGroup, parseViewBox, type ParkedCar } from "./parking-sim";
+import { SPOT_H, SPOT_W, parseViewBox } from "../parking-map/parking-map-data";
+import type { ParkingMapLayout, ParkingMapSpot } from "../parking-map/ParkingMap";
+
+/** 배치도 축척 — 면 34x64px = 2.5m x 5.0m (13px/m). ai-core geometry.PX_TO_M 와 동일해야 한다. */
+export const PX_TO_M = 1 / 13;
+
+/** 소속 필터의 "외부 차량" 그룹 키(동명이 아닌 유일 값) — 관리자 필터 계약. */
+export const EXTERNAL_GROUP = "외부";
+
+/** 배치도 위 사각 영역(코어·램프 등) — 3D 솔리드·거리 계산 기준. */
+export interface SceneRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** 3D 씬이 요구하는 배치도 — 2D 공용 레이아웃 + 동 코어(승강기 홀 솔리드). */
+export interface ParkingSceneLayout extends ParkingMapLayout {
+  cores: readonly SceneRect[];
+}
+
+/**
+ * 점유 차량 1대의 씬 표현 최소 형태. 관리자는 ParkedCar 에서 만들고(external·dong),
+ * 입주민은 전부 { external: false, group: null } — 소속 구분 없이 "찼다"만 그린다(규칙 2).
+ */
+export interface SceneOccupant {
+  external: boolean;
+  /** 소속 필터 대조 키(관리자 = 동명). null 이면 어느 그룹에도 속하지 않는다. */
+  group: string | null;
+}
 
 /** 면 상태 — 2D 지도와 같은 의미(빈자리·입주민·외부) + 3D 전용 두 가지(필터 흐림·선택). */
 export type SpotTone = "empty" | "resident" | "external" | "dim" | "selected";
@@ -67,7 +98,7 @@ export function floorSize(viewBox: string): { w: number; h: number } {
 }
 
 /** 면 중심 좌표·회전(미터) — 순서는 입력 순서 그대로(인스턴스 index 계약). */
-export function spotPlacements(spots: readonly ParkingSpot[]): SpotPlacement[] {
+export function spotPlacements(spots: readonly ParkingMapSpot[]): SpotPlacement[] {
   return spots.map((spot) => ({
     no: spot.no,
     x: toMeters(spot.x + SPOT_W / 2),
@@ -76,37 +107,43 @@ export function spotPlacements(spots: readonly ParkingSpot[]): SpotPlacement[] {
   }));
 }
 
+/** 소속 필터 대조 — "외부"는 외부 차량, 그 외는 그룹 키. 빈자리는 어느 그룹에도 속하지 않는다. */
+export function matchesGroup(occupant: SceneOccupant | undefined, group: string): boolean {
+  if (!occupant) return false;
+  return group === EXTERNAL_GROUP ? occupant.external : occupant.group === group;
+}
+
 /**
  * 면 색 + 주차 차량 인스턴스. 선택한 면이 최우선, 그다음 소속 필터 흐림(2D 지도의 data-dim 과
  * 같은 규칙 — 빈자리도 필터가 걸리면 흐려진다), 그다음 입주민/외부.
  */
 export function sceneState(
   placements: readonly SpotPlacement[],
-  bySpot: ReadonlyMap<string, ParkedCar>,
+  bySpot: ReadonlyMap<string, SceneOccupant>,
   selectedNo: string | null,
   activeGroup: string | null,
 ): SceneState {
   const tones: SpotTone[] = [];
   const cars: CarInstance[] = [];
   for (const placement of placements) {
-    const car = bySpot.get(placement.no);
-    const tone = spotTone(car, placement.no === selectedNo, activeGroup);
+    const occupant = bySpot.get(placement.no);
+    const tone = spotTone(occupant, placement.no === selectedNo, activeGroup);
     tones.push(tone);
-    // car 가 있으면 tone 은 empty 가 아니다 — 조건으로 좁혀 CarTone 으로 넘긴다.
-    if (car && tone !== "empty") cars.push({ ...placement, tone });
+    // occupant 가 있으면 tone 은 empty 가 아니다 — 조건으로 좁혀 CarTone 으로 넘긴다.
+    if (occupant && tone !== "empty") cars.push({ ...placement, tone });
   }
   return { tones, cars };
 }
 
 function spotTone(
-  car: ParkedCar | undefined,
+  occupant: SceneOccupant | undefined,
   selected: boolean,
   activeGroup: string | null,
 ): SpotTone {
   if (selected) return "selected";
-  if (activeGroup !== null && !matchesGroup(car, activeGroup)) return "dim";
-  if (!car) return "empty";
-  return car.external ? "external" : "resident";
+  if (activeGroup !== null && !matchesGroup(occupant, activeGroup)) return "dim";
+  if (!occupant) return "empty";
+  return occupant.external ? "external" : "resident";
 }
 
 /** 전체 부감 — 3D 진입 초기 시점(스윕 없이 즉시, 사용자 지시)이자 "전체 보기" 버튼 목적지. */
@@ -130,15 +167,12 @@ export function spotShot(placement: SpotPlacement): CameraShot {
 }
 
 /** 동 footprint 폴리곤 → 미터 shape 좌표. y 는 부호가 뒤집힌다(배치도 y ↓ = 바닥 z ↑). */
-export function outlineToShape(outline: readonly number[][]): { x: number; y: number }[] {
+export function outlineToShape(outline: readonly (readonly number[])[]): { x: number; y: number }[] {
   return outline.map((point) => ({ x: toMeters(point[0] ?? 0), y: -toMeters(point[1] ?? 0) }));
 }
 
 /** 사각 구역(코어·램프 박스) 중심(미터). */
-export function rectCenter(rect: { x: number; y: number; w: number; h: number }): {
-  x: number;
-  z: number;
-} {
+export function rectCenter(rect: SceneRect): { x: number; z: number } {
   return { x: toMeters(rect.x + rect.w / 2), z: toMeters(rect.y + rect.h / 2) };
 }
 
@@ -167,7 +201,7 @@ const INNER_SPEED_MPS = 4.4;
 const INNER_LANE_SHIFT = 0.45;
 
 /** 같은 열에 붙은 주차면들을 하나의 띠로 묶는다(px) — 띠 사이 빈 곳이 통로다. */
-function spotBands(spots: readonly ParkingSpot[]): { top: number; bottom: number }[] {
+function spotBands(spots: readonly ParkingMapSpot[]): { top: number; bottom: number }[] {
   const tops = [...new Set(spots.map((spot) => spot.y))].sort((a, b) => a - b);
   const bands: { top: number; bottom: number }[] = [];
   for (const top of tops) {
@@ -200,7 +234,7 @@ function loopPath(
  * 주행 차량 5대의 경로 — 바깥 순환(주차열 위·아래 통로) 3대, 안쪽 순환(가운데 통로) 2대.
  * 두 순환은 세로 연결선 x 를 어긋나게 둬 교차 지점에서 겹치지 않는다.
  */
-export function cruiseRoutes(spots: readonly ParkingSpot[]): CruiseRoute[] {
+export function cruiseRoutes(spots: readonly ParkingMapSpot[]): CruiseRoute[] {
   const bands = spotBands(spots);
   if (bands.length < 2) return [];
   const first = bands[0];
@@ -218,9 +252,7 @@ export function cruiseRoutes(spots: readonly ParkingSpot[]): CruiseRoute[] {
   const innerTop = first.bottom + aisleHalf;
   const innerBottom = last.top - aisleHalf;
   const hasInner = bands.length >= 3 && innerBottom > innerTop;
-  const inner = hasInner
-    ? loopPath(innerTop, innerBottom, left + shift, right - shift)
-    : null;
+  const inner = hasInner ? loopPath(innerTop, innerBottom, left + shift, right - shift) : null;
 
   const routes: CruiseRoute[] = [];
   const outerCount = inner ? OUTER_CRUISERS : OUTER_CRUISERS + INNER_CRUISERS;

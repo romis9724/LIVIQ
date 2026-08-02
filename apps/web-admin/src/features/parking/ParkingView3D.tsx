@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { EmptyState } from "@liviq/ui";
+import {
+  EmptyState,
+  ParkingScene3D,
+  SCENE_COLOR_VARS,
+  isWebglSupported,
+  sceneState,
+  spotPlacements,
+  type SceneColors,
+  type SceneOccupant,
+} from "@liviq/ui";
 import type { ParkingLayout } from "@/lib/api";
-import { isWebglSupported } from "@/lib/webgl";
 import type { ParkedCar } from "./parking-sim";
-import { sceneState, spotPlacements } from "./parking-3d-data";
-import { ParkingScene3D, SCENE_COLOR_VARS, type SceneColors } from "./parking-scene-3d";
 
 // three(WebGL)를 쓰는 컴포넌트 — ParkingView 가 next/dynamic ssr:false 로만 불러온다.
 
@@ -59,9 +65,17 @@ export function ParkingView3D({
   }, [onSelect]);
 
   const placements = useMemo(() => spotPlacements(layout.spots), [layout.spots]);
+  // 공용 씬 계약(SceneOccupant)으로 접는다 — 그룹 키는 동명(2D 소속 필터와 동일).
+  const occupants = useMemo(
+    () =>
+      new Map<string, SceneOccupant>(
+        [...bySpot].map(([no, car]) => [no, { external: car.external, group: car.dong }]),
+      ),
+    [bySpot],
+  );
   const state = useMemo(
-    () => sceneState(placements, bySpot, selectedNo, activeGroup),
-    [placements, bySpot, selectedNo, activeGroup],
+    () => sceneState(placements, occupants, selectedNo, activeGroup),
+    [placements, occupants, selectedNo, activeGroup],
   );
 
   // 씬 생성·해제 — 레이아웃이 바뀌면 통째로 다시 짓는다(면 위치가 인스턴스에 굳어 있다).

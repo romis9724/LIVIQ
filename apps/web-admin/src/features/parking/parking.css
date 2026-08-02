@@ -9,26 +9,7 @@
    three(WebGL)는 oklch 를 파싱하지 못해 3D 씬이 쓰는 색만 sRGB hex 로 :root 에 둔다
    (facilities 그래프 팔레트와 같은 예외 — 캔버스가 getComputedStyle 로 읽는다).
    의미는 2D 배치도와 같다: 빈자리 초록 · 입주민 파랑 · 외부 주황 · 선택 빨강. */
-:root {
-  --pk3d-bg: #eef1f5; /* 씬 배경 = 안개 색 */
-  --pk3d-floor: #8f979f; /* 바닥 슬래브(아스팔트) */
-  --pk3d-line: #f5f7f9; /* 주차선 */
-  --pk3d-empty: #34a05e;
-  --pk3d-resident: #3b82f6;
-  --pk3d-external: #ea580c;
-  --pk3d-dim: #bcc3ca; /* 소속 필터에 걸러진 면·차량 — 바닥보다 밝게 둬 구분은 남긴다 */
-  --pk3d-selected: #ef4444;
-  --pk3d-car-resident: #5b8def;
-  --pk3d-car-external: #f97316;
-  --pk3d-glass: #3a3f47; /* 차 캐빈(앞유리) */
-  --pk3d-building: #94a3b8; /* 동 footprint(반투명) */
-  --pk3d-core: #7d8894; /* 엘리베이터 코어 */
-  --pk3d-box: #d9a92c; /* 램프·설비실 */
-  --pk3d-label: #f8fafc; /* 동명·구역명 스프라이트(어두운 외곽선을 둘러 어디서나 읽힌다) */
-  /* 차로를 순환하는 연출용 주행 차량 2색 — 면 상태색(초록·파랑·주황·빨강)과 겹치지 않게 둔다. */
-  --pk3d-cruise-a: #0f766e;
-  --pk3d-cruise-b: #7e57c2;
-}
+/* 3D 팔레트(--pk3d-*)는 @liviq/ui parking-scene-3d.css 로 이동(H20-8 공용 승격). */
 
 .pk-stack {
   display: flex;

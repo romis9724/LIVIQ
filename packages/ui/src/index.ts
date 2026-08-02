@@ -148,3 +148,43 @@ export { ProgressSteps } from "./components/assistant/ProgressSteps";
 export { SuggestionChips } from "./components/assistant/SuggestionChips";
 export type { SuggestionChipsProps } from "./components/assistant/SuggestionChips";
 export { StructuredBlock } from "./components/assistant/StructuredBlock";
+
+// ── 주차장 3D 씬 (H14-4 web-admin → H20-8 공용 승격) ─────────────────────────
+export {
+  ParkingScene3D,
+  SCENE_COLOR_VARS,
+} from "./components/parking-scene-3d/ParkingScene3D";
+export type {
+  ParkingScene3DOptions,
+  SceneColors,
+  SpotBeacon,
+} from "./components/parking-scene-3d/ParkingScene3D";
+export {
+  EXTERNAL_GROUP,
+  PX_TO_M,
+  cruiseRoutes,
+  floorSize,
+  matchesGroup,
+  outlineToShape,
+  overviewShot,
+  pathLength,
+  pointAlongPath,
+  rectCenter,
+  sceneState,
+  spotPlacements,
+  spotShot,
+  toMeters,
+} from "./components/parking-scene-3d/parking-scene-data";
+export type {
+  CameraShot,
+  CarInstance,
+  CarTone,
+  CruiseRoute,
+  ParkingSceneLayout,
+  SceneOccupant,
+  SceneRect,
+  SceneState,
+  SpotPlacement,
+  SpotTone,
+} from "./components/parking-scene-3d/parking-scene-data";
+export { isWebglSupported } from "./lib/webgl";
