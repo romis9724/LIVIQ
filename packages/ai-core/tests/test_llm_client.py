@@ -159,6 +159,24 @@ async def test_guided_citation_applies_to_stream_turn_only(settings: AiCoreSetti
     assert "guided_regex" not in decided
 
 
+async def test_chat_stream_skips_guided_regex_when_caller_opts_out(
+    settings: AiCoreSettings,
+) -> None:
+    """guided=False면 노브가 켜져 있어도 문법을 걸지 않는다.
+
+    인용할 [n]이 프롬프트에 없는 답변(도구 카드만·관리비 설명)은 문법을 만족시킬 방법이
+    NO_EVIDENCE 도피뿐이다(R36 실측).
+    """
+    tuned = settings.model_copy(update={"llm_guided_citation": True})
+    captured: dict[str, object] = {}
+
+    stream = _client(tuned, _sse_handler(captured)).chat_stream(
+        [{"role": "user", "content": "q"}], guided=False
+    )
+    assert [t async for t in stream] == ["ok"]
+    assert "guided_regex" not in captured
+
+
 @pytest.mark.parametrize(
     ("answer", "allowed"),
     [

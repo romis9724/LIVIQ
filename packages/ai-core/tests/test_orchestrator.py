@@ -17,7 +17,7 @@ from conftest import FakeSession, row
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_core.config import AiCoreSettings
-from ai_core.llm.client import LlmClient
+from ai_core.llm.client import GUIDED_CITATION_REGEX, LlmClient
 from ai_core.masking import MaskingFailedError
 from ai_core.orchestrator import (
     FALLBACK_LLM_UNAVAILABLE,
@@ -136,6 +136,7 @@ def _agent_llm(
     answer_deltas: Sequence[str] | None = None,
     embed_ok: bool = True,
     stream_systems: list[str] | None = None,
+    stream_bodies: list[dict[str, Any]] | None = None,
 ) -> LlmClient:
     dims = settings.embedding_dimensions
 
@@ -148,6 +149,8 @@ def _agent_llm(
             data = [{"index": i, "embedding": [0.05] * dims} for i in range(len(texts))]
             return httpx.Response(200, json={"data": data})
         if body.get("stream"):
+            if stream_bodies is not None:
+                stream_bodies.append(body)
             if stream_systems is not None:
                 stream_systems.extend(
                     str(m["content"]) for m in body["messages"] if m.get("role") == "system"
@@ -463,6 +466,53 @@ async def test_quote_first_rule_prepended_when_enabled(settings: AiCoreSettings)
     # Assert — 기존 규칙은 유지한 채 규칙 0만 추가
     assert QUOTE_FIRST_RULE in prompt
     assert prompt.index(QUOTE_FIRST_RULE) < prompt.index("1. 아래 [문서 근거]")
+
+
+async def _stream_body(settings: AiCoreSettings, *, doc_evidence: bool) -> dict[str, Any]:
+    """최종 답변 turn의 요청 페이로드 1건. doc_evidence=False면 도구 카드만 근거."""
+    bodies: list[dict[str, Any]] = []
+    call = _tc("search_documents", {"query": "주차"}) if doc_evidence else _tc("get_fees", {})
+    llm = _agent_llm(
+        settings,
+        _calls_then_stop(call),
+        answer="이번 달 관리비는 100,000원입니다." if not doc_evidence else "[1] 답변입니다.",
+        stream_bodies=bodies,
+    )
+    await _run(llm, FakeRetriever([_chunk()] if doc_evidence else []))
+    assert len(bodies) == 1
+    return bodies[0]
+
+
+async def test_guided_citation_applies_when_document_evidence_exists(
+    settings: AiCoreSettings,
+) -> None:
+    """문서 청크가 있으면 [n]을 붙일 근거가 프롬프트에 있다 — 문법 강제 유지(R36-A)."""
+    # Arrange
+    tuned = settings.model_copy(update={"llm_guided_citation": True})
+
+    # Act
+    body = await _stream_body(tuned, doc_evidence=True)
+
+    # Assert
+    assert body["guided_regex"] == GUIDED_CITATION_REGEX
+
+
+async def test_guided_citation_lifted_for_tool_card_only_answers(
+    settings: AiCoreSettings,
+) -> None:
+    """도구 카드만 있으면 문법을 걸지 않는다.
+
+    카드는 프롬프트에 [n] 번호 없이 들어가므로(확정 데이터 블록), 문법을 걸면 모델이
+    NO_EVIDENCE로 도피하는 길밖에 없다 — 확정 데이터를 받고도 폴백났다(R36 0210·0211).
+    """
+    # Arrange
+    tuned = settings.model_copy(update={"llm_guided_citation": True})
+
+    # Act
+    body = await _stream_body(tuned, doc_evidence=False)
+
+    # Assert
+    assert "guided_regex" not in body
 
 
 async def test_no_tool_calls_falls_back_no_evidence(settings: AiCoreSettings) -> None:
