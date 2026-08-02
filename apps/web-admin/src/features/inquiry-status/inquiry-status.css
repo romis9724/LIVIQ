@@ -1,5 +1,6 @@
-/* 관리자 대시보드 — 오늘 할 일·민원/시설 현황·AI 도우미 현황.
-   현황 수치는 공통 StatCard/StatGrid, 기간 토글은 '오늘 할 일' 제목 줄의 FilterChips(docs/05 §5A). */
+/* 관리소 운영 > 민원현황 — 오늘 할 일·민원/시설 현황·일일 토큰 예산(구 대시보드, H20-2).
+   현황 수치는 공통 StatCard/StatGrid, 기간 토글은 '오늘 할 일' 제목 줄의 FilterChips(docs/05 §5A).
+   `dash-*` 접두는 개명 전 이름을 그대로 둔 것 — 이 파일 안에서만 쓰는 로컬 클래스다. */
 
 .dash-main {
   display: flex;
@@ -44,12 +45,6 @@
   outline-offset: 2px;
 }
 
-/* AI 도우미 현황 */
-.dash-ai {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
 .dash-note {
   margin: 0;
   font-size: var(--text-sm);

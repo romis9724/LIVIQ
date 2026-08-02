@@ -25,10 +25,8 @@ import {
   barWidth,
   budgetWidth,
   formatCount,
-  formatPercent,
-  formatTokens,
 } from "./data";
-import "./dashboard.css";
+import "./inquiry-status.css";
 
 const PERIODS = [
   { id: "7", label: "최근 7일" },
@@ -42,7 +40,7 @@ function errorMessage(err: unknown): string {
   return "알 수 없는 오류가 발생했습니다.";
 }
 
-export function Dashboard() {
+export function InquiryStatus() {
   const [period, setPeriod] = useState<PeriodId>("7");
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,23 +66,23 @@ export function Dashboard() {
     <>
       <header className="admin-page__header">
         <h1 id="main" className="admin-page__title">
-          대시보드
+          민원현황
         </h1>
       </header>
 
       <main className="admin-page__main dash-main">
         {/* 기간 칩은 '오늘 할 일' 제목 줄 오른쪽에 붙인다 — 툴바 한 줄을 없애 세로 공간 절약. */}
         {loading ? (
-          <DashboardSkeleton />
+          <InquiryStatusSkeleton />
         ) : loadError ? (
           <EmptyState
             icon="⚠"
-            title="대시보드를 불러오지 못했습니다"
+            title="민원현황을 불러오지 못했습니다"
             description={loadError}
             action={<Button onClick={() => void load(Number(period))}>다시 시도</Button>}
           />
         ) : stats ? (
-          <DashboardContent
+          <InquiryStatusContent
             stats={stats}
             periodChips={
               <FilterChips items={PERIODS} value={period} onChange={setPeriod} label="기간" />
@@ -96,7 +94,7 @@ export function Dashboard() {
   );
 }
 
-function DashboardSkeleton() {
+function InquiryStatusSkeleton() {
   return (
     <>
       <StatGrid>
@@ -164,14 +162,14 @@ function ActionQueue({
   );
 }
 
-function DashboardContent({
+function InquiryStatusContent({
   stats,
   periodChips,
 }: {
   stats: DashboardStats;
   periodChips: ReactNode;
 }) {
-  const { actions, ai, cache, budget, inquiries, facilities } = stats;
+  const { actions, budget, inquiries, facilities } = stats;
 
   return (
     <>
@@ -192,27 +190,10 @@ function DashboardContent({
         />
       </div>
 
-      <section aria-labelledby="dash-ai-title" className="dash-ai">
-        <h2 id="dash-ai-title" className="dash-section__title dash-section__title--flush">
-          AI 도우미 현황
-        </h2>
-
-        <StatGrid>
-          <StatCard label="AI 질의 수" value={formatCount(ai.queryCount)} unit="건" />
-          <StatCard label="답변률" value={formatPercent(ai.answerRate)} />
-          <StatCard label="폴백률" value={formatPercent(ai.fallbackRate)} />
-          <StatCard label="질의당 평균 입력" value={formatTokens(ai.avgTokenInput)} unit="토큰" />
-          <StatCard label="질의당 평균 출력" value={formatTokens(ai.avgTokenOutput)} unit="토큰" />
-          <StatCard label="캐시 적중률" value={formatPercent(cache.hitRate)} />
-        </StatGrid>
-
-        <p className="dash-note">
-          캐시 적중 {formatCount(cache.hits)}건 · 미스 {formatCount(cache.misses)}건 — 적중한 질의는
-          LLM 호출 없이 답변합니다.
-        </p>
-
-        {budget.enabled ? <TokenBudget budget={budget} /> : null}
-      </section>
+      {/* AI 도우미 현황(질의 수·답변률·폴백률·평균 토큰·캐시)은 H20-2에서 삭제 —
+          대체 노출 없음(ADR-0028 결정 1). 서버 stats 응답의 ai·cache 필드는 그대로라
+          다시 필요해지면 화면만 붙이면 된다. 토큰 예산은 AI 통계가 아니라 비용 가드(규칙 7)라 유지. */}
+      {budget.enabled ? <TokenBudget budget={budget} /> : null}
     </>
   );
 }

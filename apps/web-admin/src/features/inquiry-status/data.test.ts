@@ -1,29 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { barWidth, budgetWidth, formatCount, formatPercent, formatTokens } from "./data";
-
-describe("formatPercent (0~1 분수 → %)", () => {
-  it("분수를 반올림 % 로 표기", () => {
-    expect(formatPercent(2 / 3)).toBe("67%");
-    expect(formatPercent(0.5)).toBe("50%");
-    expect(formatPercent(1)).toBe("100%");
-  });
-
-  it("null(분모 0)은 대시로 표기 — 지어내지 않음", () => {
-    expect(formatPercent(null)).toBe("—");
-  });
-});
-
-describe("formatTokens", () => {
-  it("평균 토큰을 반올림 정수·천단위 구분", () => {
-    expect(formatTokens(200)).toBe("200");
-    expect(formatTokens(1234.6)).toBe("1,235");
-  });
-
-  it("null 은 대시", () => {
-    expect(formatTokens(null)).toBe("—");
-  });
-});
+import { barWidth, budgetWidth, formatCount } from "./data";
 
 describe("formatCount", () => {
   it("천단위 구분", () => {

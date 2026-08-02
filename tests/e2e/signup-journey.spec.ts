@@ -294,9 +294,9 @@ test.describe.serial("가입 전 구간 여정 — 설치→단지→초대→�
     await expect(mgrPage.getByText("계정이 활성화되었습니다")).toBeVisible();
 
     await adminLogin(mgrPage, JOURNEY.managerEmail, JOURNEY.password);
-    // MANAGER 첫 진입=대시보드(H7-6). 첫 방문 라우트 컴파일이 expect 기본 15초를 넘길 수 있어
+    // MANAGER 첫 진입=AI 비서(H7-6 → H20-2). 첫 방문 라우트 컴파일이 expect 기본 15초를 넘길 수 있어
     // 네비게이션 예산(config navigationTimeout)으로 기다린다 — 상한이지 sleep 아니다.
-    await mgrPage.waitForURL(/\/dashboard/, { timeout: 60_000 });
+    await mgrPage.waitForURL(/\/assistant/, { timeout: 60_000 });
 
     // 직원 초대(202) → 목록에 초대됨 행. 토스트는 전이 상태라 요청·목록 상태로 판정한다.
     await mgrPage.goto(`${ADMIN}/staff`);
