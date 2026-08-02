@@ -26,7 +26,7 @@ const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 관리사무�
 const INQUIRY_TOOL = "search_similar_inquiries";
 
 const FALLBACK_TEXT: Record<string, string> = {
-  no_evidence: "정확한 근거를 찾지 못해 관리사무소에 연락해주세요.",
+  no_evidence: "죄송해요, 질문하신 내용은 자료에서 정확한 답을 찾지 못했어요. 관리사무소에 문의해 주시면 확인해 드릴 거예요.",
   llm_unavailable: "AI 요약이 일시적으로 어려워 검색된 근거만 안내해요. 잠시 후 다시 시도해 주세요.",
   low_confidence: FALLBACK_DEFAULT,
   masking_failed: "개인정보 보호를 위해 이 질문은 담당자에게 직접 연결해 드릴게요.",
