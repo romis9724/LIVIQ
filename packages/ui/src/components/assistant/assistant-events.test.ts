@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type DoneResult, answerKind, parseSseBuffer, toEvent } from "./api";
+import {
+  type AssistantDoneResult,
+  answerKind,
+  parseSseBuffer,
+  streamAssistant,
+  toEvent,
+} from "./assistant-events";
 
 describe("parseSseBuffer", () => {
   it("완결 프레임을 파싱하고 미완결 버퍼를 남긴다", () => {
@@ -106,8 +112,49 @@ describe("toEvent — H18 additive 필드", () => {
   });
 });
 
+describe("streamAssistant — 앱 주입(URL·인증 fetch)", () => {
+  const sse = (text: string) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text));
+        controller.close();
+      },
+    });
+
+  it("앱의 apiFetch 로 POST 하고 프레임을 이벤트로 흘린다", async () => {
+    // Arrange — ui 는 엔드포인트도 인증도 모른다: 둘 다 호출부가 준다.
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const apiFetch = async (url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      return new Response(sse('event: token\ndata: {"text":"가"}\n\nevent: done\ndata: {"conversation_id":"c1","status":"answered","confidence":0.9,"needs_review":false}\n\n'));
+    };
+
+    // Act
+    const events = [];
+    for await (const e of streamAssistant("/x/ask", { question: "질문" }, { apiFetch })) {
+      events.push(e);
+    }
+
+    // Assert
+    expect(calls[0]?.[0]).toBe("/x/ask");
+    expect(calls[0]?.[1]?.method).toBe("POST");
+    expect(calls[0]?.[1]?.body).toBe(JSON.stringify({ question: "질문" }));
+    expect(events.map((e) => e.type)).toEqual(["token", "done"]);
+  });
+
+  it("실패 응답은 던진다(호출부가 폴백 말풍선으로 받는다)", async () => {
+    // Arrange
+    const apiFetch = async () => new Response("nope", { status: 500 });
+
+    // Act · Assert
+    await expect(
+      streamAssistant("/x/ask", {}, { apiFetch }).next(),
+    ).rejects.toThrow("assistant 요청 실패: 500");
+  });
+});
+
 describe("answerKind — 되묻기 분기", () => {
-  const result = (status: DoneResult["status"]) => ({ status });
+  const result = (status: AssistantDoneResult["status"]) => ({ status });
 
   it("되묻기는 폴백이 아니라 clarify 로 분기한다", () => {
     expect(answerKind({ status: "done", result: result("clarify") })).toBe("clarify");

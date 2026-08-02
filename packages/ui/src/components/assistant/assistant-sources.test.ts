@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import type { Citation } from "./api";
-import { citationDetail, groupCitations } from "./sources";
+import type { AssistantCitation } from "./assistant-events";
+import { citationDetail, groupCitations } from "./assistant-sources";
 
-function cite(over: Partial<Citation>): Citation {
+function cite(over: Partial<AssistantCitation>): AssistantCitation {
   return {
     ref: 1,
     documentId: "doc-1",
@@ -12,7 +12,7 @@ function cite(over: Partial<Citation>): Citation {
     clause: null,
     data: null,
     ...over,
-  } as Citation;
+  } as AssistantCitation;
 }
 
 describe("citationDetail", () => {

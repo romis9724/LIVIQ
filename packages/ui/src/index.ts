@@ -77,3 +77,74 @@ export type {
   ParkingSpotView,
 } from "./components/parking-map/ParkingMap";
 export { SPOT_H, SPOT_W, elapsedText, parseViewBox } from "./components/parking-map/parking-map-data";
+
+/* ===== AI 비서 — 메커니즘만 공용, 조립(헤더·빈 상태·CTA)은 앱별(ADR-0028 결정 4) ===== */
+export {
+  answerKind,
+  parseSseBuffer,
+  streamAssistant,
+  toEvent,
+} from "./components/assistant/assistant-events";
+export type {
+  AnswerKind,
+  AssistantCitation,
+  AssistantDoneResult,
+  AssistantEvent,
+  AssistantStage,
+  FetchLike,
+  StreamAssistantOptions,
+} from "./components/assistant/assistant-events";
+
+export { useAssistantStream } from "./components/assistant/useAssistantStream";
+export type {
+  AiMessage,
+  AssistantStreamOptions,
+  ChatMessage,
+  UserMessage,
+} from "./components/assistant/useAssistantStream";
+
+export { parseLatestThread } from "./components/assistant/assistant-restore";
+export type { RestoredThread } from "./components/assistant/assistant-restore";
+
+export {
+  EMPTY_THREAD,
+  clearThread,
+  parseThread,
+  persistableMessages,
+  readThread,
+  writeThread,
+} from "./components/assistant/assistant-session-store";
+export type { StoredThread } from "./components/assistant/assistant-session-store";
+
+export { answerBlocks, stripMarkers } from "./components/assistant/assistant-markdown";
+export type { AnswerBlock } from "./components/assistant/assistant-markdown";
+
+export {
+  TOOL_LABELS,
+  UNKNOWN_TOOL_LABEL,
+  appendProgress,
+  progressLabel,
+} from "./components/assistant/assistant-progress";
+
+export { citationDetail, groupCitations } from "./components/assistant/assistant-sources";
+export type { GroupedSource } from "./components/assistant/assistant-sources";
+
+export { structuredBlocks, toStructured } from "./components/assistant/assistant-structured";
+export type {
+  FacilityItem,
+  FacilityStatusData,
+  FeeMonth,
+  FeeRow,
+  FeeTableData,
+  InquiryCase,
+  InquiryCasesData,
+  ParkingSpot,
+  ParkingSpotsData,
+  StructuredData,
+} from "./components/assistant/assistant-structured";
+
+export { AnswerBody } from "./components/assistant/AnswerBody";
+export { ProgressSteps } from "./components/assistant/ProgressSteps";
+export { SuggestionChips } from "./components/assistant/SuggestionChips";
+export type { SuggestionChipsProps } from "./components/assistant/SuggestionChips";
+export { StructuredBlock } from "./components/assistant/StructuredBlock";

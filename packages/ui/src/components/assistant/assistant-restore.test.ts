@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLatestThread } from "./restore";
+import { parseLatestThread } from "./assistant-restore";
 
 const raw = (messages: unknown[], conversationId: unknown = "conv-1") => ({
   conversation_id: conversationId,

@@ -6,7 +6,7 @@
  * 에서만 뽑는다 — 모델이 본문에 쓴 숫자는 근거가 아니다(규칙 1·8).
  */
 
-import type { Citation } from "@/features/assistant/api";
+import type { AssistantCitation } from "@liviq/ui";
 
 /** 이 도구가 호출됐다 = 모델이 빈자리 질의로 라우팅했다는 뜻. */
 export const PARKING_TOOL = "find_nearest_available_parking";
@@ -43,7 +43,7 @@ function dedupe(nos: readonly string[]): string[] {
  * 도구 카드는 `document_id: null` + 카드 제목으로 식별된다(assistant SSE 계약).
  * 빈자리가 없을 때의 quote 에는 면 번호가 없어 자연히 빈 배열이 된다.
  */
-export function spotNosFromCitations(citations: readonly Citation[]): string[] {
+export function spotNosFromCitations(citations: readonly AssistantCitation[]): string[] {
   const card = citations.find(
     (c) => c.documentId === null && SPOT_CARD_TITLES.includes(c.documentTitle),
   );

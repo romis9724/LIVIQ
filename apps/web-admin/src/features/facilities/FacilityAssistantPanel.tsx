@@ -1,16 +1,18 @@
 "use client";
 
-import { Button, CitationCard, ConfidenceBadge } from "@liviq/ui";
+import {
+  Button,
+  CitationCard,
+  ConfidenceBadge,
+  type AssistantCitation,
+  type AssistantDoneResult,
+  type AssistantStage,
+} from "@liviq/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import {
-  type AssistantCitation,
-  type DoneResult,
-  type Stage,
-  streamFacilityAssistant,
-} from "./assistant";
+import { streamFacilityAssistant } from "./assistant";
 
-const STAGE_HINT: Record<Stage, string> = {
+const STAGE_HINT: Record<AssistantStage, string> = {
   searching: "유사 장애·이력 조회 중…",
   generating: "가능 원인 후보 작성 중…",
   verifying: "근거 확인 중…",
@@ -32,10 +34,10 @@ function fallbackText(reason: string | null): string {
 
 interface AssistantState {
   status: "idle" | "streaming" | "done";
-  stage: Stage;
+  stage: AssistantStage;
   text: string;
   citations: AssistantCitation[];
-  result?: DoneResult;
+  result?: AssistantDoneResult;
   error?: boolean;
 }
 

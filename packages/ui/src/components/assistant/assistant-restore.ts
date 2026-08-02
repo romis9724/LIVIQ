@@ -7,7 +7,7 @@
  * `citations`·`steps` 는 빈 배열로 채운다.
  */
 
-import type { DoneResult } from "./api";
+import type { AssistantDoneResult } from "./assistant-events";
 import type { ChatMessage } from "./useAssistantStream";
 
 export interface RestoredThread {
@@ -21,7 +21,7 @@ const EMPTY_RESTORED: RestoredThread = { conversationId: null, messages: [] };
 const DONE_STAGE = "verifying" as const;
 
 /** 서버 상태 → 화면 분기 계약. `handed_off` 는 화면에서 폴백(담당자 연결)과 같은 자리다. */
-function toDoneStatus(status: unknown): DoneResult["status"] {
+function toDoneStatus(status: unknown): AssistantDoneResult["status"] {
   if (status === "answered" || status === "clarify") return status;
   return "fallback";
 }

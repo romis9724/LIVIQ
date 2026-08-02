@@ -35,16 +35,17 @@ describe("navForRoles", () => {
       "설정",
     ]);
     expect(nav.map((g) => g.items.map((i) => i.href))).toEqual([
-      ["/dashboard", "/parking", "/notices"],
+      ["/assistant", "/parking", "/notices"],
       ["/residents", "/fees", "/inquiries"],
-      ["/staff", "/documents", "/facilities"],
+      ["/inquiry-status", "/staff", "/documents", "/facilities"],
       ["/settings/households", "/settings/codes"],
     ]);
   });
 
   it("MANAGER에는 전체와 직원 관리·코드 관리를 노출한다", () => {
     const hrefs = flatHrefs(navForRoles(["MANAGER"]));
-    expect(hrefs).toContain("/dashboard");
+    expect(hrefs).toContain("/assistant");
+    expect(hrefs).toContain("/inquiry-status");
     expect(hrefs).toContain("/staff");
     expect(hrefs).toContain("/fees");
     expect(hrefs).toContain("/settings/codes");
@@ -60,31 +61,47 @@ describe("navForRoles", () => {
   });
 
   it("역할 미상(빈 배열)은 MANAGER 전체로 폴백한다", () => {
-    expect(flatHrefs(navForRoles([]))).toContain("/dashboard");
+    expect(flatHrefs(navForRoles([]))).toContain("/assistant");
   });
 
-  it("hasTwin이면 MANAGER 대시보드 바로 아래(첫 그룹)에 트윈·주차장 대시보드를 노출한다", () => {
+  it("hasTwin이면 MANAGER AI 비서 바로 아래(첫 그룹)에 트윈·주차장 대시보드를 노출한다", () => {
     const top = navForRoles(["MANAGER"], { hasTwin: true })[0];
-    expect(top?.items.map((i) => i.href)).toEqual(["/dashboard", "/twin", "/parking", "/notices"]);
+    expect(top?.items.map((i) => i.href)).toEqual(["/assistant", "/twin", "/parking", "/notices"]);
     // 관리소 운영에는 더 이상 트윈이 없다(대시보드 계열로 이동, H9-4).
     const ops = navForRoles(["MANAGER"], { hasTwin: true }).find(
       (g) => g.title === "관리소 운영",
     );
-    expect(ops?.items.map((i) => i.href)).toEqual(["/staff", "/documents", "/facilities"]);
+    expect(ops?.items.map((i) => i.href)).toEqual([
+      "/inquiry-status",
+      "/staff",
+      "/documents",
+      "/facilities",
+    ]);
   });
 
   it("주차장 대시보드는 hasTwin과 무관하게 MANAGER 첫 그룹에 항상 노출한다 (H9-5)", () => {
-    // 트윈 없음: 대시보드 바로 다음. 트윈 있음: 트윈 바로 다음.
+    // 트윈 없음: AI 비서 바로 다음. 트윈 있음: 트윈 바로 다음.
     expect(navForRoles(["MANAGER"])[0]?.items.map((i) => i.href)).toEqual([
-      "/dashboard",
+      "/assistant",
       "/parking",
       "/notices",
     ]);
     expect(navForRoles(["MANAGER"], { hasTwin: false })[0]?.items.map((i) => i.href)).toEqual([
-      "/dashboard",
+      "/assistant",
       "/parking",
       "/notices",
     ]);
+  });
+
+  it("대시보드 메뉴는 더 이상 없다 — 민원현황으로 개명·이동 (H20-2)", () => {
+    expect(flatHrefs(navForRoles(["MANAGER"], { hasTwin: true }))).not.toContain("/dashboard");
+  });
+
+  it("AI 비서·민원현황은 STAFF·SYS_ADMIN에 노출하지 않는다", () => {
+    for (const roles of [["STAFF"], ["SYS_ADMIN"]]) {
+      expect(flatHrefs(navForRoles(roles))).not.toContain("/assistant");
+      expect(flatHrefs(navForRoles(roles))).not.toContain("/inquiry-status");
+    }
   });
 
   it("STAFF·SYS_ADMIN에는 주차장 대시보드를 노출하지 않는다", () => {
@@ -112,8 +129,8 @@ describe("roleHome", () => {
     expect(roleHome(["STAFF"])).toBe("/inquiries");
   });
 
-  it("MANAGER는 대시보드로 진입한다 (H7-6)", () => {
-    expect(roleHome(["MANAGER"])).toBe("/dashboard");
+  it("MANAGER는 AI 비서로 진입한다 (H7-6 → H20-2)", () => {
+    expect(roleHome(["MANAGER"])).toBe("/assistant");
   });
 });
 

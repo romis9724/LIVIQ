@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Citation } from "@/features/assistant/api";
+import type { AssistantCitation } from "@liviq/ui";
 import {
   MY_VEHICLE_CARD_TITLE,
   MY_VEHICLE_TOOL,
@@ -11,7 +11,7 @@ import {
   spotNosFromCitations,
 } from "./links";
 
-function citation(overrides: Partial<Citation> = {}): Citation {
+function citation(overrides: Partial<AssistantCitation> = {}): AssistantCitation {
   return {
     ref: 1,
     documentId: null,

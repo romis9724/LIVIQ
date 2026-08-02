@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Citation } from "./api";
-import { structuredBlocks, toStructured } from "./structured";
+import type { AssistantCitation } from "./assistant-events";
+import { structuredBlocks, toStructured } from "./assistant-structured";
 
 /** 서버(ai_core/tools/library.py `_fee_data`)가 실제로 보내는 형태. */
 const FEE_PAYLOAD = {
@@ -180,7 +180,7 @@ describe("toStructured — kind 분기", () => {
 });
 
 describe("structuredBlocks", () => {
-  const citation = (ref: number, data: unknown): Citation => ({
+  const citation = (ref: number, data: unknown): AssistantCitation => ({
     ref,
     documentId: null,
     documentTitle: "관리비 2026-07 확정 데이터",
@@ -192,7 +192,7 @@ describe("structuredBlocks", () => {
 
   it("data 가 있는 인용만 블록으로 뽑고 ref 를 유지한다", () => {
     // Arrange — 문서 인용(data null) + 도구 카드(data 있음) + 모르는 kind
-    const citations: Citation[] = [
+    const citations: AssistantCitation[] = [
       { ...citation(1, null), documentId: "d1", documentTitle: "관리규약" },
       citation(2, FEE_PAYLOAD),
       citation(3, { kind: "future_block" }),

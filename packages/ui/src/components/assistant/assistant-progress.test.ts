@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UNKNOWN_TOOL_LABEL, appendProgress, progressLabel } from "./progress";
+import { UNKNOWN_TOOL_LABEL, appendProgress, progressLabel } from "./assistant-progress";
 
 describe("progressLabel", () => {
   it("도구 이름을 사람이 읽는 문구로 바꾼다", () => {

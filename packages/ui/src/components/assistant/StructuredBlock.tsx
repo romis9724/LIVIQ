@@ -3,9 +3,9 @@
 /**
  * 구조화 블록 렌더러 (H18-3 ②) — `citation.data.kind` 별 표·목록·상태 카드.
  *
- * `packages/ui` 가 아니라 여기에 두는 이유: 이 블록들의 형태는 어시스턴트 SSE 도구 페이로드
- * 계약(ADR-0025 §6) 그 자체라 다른 화면에서 쓸 수 있는 모양이 아니고, 소비자도 하나뿐이다.
- * 두 번째 소비자가 생기면 그때 올린다(YAGNI). 스타일은 assistant.css 의 토큰만 쓴다.
+ * 두 번째 소비자(관리자 홈 어시스턴트)가 생겨 `packages/ui` 로 올렸다(ADR-0028 결정 4 — 어시스턴트
+ * **메커니즘**은 공용, 조립은 앱별). 형태는 여전히 SSE 도구 페이로드 계약(ADR-0025 §6) 그
+ * 자체다. 스타일은 assistant.css 의 토큰만 쓴다.
  *
  * 값은 서버가 확정한 것을 **그대로** 뿌린다. 프론트에서 하는 계산은 천단위 구분 표기뿐이다.
  */
@@ -16,7 +16,7 @@ import type {
   InquiryCasesData,
   ParkingSpotsData,
   StructuredData,
-} from "./structured";
+} from "./assistant-structured";
 
 /** 금액 표기 — 값 자체는 서버 것 그대로, 자릿수 구분만 붙인다. */
 const won = (amount: number) => `${amount.toLocaleString("ko-KR")}원`;

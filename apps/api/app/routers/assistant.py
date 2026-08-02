@@ -68,8 +68,12 @@ _HISTORY_MESSAGE_LIMIT = HISTORY_CANDIDATE_TURNS * 2
 RESTORE_MESSAGE_LIMIT = 40
 # 시설 AI 도우미 접근 역할(docs/04 §4) — 시설은 소장 전용(H7-2에서 FACILITY 제거).
 _FACILITY_ASSISTANT_ROLES = ("MANAGER",)
+# 관리자 홈 AI 비서 접근 역할(ADR-0028) — 소장 전용(STAFF 첫 진입은 /inquiries 그대로).
+_ADMIN_ASSISTANT_ROLES = ("MANAGER",)
 
 router = APIRouter(prefix="/assistant", tags=["assistant"])
+# 관리자 홈 AI 비서(ADR-0028) — 입주민 ask와 같은 헬퍼, 채널만 admin.
+admin_assistant_router = APIRouter(prefix="/admin/assistant", tags=["assistant"])
 # 시설 도우미는 /admin/facilities 표면에 속한다 — 스트림·영속은 아래 공유 헬퍼 재사용.
 facility_router = APIRouter(prefix="/admin/facilities", tags=["facilities"])
 
@@ -135,6 +139,26 @@ async def latest_conversation(
     )
 
 
+@admin_assistant_router.post("/ask", dependencies=[Depends(enforce_rate_limit)])
+async def admin_ask(
+    body: AskRequest,
+    ctx: Annotated[RequestContext, Depends(require_roles(*_ADMIN_ASSISTANT_ROLES))],
+    session: Annotated[AsyncSession, Depends(get_tenant_session)],
+    llm: Annotated[LlmClient, Depends(get_llm)],
+    graph: Annotated[GraphClient | None, Depends(get_graph)],
+    redis: Annotated[Redis, Depends(get_redis)],
+    tuning: Annotated[AiTuning, Depends(get_tuning)],
+) -> EventSourceResponse:
+    """관리자 홈 AI 비서(ADR-0028 결정 2) — 입주민 ask와 같은 에이전트 경로, channel="admin".
+
+    도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
+    서버 복원(`/assistant/conversations/latest`)은 **제공하지 않는다** — 진입 브리핑(로그인마다
+    인사+민원 현황 요약)이 요구사항의 본체인데 복원이 되면 브리핑이 뜨지 않는다. 탭 내
+    연속성은 프론트 sessionStorage가 담당.
+    """
+    return await _assistant_response(body, ctx, session, llm, graph, redis, tuning, channel="admin")
+
+
 @facility_router.post("/assistant", dependencies=[Depends(enforce_rate_limit)])
 async def facility_assistant(
     body: AskRequest,
@@ -175,7 +199,7 @@ async def _assistant_response(
     channel: str,
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
 ) -> EventSourceResponse:
-    """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 두 엔드포인트 공유."""
+    """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 세 엔드포인트 공유."""
     conversation = await _load_or_create_conversation(session, ctx, body.conversation_id, channel)
     # 히스토리는 이번 질문을 적재하기 **전에** 읽는다 — 방금 넣은 user 메시지가 섞이면
     # 같은 질문이 두 번 실려 나간다.
@@ -209,6 +233,12 @@ async def _assistant_response(
     )
     # 캐시 키의 백엔드 세그먼트 — 런타임에 바뀐 백엔드의 답변이 섞이지 않게(H15-1).
     backend = backend_id(llm.settings)
+    # 답변 캐시는 입주민 채널만 참여한다(읽기·쓰기 모두 — ADR-0028 결정 2).
+    # ① 관리자 답변의 근거는 민원 현황·시설 이력 같은 운영 데이터라 수시로 변한다 — 재생은
+    #    아침 답을 저녁까지 내보내는 것이다. ② 캐시 키에 채널 세그먼트가 없어서, 도구 가시성이
+    #    다른 채널의 답변이 서로 재생될 수 있다(H19-1 동 세그먼트 함정과 같은 계열).
+    # 키를 늘리는 대신 우회를 택한다 — 관리자는 소수라 캐시 이득이 없다.
+    is_cacheable_channel = channel == "resident"
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         # 캐시 히트면 LLM 호출 0으로 재생, 미스면 정상 스트림(완료 후 저장).
@@ -216,7 +246,7 @@ async def _assistant_response(
         # 달라지고, 캐시 키에 히스토리를 넣으면 적중률이 0에 수렴한다. 첫 턴만 캐시한다.
         cached = (
             None
-            if history.turns
+            if history.turns or not is_cacheable_channel
             else await answer_cache.lookup(
                 redis,
                 ctx=tool_ctx,
@@ -276,7 +306,7 @@ async def _assistant_response(
                         session, ctx, conversation.id, done
                     )
                     # 정상 경로 + 첫 턴만 저장(재생은 재저장 금지, 맥락 의존 답변은 캐시 금지).
-                    if cached is None and not history.turns:
+                    if is_cacheable_channel and cached is None and not history.turns:
                         await answer_cache.store(
                             redis,
                             ctx=tool_ctx,

@@ -9,10 +9,10 @@
 
 import type { ChatMessage } from "./useAssistantStream";
 
-/** 저장 키 — 스키마가 바뀌면 뒤 버전을 올려 옛 값을 자연 폐기한다.
- *  v2: AI 메시지에 `steps`(진행 단계) 추가 — H18-3. */
-export const THREAD_STORAGE_KEY = "liviq.assistant.thread.v2";
-
+/**
+ * 저장 키는 **앱이 정한다**(ADR-0028 결정 4 — 메커니즘만 공용). 관리자·입주민 대화가 한 브라우저에서
+ * 섞이면 안 되고, 스키마가 바뀌면 앱이 키 뒤 버전을 올려 옛 값을 자연 폐기한다.
+ */
 export interface StoredThread {
   messages: ChatMessage[];
   /** 서버 대화 id — 복원 후 이어지는 질문이 같은 대화로 붙도록 함께 저장. */
@@ -69,9 +69,9 @@ export function parseThread(raw: string | null): StoredThread {
  * 건너뛰어야 한다(마커 없이는 새 대화 직후 리로드가 옛 대화를 되살린다 — ADR-0027 결정 1).
  * SSR·프라이빗 모드 등 sessionStorage 가 없거나 던지는 환경은 null(저장된 적 없음)로 처리.
  */
-export function readThread(): StoredThread | null {
+export function readThread(storageKey: string): StoredThread | null {
   try {
-    const raw = window.sessionStorage.getItem(THREAD_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(storageKey);
     if (raw === null) return null;
     return parseThread(raw);
   } catch {
@@ -80,9 +80,9 @@ export function readThread(): StoredThread | null {
 }
 
 /** 저장 — 용량 초과(QuotaExceeded) 등으로 실패해도 대화 자체는 계속돼야 한다. */
-export function writeThread(thread: StoredThread): void {
+export function writeThread(storageKey: string, thread: StoredThread): void {
   try {
-    window.sessionStorage.setItem(THREAD_STORAGE_KEY, JSON.stringify(thread));
+    window.sessionStorage.setItem(storageKey, JSON.stringify(thread));
   } catch {
     // 보관은 편의 기능일 뿐 — 실패해도 화면 동작에는 영향 없다.
   }
@@ -92,6 +92,6 @@ export function writeThread(thread: StoredThread): void {
  * "새 대화" — 빈 스레드를 **저장**해 마커로 남긴다(키 삭제가 아니다 — 지우면 다음 리로드의
  * 서버 복원이 방금 끊은 대화를 되살린다). 서버 대화는 그대로다(삭제가 아니라 끊기, ADR-0027).
  */
-export function clearThread(): void {
-  writeThread(EMPTY_THREAD);
+export function clearThread(storageKey: string): void {
+  writeThread(storageKey, EMPTY_THREAD);
 }

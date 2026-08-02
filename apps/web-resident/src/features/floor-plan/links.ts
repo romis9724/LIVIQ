@@ -7,7 +7,7 @@
  * (두꺼비집 → 분전함)은 서버 도구가 이미 끝냈으므로 여기서는 다시 하지 않는다.
  */
 
-import type { Citation } from "@/features/assistant/api";
+import type { AssistantCitation } from "@liviq/ui";
 
 /** 이 도구가 호출됐다 = 모델이 세대 평면도 위치 질의로 라우팅했다는 뜻. */
 export const FLOOR_PLAN_TOOL = "find_in_floor_plan";
@@ -42,7 +42,7 @@ function isSafeLabel(label: string): boolean {
  * 도구 카드는 `document_id: null` + 카드 제목으로 식별된다(assistant SSE 계약).
  * 방 질의("거실 위치")는 마커가 아니라 방 라벨이라 뽑지 않는다.
  */
-export function deviceLabelsFromCitations(citations: readonly Citation[]): string[] {
+export function deviceLabelsFromCitations(citations: readonly AssistantCitation[]): string[] {
   const card = citations.find(
     (c) => c.documentId === null && c.documentTitle === FLOOR_PLAN_CARD_TITLE,
   );

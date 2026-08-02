@@ -1,0 +1,146 @@
+/* 관리자 홈 AI 비서(H20-2, ADR-0028) — 좌 채팅(유동) · 우 민원현황 패널(고정폭).
+   말풍선·진행 단계·구조화 블록 스타일은 @liviq/ui assistant.css 를 그대로 쓴다(리디자인 없음).
+   여기 있는 것은 2컬럼 셸과 패널뿐이고, 값은 디자인 토큰만 쓴다. */
+
+.adm-assist {
+  --adm-panel-w: 22.5rem; /* 360px */
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--adm-panel-w);
+  background: var(--color-surface-sunken);
+}
+
+.adm-assist__chat {
+  min-width: 0;
+  border-right: 1px solid var(--color-border);
+}
+
+/* ── 우측 민원현황 패널 ──────────────────────────────────────────────────── */
+.adm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  background: var(--color-surface);
+}
+.adm-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.adm-panel__title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.adm-panel__subtitle {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-3);
+}
+.adm-panel__more {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+.adm-panel__note {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.adm-panel__error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+/* 목록이 짧아도 CTA 는 패널 아래쪽에 붙인다. */
+.adm-panel__cta {
+  margin-top: auto;
+  justify-content: center;
+}
+
+/* 상태별 카운트 — 강조는 값 색만(docs/05 §5A). */
+.adm-counts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.adm-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+.adm-count__label {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.adm-count__value {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.adm-count[data-alert] .adm-count__value {
+  color: var(--color-danger);
+}
+
+/* 최근 민원 5건 */
+.adm-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.adm-recent__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.adm-recent__item:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.adm-recent__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-recent__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.adm-recent__date {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+/* 좁은 화면: 패널을 채팅 아래로 내리고, 스크롤은 바깥 컬럼이 받는다. */
+@media (max-width: 1024px) {
+  .adm-assist {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .adm-assist__chat {
+    min-height: 60vh;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .adm-panel {
+    overflow: visible;
+  }
+}

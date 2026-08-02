@@ -1661,7 +1661,7 @@ export async function changePassword(
 }
 
 // ── 운영 대시보드 (docs/01 §13, FR-ADM-06 · MANAGER 전용) ──────────────────────
-// 비율(0~1 분수·null)은 서버 값 그대로 — 표기 변환은 features/dashboard/data.ts.
+// 비율(0~1 분수·null)은 서버 값 그대로 — 표기 변환은 features/inquiry-status/data.ts.
 
 export interface DashboardActionQueue {
   approvalsPending: number;

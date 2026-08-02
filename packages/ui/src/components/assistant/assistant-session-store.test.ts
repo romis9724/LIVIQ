@@ -1,12 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EMPTY_THREAD,
-  THREAD_STORAGE_KEY,
   clearThread,
   parseThread,
   persistableMessages,
   readThread,
-} from "./session-store";
+} from "./assistant-session-store";
+
+/** 저장 키는 앱이 정한다(ADR-0028 결정 4) — 테스트도 제 키를 준다. */
+const KEY = "liviq.test.thread";
 import type { AiMessage, ChatMessage, UserMessage } from "./useAssistantStream";
 
 function user(overrides: Partial<UserMessage> = {}): UserMessage {
@@ -117,7 +119,7 @@ describe("clearThread", () => {
   it("stores an empty-thread marker instead of deleting the key", () => {
     // Arrange — node 환경이라 sessionStorage 를 직접 세운다. 키를 지우면 다음 리로드의
     // 서버 복원이 방금 끊은 대화를 되살린다 — 마커가 남아야 한다(ADR-0027 결정 1).
-    const store = new Map([[THREAD_STORAGE_KEY, JSON.stringify({ messages: [user()] })]]);
+    const store = new Map([[KEY, JSON.stringify({ messages: [user()] })]]);
     vi.stubGlobal("window", {
       sessionStorage: {
         setItem: (key: string, value: string) => store.set(key, value),
@@ -125,10 +127,10 @@ describe("clearThread", () => {
     });
 
     // Act
-    clearThread();
+    clearThread(KEY);
 
     // Assert — 키는 남고 내용은 빈 스레드
-    const marker = parseThread(store.get(THREAD_STORAGE_KEY) ?? null);
+    const marker = parseThread(store.get(KEY) ?? null);
     expect(marker.messages).toEqual([]);
     expect(marker.conversationId).toBeNull();
   });
@@ -142,7 +144,7 @@ describe("clearThread", () => {
     });
 
     // Act · Assert — 새 대화 자체는 계속돼야 한다
-    expect(() => clearThread()).not.toThrow();
+    expect(() => clearThread(KEY)).not.toThrow();
   });
 });
 
@@ -156,7 +158,7 @@ describe("readThread", () => {
     });
 
     // Act · Assert — "저장된 적 없음"은 빈 스레드와 다르다
-    expect(readThread()).toBeNull();
+    expect(readThread(KEY)).toBeNull();
   });
 
   it("returns the empty-thread marker as a thread, not null", () => {
@@ -168,7 +170,7 @@ describe("readThread", () => {
     });
 
     // Act
-    const thread = readThread();
+    const thread = readThread(KEY);
 
     // Assert
     expect(thread).not.toBeNull();
@@ -184,6 +186,6 @@ describe("readThread", () => {
     });
 
     // Act · Assert
-    expect(readThread()).toBeNull();
+    expect(readThread(KEY)).toBeNull();
   });
 });
