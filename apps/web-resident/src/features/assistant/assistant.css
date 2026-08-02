@@ -466,14 +466,6 @@
   margin-left: auto;
 }
 
-/* handoff */
-.handoff-contact {
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
-  background: var(--color-surface-sunken);
-  border-radius: var(--radius-sm);
-  padding: var(--space-3);
-}
 /* composer */
 .composer {
   flex: none;
