@@ -60,3 +60,6 @@ class ParkingMapOut(BaseModel):
     layout: dict | None
     occupied_spot_nos: list[str]
     my_vehicles: list[MyParkingVehicleOut]
+    # 본인 동 코어 이름("401동") — 면 상세의 "우리 동 승강기까지 거리" 계산 앵커(H20-5).
+    # 본인 소속이라 규칙 2와 무관. 세대 미배정이면 null.
+    my_dong: str | None = None

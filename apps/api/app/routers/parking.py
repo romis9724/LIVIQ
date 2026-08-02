@@ -151,6 +151,16 @@ async def get_parking_map(
     household_id = await session.scalar(
         select(User.household_id).where(User.id == ctx.user_id, User.tenant_id == ctx.tenant_id)
     )
+    # 본인 동 이름 — 배치도 코어("401동")와 같은 표기로 맞춘다(buildings.name은 "401").
+    my_dong_name = (
+        await session.scalar(
+            select(Building.name)
+            .join(Household, Household.building_id == Building.id)
+            .where(Household.id == household_id, Building.tenant_id == ctx.tenant_id)
+        )
+        if household_id is not None
+        else None
+    )
     # 세대 미배정(승인 전 등)은 빈 목록 — 지도 자체는 볼 수 있어야 하므로 404로 막지 않는다.
     my_rows = (
         (
@@ -174,4 +184,5 @@ async def get_parking_map(
         my_vehicles=[
             MyParkingVehicleOut(spot_no=spot_no, entry_at=entry_at) for spot_no, entry_at in my_rows
         ],
+        my_dong=f"{my_dong_name}동" if my_dong_name else None,
     )

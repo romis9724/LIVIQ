@@ -165,8 +165,9 @@ export function ParkingMap({
       top: viewport.scrollTop,
     };
     draggedRef.current = false;
-    setDragging(true);
-    viewport.setPointerCapture(event.pointerId);
+    // 캡처는 아직 안 한다 — pointerdown에서 캡처하면 이어지는 click이 뷰포트로 리타게팅돼
+    // SVG의 면 클릭(onClick 위임)이 영영 안 온다(2026-08-03 사용자 신고 — 확대 상태에서
+    // 면을 눌러도 하단 정보가 안 바뀌던 버그). 드래그로 판정된 뒤에만 캡처한다.
   }
 
   function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -175,7 +176,15 @@ export function ParkingMap({
     if (!viewport || !start) return;
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) draggedRef.current = true;
+    if (
+      !draggedRef.current &&
+      (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)
+    ) {
+      draggedRef.current = true;
+      setDragging(true);
+      viewport.setPointerCapture(event.pointerId);
+    }
+    if (!draggedRef.current) return;
     viewport.scrollLeft = start.left - dx;
     viewport.scrollTop = start.top - dy;
   }

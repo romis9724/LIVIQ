@@ -48,9 +48,15 @@ def _handler(
     building_name: str | None = "401",
     has_layout: bool = True,
     occupied: Sequence[str] = (),
+    has_ev: bool = False,
 ) -> Any:
     def handler(sql: str, params: dict[str, Any]) -> list[Any]:
         s = sql.lower()
+        if "bool_or" in s:
+            # 세대 EV 보유 조회 — 본인 세대로만 스코프(CRITICAL).
+            assert params["uid"] == USER
+            assert params["tid"] == TENANT
+            return [row(has_ev=has_ev)]
         if "from users" in s:
             assert params["uid"] == USER  # 세대 스코프(CRITICAL) — 항상 ctx.user_id로 해석
             assert params["tid"] == TENANT
@@ -165,6 +171,27 @@ async def test_ev_preferred_includes_ev_spot(settings: AiCoreSettings) -> None:
     # 전기차(003)가 후보에 포함되고 거리순으로 001·003·004 상위 3면.
     assert "003면 (전기차" in quote
     assert "002면" not in quote  # 장애인은 여전히 제외
+
+
+# ── (6) 세대에 전기차가 있으면 일반 질의에도 전기차 면 포함 ────────────────
+# 2026-08-03 사용자 신고: 317면(전기차, 28m)이 더 먼 일반 면보다 가까운데 목록에서 빠졌다.
+# ev_preferred는 8B가 "충전" 언급 없이는 안 채운다 — 세대 차량 데이터로 판정한다.
+
+
+async def test_household_ev_includes_ev_spot_without_flag(settings: AiCoreSettings) -> None:
+    deps = _deps(settings, _handler(has_ev=True))
+    result = (await execute_tool(_call(), ctx=CTX, deps=deps, registry=default_registry())).result
+    assert result.card is not None
+    quote = result.card.quote
+    assert "003면 (전기차" in quote  # EV 세대 → 전기차 면 후보 포함
+    assert "002면" not in quote  # 장애인은 여전히 제외
+
+
+async def test_no_ev_household_excludes_ev_spot(settings: AiCoreSettings) -> None:
+    deps = _deps(settings, _handler(has_ev=False))
+    result = (await execute_tool(_call(), ctx=CTX, deps=deps, registry=default_registry())).result
+    assert result.card is not None
+    assert "003면" not in result.card.quote
 
 
 # ── 역할 가시성(RESIDENT 전용) ─────────────────────────────────────────

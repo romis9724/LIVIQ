@@ -11,8 +11,15 @@ import {
   type ParkingMapLayout,
   type ParkingSpotView,
 } from "@liviq/ui";
-import { ApiError, getParkingMap, type MyParkedVehicle, type ParkingMapData } from "./api";
+import {
+  ApiError,
+  getParkingMap,
+  type MyParkedVehicle,
+  type ParkingCore,
+  type ParkingMapData,
+} from "./api";
 import { readSpotParam } from "./links";
+import { buildSpotDetail } from "./spot-detail";
 import "./parking.css";
 
 type DataState =
@@ -87,6 +94,8 @@ export function ParkingMapView() {
         ) : (
           <ReadyView
             layout={state.data.layout}
+            cores={state.data.cores}
+            myDong={state.data.myDong}
             occupiedSpotNos={state.data.occupiedSpotNos}
             myVehicles={state.data.myVehicles}
             recommended={recommended}
@@ -100,13 +109,23 @@ export function ParkingMapView() {
 
 interface ReadyViewProps {
   layout: ParkingMapLayout;
+  cores: readonly ParkingCore[];
+  myDong: string | null;
   occupiedSpotNos: readonly string[];
   myVehicles: readonly MyParkedVehicle[];
   recommended: readonly string[];
   nowMs: number;
 }
 
-function ReadyView({ layout, occupiedSpotNos, myVehicles, recommended, nowMs }: ReadyViewProps) {
+function ReadyView({
+  layout,
+  cores,
+  myDong,
+  occupiedSpotNos,
+  myVehicles,
+  recommended,
+  nowMs,
+}: ReadyViewProps) {
   // 볼 면이 정해져 있으면(추천 자리 > 내 차) 선택 상태로 열어 지도가 그 면으로 포커스한다.
   const focusNo = recommended[0] ?? myVehicles[0]?.spotNo ?? null;
   const [selectedNo, setSelectedNo] = useState<string | null>(focusNo);
@@ -156,21 +175,78 @@ function ReadyView({ layout, occupiedSpotNos, myVehicles, recommended, nowMs }: 
           onSelect={setSelectedNo}
           summaryLabel={`지하 1층 주차 배치도 — ${summary}. 면을 누르면 상태를 읽어 줍니다.`}
           // 입주민 앱은 폭이 좁아 전체 보기로는 면이 안 보인다 — 볼 면이 있으면 확대해 연다.
-          initialZoom={focusNo ? 3 : 1}
+          // 5×는 사용자 요청(2026-08-03) — 3×로는 면 번호가 작다.
+          initialZoom={focusNo ? 5 : 1}
         />
         <MapLegend />
       </section>
 
-      <p className="rpk__answer" role="status" aria-live="polite">
-        {selectedNo
-          ? (spotViews.get(selectedNo)?.tooltip ?? `${selectedNo}면`)
-          : "배치도에서 주차면을 누르면 상태가 표시됩니다."}
-      </p>
+      <SpotDetailPanel
+        layout={layout}
+        selectedNo={selectedNo}
+        occupied={occupied}
+        mineBySpot={mineBySpot}
+        recommended={recommended}
+        myDong={myDong}
+        cores={cores}
+        nowMs={nowMs}
+      />
 
       <p className="rpk__note" role="note">
         다른 세대의 차량 정보는 표시하지 않습니다. 점유 현황은 데모 데이터입니다.
       </p>
     </>
+  );
+}
+
+interface SpotDetailPanelProps {
+  layout: ParkingMapLayout;
+  selectedNo: string | null;
+  occupied: ReadonlySet<string>;
+  mineBySpot: ReadonlyMap<string, MyParkedVehicle>;
+  recommended: readonly string[];
+  myDong: string | null;
+  cores: readonly ParkingCore[];
+  nowMs: number;
+}
+
+/** 선택한 면의 상세 — 종류·상태·추천 순위·우리 동 승강기까지 거리(H20-5 상세화). */
+function SpotDetailPanel({
+  layout,
+  selectedNo,
+  occupied,
+  mineBySpot,
+  recommended,
+  myDong,
+  cores,
+  nowMs,
+}: SpotDetailPanelProps) {
+  const spot = selectedNo ? layout.spots.find((s) => s.no === selectedNo) : undefined;
+  if (!spot) {
+    return (
+      <p className="rpk__answer" role="status" aria-live="polite">
+        배치도에서 주차면을 누르면 상세 정보가 표시됩니다.
+      </p>
+    );
+  }
+  const detail = buildSpotDetail({
+    spot,
+    isOccupied: occupied.has(spot.no),
+    mine: mineBySpot.get(spot.no),
+    recommendIndex: recommended.indexOf(spot.no),
+    myDong,
+    core: myDong ? cores.find((c) => c.name === myDong) : undefined,
+    nowMs,
+  });
+  return (
+    <div className="rpk__detail" role="status" aria-live="polite">
+      <p className="rpk__detail-title">{detail.title}</p>
+      {detail.lines.map((line) => (
+        <p key={line} className="rpk__detail-line">
+          {line}
+        </p>
+      ))}
+    </div>
   );
 }
 

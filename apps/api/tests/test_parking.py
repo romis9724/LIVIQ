@@ -241,7 +241,12 @@ async def test_map_layout_absent_returns_null(seeded: tuple) -> None:
     await _add_resident(session, household_id=mapping[(3, 301)])
     async with _client(session, roles=("RESIDENT",), user_id=USER_ID) as c:
         body = (await c.get("/parking/map")).json()
-    assert body == {"layout": None, "occupied_spot_nos": [], "my_vehicles": []}
+    assert body == {
+        "layout": None,
+        "occupied_spot_nos": [],
+        "my_vehicles": [],
+        "my_dong": "101동",
+    }
 
 
 async def test_map_hides_other_household_pii(seeded: tuple) -> None:
@@ -261,7 +266,8 @@ async def test_map_hides_other_household_pii(seeded: tuple) -> None:
     assert body["occupied_spot_nos"] == ["200", "201"]
     assert body["my_vehicles"] == []  # 본인 세대는 미주차
     # 응답 스키마에 PII 필드 자체가 없다 — 키 집합을 고정해 나중에 늘어나는 것도 막는다.
-    assert set(body) == {"layout", "occupied_spot_nos", "my_vehicles"}
+    # my_dong은 **본인** 동 이름이라 PII 예외(H20-5 — 면 상세 거리 앵커).
+    assert set(body) == {"layout", "occupied_spot_nos", "my_vehicles", "my_dong"}
     assert _PLATE not in raw
     assert "123가4567" not in raw
     assert str(other) not in raw  # 타 세대 식별자
@@ -301,4 +307,4 @@ async def test_map_cross_tenant_not_visible(seeded: tuple) -> None:
 
     async with _client(session, roles=("RESIDENT",), tenant_id=TENANT_B_ID) as c:
         body = (await c.get("/parking/map")).json()
-    assert body == {"layout": None, "occupied_spot_nos": [], "my_vehicles": []}
+    assert body == {"layout": None, "occupied_spot_nos": [], "my_vehicles": [], "my_dong": None}
