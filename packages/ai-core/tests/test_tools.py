@@ -22,7 +22,7 @@ from ai_core.graph import GraphClient, IncidentContext, IncidentHit
 from ai_core.llm.client import LlmClient, ToolCallRequest
 from ai_core.rag.retrieval import RetrievedChunk, Retriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry, execute_tool
-from ai_core.tools.library import COMPLEX_SCOPE, MIN_PEER_SAMPLE, GetFeesArgs
+from ai_core.tools.library import MIN_PEER_SAMPLE, GetFeesArgs
 
 TENANT = uuid.uuid4()
 USER = uuid.uuid4()
@@ -665,6 +665,11 @@ async def test_get_fees_scope_complex_sql_has_no_building_filter(
 def test_get_fees_args_normalize_scope() -> None:
     """8B 표기 흔들림 흡수 — 숫자만·전체 동의어·null 리터럴."""
     assert GetFeesArgs(scope="402").scope == "402동"
+    # dev 실측: 단독 "아파트"도 전체 평균 의도다.
+    from ai_core.tools.fees_common import COMPLEX_SCOPE
+
+    assert GetFeesArgs(scope="아파트").scope == COMPLEX_SCOPE
+    assert GetFeesArgs(scope="아파트 평균").scope == COMPLEX_SCOPE
     assert GetFeesArgs(scope=" 402동 ").scope == "402동"
     for whole in ("전체", "단지", "단지 전체", "모든 동", "아파트 전체"):
         assert GetFeesArgs(scope=whole).scope == COMPLEX_SCOPE
