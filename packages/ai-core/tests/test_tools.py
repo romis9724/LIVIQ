@@ -82,12 +82,17 @@ def _chunk() -> RetrievedChunk:
     )
 
 
-def _embed_llm(settings: AiCoreSettings, *, ok: bool = True) -> LlmClient:
+def _embed_llm(
+    settings: AiCoreSettings, *, ok: bool = True, embedded: list[str] | None = None
+) -> LlmClient:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path.endswith("/embeddings"):
             if not ok:
                 return httpx.Response(400)  # 4xx → LlmError(재시도 없음)
-            n = len(json.loads(request.content)["input"])
+            inputs = json.loads(request.content)["input"]
+            if embedded is not None:
+                embedded.extend(inputs)
+            n = len(inputs)
             data = [
                 {"index": i, "embedding": [0.05] * settings.embedding_dimensions} for i in range(n)
             ]
@@ -104,11 +109,12 @@ def _deps(
     chunks: Sequence[RetrievedChunk] = (),
     graph: Any = None,
     embed_ok: bool = True,
+    embedded: list[str] | None = None,
 ) -> ToolDeps:
     session = FakeSession(handler or (lambda sql, params: []))
     return ToolDeps(
         session=cast(AsyncSession, session),
-        llm=_embed_llm(settings, ok=embed_ok),
+        llm=_embed_llm(settings, ok=embed_ok, embedded=embedded),
         retriever=cast(Retriever, FakeRetriever(chunks)),
         graph=cast(GraphClient, graph) if graph is not None else None,
     )
@@ -222,6 +228,18 @@ async def test_search_documents_without_building_passes_none(settings: AiCoreSet
         registry=default_registry(),
     )
     assert retriever.calls == [{"tenant_id": TENANT, "building_id": None}]
+
+
+async def test_search_documents_embeds_expanded_life_synonyms(settings: AiCoreSettings) -> None:
+    """'두꺼비집'은 문서에 없는 말이다(H20-7) — 임베딩 텍스트만 표준어로 넓힌다."""
+    embedded: list[str] = []
+    await execute_tool(
+        _call("search_documents", {"query": "두꺼비집 점검 주기"}),
+        ctx=CTX_RESIDENT,
+        deps=_deps(settings, chunks=[_chunk()], embedded=embedded),
+        registry=default_registry(),
+    )
+    assert embedded == ["두꺼비집 점검 주기 (분전함)"]
 
 
 async def test_search_documents_empty_returns_note(settings: AiCoreSettings) -> None:
