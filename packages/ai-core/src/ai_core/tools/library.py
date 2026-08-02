@@ -64,6 +64,9 @@ COMPLEX_SCOPE = "__complex__"
 _COMPLEX_SCOPE_WORDS = frozenset(
     {"전체", "단지", "단지전체", "전체단지", "전체동", "모든동", "아파트전체", "우리단지", "전세대"}
 )
+# dev 실측: 모델이 본인 질문에도 scope="본인 세대"를 채운다 — 본인 동의어는 미지정으로 접는다
+# (설명의 "본인 질문에는 쓰지 않는다"만으로는 안 막혔다. 코드가 방어 — 규칙 8의 정신).
+_SELF_SCOPE_WORDS = frozenset({"본인", "본인세대", "우리집", "우리세대", "내집", "자기집", "세대"})
 
 # 장기주차 기준 시간(H19-3) — 기본 하루, 상한 7일. 상한이 없으면 모델이 큰 값을 넣어
 # 사실상 필터가 사라진다(경계 검증은 Pydantic이 담당, 규칙: 경계 입력 검증).
@@ -115,7 +118,10 @@ class GetFeesArgs(BaseModel):
         raw = value.strip()
         if raw.lower() in ("", "null", "none"):
             return None
-        if raw.replace(" ", "") in _COMPLEX_SCOPE_WORDS:
+        compact = raw.replace(" ", "")
+        if compact in _SELF_SCOPE_WORDS:
+            return None
+        if compact in _COMPLEX_SCOPE_WORDS:
             return COMPLEX_SCOPE
         return f"{raw}동" if raw.isdigit() else raw
 
