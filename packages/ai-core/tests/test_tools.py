@@ -993,3 +993,28 @@ def test_get_fees_args_accept_comma_separated_months() -> None:
         except ValidationError:
             continue
         raise AssertionError(f"형식 검증이 통과하면 안 됨: {bad}")
+
+
+def test_fee_quote_includes_detail_items_for_item_questions() -> None:
+    """세부 항목(전기료 등)이 quote에 실려야 항목 질의가 근거를 갖는다(사용자 요구 3).
+
+    화면 표는 level 0 그대로이므로 detail은 quote 전용이다.
+    """
+    from ai_core.tools.library import _fee_detail_items, _fee_quote
+
+    raw = [
+        {"name": "공용관리비", "level": 0, "amount": 91362},
+        {"name": "일반관리비", "level": 1, "amount": 47281},
+        {"name": "공과금중 전기료", "level": 2, "amount": 12345},
+        {"name": "급여", "level": 3, "amount": 30559},  # level 3 제외
+        {"name": "상여금", "level": 2, "amount": 0},  # 0원 제외
+        {"name": "합계", "level": 0, "amount": 176601},
+    ]
+    detail = _fee_detail_items(raw)
+    assert ("공과금중 전기료", 12345) in detail
+    assert all(name not in ("급여", "상여금", "합계") for name, _ in detail)
+
+    quote = _fee_quote("2026-07", [("공용관리비", 91362)], 176601, None, None, detail=detail)
+    assert "공과금중 전기료 12,345원" in quote
+    # detail 없으면 기존 문구 그대로(회귀 없음).
+    assert "세부 항목" not in _fee_quote("2026-07", [("공용관리비", 91362)], 176601, None, None)
