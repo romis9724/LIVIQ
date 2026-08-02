@@ -222,7 +222,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
               {progressLabel(message.stage, message.tool)} 중…
             </div>
             <div className="bubble-ai">
-              <AnswerBody text={message.text} />
+              <AnswerBody text={message.text} citations={message.citations} />
               <span className="caret" aria-hidden="true" />
             </div>
           </>
@@ -243,7 +243,7 @@ function AiRow({ message, question, onAsk }: AiRowProps) {
                 무엇을 근거로 답했는지는 '답변 과정'을 펼치면 도구 단위로 보인다. */}
             <ProgressSteps steps={message.steps} />
             <div className="bubble-ai">
-              <AnswerBody text={message.text} />
+              <AnswerBody text={message.text} citations={message.citations} />
               {blocks.map((b) => (
                 <StructuredBlock key={b.ref} data={b.data} />
               ))}

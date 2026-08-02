@@ -166,6 +166,79 @@
 .answer-text {
   white-space: pre-line;
 }
+
+/* 인라인 출처 배지 + 툴팁(H20-4) — 본문 [n] 마커 자리. 호버·포커스·클릭(모바일)으로 툴팁. */
+.cite {
+  position: relative;
+  display: inline-flex;
+  vertical-align: baseline;
+  margin-left: var(--space-1);
+}
+.cite__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 var(--space-1);
+  border: none;
+  border-radius: 999px;
+  background: var(--color-citation);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transform: translateY(-0.15em);
+}
+.cite__badge:hover {
+  background: color-mix(in oklch, var(--color-accent) 18%, var(--color-citation));
+}
+.cite__badge:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.cite__tip {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: none;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: max-content;
+  max-width: min(280px, 72vw);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card-hover);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: normal;
+  text-align: left;
+}
+.cite:hover .cite__tip,
+.cite--open .cite__tip,
+.cite__badge:focus-visible + .cite__tip {
+  display: flex;
+}
+.cite__tip-title {
+  font-weight: 700;
+  color: var(--color-text);
+}
+.cite__tip-meta {
+  color: var(--color-text-muted);
+}
+/* 인용문은 길 수 있다 — 4줄에서 자른다(전문은 '답변 과정' 패널이 담당). */
+.cite__tip-quote {
+  color: var(--color-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* 목록은 표기 하나(`- `)만 처리한다 — 기호 렌더가 아니라 의미(항목 나열)를 표시. */
 .answer-list {
   margin: 0;

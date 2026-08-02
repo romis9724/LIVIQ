@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerBlocks, stripMarkers } from "./assistant-markdown";
+import { answerBlocks, answerSegmentBlocks, stripMarkers } from "./assistant-markdown";
 
 describe("stripMarkers", () => {
   it("굵게·기울임·코드 기호를 표시에서 벗긴다", () => {
@@ -89,5 +89,75 @@ describe("answerBlocks", () => {
 
   it("스트리밍 중 짝이 안 맞는 기호는 그대로 남긴다(다음 청크에서 완성)", () => {
     expect(answerBlocks("관리비는 **12,0")).toEqual([{ kind: "p", text: "관리비는 **12,0" }]);
+  });
+});
+
+describe("answerSegmentBlocks — 인라인 출처 배지(H20-4)", () => {
+  it("인용 마커를 벗기는 대신 refs 로 뽑는다", () => {
+    expect(answerSegmentBlocks("관리규약 제5조에 따릅니다 [2]")).toEqual([
+      { kind: "p", segments: [{ text: "관리규약 제5조에 따릅니다", refs: [2] }] },
+    ]);
+  });
+
+  it("연속 마커·쉼표 마커는 refs 하나로 합친다", () => {
+    expect(answerSegmentBlocks("7월 1일 점검합니다. [1][3]")).toEqual([
+      { kind: "p", segments: [{ text: "7월 1일 점검합니다.", refs: [1, 3] }] },
+    ]);
+    expect(answerSegmentBlocks("납부기한은 8월 31일입니다 [1, 2]")).toEqual([
+      { kind: "p", segments: [{ text: "납부기한은 8월 31일입니다", refs: [1, 2] }] },
+    ]);
+  });
+
+  it("문장 중간 마커는 텍스트를 가르고 이어지는 텍스트를 남긴다", () => {
+    expect(answerSegmentBlocks("임기는 2년이며 [1] 연임할 수 있습니다")).toEqual([
+      {
+        kind: "p",
+        segments: [
+          { text: "임기는 2년이며", refs: [1] },
+          { text: " 연임할 수 있습니다", refs: [] },
+        ],
+      },
+    ]);
+  });
+
+  it("목록 항목의 마커도 refs 로 뽑는다", () => {
+    expect(answerSegmentBlocks("- **일반관리비**: 12,000원 [4]")).toEqual([
+      { kind: "ul", items: [[{ text: "일반관리비: 12,000원", refs: [4] }]] },
+    ]);
+  });
+
+  it("강조 기호·내부 라벨은 기존대로 벗기고 마스킹 별표는 남긴다", () => {
+    expect(answerSegmentBlocks("[문서 근거] **담당자**는 김*수 소장입니다")).toEqual([
+      { kind: "p", segments: [{ text: "담당자는 김*수 소장입니다", refs: [] }] },
+    ]);
+  });
+
+  it("텍스트 대괄호·미완성 마커는 텍스트로 남긴다", () => {
+    expect(answerSegmentBlocks("[별관] 이용 안내")).toEqual([
+      { kind: "p", segments: [{ text: "[별관] 이용 안내", refs: [] }] },
+    ]);
+    expect(answerSegmentBlocks("점검합니다. [1")).toEqual([
+      { kind: "p", segments: [{ text: "점검합니다. [1", refs: [] }] },
+    ]);
+  });
+
+  it("여러 줄 문단은 한 블록으로 묶이고 answerBlocks 텍스트와 일치한다", () => {
+    const text = "첫 줄입니다 [1]\n둘째 줄입니다 [2]\n\n- 항목 [3]";
+    const seg = answerSegmentBlocks(text);
+    expect(seg).toEqual([
+      {
+        kind: "p",
+        segments: [
+          { text: "첫 줄입니다", refs: [1] },
+          { text: "\n둘째 줄입니다", refs: [2] },
+        ],
+      },
+      { kind: "ul", items: [[{ text: "항목", refs: [3] }]] },
+    ]);
+    // 파생 관계 — 표시 텍스트는 기존 answerBlocks 와 같아야 한다.
+    expect(answerBlocks(text)).toEqual([
+      { kind: "p", text: "첫 줄입니다\n둘째 줄입니다" },
+      { kind: "ul", items: ["항목"] },
+    ]);
   });
 });

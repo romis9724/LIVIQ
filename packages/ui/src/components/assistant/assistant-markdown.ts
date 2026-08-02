@@ -43,29 +43,72 @@ const CITATION_MARKER_RE = /\s*\[\d+(?:\s*,\s*\d+)*\]/g;
  */
 const INTERNAL_LABEL_RE = /\[(?:문서 근거|확정 데이터·?도구 결과|확정 데이터|도구 결과)\]\s*/g;
 
-/** 한 줄에서 강조 기호·인용 마커·내부 라벨만 제거. 텍스트 내용은 바꾸지 않는다. */
-export function stripMarkers(line: string): string {
+/** 인용 마커를 **뺀** 나머지 기호 제거 — 인라인 배지 경로(H20-4)가 마커를 refs 로 살려 쓴다. */
+function stripTextMarkers(line: string): string {
   return line
     .replace(HEADING_RE, "")
     .replace(BOLD_RE, "$1")
     .replace(EMPHASIS_RE, "$1$2")
     .replace(CODE_RE, "$1")
-    .replace(CITATION_MARKER_RE, "")
     .replace(INTERNAL_LABEL_RE, "")
     .trimEnd();
 }
 
+/** 한 줄에서 강조 기호·인용 마커·내부 라벨만 제거. 텍스트 내용은 바꾸지 않는다. */
+export function stripMarkers(line: string): string {
+  return stripTextMarkers(line).replace(CITATION_MARKER_RE, "").trimEnd();
+}
+
 /**
- * 답변 본문 → 렌더 블록. 빈 줄은 문단 경계, 연속 글머리 줄은 하나의 목록.
- * 스트리밍 중 잘린 텍스트에도 안전하다(짝이 안 맞는 기호는 그대로 남는다 — 다음 청크에서 완성).
+ * 텍스트 한 조각과 그 **직후에 붙은** 인용 번호들(H20-4 인라인 출처 배지).
+ * refs 가 비면 그냥 텍스트다. 번호 순서는 모델 출력 순서를 유지한다.
  */
-export function answerBlocks(text: string): AnswerBlock[] {
-  const blocks: AnswerBlock[] = [];
-  let paragraph: string[] = [];
-  let items: string[] = [];
+export interface AnswerSegment {
+  text: string;
+  refs: number[];
+}
+
+/** 인용 마커에서 번호를 뽑는 버전 — CITATION_MARKER_RE 와 같은 문법, 번호만 캡처. */
+const CITATION_CAPTURE_RE = /\s*\[(\d+(?:\s*,\s*\d+)*)\]/g;
+
+/** 한 줄 → 세그먼트. 마커가 없으면 세그먼트 1개(refs []). 빈 줄이면 []. */
+function lineSegments(raw: string): AnswerSegment[] {
+  const line = stripTextMarkers(raw).trim();
+  const segments: AnswerSegment[] = [];
+  let cursor = 0;
+  for (const m of line.matchAll(CITATION_CAPTURE_RE)) {
+    const refs = (m[1] ?? "").split(",").map((n) => Number(n.trim()));
+    const text = line.slice(cursor, m.index).trimEnd();
+    cursor = m.index + m[0].length;
+    const prev = segments[segments.length - 1];
+    // `[1][3]` 처럼 마커 사이에 텍스트가 없으면 앞 세그먼트의 refs 로 합친다.
+    if (!text && prev) {
+      segments[segments.length - 1] = { ...prev, refs: [...prev.refs, ...refs] };
+      continue;
+    }
+    segments.push({ text, refs });
+  }
+  const rest = line.slice(cursor).trimEnd();
+  if (rest) segments.push({ text: rest, refs: [] });
+  // 마커만 있는 줄은 기존(빈 줄) 취급 — 텍스트 없는 배지는 앵커가 없다.
+  return segments.every((s) => !s.text) ? [] : segments;
+}
+
+export type SegmentBlock =
+  | { kind: "p"; segments: AnswerSegment[] }
+  | { kind: "ul"; items: AnswerSegment[][] };
+
+/**
+ * 답변 본문 → 인라인 출처 배지용 블록. `answerBlocks` 와 같은 문단·목록 규칙이되
+ * 인용 마커를 벗기는 대신 각 텍스트 조각의 refs 로 남긴다(H20-4).
+ */
+export function answerSegmentBlocks(text: string): SegmentBlock[] {
+  const blocks: SegmentBlock[] = [];
+  let paragraph: AnswerSegment[] = [];
+  let items: AnswerSegment[][] = [];
 
   const flushParagraph = () => {
-    if (paragraph.length > 0) blocks.push({ kind: "p", text: paragraph.join("\n") });
+    if (paragraph.length > 0) blocks.push({ kind: "p", segments: paragraph });
     paragraph = [];
   };
   const flushList = () => {
@@ -77,20 +120,42 @@ export function answerBlocks(text: string): AnswerBlock[] {
     const bullet = BULLET_RE.exec(raw);
     if (bullet) {
       flushParagraph();
-      const item = stripMarkers(bullet[1] ?? "").trim();
-      if (item) items.push(item);
+      const segs = lineSegments(bullet[1] ?? "");
+      if (segs.length > 0) items.push(segs);
       continue;
     }
-    const line = stripMarkers(raw).trim();
-    if (!line) {
+    const segs = lineSegments(raw);
+    if (segs.length === 0) {
       flushList();
       flushParagraph();
       continue;
     }
     flushList();
-    paragraph.push(line);
+    // 문단 안의 줄바꿈은 첫 조각 앞에 남긴다 — 표시 텍스트가 기존 answerBlocks 와 같아진다.
+    paragraph.push(
+      ...(paragraph.length > 0 && segs[0]
+        ? [{ ...segs[0], text: `\n${segs[0].text}` }, ...segs.slice(1)]
+        : segs),
+    );
   }
   flushList();
   flushParagraph();
   return blocks;
+}
+
+/** 세그먼트들의 표시 텍스트 — refs 를 버리면 기존 answerBlocks 표시와 같다. */
+const segmentsText = (segments: AnswerSegment[]): string =>
+  segments.map((s) => s.text).join("");
+
+/**
+ * 답변 본문 → 렌더 블록. 빈 줄은 문단 경계, 연속 글머리 줄은 하나의 목록.
+ * 스트리밍 중 잘린 텍스트에도 안전하다(짝이 안 맞는 기호는 그대로 남는다 — 다음 청크에서 완성).
+ * `answerSegmentBlocks` 의 파생 — 인용 마커(refs)만 버린다.
+ */
+export function answerBlocks(text: string): AnswerBlock[] {
+  return answerSegmentBlocks(text).map((b) =>
+    b.kind === "ul"
+      ? { kind: "ul", items: b.items.map(segmentsText) }
+      : { kind: "p", text: segmentsText(b.segments) },
+  );
 }
