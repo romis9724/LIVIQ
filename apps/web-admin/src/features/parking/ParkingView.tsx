@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 import { Button, EmptyState, Skeleton } from "@liviq/ui";
 import {
   ApiError,
@@ -21,6 +22,7 @@ import {
 } from "./parking-sim";
 import { ParkingMap } from "./ParkingMap";
 import { ParkingList } from "./ParkingList";
+import { readSpotParam, readViewParam } from "./assistant-links";
 import "./parking.css";
 
 // three.js 는 무겁다 — 3D 뷰는 옵트인이라 눌렀을 때만 클라이언트로 불러온다
@@ -70,9 +72,13 @@ function errorMessage(err: unknown): string {
 }
 
 export function ParkingView() {
+  const searchParams = useSearchParams();
   const [state, setState] = useState<DataState>({ kind: "loading" });
   // 경과시간 기준점 — 마운트 시 1회 고정(리렌더마다 흔들리지 않게).
   const [nowMs] = useState(() => Date.now());
+  // AI 비서 딥링크(ADM-1) — 장기주차 면 비콘 + 3D 시작.
+  const beaconNos = useMemo(() => readSpotParam(searchParams), [searchParams]);
+  const initialView = useMemo(() => readViewParam(searchParams), [searchParams]);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
@@ -122,7 +128,13 @@ export function ParkingView() {
             />
           </section>
         ) : (
-          <ReadyView layout={state.layout} vehicles={state.vehicles} nowMs={nowMs} />
+          <ReadyView
+            layout={state.layout}
+            vehicles={state.vehicles}
+            beaconNos={beaconNos}
+            initialView={initialView}
+            nowMs={nowMs}
+          />
         )}
       </main>
     </>
@@ -141,15 +153,20 @@ function LoadingSkeleton() {
 interface ReadyViewProps {
   layout: ParkingLayout;
   vehicles: readonly ParkingVehicle[];
+  /** AI 비서 딥링크(ADM-1) — 3D 에 비콘을 세울 면(오래된 순 = 비콘 순번). */
+  beaconNos: readonly string[];
+  initialView: ViewMode;
   nowMs: number;
 }
 
-function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
-  const [selectedNo, setSelectedNo] = useState<string | null>(null);
+function ReadyView({ layout, vehicles, beaconNos, initialView, nowMs }: ReadyViewProps) {
+  // 딥링크 진입이면 첫 비콘 면을 선택 상태로 열어 3D 카메라가 그 면으로 날아간다(ADM-1).
+  const [selectedNo, setSelectedNo] = useState<string | null>(beaconNos[0] ?? null);
   const [group, setGroup] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   // 기본은 2D — 3D 는 옵트인이고, WebGL 이 없거나 느린 기기는 2D 로 계속 볼 수 있다.
-  const [viewMode, setViewMode] = useState<ViewMode>("2d");
+  // AI 비서 딥링크(?view=3d)만 3D 로 시작한다.
+  const [viewMode, setViewMode] = useState<ViewMode>(initialView);
 
   // 점유는 응답 그대로 — 면 번호로 인덱싱만 한다(차량 목록이 바뀔 때만 재계산).
   const sim = useMemo(() => occupancyFromVehicles(vehicles), [vehicles]);
@@ -225,6 +242,7 @@ function ReadyView({ layout, vehicles, nowMs }: ReadyViewProps) {
               bySpot={sim.bySpot}
               selectedNo={selectedNo}
               activeGroup={group}
+              beaconNos={beaconNos}
               onSelect={setSelectedNo}
               summaryLabel={mapSummaryLabel(counts)}
             />

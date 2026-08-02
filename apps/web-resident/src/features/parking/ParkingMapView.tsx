@@ -20,7 +20,7 @@ import {
   type ParkingCore,
   type ParkingMapData,
 } from "./api";
-import { readSpotParam } from "./links";
+import { readSpotParam, readViewParam } from "./links";
 import { buildSpotDetail } from "./spot-detail";
 import "./parking.css";
 
@@ -69,6 +69,8 @@ export function ParkingMapView() {
   }, [load]);
 
   const recommended = useMemo(() => readSpotParam(searchParams), [searchParams]);
+  // 어시스턴트 CTA(내 차·빈자리)는 3D 로 진입한다 — 비콘·카메라 연출이 3D 몫(RES-1·RES-2).
+  const initialView = useMemo(() => readViewParam(searchParams), [searchParams]);
 
   return (
     <div className="rpk">
@@ -114,6 +116,7 @@ export function ParkingMapView() {
             occupiedSpotNos={state.data.occupiedSpotNos}
             myVehicles={state.data.myVehicles}
             recommended={recommended}
+            initialView={initialView}
             nowMs={nowMs}
           />
         )}
@@ -129,6 +132,7 @@ interface ReadyViewProps {
   occupiedSpotNos: readonly string[];
   myVehicles: readonly MyParkedVehicle[];
   recommended: readonly string[];
+  initialView: "2d" | "3d";
   nowMs: number;
 }
 
@@ -139,14 +143,15 @@ function ReadyView({
   occupiedSpotNos,
   myVehicles,
   recommended,
+  initialView,
   nowMs,
 }: ReadyViewProps) {
   // 볼 면이 정해져 있으면(추천 자리 > 내 차) 선택 상태로 열어 지도가 그 면으로 포커스한다.
   const focusNo = recommended[0] ?? myVehicles[0]?.spotNo ?? null;
   const [selectedNo, setSelectedNo] = useState<string | null>(focusNo);
 
-  // 2D 배치도 ↔ 3D 보기(H20-8 — 추천 자리 순위 비콘 + 카메라 이동은 3D 쪽).
-  const [viewMode, setViewMode] = useState<"2d" | "3d">("2d");
+  // 2D 배치도 ↔ 3D 보기(H20-8) — 어시스턴트 딥링크(?view=3d)는 3D 로 시작(RES-1·RES-2).
+  const [viewMode, setViewMode] = useState<"2d" | "3d">(initialView);
 
   const occupied = useMemo(() => new Set(occupiedSpotNos), [occupiedSpotNos]);
   const mineBySpot = useMemo(
@@ -211,6 +216,7 @@ function ReadyView({
             layout={sceneLayout}
             occupiedSpotNos={occupiedSpotNos}
             recommended={recommended}
+            myVehicleSpotNos={myVehicles.map((v) => v.spotNo)}
             selectedNo={selectedNo}
             onSelect={setSelectedNo}
             summaryLabel={`지하 1층 주차장 3D — ${summary}. 추천 자리에 순위 비콘이 표시됩니다.`}

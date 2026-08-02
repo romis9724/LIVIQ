@@ -55,10 +55,12 @@ export const SCENE_COLOR_VARS = {
 
 export type SceneColors = Record<keyof typeof SCENE_COLOR_VARS, string>;
 
-/** 추천 자리 비콘 1개 — 순위(1부터)와 면 번호. */
+/** 면 위 비콘 1개 — 라벨(순위 "1"·"내 차" 등)과 색(기본 보라, 내 차는 입주민 파랑). */
 export interface SpotBeacon {
   spotNo: string;
-  rank: number;
+  label: string;
+  /** 씬 팔레트 키 — 지정 없으면 추천 보라(--pk3d-beacon). */
+  color?: "beacon" | "carResident" | "external";
 }
 
 export interface ParkingScene3DOptions {
@@ -408,24 +410,24 @@ export class ParkingScene3D {
     }
     this.beacons = [];
 
-    for (const { spotNo, rank } of beacons) {
+    beacons.forEach(({ spotNo, label, color }, index) => {
       const placement = this.placements.find((item) => item.no === spotNo);
-      if (!placement) continue;
+      if (!placement) return;
       const group = new THREE.Group();
       const cone = new THREE.Mesh(
         new THREE.ConeGeometry(BEACON_CONE_RADIUS_M, BEACON_CONE_HEIGHT_M, 16),
-        new THREE.MeshLambertMaterial({ color: this.colors.beacon }),
+        new THREE.MeshLambertMaterial({ color: this.colors[color ?? "beacon"] }),
       );
       cone.rotation.x = Math.PI; // 꼭짓점이 면을 가리키게 뒤집는다
       group.add(cone);
-      const label = textSprite(String(rank), this.colors.label);
-      label.position.y = BEACON_LABEL_GAP_M;
-      group.add(label);
+      const sprite = textSprite(label, this.colors.label);
+      sprite.position.y = BEACON_LABEL_GAP_M;
+      group.add(sprite);
       group.position.set(placement.x, BEACON_BASE_Y, placement.z);
       this.scene.add(group);
-      // 순위별 위상차 — 셋이 같은 박자로 출렁이면 하나처럼 보인다.
-      this.beacons.push({ group, baseY: BEACON_BASE_Y, phase: rank * 0.9 });
-    }
+      // 비콘별 위상차 — 여럿이 같은 박자로 출렁이면 하나처럼 보인다.
+      this.beacons.push({ group, baseY: BEACON_BASE_Y, phase: (index + 1) * 0.9 });
+    });
     // 루프가 꺼진 상태(reduced motion)에서도 비콘이 바로 보이게 한 프레임 그린다.
     if (!this.active) this.renderer.render(this.scene, this.camera);
   }

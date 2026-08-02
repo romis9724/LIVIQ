@@ -24,6 +24,8 @@ interface ParkingView3DProps {
   selectedNo: string | null;
   /** 강조할 소속("401동" | "외부") — 2D 지도와 같은 상태를 공유한다(미해당은 흐림). */
   activeGroup: string | null;
+  /** AI 비서 딥링크(ADM-1) — 장기주차 면에 순번 비콘(주황, 오래된 순)을 세운다. */
+  beaconNos?: readonly string[];
   onSelect: (spotNo: string) => void;
   /** 3D 뷰 요약(role=img aria-label) — 스크린리더 대안 경로는 2D 지도·목록 표다. */
   summaryLabel: string;
@@ -52,6 +54,7 @@ export function ParkingView3D({
   bySpot,
   selectedNo,
   activeGroup,
+  beaconNos,
   onSelect,
   summaryLabel,
 }: ParkingView3DProps) {
@@ -100,6 +103,20 @@ export function ParkingView3D({
   useEffect(() => {
     sceneRef.current?.update(state);
   }, [state]);
+
+  // 장기주차 비콘(ADM-1) — 외부 차량 색(주황)으로 오래된 순번을 세운다. 카메라 이동은
+  // 딥링크가 첫 면을 선택 상태로 열어 아래 selectedNo 효과가 담당한다.
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    scene.setBeacons(
+      (beaconNos ?? []).map((spotNo, index) => ({
+        spotNo,
+        label: String(index + 1),
+        color: "external" as const,
+      })),
+    );
+  }, [beaconNos, layout, supported]);
 
   // 면 선택(3D 클릭·목록 행·2D 지도 어디서 왔든) → 해당 면으로 카메라 이동.
   useEffect(() => {
