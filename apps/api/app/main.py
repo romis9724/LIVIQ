@@ -96,6 +96,7 @@ def create_app() -> FastAPI:
     app.include_router(roster.router)
     app.include_router(documents.router)
     app.include_router(assistant.router)
+    app.include_router(assistant.admin_assistant_router)
     app.include_router(assistant.facility_router)
     app.include_router(inquiries.router)
     app.include_router(inquiries.admin_router)

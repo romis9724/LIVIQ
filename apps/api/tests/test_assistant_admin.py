@@ -1,0 +1,175 @@
+"""관리자 홈 AI 비서 `POST /admin/assistant/ask` (H20-2, ADR-0028 결정 2).
+
+스트림·영속은 입주민 ask와 같은 헬퍼라 이미 검증돼 있다. 여기서는 이 엔드포인트에만
+있는 것 — 역할 게이트(CRITICAL)와 admin 채널의 답변 캐시 우회 — 를 실 PG로 확인한다.
+"""
+
+from __future__ import annotations
+
+import typing
+from collections.abc import AsyncIterator
+
+import httpx
+import pytest
+import pytest_asyncio
+from app import answer_cache
+from app.ai_backend import backend_id
+from app.deps import (
+    RequestContext,
+    get_context,
+    get_llm,
+    get_tenant_session,
+    visibilities_for,
+)
+from app.main import create_app
+from app.session import get_redis
+from conftest import TENANT_ID, USER_ID
+from httpx import ASGITransport
+from sqlalchemy.ext.asyncio import AsyncSession
+from test_assistant import _parse_sse, _seed_indexed_document
+
+from ai_core.llm.client import LlmClient
+from ai_core.orchestrator import DoneEvent
+from ai_core.tools import ToolContext
+
+ADMIN_ASK = "/admin/assistant/ask"
+QUESTION = "주차장 언제 열어요?"
+# 캐시에만 있고 가짜 LLM은 절대 내지 않는 문장 — 재생 여부를 답변 본문으로 가른다.
+CACHED_ANSWER = "캐시에 남아 있던 옛 답변입니다 [1]."
+
+
+def _client(
+    db_session: AsyncSession, llm: LlmClient, redis: object, *, roles: tuple[str, ...]
+) -> httpx.AsyncClient:
+    app = create_app()
+    ctx = RequestContext(TENANT_ID, USER_ID, roles=roles, visibilities=visibilities_for(roles))
+    app.dependency_overrides[get_context] = lambda: ctx
+    app.dependency_overrides[get_tenant_session] = lambda: db_session
+    app.dependency_overrides[get_llm] = lambda: llm
+    app.dependency_overrides[get_redis] = lambda: redis
+    return httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+@pytest.fixture
+def doc_only_llm(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> LlmClient:
+    """문서 검색만 부르는 가짜 LLM — 관리자에겐 입주민 전용 도구(get_fees)가 없다.
+
+    env를 먼저 세팅해야 fake_llm이 그 값으로 만들어진다(clarify_llm과 같은 패턴).
+    """
+    monkeypatch.setenv("_TEST_LLM_TOOLS", "search_documents")
+    return typing.cast(LlmClient, request.getfixturevalue("fake_llm"))
+
+
+@pytest_asyncio.fixture
+async def manager_client(
+    db_session: AsyncSession, doc_only_llm: LlmClient, fake_redis: object
+) -> AsyncIterator[httpx.AsyncClient]:
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, doc_only_llm, fake_redis, roles=("MANAGER",)) as c:
+        yield c
+
+
+def _done(body: str) -> dict[str, object]:
+    events = _parse_sse(body)
+    assert events[-1][0] == "done"
+    return events[-1][1]
+
+
+async def _seed_cached_answer(
+    redis: object, llm: LlmClient, *, roles: tuple[str, ...]
+) -> list[str]:
+    """호출자와 **같은 키**가 되도록 캐시를 심고, 심긴 키 목록을 돌려준다.
+
+    building_id=None인 것은 라우터와 같다 — 관리자는 역할로 면제되고, 시드 입주민은 세대가
+    없다. 키가 어긋나면 우회 테스트가 공허해지므로 입주민 대조 테스트가 이 헬퍼를 검증한다.
+    """
+    await answer_cache.store(
+        redis,  # type: ignore[arg-type]
+        ctx=ToolContext(
+            tenant_id=TENANT_ID,
+            user_id=USER_ID,
+            roles=roles,
+            visibilities=visibilities_for(roles),
+            building_id=None,
+        ),
+        question=QUESTION,
+        done=DoneEvent(
+            status="answered",
+            confidence=0.9,
+            needs_review=False,
+            usage=None,
+            answer=CACHED_ANSWER,
+        ),
+        backend=backend_id(llm.settings),
+    )
+    keys = await redis.keys("cache:ans:*")  # type: ignore[attr-defined]
+    assert len(keys) == 1, "캐시 시드 실패 — 키가 1개여야 한다"
+    return typing.cast(list[str], keys)
+
+
+# ── 역할 게이트 ────────────────────────────────────────────────────────
+
+
+async def test_resident_cannot_use_admin_assistant(
+    db_session: AsyncSession, fake_llm: LlmClient, fake_redis: object
+) -> None:
+    """CRITICAL 인가(규칙 4) — 입주민 세션은 관리자 어시스턴트에 접근할 수 없다."""
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, fake_llm, fake_redis, roles=("RESIDENT",)) as c:
+        response = await c.post(ADMIN_ASK, json={"question": QUESTION})
+
+    assert response.status_code == 403
+
+
+async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None:
+    """MANAGER는 입주민 ask와 동일한 SSE 4종으로 답변을 받는다."""
+    response = await manager_client.post(ADMIN_ASK, json={"question": QUESTION})
+
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    names = [name for name, _ in events]
+    assert {"status", "token", "citation"} <= set(names)
+    assert names[-1] == "done"
+    assert events[-1][1]["status"] == "answered"
+
+
+# ── 답변 캐시 우회(ADR-0028 결정 2) ────────────────────────────────────
+
+
+async def test_admin_ask_ignores_cached_answer(
+    manager_client: httpx.AsyncClient, doc_only_llm: LlmClient, fake_redis: typing.Any
+) -> None:
+    """같은 키의 캐시가 있어도 admin 채널은 재생하지 않는다 — 운영 데이터는 매번 새로 읽는다."""
+    await _seed_cached_answer(fake_redis, doc_only_llm, roles=("MANAGER",))
+
+    done = _done((await manager_client.post(ADMIN_ASK, json={"question": QUESTION})).text)
+
+    assert done["answer"] != CACHED_ANSWER
+    assert typing.cast(int, done["token_input"]) > 0  # 재생이면 usage가 0으로 고정된다
+
+
+async def test_admin_ask_does_not_store_answer_in_cache(
+    manager_client: httpx.AsyncClient, fake_redis: typing.Any
+) -> None:
+    """admin 답변은 캐시에 남지 않는다 — 입주민 채널로 재생될 여지를 만들지 않는다."""
+    done = _done((await manager_client.post(ADMIN_ASK, json={"question": QUESTION})).text)
+    assert done["status"] == "answered"  # 저장 조건(answered)을 만족한 답변인데도
+
+    assert await fake_redis.keys("cache:ans:*") == []
+
+
+async def test_resident_ask_still_replays_same_seeded_key(
+    db_session: AsyncSession, doc_only_llm: LlmClient, fake_redis: typing.Any
+) -> None:
+    """대조군 — 같은 헬퍼로 심은 캐시가 입주민 채널에서는 그대로 재생된다.
+
+    이게 없으면 위 우회 테스트가 "키를 잘못 심어서 미스"였는지 구분할 수 없다.
+    """
+    await _seed_indexed_document(db_session)
+    await _seed_cached_answer(fake_redis, doc_only_llm, roles=("RESIDENT",))
+
+    async with _client(db_session, doc_only_llm, fake_redis, roles=("RESIDENT",)) as c:
+        done = _done((await c.post("/assistant/ask", json={"question": QUESTION})).text)
+
+    assert done["answer"] == CACHED_ANSWER
+    assert done["token_input"] == 0  # 재생은 LLM 호출 0
