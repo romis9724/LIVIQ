@@ -51,6 +51,7 @@ export const READ_TOOLS = new Set([
   "search_documents",
   "search_facility_graph",
   "get_fees",
+  "compare_fees", // 관리비 비교(우리집↔단지·동↔동·항목별) — H20-1 후속, ai_core.tools.fees_compare
   "get_my_inquiries",
   "get_facilities",
   "get_overdue_checks",

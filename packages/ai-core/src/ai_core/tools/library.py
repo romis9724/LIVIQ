@@ -1,4 +1,4 @@
-"""도구 구현 15종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
+"""도구 구현 16종 (docs/01 §5.2, ADR-0007) — 전부 읽기 전용. 평면도 도구는 floor_plan.py.
 
 SQL 도구는 retrieval.py와 동일하게 raw `text()` SELECT를 주입 세션으로 실행한다
 (ai-core는 liviq_db ORM에 의존하지 않는다 — 계약은 컬럼명뿐). RLS가 1차 방어,
@@ -16,11 +16,29 @@ from typing import Any, NamedTuple, cast
 
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
-from sqlalchemy.sql.elements import TextClause
 
 from ai_core.graph import IncidentContext, IncidentHit
 from ai_core.llm.client import LlmError
 from ai_core.tools.clarify import ask_clarification_tool
+from ai_core.tools.fees_common import (
+    COMPLEX_SCOPE,
+    FEE_SQL,
+    MIN_PEER_SAMPLE,
+    PERIOD_PATTERN,
+    SCOPE_COMPLEX_ITEMS_SQL,
+    SCOPE_COMPLEX_TOTAL_SQL,
+    SCOPE_DONG_ITEMS_SQL,
+    SCOPE_DONG_TOTAL_SQL,
+    SELF_SCOPE,
+    breakdown_items,
+    fee_detail_items,
+    fold_null_literal,
+    fold_scope,
+    latest_confirmed_period,
+    scope_params,
+    self_household,
+)
+from ai_core.tools.fees_compare import compare_fees_tool
 from ai_core.tools.floor_plan import find_in_floor_plan_tool
 from ai_core.tools.inquiries import search_similar_inquiries_tool, summarize_inquiries_tool
 from ai_core.tools.notices import get_recent_notices_tool
@@ -43,30 +61,10 @@ OVERDUE_WINDOW_DAYS = 7
 
 # 다음 정기점검 예정일(ADM-3) — 임박 창 밖의 향후 점검을 가까운 순으로 몇 건 덧붙인다.
 UPCOMING_CHECK_ROWS = 5
-# 같은 평형 평균 비교의 표본 하한(ADR-0026 결정 3). 미달이면 비교를 생략한다 — 소표본
-# 평균은 본인 값과 함께 특정 세대 금액을 역산시킨다(n=2면 상대 세대 금액이 그대로 나온다).
-# 첫마을 4단지는 322세대이고 소수 평형(59C)도 수십 세대라, 10이면 역산은 불가능하면서
-# 비교는 거의 항상 성립한다.
-MIN_PEER_SAMPLE = 10
 
 FACILITY_ROLES = frozenset({"FACILITY", "MANAGER"})
-# 조회할 월 — 한 달(2026-06) 또는 쉼표로 나열한 여러 달(2026-06,2026-07).
-# 배열 인자가 아니라 쉼표 문자열인 이유: 8B는 배열 인자 생성에 약하고, 인자 개수가 늘수록
-# 라우팅이 함께 무너진다(R22 계열 — LongtermParkingArgs와 같은 판단). 필드 이름을 그대로
-# 두면 기존 단일 월 호출·골든셋도 한 글자도 안 바뀐다.
-_PERIOD_PATTERN = r"^\d{4}-\d{2}(\s*,\s*\d{4}-\d{2})*$"
 # 평균은 2개월 이상일 때만 의미가 있다(1개월 평균 = 그 달 합계).
 MIN_AVERAGE_MONTHS = 2
-
-# 집계 범위(H20-1) — "전체"·"단지" 같은 사용자 어휘를 접어 넣는 내부 표기(동 이름과 절대
-# 겹치지 않는 값). scope가 이 값이면 동 조인 없이 단지 전체를 집계한다.
-COMPLEX_SCOPE = "__complex__"
-_COMPLEX_SCOPE_WORDS = frozenset(
-    {"전체", "단지", "단지전체", "전체단지", "전체동", "모든동", "아파트전체", "우리단지", "전세대"}
-)
-# dev 실측: 모델이 본인 질문에도 scope="본인 세대"를 채운다 — 본인 동의어는 미지정으로 접는다
-# (설명의 "본인 질문에는 쓰지 않는다"만으로는 안 막혔다. 코드가 방어 — 규칙 8의 정신).
-_SELF_SCOPE_WORDS = frozenset({"본인", "본인세대", "우리집", "우리세대", "내집", "자기집", "세대"})
 
 # 장기주차 기준 시간(H19-3) — 기본 하루, 상한 7일. 상한이 없으면 모델이 큰 값을 넣어
 # 사실상 필터가 사라진다(경계 검증은 Pydantic이 담당, 규칙: 경계 입력 검증).
@@ -85,7 +83,7 @@ class QueryArgs(BaseModel):
 class GetFeesArgs(BaseModel):
     period: str | None = Field(
         default=None,
-        pattern=_PERIOD_PATTERN,
+        pattern=PERIOD_PATTERN,
         description=(
             "조회할 월(YYYY-MM). 여러 달을 물으면 쉼표로 전부 나열한다"
             "(예: 2026-06,2026-07) — 평균·합계는 이 도구가 계산해 돌려준다. "
@@ -103,27 +101,19 @@ class GetFeesArgs(BaseModel):
     @field_validator("period", mode="before")
     @classmethod
     def _fold_null_literal(cls, value: object) -> object:
-        # 8B가 "생략"을 문자열 "null"로 넘긴다(2026-08-01 실측: {"period":"null"} →
-        # 패턴 검증 실패 → 카드 0 → no_evidence 폴백). 리터럴 null/none/빈 값은 미지정으로.
-        if isinstance(value, str) and value.strip().lower() in ("", "null", "none"):
-            return None
-        return value
+        return fold_null_literal(value)
 
     @field_validator("scope", mode="before")
     @classmethod
     def _normalize_scope(cls, value: object) -> object:
-        """표기 흔들림을 세 갈래로 접는다 — 미지정 · 단지 전체 · "<동>동"."""
+        """표기 흔들림을 세 갈래로 접는다 — 미지정 · 단지 전체 · "<동>동".
+
+        본인 동의어는 **미지정**으로 접힌다 — 이 도구에서 본인 세대는 scope가 없는 갈래다.
+        """
         if not isinstance(value, str):
             return value
-        raw = value.strip()
-        if raw.lower() in ("", "null", "none"):
-            return None
-        compact = raw.replace(" ", "")
-        if compact in _SELF_SCOPE_WORDS:
-            return None
-        if compact in _COMPLEX_SCOPE_WORDS:
-            return COMPLEX_SCOPE
-        return f"{raw}동" if raw.isdigit() else raw
+        folded = fold_scope(value)
+        return None if folded == SELF_SCOPE else folded
 
     def requested_periods(self) -> list[str]:
         """요청 월 목록(중복 제거·오름차순). 빈 목록 = 미지정(최근 확정 월)."""
@@ -219,15 +209,11 @@ def _graph_quote(hits: list[IncidentHit], contexts: list[IncidentContext]) -> st
 
 # ponytail: _prev_period는 apps/api fees 라우터에도 있다 — 5줄 헬퍼라 패키지 경계
 # 넘어 import하지 않고 재정의(ai-core는 apps.api에 의존 불가). 계약 변경 시 양쪽 수정.
-_USER_SQL = text("SELECT household_id, approved_at FROM users WHERE id = :uid AND tenant_id = :tid")
+# 세대 조회·단건 조회 SQL과 범위 집계 SQL은 fees_common(compare_fees와 공용).
 _LATEST_FEE_SQL = text(
     "SELECT period FROM fees "
     "WHERE tenant_id = :tid AND household_id = :hid AND period >= :approved "
     "ORDER BY period DESC LIMIT 1"
-)
-_FEE_SQL = text(
-    "SELECT breakdown, total_amount FROM fees "
-    "WHERE tenant_id = :tid AND household_id = :hid AND period = :period"
 )
 # 여러 달 조회(2026-08-01 사고 대응) — 월별 확정값과 **평균을 한 번에 SQL이 낸다**.
 # 파이썬도 LLM도 나눗셈을 하지 않는다(규칙 5): 인자가 단일 월뿐이던 시절 "6,7월 평균"에
@@ -259,48 +245,6 @@ _PEER_AVG_SQL = text(
 )
 
 
-# 동·단지 평균(H20-1) — 본인 세대와 무관한 **집계 전용** 쿼리다. SELECT에 세대 식별자도
-# 개별 금액도 없고, 표본수가 함께 나와 소표본이면 호출부가 평균을 거부한다.
-# buildings.name은 접미사 없는 "402"(seed_households_xlsx 규칙)라 "402동" 표기도 함께 받는다.
-_SCOPE_DONG_JOIN = (
-    " JOIN households h ON h.tenant_id = :tid AND h.id = f.household_id"
-    " JOIN buildings b ON b.tenant_id = :tid AND b.id = h.building_id"
-    " AND b.name = ANY(:dong)"
-)
-_SCOPE_WHERE = " WHERE f.tenant_id = :tid AND f.period = :period"
-
-
-def _scope_sql(join: str) -> tuple[TextClause, TextClause]:
-    """(총액 평균, 항목별 평균) 한 쌍 — 동 조인 유무만 다르다.
-
-    항목 평균은 breakdown(JSONB 배열)을 SQL이 직접 펼쳐 avg를 낸다(H19-4와 같은 계열):
-    파이썬도 LLM도 더하거나 나누지 않는다(규칙 5). 구 dict 포맷 행은 unnest가 깨지므로
-    `jsonb_typeof = 'array'`로 걸러내고, '합계'는 총액과 중복이라 뺀다(_breakdown_items 규칙).
-    """
-    total = text(
-        "SELECT round(avg(f.total_amount))::bigint AS avg_total, count(*) AS sample_size"
-        " FROM fees f" + join + _SCOPE_WHERE
-    )
-    items = text(
-        "SELECT elem->>'name' AS name,"
-        " round(avg((elem->>'amount')::numeric))::bigint AS avg_amount"
-        " FROM fees f"
-        + join
-        + " CROSS JOIN LATERAL jsonb_array_elements(f.breakdown) AS elem"
-        + _SCOPE_WHERE
-        + " AND jsonb_typeof(f.breakdown) = 'array'"
-        " AND (elem->>'level')::int = 0 AND elem->>'name' <> '합계'"
-        " GROUP BY 1 ORDER BY 1"
-    )
-    return total, items
-
-
-_SCOPE_DONG_TOTAL_SQL, _SCOPE_DONG_ITEMS_SQL = _scope_sql(_SCOPE_DONG_JOIN)
-_SCOPE_COMPLEX_TOTAL_SQL, _SCOPE_COMPLEX_ITEMS_SQL = _scope_sql("")
-# 범위 평균의 "최근 확정 월" — 본인 세대가 아니라 단지 전체의 최신 월이다.
-_LATEST_SCOPE_PERIOD_SQL = text("SELECT max(period) AS period FROM fees WHERE tenant_id = :tid")
-
-
 class PeerAverage(NamedTuple):
     """같은 평형 평균 비교 결과 — 전부 집계값(세대 식별 정보 없음)."""
 
@@ -315,18 +259,15 @@ async def _get_fees(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> ToolRe
     if a.scope:
         # 범위 평균은 본인 세대와 무관한 집계 — 소유권·승인월 조회 자체가 없다(H20-1).
         return await _fees_scope_average(deps, ctx, a)
-    urow = (
-        await deps.session.execute(_USER_SQL, {"uid": ctx.user_id, "tid": ctx.tenant_id})
-    ).first()
-    if urow is None or urow.household_id is None:
+    me = await self_household(deps, ctx)
+    if me is None:
         return ToolResult(note="세대가 배정되지 않아 관리비를 조회할 수 없습니다.")
-    approved = urow.approved_at.strftime("%Y-%m") if urow.approved_at else "9999-12"
 
     requested = a.requested_periods()
     if len(requested) > 1:
-        return await _fees_multi_month(deps, ctx, urow.household_id, requested, approved)
+        return await _fees_multi_month(deps, ctx, me.household_id, requested, me.approved)
     return await _fees_single_month(
-        deps, ctx, urow.household_id, requested[0] if requested else None, approved
+        deps, ctx, me.household_id, requested[0] if requested else None, me.approved
     )
 
 
@@ -353,12 +294,12 @@ async def _fees_single_month(
 
     fee = (
         await deps.session.execute(
-            _FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": period}
+            FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": period}
         )
     ).first()
     if fee is None or fee.total_amount is None:
         return ToolResult(note=f"{period} 관리비 내역이 없습니다.")
-    breakdown = _breakdown_items(fee.breakdown)
+    breakdown = breakdown_items(fee.breakdown)
     total = int(fee.total_amount)
 
     prev_period = _prev_period(period)
@@ -366,7 +307,7 @@ async def _fees_single_month(
     if prev_period >= approved:
         prev = (
             await deps.session.execute(
-                _FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": prev_period}
+                FEE_SQL, {"tid": ctx.tenant_id, "hid": household_id, "period": prev_period}
             )
         ).first()
         prev_total = int(prev.total_amount) if prev and prev.total_amount is not None else None
@@ -377,7 +318,7 @@ async def _fees_single_month(
         card=ToolCard(
             title=f"관리비 {period} 내역",
             quote=_fee_quote(
-                period, breakdown, total, prev_total, peer, detail=_fee_detail_items(fee.breakdown)
+                period, breakdown, total, prev_total, peer, detail=fee_detail_items(fee.breakdown)
             ),
             source_kind="tool:get_fees",
             data=_fee_data(period, breakdown, total, prev_total, peer),
@@ -491,13 +432,11 @@ async def _fees_scope_average(deps: ToolDeps, ctx: ToolContext, args: GetFeesArg
     if period is None:
         return ToolResult(note="조회 가능한 관리비 내역이 없습니다.")
 
-    params: dict[str, Any] = {"tid": ctx.tenant_id, "period": period}
-    if not is_complex:
-        params["dong"] = _dong_names(scope)
+    params = scope_params(scope, period, ctx.tenant_id)
     total_sql, items_sql = (
-        (_SCOPE_COMPLEX_TOTAL_SQL, _SCOPE_COMPLEX_ITEMS_SQL)
+        (SCOPE_COMPLEX_TOTAL_SQL, SCOPE_COMPLEX_ITEMS_SQL)
         if is_complex
-        else (_SCOPE_DONG_TOTAL_SQL, _SCOPE_DONG_ITEMS_SQL)
+        else (SCOPE_DONG_TOTAL_SQL, SCOPE_DONG_ITEMS_SQL)
     )
 
     row = (await deps.session.execute(total_sql, params)).first()
@@ -543,14 +482,7 @@ async def _scope_period(deps: ToolDeps, ctx: ToolContext, args: GetFeesArgs) -> 
     requested = args.requested_periods()
     if requested:
         return requested[-1]
-    latest = (await deps.session.execute(_LATEST_SCOPE_PERIOD_SQL, {"tid": ctx.tenant_id})).first()
-    return str(latest.period) if latest is not None and latest.period else None
-
-
-def _dong_names(scope: str) -> list[str]:
-    """ "402동" → ["402", "402동"] — buildings.name 표기 흔들림을 둘 다 받는다."""
-    bare = scope.removesuffix("동").strip()
-    return [bare, scope] if bare and bare != scope else [scope]
+    return await latest_confirmed_period(deps, ctx)
 
 
 def _scope_card(label: str, quote: str) -> ToolResult:
@@ -596,46 +528,6 @@ async def _peer_average(
         sample_size=int(row.sample_size),
         diff=total - avg_total,
     )
-
-
-def _breakdown_items(raw: object) -> list[tuple[str, int]]:
-    """fees.breakdown(H8-7 리스트 `[{name,level,amount}]`) → (항목명, 금액) 목록.
-
-    상위 항목(level 0)만, '합계'는 total과 중복이라 제외. 구 dict 포맷도 방어적으로 수용
-    (과거 시드·외부 적재 데이터가 남아 있을 수 있다).
-    """
-    if isinstance(raw, dict):
-        return [(str(k), int(v)) for k, v in raw.items()]
-    items: list[tuple[str, int]] = []
-    for entry in raw if isinstance(raw, list) else []:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name", ""))
-        if not name or name == "합계" or int(entry.get("level", 0)) != 0:
-            continue
-        items.append((name, int(entry.get("amount", 0))))
-    return items
-
-
-# 세부 항목 질의("전기요금 얼마야?")는 하위 항목이 LLM에 보여야 답할 수 있다(사용자 요구 3).
-# level 3(급여 세부 등)은 입주민 질의 어휘에 없고 토큰만 먹어 제외, 0원 항목도 제외.
-_FEE_DETAIL_LEVELS = (1, 2)
-
-
-def _fee_detail_items(raw: object) -> list[tuple[str, int]]:
-    """fees.breakdown → 하위 항목(level 1~2, 0원 제외) 목록 — quote(LLM 경로) 전용."""
-    items: list[tuple[str, int]] = []
-    for entry in raw if isinstance(raw, list) else []:
-        if not isinstance(entry, dict):
-            continue
-        name = str(entry.get("name", ""))
-        amount = int(entry.get("amount", 0))
-        if not name or name == "합계" or amount <= 0:
-            continue
-        if int(entry.get("level", 0)) not in _FEE_DETAIL_LEVELS:
-            continue
-        items.append((name, amount))
-    return items
 
 
 def _fee_quote(
@@ -903,7 +795,7 @@ def _check_quote(rows: Sequence[Any], upcoming: Sequence[Any]) -> str:
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 15종. 시설 도구는 FACILITY·MANAGER, 민원 집계는 MANAGER·STAFF,
+    """운영 도구 16종. 시설 도구는 FACILITY·MANAGER, 민원 집계는 MANAGER·STAFF,
     그래프 도구는 Neo4j 가용 시만 노출.
 
     되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
@@ -956,11 +848,15 @@ def default_registry() -> ToolRegistry:
                     "직접 더하거나 나누지 않는다. "
                     "scope에 '402동' 같은 동 이름이나 '전체'를 주면 그 범위의 평균 관리비"
                     "(총액·항목별)를 조회한다. 특정 동·전체 평균 질문에만 scope를 쓰고, "
-                    "본인 관리비 질문에는 쓰지 않는다."
+                    "본인 관리비 질문에는 쓰지 않는다. "
+                    # dev 실측: "아파트 관리비는?"에 평균 카드와 본인 카드가 함께 떴다.
+                    "동이나 전체의 평균을 물으면 scope 호출 한 번만 한다 — "
+                    "본인 세대 조회를 함께 호출하지 않는다."
                 ),
                 args_model=GetFeesArgs,
                 run=_get_fees,
             ),
+            compare_fees_tool,
             Tool(
                 name="get_my_inquiries",
                 # 신고형 질의를 받는 search_similar_inquiries와 갈라지는 지점은 "이미 접수한

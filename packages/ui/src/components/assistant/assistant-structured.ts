@@ -51,6 +51,36 @@ export interface FeeTableData {
   scope?: FeeScope;
 }
 
+/** 비교 대상 한 줄(H20-1 후속 `compare_fees`). 값을 못 낸 대상도 사유와 함께 온다. */
+export interface FeeCompareRow {
+  label: string;
+  /** self | dong | complex — 서버 라벨 그대로. */
+  kind: string;
+  /** 값을 못 낸 대상은 null(사유는 note). */
+  amount: number | null;
+  /** 집계 대상의 표본 세대 수. 본인 세대는 null. */
+  sampleSize: number | null;
+  /** 비교에서 빠진 사유(정상이면 빈 문자열). */
+  note: string;
+}
+
+export interface FeeCompareDiff {
+  label: string;
+  /** 기준 대상 − 이 대상. 서버가 확정값끼리 뺀 값이다(프론트는 다시 계산하지 않는다). */
+  diff: number;
+}
+
+export interface FeeCompareData {
+  kind: "fee_compare";
+  period: string;
+  /** 항목 비교일 때의 항목명. 총액 비교면 null. */
+  item: string | null;
+  rows: FeeCompareRow[];
+  /** 차액의 기준이 된 대상(첫 번째 비교 가능 대상). */
+  baseLabel: string;
+  diffs: FeeCompareDiff[];
+}
+
 export interface ParkingSpot {
   no: string;
   /** 자리 종류(일반·전기차 등) — 서버 라벨 그대로. */
@@ -92,6 +122,7 @@ export interface InquiryCasesData {
 
 export type StructuredData =
   | FeeTableData
+  | FeeCompareData
   | ParkingSpotsData
   | FacilityStatusData
   | InquiryCasesData;
@@ -149,6 +180,21 @@ export function toStructured(data: unknown): StructuredData | null {
         missingPeriods: strings(raw.missing_periods),
         excludedPeriods: strings(raw.excluded_periods),
         scope: feeScope(raw.scope),
+      };
+    case "fee_compare":
+      return {
+        kind: "fee_compare",
+        period: str(raw.period),
+        item: typeof raw.item === "string" ? raw.item : null,
+        rows: asRows(raw.rows).map((r) => ({
+          label: str(r.label),
+          kind: str(r.kind),
+          amount: numOrNull(r.amount),
+          sampleSize: numOrNull(r.sample_size),
+          note: str(r.note),
+        })),
+        baseLabel: str(raw.base_label),
+        diffs: asRows(raw.diffs).map((d) => ({ label: str(d.label), diff: num(d.diff) })),
       };
     case "parking_spots":
       return {

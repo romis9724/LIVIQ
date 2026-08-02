@@ -108,6 +108,39 @@ describe("toStructured — kind 분기", () => {
     expect(data).toMatchObject({ prevTotal: null, diff: null });
   });
 
+  it("fee_compare 를 대상·차액으로 좁힌다(값을 못 낸 대상은 amount null + 사유)", () => {
+    // Arrange — ai_core/tools/fees_compare.py `_compare_data`
+    const raw = {
+      kind: "fee_compare",
+      period: "2026-07",
+      item: "공과금중 전기료",
+      rows: [
+        { label: "우리집", kind: "self", amount: 12345, sample_size: null, note: "" },
+        { label: "402동", kind: "dong", amount: null, sample_size: null, note: "관리비 데이터 없음" },
+      ],
+      base_label: "우리집",
+      diffs: [{ label: "단지 전체", diff: 1345 }],
+    };
+
+    // Act
+    const data = toStructured(raw);
+
+    // Assert
+    expect(data).toEqual({
+      kind: "fee_compare",
+      period: "2026-07",
+      item: "공과금중 전기료",
+      rows: [
+        { label: "우리집", kind: "self", amount: 12345, sampleSize: null, note: "" },
+        { label: "402동", kind: "dong", amount: null, sampleSize: null, note: "관리비 데이터 없음" },
+      ],
+      baseLabel: "우리집",
+      diffs: [{ label: "단지 전체", diff: 1345 }],
+    });
+    // 총액 비교(항목 없음)면 item 은 null 이다.
+    expect(toStructured({ ...raw, item: undefined })).toMatchObject({ item: null });
+  });
+
   it("parking_spots 를 자리 목록으로 좁힌다", () => {
     // Arrange — ai_core/tools/parking.py `_data`
     const raw = {

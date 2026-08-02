@@ -12,6 +12,7 @@
 
 import type {
   FacilityStatusData,
+  FeeCompareData,
   FeeTableData,
   InquiryCasesData,
   ParkingSpotsData,
@@ -25,6 +26,8 @@ export function StructuredBlock({ data }: { data: StructuredData }) {
   switch (data.kind) {
     case "fee_table":
       return <FeeTable data={data} />;
+    case "fee_compare":
+      return <FeeCompare data={data} />;
     case "parking_spots":
       return <ParkingSpots data={data} />;
     case "facility_status":
@@ -80,6 +83,55 @@ function FeeTable({ data }: { data: FeeTableData }) {
           전월 {won(data.prevTotal)} 대비 {won(Math.abs(data.diff))} {trend}
         </p>
       ) : null}
+    </figure>
+  );
+}
+
+/**
+ * 관리비 비교(H20-1 후속) — 대상별 값과 차액. 값을 못 낸 대상도 사유와 함께 그린다.
+ * 값·차액은 서버가 확정한 것 그대로다(여기서 빼지 않는다, 규칙 5).
+ */
+function FeeCompare({ data }: { data: FeeCompareData }) {
+  if (data.rows.length === 0) return null;
+  const caption = data.item
+    ? `${data.period} 관리비 비교 (${data.item})`
+    : `${data.period} 관리비 비교`;
+  return (
+    <figure className="sb">
+      <figcaption className="sb__caption">{caption}</figcaption>
+      <div className="sb__scroll" tabIndex={0} role="group" aria-label="관리비 비교 표">
+        <table className="sb__table">
+          <thead>
+            <tr>
+              <th scope="col">대상</th>
+              <th scope="col" className="sb__num">
+                금액
+              </th>
+              <th scope="col" className="sb__num">
+                표본
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.rows.map((row) => (
+              <tr key={row.label}>
+                <th scope="row">{row.label}</th>
+                <td className="sb__num">{row.amount === null ? row.note : won(row.amount)}</td>
+                <td className="sb__num">
+                  {row.sampleSize === null ? "—" : `${row.sampleSize}세대`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* 증감은 색이 아니라 글자로 전한다(WCAG 1.4.1) — 부호만으로는 안 읽힌다. */}
+      {data.diffs.map((d) => (
+        <p className="sb__note" key={d.label}>
+          {data.baseLabel}이(가) {d.label}보다 {won(Math.abs(d.diff))}{" "}
+          {d.diff >= 0 ? "많아요" : "적어요"}
+        </p>
+      ))}
     </figure>
   );
 }
