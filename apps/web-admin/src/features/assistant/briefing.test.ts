@@ -17,6 +17,10 @@ describe("briefingPrompt", () => {
     expect(prompt).toContain("민원 현황을 요약");
     expect(prompt).toContain("오늘 우선 처리해야 할 일");
   });
+
+  it("기간을 선제 명시한다 — 안 주면 모델이 기간을 되물었다", () => {
+    expect(briefingPrompt(new Date(2026, 7, 2))).toContain("최근 7일 민원 현황을 요약");
+  });
 });
 
 describe("isBriefingPrompt", () => {
@@ -26,6 +30,14 @@ describe("isBriefingPrompt", () => {
 
   it("날짜가 다른(복원된 어제) 브리핑도 알아본다 — 판정은 꼬리로만", () => {
     expect(isBriefingPrompt(briefingPrompt(new Date(2025, 11, 31)))).toBe(true);
+  });
+
+  it("구 꼬리(기간 없는 버전)로 보낸 당일 복원본도 알아본다", () => {
+    expect(
+      isBriefingPrompt(
+        "오늘은 2026년 8월 2일입니다. 관리소장에게 간단히 인사하고, 현재 민원 현황을 요약한 뒤 오늘 우선 처리해야 할 일을 알려주세요.",
+      ),
+    ).toBe(true);
   });
 
   it("사용자가 직접 친 질문은 브리핑이 아니다", () => {

@@ -206,6 +206,27 @@ async def test_consecutive_clarify_is_blocked(clarify_client: httpx.AsyncClient)
     assert second["status"] != "clarify"
 
 
+async def test_allow_clarify_false_blocks_clarify(clarify_client: httpx.AsyncClient) -> None:
+    """자동 발화(관리자 진입 브리핑)는 되묻기를 끈다 — 되물으려 해도 도구가 없다(H20-3)."""
+    done = _done(
+        (
+            await clarify_client.post(
+                "/assistant/ask",
+                json={"question": "관리비 얼마야?", "allow_clarify": False},
+            )
+        ).text
+    )
+    assert done["status"] != "clarify"  # 답변 또는 폴백으로 끝난다
+
+
+async def test_allow_clarify_defaults_to_true(clarify_client: httpx.AsyncClient) -> None:
+    """회귀: 필드를 안 보내면 기존대로 되묻는다(additive 필드)."""
+    done = _done(
+        (await clarify_client.post("/assistant/ask", json={"question": "관리비 얼마야?"})).text
+    )
+    assert done["status"] == "clarify"
+
+
 async def test_unknown_conversation_is_rejected(seeded_client: httpx.AsyncClient) -> None:
     """회귀: 남의(또는 없는) 대화 id로 히스토리를 끌어올 수 없다(규칙 4)."""
     response = await seeded_client.post(

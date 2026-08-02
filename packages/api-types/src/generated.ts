@@ -2350,6 +2350,11 @@ export interface components {
         };
         /** AskRequest */
         AskRequest: {
+            /**
+             * Allow Clarify
+             * @default true
+             */
+            allow_clarify: boolean;
             /** Conversation Id */
             conversation_id?: string | null;
             /** Question */

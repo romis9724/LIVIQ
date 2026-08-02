@@ -249,7 +249,8 @@ async def _assistant_response(
                 ctx=tool_ctx,
                 history=history.turns,
                 # 직전 턴이 되묻기였으면 되묻기 도구를 감춘다 — 연속 되묻기 금지(ADR-0025 §4).
-                allow_clarify=not history.last_was_clarify,
+                # 요청이 끄고 들어온 경우(자동 발화 — 관리자 진입 브리핑)도 같이 감춘다.
+                allow_clarify=body.allow_clarify and not history.last_was_clarify,
                 answer_prompt=answer_prompt,
                 tool_confidence=tuning.tool_confidence,
             )

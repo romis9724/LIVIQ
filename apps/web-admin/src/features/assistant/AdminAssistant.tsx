@@ -68,7 +68,8 @@ export function AdminAssistant() {
     }
     const timer = setTimeout(() => {
       briefedRef.current = true;
-      void ask(briefingPrompt(new Date()));
+      // 되묻기를 끄고 보낸다 — 화면을 연 직후의 자동 질의라 되물어도 답할 사람이 없다(H20-3).
+      void ask(briefingPrompt(new Date()), { allow_clarify: false });
     }, 0);
     return () => clearTimeout(timer);
   }, [ask, restored, messageCount]);
@@ -103,10 +104,10 @@ export function AdminAssistant() {
       </h1>
 
       <section className="assistant adm-assist__chat" aria-label="AI 비서 대화">
+        {/* 관리자 헤더에는 L 마크를 두지 않는다 — AdminShell 사이드바가 이미 LIVIQ 마크를
+            그려서 모바일에선 두 개가 세로로 겹쳐 보였다(실화면 보고). 입주민은 셸에 로고가
+            없어 마크가 유일한 브랜딩이라 공용 assistant.css·AssistantChat 은 그대로 둔다. */}
         <header className="assistant__header">
-          <span className="assistant__mark" aria-hidden="true">
-            L
-          </span>
           <span className="assistant__heading">
             <span className="assistant__title">AI 비서</span>
             <span className="assistant__sub">관리소 운영 현황을 근거와 함께 알려드려요</span>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // 복원 경로의 상태 전이만 본다(SSE·질의는 대상 아님) — `restored` 는 호출부의 브리핑
 // 게이트가 걸린 계약이라 "언제 true 가 되는가"가 전부다(ADR-0028 결정 2 개정, H20-3).
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { RestoredThread } from "./assistant-restore";
@@ -78,5 +78,46 @@ describe("useAssistantStream 복원", () => {
 
     await waitFor(() => expect(result.current.restored).toBe(true));
     expect(result.current.messages).toEqual([]);
+  });
+});
+
+describe("useAssistantStream ask", () => {
+  const sse = () =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          new TextEncoder().encode(
+            'event: done\ndata: {"conversation_id":"c1","status":"answered","confidence":0.9,"needs_review":false}\n\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+
+  it("extraBody 를 요청 body 에 얹는다 — 자동 발화의 allow_clarify:false(H20-3)", async () => {
+    // Arrange
+    const bodies: string[] = [];
+    const capturing: FetchLike = async (_url, init) => {
+      bodies.push(String(init?.body));
+      return new Response(sse());
+    };
+    const { result } = renderHook(() =>
+      useAssistantStream({ askUrl: "/ask", apiFetch: capturing, storageKey: KEY }),
+    );
+    await waitFor(() => expect(result.current.restored).toBe(true));
+
+    // Act — 두 번째 ask 는 pending 이 풀린 뒤라야 실행된다(훅의 중복 전송 가드).
+    await act(async () => {
+      await result.current.ask("브리핑", { allow_clarify: false });
+    });
+    await waitFor(() => expect(result.current.pending).toBe(false));
+    await act(async () => {
+      await result.current.ask("직접 친 질문");
+    });
+
+    // Assert — 안 주면 종전 그대로(필드 없음).
+    await waitFor(() => expect(bodies).toHaveLength(2));
+    expect(JSON.parse(bodies[0]!)).toMatchObject({ question: "브리핑", allow_clarify: false });
+    expect(JSON.parse(bodies[1]!)).not.toHaveProperty("allow_clarify");
   });
 });

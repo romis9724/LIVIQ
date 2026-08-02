@@ -140,8 +140,12 @@ export function useAssistantStream({
     [],
   );
 
+  /**
+   * 질문 1건 전송. `extraBody` 는 요청 body 에 그대로 얹는 추가 필드다(additive) —
+   * 자동 발화가 `allow_clarify: false` 로 되묻기를 끄는 데 쓴다(H20-3). 안 주면 종전과 동일.
+   */
   const ask = useCallback(
-    async (question: string) => {
+    async (question: string, extraBody?: Record<string, unknown>) => {
       const text = question.trim();
       if (!text || pending) return;
       abortRef.current?.abort();
@@ -168,7 +172,7 @@ export function useAssistantStream({
       try {
         const stream = streamAssistant(
           askUrl,
-          { question: text, conversation_id: conversationId.current },
+          { question: text, conversation_id: conversationId.current, ...extraBody },
           { apiFetch, signal: controller.signal },
         );
         for await (const event of stream) {
