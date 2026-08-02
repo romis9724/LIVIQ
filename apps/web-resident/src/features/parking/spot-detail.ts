@@ -52,7 +52,8 @@ export function buildSpotDetail(input: {
     lines.push(isOccupied ? "다른 차량이 주차 중이에요." : "지금 비어 있어요.");
   }
 
-  if (recommendIndex >= 0) lines.push(`AI 비서 추천 자리 ${recommendIndex + 1}순위예요.`);
+  // 내 차 면은 딥링크(?spot=)로 강조돼도 "추천"이 아니다 — 순위 줄은 빈자리 추천에만.
+  if (recommendIndex >= 0 && !mine) lines.push(`AI 비서 추천 자리 ${recommendIndex + 1}순위예요.`);
 
   const distance = coreDistanceM(spot, core);
   if (distance !== null && myDong) {

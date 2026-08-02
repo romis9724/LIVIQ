@@ -23,6 +23,11 @@ import {
 } from "@liviq/ui";
 
 import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer } from "./briefing";
+import {
+  buildLongtermParkingHref,
+  isLongtermParkingAnswer,
+  longtermSpotNos,
+} from "@/features/parking/assistant-links";
 import { ADMIN_ASSISTANT_STREAM_OPTIONS } from "./client";
 import { InquiryStatusPanel } from "./InquiryStatusPanel";
 import "./admin-assistant.css";
@@ -200,8 +205,11 @@ function AiRow({ message, onAsk }: AiRowProps) {
   const blocks = structuredBlocks(message.citations);
   // 폴백에는 칩을 달지 않는다 — 서버가 이미 질문형만 중복 없이 보낸다(ai_core/suggestions.py).
   const chips = kind === "answered" ? (message.result?.suggestions ?? []) : [];
-  // 관리자 CTA 는 민원현황 하나뿐이다 — 입주민 CTA(접수·주차·평면도)는 여기 없다.
   const isSummary = isInquirySummaryAnswer(message.result?.toolPath);
+  // 장기주차 답변 → 3D 비콘 딥링크(ADM-1). 면 번호는 도구 카드 quote 확정값에서만 뽑는다.
+  const longtermSpots = isLongtermParkingAnswer(message.result?.toolPath)
+    ? longtermSpotNos(message.citations)
+    : [];
 
   return (
     <div className="ai-row">
@@ -242,6 +250,14 @@ function AiRow({ message, onAsk }: AiRowProps) {
               {isSummary ? (
                 <Link href="/inquiry-status" className="btn btn--secondary btn--sm">
                   <span aria-hidden="true">📊</span> 민원현황 열기
+                </Link>
+              ) : null}
+              {longtermSpots.length > 0 ? (
+                <Link
+                  href={buildLongtermParkingHref(longtermSpots)}
+                  className="btn btn--secondary btn--sm"
+                >
+                  <span aria-hidden="true">🅿️</span> 주차장 3D에서 보기
                 </Link>
               ) : null}
               <FeedbackButtons className="ai-row__feedback" />

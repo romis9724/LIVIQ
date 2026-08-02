@@ -23,8 +23,10 @@ interface ParkingView3DResidentProps {
   layout: ParkingSceneLayout;
   /** 점유 면 번호 — 입주민에겐 소속 구분이 없다("찼다"만, 규칙 2). */
   occupiedSpotNos: readonly string[];
-  /** AI 추천 면(순서 = 순위) — 비콘 1·2·3 이 선다. */
+  /** AI 추천/강조 면(순서 = 순위) — 비콘이 선다. 내 차 면이면 파란 "내 차" 비콘. */
   recommended: readonly string[];
+  /** 본인 세대 차량 면 — 비콘 라벨·색 분기(RES-1: 내 차 클로즈업 + 파란 비콘). */
+  myVehicleSpotNos: readonly string[];
   selectedNo: string | null;
   onSelect: (spotNo: string) => void;
   /** 3D 뷰 요약(role=img aria-label) — 스크린리더 대안 경로는 2D 배치도·상세 패널이다. */
@@ -53,6 +55,7 @@ export function ParkingView3DResident({
   layout,
   occupiedSpotNos,
   recommended,
+  myVehicleSpotNos,
   selectedNo,
   onSelect,
   summaryLabel,
@@ -104,10 +107,18 @@ export function ParkingView3DResident({
   }, [state]);
 
   // 추천 비콘 + 진입 카메라 연출 — 부감을 잠깐 보여준 뒤 1순위 자리로 날아간다.
+  // 내 차 면(RES-1)은 순위 대신 파란 "내 차" 비콘 — 추천(보라 숫자)과 시각적으로 구분.
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
-    scene.setBeacons(recommended.map((spotNo, index) => ({ spotNo, rank: index + 1 })));
+    const mine = new Set(myVehicleSpotNos);
+    scene.setBeacons(
+      recommended.map((spotNo, index) =>
+        mine.has(spotNo)
+          ? { spotNo, label: "내 차", color: "carResident" as const }
+          : { spotNo, label: String(index + 1) },
+      ),
+    );
     const first = recommended[0];
     if (!first) return;
     if (prefersReducedMotion()) {
@@ -117,7 +128,7 @@ export function ParkingView3DResident({
     const timer = window.setTimeout(() => sceneRef.current?.flyToSpot(first, false), INTRO_FLY_DELAY_MS);
     return () => window.clearTimeout(timer);
     // layout 재생성 시 씬이 바뀌므로 함께 다시 건다.
-  }, [recommended, layout, supported]);
+  }, [recommended, myVehicleSpotNos, layout, supported]);
 
   // 면 선택(3D 클릭·상세 패널 어디서 왔든) → 해당 면으로 카메라 이동.
   useEffect(() => {
@@ -156,7 +167,7 @@ export function ParkingView3DResident({
               sceneRef.current?.flyToSpot(spotNo, prefersReducedMotion());
             }}
           >
-            {index + 1}순위 {spotNo}면
+            {myVehicleSpotNos.includes(spotNo) ? "내 차" : `${index + 1}순위`} {spotNo}면
           </button>
         ))}
         <button

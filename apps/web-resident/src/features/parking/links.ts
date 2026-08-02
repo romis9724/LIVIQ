@@ -51,15 +51,23 @@ export function spotNosFromCitations(citations: readonly AssistantCitation[]): s
   return dedupe([...card.quote.matchAll(SPOT_IN_QUOTE)].map((m) => m[1] as string));
 }
 
-/** 추천 면 → `/parking?spot=012,034`. 면이 없으면 쿼리 없이 `/parking`. */
+/**
+ * 추천 면 → `/parking?spot=012,034&view=3d`. 면이 없으면 쿼리 없이 `/parking`.
+ * 어시스턴트 CTA 는 3D 로 연다(시나리오 RES-1·RES-2 화면 연동 — 비콘·카메라 연출은 3D 몫).
+ */
 export function buildParkingHref(spotNos: readonly string[]): string {
   const nos = dedupe(spotNos.filter((no) => SPOT_NO_PATTERN.test(no)));
-  return nos.length > 0 ? `/parking?spot=${nos.join(",")}` : "/parking";
+  return nos.length > 0 ? `/parking?spot=${nos.join(",")}&view=3d` : "/parking";
 }
 
 /** `URLSearchParams` · Next 의 `ReadonlyURLSearchParams` 양쪽을 받는 최소 계약. */
 interface QueryParams {
   get(key: string): string | null;
+}
+
+/** 쿼리스트링 → 초기 보기 방식. "3d"만 인정(그 외는 2D — URL 은 신뢰하지 않는다). */
+export function readViewParam(params: QueryParams): "2d" | "3d" {
+  return params.get("view") === "3d" ? "3d" : "2d";
 }
 
 /** 쿼리스트링 → 강조할 면 번호. URL 은 신뢰할 수 없는 입력이라 형식·개수를 검증한다. */

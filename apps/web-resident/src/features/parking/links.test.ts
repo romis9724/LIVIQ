@@ -6,6 +6,7 @@ import {
   PARKING_CARD_TITLE,
   PARKING_TOOL,
   buildParkingHref,
+  readViewParam,
   isParkingAnswer,
   readSpotParam,
   spotNosFromCitations,
@@ -83,9 +84,17 @@ describe("isParkingAnswer", () => {
   });
 });
 
+describe("readViewParam", () => {
+  it('view=3d 만 3D 로 연다 — 그 외 값은 2D', () => {
+    expect(readViewParam(new URLSearchParams("view=3d"))).toBe("3d");
+    expect(readViewParam(new URLSearchParams("view=evil"))).toBe("2d");
+    expect(readViewParam(new URLSearchParams(""))).toBe("2d");
+  });
+});
+
 describe("buildParkingHref", () => {
   it("joins spot numbers into the spot query", () => {
-    expect(buildParkingHref(["012", "034"])).toBe("/parking?spot=012,034");
+    expect(buildParkingHref(["012", "034"])).toBe("/parking?spot=012,034&view=3d");
   });
 
   it("drops the query when nothing was recommended", () => {
@@ -93,7 +102,7 @@ describe("buildParkingHref", () => {
   });
 
   it("drops malformed spot numbers instead of putting them in the URL", () => {
-    expect(buildParkingHref(["012", "<script>", ""])).toBe("/parking?spot=012");
+    expect(buildParkingHref(["012", "<script>", ""])).toBe("/parking?spot=012&view=3d");
   });
 });
 
