@@ -1,0 +1,69 @@
+{
+  "label": "r37-duel-r1d-gr",
+  "set": "all",
+  "case_ids": [
+    "V2-GR-0027",
+    "IQ-03",
+    "CL-N2",
+    "CX-R01",
+    "MT-01",
+    "CX-R02",
+    "MT-02"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-02T13:34:35.104Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 전 건 프로바이더 실측"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": null,
+    "by_category": [],
+    "by_backend": [],
+    "pairs": []
+  },
+  "errors": [
+    {
+      "case_id": "V2-GR-0027",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R02",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "MT-01",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "MT-02",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CL-N2",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    }
+  ],
+  "cases": []
+}
