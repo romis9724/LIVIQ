@@ -107,10 +107,15 @@ async def _trace_home_device(ctx: ToolContext, deps: ToolDeps, args: BaseModel) 
 def trace_home_device_issue_tool() -> Tool:
     return Tool(
         name="trace_home_device_issue",
+        # 신고형 배제는 R36 실측 — "온수가 미지근해요"·"도어록 경고음"(IQ-03·IQ-06·GR-0027)이
+        # 이력 추적으로 새서 접수 CTA가 달린 유사 민원 답변을 못 받았다. 이 도구가 답하는 건
+        # "왜 그런가(과거 이력)"이지 "접수해 달라"가 아니다(ADR-0024 분담).
         description=(
             "본인 세대 기기(월패드·화재감지기·수도밸브 등)의 고장·이상 증상에 대해, 그 기기가 "
             "연결된 공용 설비 계통의 과거 장애·원인·조치 이력을 추적한다. 집 안 위치를 묻는 "
-            "질문(find_in_floor_plan)이나 관리규약 조항 질문에는 쓰지 않는다."
+            "질문(find_in_floor_plan)이나 관리규약 조항 질문에는 쓰지 않는다. "
+            "'~가 안 돼요', '~가 이상해요'처럼 고장을 신고·접수하려는 질문에도 쓰지 않는다 — "
+            "유사 민원 검색을 쓴다."
         ),
         args_model=TraceHomeDeviceArgs,
         run=_trace_home_device,

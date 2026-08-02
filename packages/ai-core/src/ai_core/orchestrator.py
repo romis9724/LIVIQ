@@ -325,7 +325,11 @@ async def answer_question(
     # "NO_EVIDENCE" 뒤에 답변을 이어 쓰면 내부 마커와 미검증 답변이 몇 초간 노출됐다).
     streaming = False
     try:
-        async for delta in llm.chat_stream(final_messages):
+        # 인용 문법(R36-A)은 문서 청크가 있을 때만 건다. 도구 카드는 프롬프트에 [n] 번호가
+        # 없어서(_build_final_user_message) 문법을 걸면 모델이 만족시킬 길이 NO_EVIDENCE
+        # 도피뿐이다 — 확정 데이터를 받고도 폴백났다(R36 0210·0211·CL-N2). 카드만 있는
+        # 답변은 [n] 없이도 정당하다: 아래 인용검증도 카드를 근거로 인정한다(`not cards`).
+        async for delta in llm.chat_stream(final_messages, guided=bool(evidence)):
             parts.append(delta)
             if streaming:
                 yield TokenEvent(text=delta)

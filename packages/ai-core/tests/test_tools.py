@@ -717,6 +717,34 @@ def test_tool_descriptions_match_io_contract() -> None:
     assert "get_overdue_checks" not in specs["search_facility_graph"]
 
 
+def test_tool_descriptions_exclude_leaking_categories() -> None:
+    """실측에서 샌 질문 범주를 설명에 배제로 못박는다(H17-1·R31 관례, 표적은 R36 잔여 실패).
+
+    - get_facilities: 사양·설계 수치(0048 "수전용량") — SELECT에 없는 값이다.
+    - get_recent_notices: 특정 주제의 일정(0332 "이번 달 실내소독") — 목록 도구가 아니다.
+    - trace_home_device_issue: 신고·접수형(IQ-03·IQ-06·GR-0027) — 유사 민원 쪽이다.
+    """
+    registry = default_registry()
+    facility_specs = {
+        s["function"]["name"]: s["function"]["description"]
+        for s in registry.specs_for(("MANAGER",), graph_available=True)
+    }
+    resident_specs = {
+        s["function"]["name"]: s["function"]["description"]
+        for s in registry.specs_for(("RESIDENT",), graph_available=True)
+    }
+    assert "수전용량" in facility_specs["get_facilities"]
+    assert "일정" in resident_specs["get_recent_notices"]
+    assert "신고" in resident_specs["trace_home_device_issue"]
+    # 배제는 대안 경로를 함께 줘야 재라우팅된다 — 도구명이 아니라 자연어로(R22 관례).
+    for name, specs in (
+        ("get_facilities", facility_specs),
+        ("get_recent_notices", resident_specs),
+    ):
+        assert "문서 검색" in specs[name]
+        assert "search_documents" not in specs[name]
+
+
 # ── search_facility_graph ──────────────────────────────────────────────
 
 

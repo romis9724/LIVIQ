@@ -80,7 +80,12 @@ async def explain_fee(
     ]
     parts: list[str] = []
     try:
-        async for delta in llm.chat_stream(messages, max_tokens=FEE_EXPLAIN_MAX_TOKENS):
+        # 인용 문법 제외(R36-A) — 이 경로의 근거는 [확정 데이터] 블록뿐이라 프롬프트에 [n]이
+        # 없고, FEE_SYSTEM_PROMPT는 NO_EVIDENCE도 쓰지 않는다. 문법을 걸면 모델이 없는 번호를
+        # 지어내거나 마커로 도피하는 수밖에 없다(어시스턴트의 카드-온리 경로와 같은 함정).
+        async for delta in llm.chat_stream(
+            messages, max_tokens=FEE_EXPLAIN_MAX_TOKENS, guided=False
+        ):
             parts.append(delta)
             yield ExplainToken(text=delta)
     except LlmUnavailableError:

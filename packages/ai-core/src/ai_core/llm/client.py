@@ -25,6 +25,9 @@ DEFAULT_TEMPERATURE = 0.2
 
 # 인용 문법 강제(R36-A 실험 노브, `LLM_GUIDED_CITATION`). 최종 답변 turn에만 건다 —
 # 결정 turn(chat)에 걸면 tool_calls JSON을 문법이 깨뜨린다.
+# **[n]을 붙일 수 있는 근거가 프롬프트에 있을 때만** 걸어야 한다 — 호출부가 `guided=False`로
+# 끈다(chat_stream). 도구 카드에는 프롬프트상 번호가 없어(orchestrator의 [확정 데이터·도구
+# 결과] 블록) 문법을 걸면 모델이 취할 수 있는 길이 NO_EVIDENCE 도피뿐이다(R36 실측).
 # 두 갈래를 모두 허용해야 폴백 경로가 죽지 않는다: 근거로 답할 수 없으면 NO_EVIDENCE
 # 마커로 시작할 수 있고, 그게 아니면 본문에 [n]이 최소 1개 있어야 한다.
 # `.` 대신 `[\s\S]`인 이유: vLLM guided decoding 백엔드(outlines·xgrammar)의 정규식 파서는
@@ -186,8 +189,13 @@ class LlmClient:
         *,
         max_tokens: int | None = None,
         temperature: float = DEFAULT_TEMPERATURE,
+        guided: bool = True,
     ) -> AsyncIterator[str]:
-        """증분 텍스트 스트림. 연결 실패는 LlmUnavailableError로 승격."""
+        """증분 텍스트 스트림. 연결 실패는 LlmUnavailableError로 승격.
+
+        guided=False면 노브가 켜져 있어도 인용 문법을 걸지 않는다 — 인용할 [n] 근거가
+        프롬프트에 없는 답변(도구 카드만·관리비 설명)은 문법을 만족시킬 방법이 없다.
+        """
         payload: dict[str, object] = {
             "model": self._settings.llm_model,
             "messages": list(messages),
@@ -197,7 +205,7 @@ class LlmClient:
         }
         if self._settings.llm_reasoning_effort is not None:
             payload["reasoning_effort"] = self._settings.llm_reasoning_effort
-        if self._settings.llm_guided_citation:
+        if self._settings.llm_guided_citation and guided:
             payload["guided_regex"] = GUIDED_CITATION_REGEX
         async with self._client(self._settings.llm_base_url, self._settings.llm_api_key) as c:
             try:

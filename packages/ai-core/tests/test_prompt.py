@@ -55,6 +55,28 @@ def test_quote_first_prompt_inserts_rule_zero_and_keeps_rules(base: str) -> None
     assert rest == base.split("\n", 1)[1]
 
 
+@pytest.mark.parametrize("base", [ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT])
+def test_answer_prompt_treats_confirmed_absence_as_an_answer(base: str) -> None:
+    """도구가 '없음'을 확정하면 그것이 답이다 — R36 도피 처방(0210·0211·CL-N2).
+
+    발동 조건이 [확정 데이터·도구 결과]로 한정돼야 한다. 조건 없이 "없으면 없다고 답하라"가
+    되면 문서 검색이 빈손일 때의 정당한 NO_EVIDENCE(규칙 1)까지 흔든다.
+    """
+    # Assert
+    assert "NO_EVIDENCE로 처리하지 마십시오" in base
+    assert "[확정 데이터·도구 결과]가" in base
+
+
+@pytest.mark.parametrize("base", [ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT])
+def test_quote_first_prompt_keeps_confirmed_absence_rule(base: str) -> None:
+    """인용 선행 변형(R36-B)에서도 확정된 '없음' 단서가 살아 있어야 한다."""
+    # Act
+    variant = quote_first_prompt(base)
+
+    # Assert
+    assert "NO_EVIDENCE로 처리하지 마십시오" in variant
+
+
 def test_agent_system_prompt_is_stable_within_a_day() -> None:
     # Arrange · Act — 같은 날짜면 문자열이 동일해야 프리픽스 캐시가 하루 단위로만 갈린다
     a = agent_system_prompt(datetime.date(2026, 8, 1))
