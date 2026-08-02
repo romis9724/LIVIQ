@@ -28,6 +28,14 @@ class AiCoreSettings(BaseSettings):
     # (비추론 모델·타 프로바이더에 무해).
     llm_reasoning_effort: str | None = Field(None, validation_alias="LLM_REASONING_EFFORT")
 
+    # ── 인용 실험 노브(R36, 기본 off — 켜지 않으면 동작 불변) ───────────
+    # 무응답 코어(근거를 받고도 [n]을 안 붙여 폐기 → no_evidence 폴백) 대책 2종의 토글.
+    # 실측 뒤 효과가 확인되면 DB 노브(ai_backend_config)로 승격한다 — 지금은 env 전용.
+    # llm_guided_citation: 최종 답변 turn에만 vLLM guided decoding 정규식을 건다(client.py).
+    # prompt_quote_first: 최종 답변 프롬프트에 "근거 문장 먼저 옮겨 적기" 지시를 넣는다.
+    llm_guided_citation: bool = Field(False, validation_alias="LLM_GUIDED_CITATION")
+    prompt_quote_first: bool = Field(False, validation_alias="PROMPT_QUOTE_FIRST")
+
     # ── 임베딩 (생성 모델과 별개 고정) ──────────────────────────────────
     embedding_base_url: str = Field(..., validation_alias="EMBEDDING_BASE_URL")
     embedding_model: str = Field(..., validation_alias="EMBEDDING_MODEL")

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -17,9 +18,19 @@ import httpx
 
 from ai_core.config import AiCoreSettings, get_settings
 from ai_core.llm.tokens import estimate_tokens
+from ai_core.rag.prompt import NO_EVIDENCE_MARKER
 
 RETRY_MAX = 2  # 최초 시도 외 재시도 횟수 상한
 DEFAULT_TEMPERATURE = 0.2
+
+# 인용 문법 강제(R36-A 실험 노브, `LLM_GUIDED_CITATION`). 최종 답변 turn에만 건다 —
+# 결정 turn(chat)에 걸면 tool_calls JSON을 문법이 깨뜨린다.
+# 두 갈래를 모두 허용해야 폴백 경로가 죽지 않는다: 근거로 답할 수 없으면 NO_EVIDENCE
+# 마커로 시작할 수 있고, 그게 아니면 본문에 [n]이 최소 1개 있어야 한다.
+# `.` 대신 `[\s\S]`인 이유: vLLM guided decoding 백엔드(outlines·xgrammar)의 정규식 파서는
+# 인라인 플래그 `(?s)`를 못 받는데, 목록 답변은 줄바꿈을 반드시 포함한다.
+# Ollama는 이 키를 무시하므로 켜져 있어도 vLLM에서만 효력. DB 노브 승격은 실측 후.
+GUIDED_CITATION_REGEX = rf"({re.escape(NO_EVIDENCE_MARKER)}[\s\S]*|[\s\S]*\[[0-9]{{1,2}}\][\s\S]*)"
 
 # tool-calling 메시지(assistant tool_calls·role=tool)는 content 외 필드를 담는다 → Any 값 허용.
 ChatMessage = Mapping[str, Any]  # {"role": ..., "content": ..., "tool_calls"?: ...}
@@ -186,6 +197,8 @@ class LlmClient:
         }
         if self._settings.llm_reasoning_effort is not None:
             payload["reasoning_effort"] = self._settings.llm_reasoning_effort
+        if self._settings.llm_guided_citation:
+            payload["guided_regex"] = GUIDED_CITATION_REGEX
         async with self._client(self._settings.llm_base_url, self._settings.llm_api_key) as c:
             try:
                 async with c.stream("POST", "/chat/completions", json=payload) as response:

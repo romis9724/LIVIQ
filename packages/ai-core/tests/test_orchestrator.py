@@ -33,6 +33,7 @@ from ai_core.orchestrator import (
     ToolCitationEvent,
     answer_question,
 )
+from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, QUOTE_FIRST_RULE
 from ai_core.rag.retrieval import RetrievedChunk
 from ai_core.tools import ToolContext, ToolDeps, default_registry
 
@@ -134,6 +135,7 @@ def _agent_llm(
     answer: str | None = "[1] 답변입니다.",
     answer_deltas: Sequence[str] | None = None,
     embed_ok: bool = True,
+    stream_systems: list[str] | None = None,
 ) -> LlmClient:
     dims = settings.embedding_dimensions
 
@@ -146,6 +148,10 @@ def _agent_llm(
             data = [{"index": i, "embedding": [0.05] * dims} for i in range(len(texts))]
             return httpx.Response(200, json={"data": data})
         if body.get("stream"):
+            if stream_systems is not None:
+                stream_systems.extend(
+                    str(m["content"]) for m in body["messages"] if m.get("role") == "system"
+                )
             if answer is None:
                 return httpx.Response(503)
             # answer_deltas가 있으면 여러 청크로 쪼개 보낸다(마커 판정이 청크 경계를 넘는 경우).
@@ -422,6 +428,41 @@ async def test_answer_prompt_override_reaches_final_turn(settings: AiCoreSetting
     ]
     assert isinstance(events[-1], DoneEvent)
     assert any("시설전용테스트프롬프트" in s for s in stream_systems)
+
+
+async def _stream_system_prompt(settings: AiCoreSettings) -> str:
+    """최종 답변 turn에 실제로 실린 system 프롬프트 1건(문서 검색 → 스트림 경로)."""
+    systems: list[str] = []
+    llm = _agent_llm(
+        settings,
+        _calls_then_stop(_tc("search_documents", {"query": "주차"})),
+        stream_systems=systems,
+    )
+    await _run(llm, FakeRetriever([_chunk()]))
+    assert len(systems) == 1
+    return systems[0]
+
+
+async def test_quote_first_rule_absent_by_default(settings: AiCoreSettings) -> None:
+    """R36-B 노브 off(기본)면 최종 답변 프롬프트는 기존과 동일 — 머지해도 동작 불변."""
+    # Arrange · Act
+    prompt = await _stream_system_prompt(settings)
+
+    # Assert
+    assert prompt == ANSWER_SYSTEM_PROMPT
+
+
+async def test_quote_first_rule_prepended_when_enabled(settings: AiCoreSettings) -> None:
+    """R36-B 노브 on이면 인용 선행 지시가 규칙 목록 맨 앞에 들어간다."""
+    # Arrange
+    tuned = settings.model_copy(update={"prompt_quote_first": True})
+
+    # Act
+    prompt = await _stream_system_prompt(tuned)
+
+    # Assert — 기존 규칙은 유지한 채 규칙 0만 추가
+    assert QUOTE_FIRST_RULE in prompt
+    assert prompt.index(QUOTE_FIRST_RULE) < prompt.index("1. 아래 [문서 근거]")
 
 
 async def test_no_tool_calls_falls_back_no_evidence(settings: AiCoreSettings) -> None:
