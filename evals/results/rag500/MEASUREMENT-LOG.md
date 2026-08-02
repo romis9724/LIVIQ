@@ -1148,3 +1148,21 @@ hard_fail 전 라운드 0. 전 설정 원상 복구(qwen3·bge-m3·400·env 노�
 천장을 못 올린다** — llama를 62→70%로 끌어올려도 qwen3 기본(80%)에 못 미치고, qwen3에는 얹어도 무효.
 ③응답률 상한 ~80~82%(8B 로컬)는 견고 — 95%行은 여전히 상위 모델 축. ④부수 실험: vLLM-qwen3
 (Qwen3-8B-AWQ+guided) 교대 기동 시도는 별도 기록.
+
+### R36 확장 — vLLM-qwen3 전환 (사용자 지적 "당연히 vLLM qwen인 줄") · **89.2% → 조합 90.7% 신기록**
+
+Ollama-qwen3가 서빙 스택 우연이었음을 확인 — GPU 캐시의 `Qwen/Qwen3-8B-AWQ`를 vLLM으로 교대 기동
+(hermes 파서·`--reasoning-parser qwen3`·kv-cache 보정). 현 vLLM 이미지는 `reasoning_effort:"none"`으로
+thinking을 완전히 꺼줌 → **코드 수정 0**으로 전환(R28 때 Qwen3.5 실패와 다른 조건: 텍스트 전용 변형+새 이미지).
+
+| 구성 | 응답률 | p50/p95 |
+|---|---|---|
+| Ollama-qwen3 (기존 상시) | 80.1% | 3.9s / 35s |
+| **vLLM-qwen3 기준선** | **89.2%** (296/332) | **2.6s / 10.1s** |
+| **vLLM-qwen3 + guided** | **90.7%** (301/332) | 동급 |
+
+hard_fail 0. **최대 교훈: 병목은 청크·임베딩이 아니라 서빙 스택** — 같은 8B 가중치가 vLLM(AWQ)에서
+Ollama(Q4) 대비 응답률 +9.1pp·지연 1/3.5. 기존 "8B 합집합 상한 85.8%" 판정은 Ollama 서빙 전제였음 — 철회.
+**채택: dev 상시 = vLLM qwen3-8b-awq@8077 + LLM_GUIDED_CITATION=1** (guided +1.5pp는 노이즈 경계지만
+llama 쌍 +4.3pp와 방향 일치·부작용 0·비용 0이라 유지). vllm-llama31은 정지 상태로 보존(교대 기동).
+95%까지 잔여 14건 — 코어 성격 재분석은 UNANSWERED 개정 4.
