@@ -1,0 +1,549 @@
+{
+  "label": "r36-c2-chunk600-gr",
+  "set": "all",
+  "case_ids": [
+    "V2-GR-0001",
+    "V2-GR-0002",
+    "V2-GR-0003",
+    "V2-GR-0004",
+    "V2-GR-0005",
+    "V2-GR-0006",
+    "V2-GR-0007",
+    "V2-GR-0008",
+    "V2-GR-0009",
+    "V2-GR-0010",
+    "V2-GR-0011",
+    "V2-GR-0012",
+    "V2-GR-0013",
+    "V2-GR-0014",
+    "V2-GR-0015",
+    "V2-GR-0016",
+    "V2-GR-0017",
+    "V2-GR-0018",
+    "V2-GR-0019",
+    "V2-GR-0020",
+    "V2-GR-0021",
+    "V2-GR-0022",
+    "V2-GR-0023",
+    "V2-GR-0024",
+    "V2-GR-0025",
+    "V2-GR-0026",
+    "V2-GR-0027",
+    "V2-GR-0028",
+    "V2-GR-0029",
+    "V2-GR-0033",
+    "V2-GR-0034",
+    "V2-GR-0035",
+    "V2-GR-0036",
+    "V2-GR-0037",
+    "V2-GR-0038",
+    "V2-GR-0039",
+    "V2-GR-0040",
+    "CX-R01",
+    "CX-R02",
+    "CX-R03",
+    "CX-R04",
+    "CX-R05",
+    "CX-R06",
+    "CX-R07",
+    "CX-R08",
+    "CX-R09",
+    "CX-R10",
+    "CX-R11",
+    "CX-R12",
+    "CX-M01",
+    "CX-M02",
+    "CX-M03",
+    "CX-M04",
+    "CX-M05",
+    "CX-M06",
+    "CX-M07",
+    "CX-M08",
+    "PK-01",
+    "PK-02",
+    "PK-03",
+    "PK-04",
+    "PK-05",
+    "PK-06",
+    "PK-07",
+    "PK-08",
+    "PK-09",
+    "PK-10",
+    "GC-01",
+    "GC-03",
+    "GC-04",
+    "IQ-01",
+    "IQ-02",
+    "IQ-03",
+    "IQ-04",
+    "IQ-05",
+    "IQ-06",
+    "IQ-07",
+    "IQ-08",
+    "IQ-09",
+    "MT-01",
+    "MT-02",
+    "MT-03",
+    "CL-N1",
+    "CL-N2",
+    "CX-R13",
+    "CX-R14",
+    "CX-R15"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-02T03:56:02.304Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 전 건 프로바이더 실측"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": null,
+    "by_category": [],
+    "by_backend": [],
+    "pairs": []
+  },
+  "errors": [
+    {
+      "case_id": "V2-GR-0001",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0002",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0003",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0004",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0005",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0006",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0007",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0008",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0009",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0010",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0011",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0012",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0013",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0014",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0015",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0016",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0017",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0018",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0019",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0020",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0021",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0022",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0023",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0024",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0025",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0026",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0027",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0028",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0029",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0033",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0034",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0035",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0036",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0037",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0038",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0039",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-GR-0040",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R02",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R04",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R05",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R06",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R07",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R08",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R09",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R10",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R11",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R12",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M02",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M04",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M05",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M06",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M07",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-M08",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-02",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-04",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-05",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-06",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-07",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-08",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-09",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "PK-10",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "GC-01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "GC-03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "GC-04",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-01",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-02",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-03",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-04",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-05",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-06",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-07",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-08",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "IQ-09",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "MT-01",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "MT-02",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "MT-03",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CL-N1",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CL-N2",
+      "category": "대화·되묻기",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R13",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R14",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "CX-R15",
+      "category": "복합·라우팅",
+      "error": "fetch failed"
+    }
+  ],
+  "cases": []
+}
