@@ -22,7 +22,7 @@ from ai_core.graph import GraphClient, IncidentContext, IncidentHit
 from ai_core.llm.client import LlmClient, ToolCallRequest
 from ai_core.rag.retrieval import RetrievedChunk, Retriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry, execute_tool
-from ai_core.tools.library import MIN_PEER_SAMPLE, GetFeesArgs
+from ai_core.tools.library import COMPLEX_SCOPE, MIN_PEER_SAMPLE, GetFeesArgs
 
 TENANT = uuid.uuid4()
 USER = uuid.uuid4()
@@ -524,6 +524,153 @@ async def test_peer_average_sql_is_tenant_scoped_and_aggregate_only(
     select_clause = peer_sql.split("SELECT me.unit_type")[1].split("FROM me")[0]
     assert "household_id" not in select_clause  # 세대 식별자 미노출
     assert "f.total_amount" not in select_clause.replace("avg(f.total_amount)", "")
+
+
+# ── get_fees 동·단지 평균 (H20-1) ───────────────────────────────────────
+
+SCOPE_ITEMS = (("공용관리비", 81_468), ("전기료", 42_000))
+
+
+def _scope_handler(
+    *,
+    avg_total: object = 141_034,
+    sample_size: int = 62,
+    items: Sequence[tuple[str, int]] = SCOPE_ITEMS,
+) -> Any:
+    """동·단지 평균 집계 응답. 평균·표본수는 SQL이 낸 값 자리를 가짜 세션이 대신 채운다."""
+
+    def handler(sql: str, params: dict[str, Any]) -> list[Any]:
+        s = sql.lower()
+        if "max(period)" in s:
+            return [row(period="2026-07")]
+        if "jsonb_array_elements" in s:
+            return [row(name=name, avg_amount=amount) for name, amount in items]
+        if "count(*) as sample_size" in s:
+            return [row(avg_total=avg_total, sample_size=sample_size)]
+        return []
+
+    return handler
+
+
+async def _scope_result(settings: AiCoreSettings, handler: Any, args: dict[str, Any]) -> Any:
+    return (
+        await execute_tool(
+            _call("get_fees", args),
+            ctx=CTX_RESIDENT,
+            deps=_deps(settings, handler=handler),
+            registry=default_registry(),
+        )
+    ).result
+
+
+async def test_get_fees_scope_dong_returns_average_of_that_building(
+    settings: AiCoreSettings,
+) -> None:
+    """ "402동 관리비는?" — 그 동의 평균 총액·항목 평균. 본인 세대 조회는 아예 없다."""
+    result = await _scope_result(
+        settings, _scope_handler(), {"scope": "402동", "period": "2026-07"}
+    )
+    assert result.card is not None
+    assert result.card.source_kind == "tool:get_fees"
+    assert "402동 2026-07 관리비 평균 총액 141,034원" in result.card.quote
+    assert "표본 62세대" in result.card.quote
+    assert "공용관리비 81,468원" in result.card.quote
+    assert result.card.data is not None
+    assert result.card.data["scope"] == {"kind": "dong", "label": "402동", "sample_size": 62}
+    assert result.card.data["total"] == 141_034
+    assert result.card.data["rows"] == [
+        {"name": "공용관리비", "amount": 81_468},
+        {"name": "전기료", "amount": 42_000},
+    ]
+    # 본인 세대 전용 키는 넣지 않는다 — 집계에는 전월 대비·같은 평형 비교가 없다.
+    assert "prev_total" not in result.card.data and "peer" not in result.card.data
+
+
+async def test_get_fees_scope_complex_returns_tenant_wide_average(
+    settings: AiCoreSettings,
+) -> None:
+    result = await _scope_result(settings, _scope_handler(), {"scope": "전체"})
+    assert result.card is not None
+    assert "단지 전체 2026-07 관리비 평균 총액 141,034원" in result.card.quote  # 기간 미지정=최신
+    assert result.card.data is not None
+    assert result.card.data["scope"] == {
+        "kind": "complex",
+        "label": "단지 전체",
+        "sample_size": 62,
+    }
+
+
+async def test_get_fees_scope_below_min_sample_refuses_average(settings: AiCoreSettings) -> None:
+    """표본 하한 미달 = 평균 거부(소표본 역산 방지). 숫자는 어디에도 안 나간다."""
+    result = await _scope_result(
+        settings,
+        _scope_handler(sample_size=MIN_PEER_SAMPLE - 1),
+        {"scope": "402동", "period": "2026-07"},
+    )
+    assert result.card is not None
+    assert "표본이 적어" in result.card.quote
+    assert "141,034" not in result.card.quote
+    assert result.card.data is None
+
+
+async def test_get_fees_scope_unknown_dong_says_no_data(settings: AiCoreSettings) -> None:
+    """없는 동은 추측하지 않는다(규칙 1) — 집계 0행이면 "데이터가 없다"가 근거다."""
+    result = await _scope_result(
+        settings,
+        _scope_handler(avg_total=None, sample_size=0),
+        {"scope": "999동", "period": "2026-07"},
+    )
+    assert result.card is not None
+    assert "999동" in result.card.quote and "데이터가 없" in result.card.quote
+    assert "141,034" not in result.card.quote
+    assert result.card.data is None
+
+
+async def test_scope_average_sql_is_tenant_scoped_and_aggregate_only(
+    settings: AiCoreSettings,
+) -> None:
+    """격리(규칙 3)·미노출(CRITICAL)을 SQL 문자열로 못박는다 — 개별 세대 값 SELECT 금지."""
+    deps = _deps(settings, handler=_scope_handler())
+    await execute_tool(
+        _call("get_fees", {"scope": "402동", "period": "2026-07"}),
+        ctx=CTX_RESIDENT,
+        deps=deps,
+        registry=default_registry(),
+    )
+    session = cast(FakeSession, deps.session)
+    assert not any("from users" in sql.lower() for sql, _ in session.executed)  # 소유권 조회 없음
+    for sql, params in session.executed:
+        assert params["tid"] == TENANT
+        assert "f.tenant_id = :tid" in sql
+        select_clause = sql.split("SELECT")[1].split("FROM")[0]
+        assert "household_id" not in select_clause  # 세대 식별자 미노출
+        assert "f.total_amount" not in select_clause.replace("avg(f.total_amount)", "")
+
+
+async def test_get_fees_scope_complex_sql_has_no_building_filter(
+    settings: AiCoreSettings,
+) -> None:
+    deps = _deps(settings, handler=_scope_handler())
+    await execute_tool(
+        _call("get_fees", {"scope": "단지"}),
+        ctx=CTX_RESIDENT,
+        deps=deps,
+        registry=default_registry(),
+    )
+    session = cast(FakeSession, deps.session)
+    aggregates = [sql for sql, _ in session.executed if "avg(" in sql]
+    assert aggregates and all("buildings" not in sql for sql in aggregates)
+
+
+def test_get_fees_args_normalize_scope() -> None:
+    """8B 표기 흔들림 흡수 — 숫자만·전체 동의어·null 리터럴."""
+    assert GetFeesArgs(scope="402").scope == "402동"
+    assert GetFeesArgs(scope=" 402동 ").scope == "402동"
+    for whole in ("전체", "단지", "단지 전체", "모든 동", "아파트 전체"):
+        assert GetFeesArgs(scope=whole).scope == COMPLEX_SCOPE
+    for literal in ("null", "None", "", "  "):
+        assert GetFeesArgs.model_validate({"scope": literal}).scope is None
+    assert GetFeesArgs.model_validate({}).scope is None
 
 
 # ── get_my_inquiries ───────────────────────────────────────────────────

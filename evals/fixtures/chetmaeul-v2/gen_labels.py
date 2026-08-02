@@ -22,6 +22,8 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
   doc-clause:<문서 제목>:<조항>   문서+조항 인용 라벨 (예: doc-clause:첫마을4단지 관리규약:제5조)
   doc:<문서 제목>                 문서 단위 인용 라벨
   fees:<YYYY-MM|latest>           세대 관리비 (케이스 household_ref 바인딩 필수)
+  fees-avg:dong:<동>:<YYYY-MM|latest>   동 평균 관리비 (집계 라벨 — household_ref 불필요)
+  fees-avg:complex:<YYYY-MM|latest>     단지 전체 평균 관리비
   inquiries:mine                  본인 민원 (user_ref 바인딩 필수)
   inquiries:other-block           타인 민원 차단 (폴백/거부가 정답)
   inquiry-summary:recent|pending  관리자 민원 집계(H20-2 브리핑) — 리졸버 **미구현**.
@@ -64,6 +66,9 @@ from ai_core.parking import Core, Spot, nearest_available_spots
 # 도구의 랭킹 SQL·임계·상한을 그대로 쓴다(비공개 이름 의도적 참조) — 문구를 복사하면
 # 가시성 규칙(done 또는 본인 건)과 임계가 갈라져 라벨이 도구 출력과 어긋난다.
 from ai_core.tools.inquiries import _LIMIT, _SIMILAR_SQL, _SIMILARITY_THRESHOLD
+
+# 표본 하한도 도구와 같은 값을 쓴다 — 도구가 평균을 거부하는 범위에 라벨을 만들면 거짓이다.
+from ai_core.tools.library import MIN_PEER_SAMPLE
 
 TENANT_NAME = "첫마을 4단지 푸르지오"
 HERE = Path(__file__).parent
@@ -279,6 +284,64 @@ async def resolve_fees(
         expected_behavior=BEHAVIOR_ANSWERED,
         as_of=str(row["period"]),
         label_source_resolved=f"fees household={href} period={row['period']}",
+        errors=[],
+    )
+
+
+async def resolve_fees_avg(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """동·단지 평균 관리비(H20-1) — 집계 라벨이라 household_ref가 없다(resolve_fees와 다름).
+
+    스펙: fees-avg:dong:<동>:<YYYY-MM|latest> · fees-avg:complex:<YYYY-MM|latest>
+    표본 하한 미달이면 도구가 평균을 거부하므로 라벨도 만들지 않는다(생성 시점 거부).
+    """
+    kind = args[0] if args else ""
+    if kind == "dong":
+        if len(args) < 3:
+            return _error("fees-avg:dong은 <동>과 <YYYY-MM|latest>가 필요")
+        dong, period = args[1].removesuffix("동"), args[2]  # buildings.name은 접미사 없음
+        label_text = f"{dong}동"
+        join = (
+            " JOIN households h ON h.id = f.household_id"
+            " JOIN buildings b ON b.id = h.building_id AND b.name = $2"
+        )
+        scope_params: list[str] = [dong]
+    elif kind == "complex":
+        if len(args) < 2:
+            return _error("fees-avg:complex는 <YYYY-MM|latest>가 필요")
+        period, label_text, join, scope_params = args[1], "단지 전체", "", []
+    else:
+        return _error(f"fees-avg 범위 미지원: {kind or '(없음)'}")
+
+    where_tid = " WHERE f.tenant_id = $1"
+    if period == "latest":
+        period = await conn.fetchval(
+            f"SELECT max(f.period) FROM fees f{join}{where_tid}", tid, *scope_params
+        )
+    if not period:
+        return _error(f"관리비 평균 없음: {label_text}(데이터 없음)")
+    row = await conn.fetchrow(
+        "SELECT round(avg(f.total_amount)) AS avg_total, count(*) AS sample_size"
+        f" FROM fees f{join}{where_tid} AND f.period = ${2 + len(scope_params)}",
+        tid,
+        *scope_params,
+        period,
+    )
+    sample = int(row["sample_size"]) if row else 0
+    if sample < MIN_PEER_SAMPLE:
+        return _error(
+            f"관리비 평균 표본 미달: {label_text} {period} n={sample}(<{MIN_PEER_SAMPLE})"
+        )
+    avg_total = int(row["avg_total"])
+    return Label(
+        expected_facts=f"{label_text} {period} 관리비 평균 총액 {avg_total:,}원",
+        expected_citations="tool:get_fees",
+        expected_tool="get_fees",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of=period,
+        label_source_resolved=f"fees avg scope={label_text} period={period} n={sample}",
         errors=[],
     )
 
@@ -868,6 +931,7 @@ RESOLVERS = {
     "doc-clause": resolve_doc_clause,
     "doc": resolve_doc,
     "fees": resolve_fees,
+    "fees-avg": resolve_fees_avg,
     "inquiries": resolve_inquiries,
     "facilities": resolve_facilities,
     "overdue": resolve_overdue,
@@ -1009,6 +1073,8 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         # bare 스펙 모호 — 거부돼야 정상(같은 조 번호가 본문·부칙·별첨에 중복)
         ("doc-clause:첫마을4단지 관리규약:제5조", {"role": "RESIDENT", "expected_facts": "범위"}),
         ("fees:latest", {"role": "RESIDENT", "household_ref": "401-201"}),
+        ("fees-avg:dong:402동:latest", {"role": "RESIDENT"}),
+        ("fees-avg:complex:latest", {"role": "RESIDENT"}),
         ("inquiries:mine", {"role": "RESIDENT", "user_ref": inquiry_author or ""}),
         ("plan-device:콘센트", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("parking:nearest", {"role": "RESIDENT", "household_ref": "401-201"}),

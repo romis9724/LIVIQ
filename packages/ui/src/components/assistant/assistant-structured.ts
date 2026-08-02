@@ -19,6 +19,15 @@ export interface FeeMonth {
   total: number;
 }
 
+/** 동·단지 평균 조회(H20-1)일 때만 온다. 본인 세대 조회에는 없다. */
+export interface FeeScope {
+  /** dong | complex — 서버 라벨 그대로. */
+  kind: string;
+  label: string;
+  /** 평균을 낸 세대 수. 서버가 센 값(하한 미달이면 애초에 평균이 오지 않는다). */
+  sampleSize: number;
+}
+
 export interface FeeTableData {
   kind: "fee_table";
   period: string;
@@ -38,6 +47,8 @@ export interface FeeTableData {
   missingPeriods: string[];
   /** 입주 승인 이전이라 조회에서 빠진 달. */
   excludedPeriods: string[];
+  /** 범위 평균 조회일 때의 범위·표본(없으면 본인 세대 조회). */
+  scope?: FeeScope;
 }
 
 export interface ParkingSpot {
@@ -105,6 +116,12 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const numOrNull = (v: unknown): number | null =>
   typeof v === "number" && Number.isFinite(v) ? v : null;
+const feeScope = (v: unknown): FeeScope | undefined => {
+  const raw = asRecord(v);
+  return raw
+    ? { kind: str(raw.kind), label: str(raw.label), sampleSize: num(raw.sample_size) }
+    : undefined;
+};
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? (v as unknown[]).filter((x): x is string => typeof x === "string") : [];
 
@@ -131,6 +148,7 @@ export function toStructured(data: unknown): StructuredData | null {
         averageTotal: numOrNull(raw.average_total),
         missingPeriods: strings(raw.missing_periods),
         excludedPeriods: strings(raw.excluded_periods),
+        scope: feeScope(raw.scope),
       };
     case "parking_spots":
       return {

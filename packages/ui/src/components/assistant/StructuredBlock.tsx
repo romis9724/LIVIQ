@@ -41,9 +41,13 @@ function FeeTable({ data }: { data: FeeTableData }) {
   // 증감은 색만으로 전하지 않는다 — "늘었어요/줄었어요"를 글자로 함께 쓴다(WCAG 1.4.1).
   const trend =
     data.diff === null ? null : data.diff >= 0 ? "늘었어요" : "줄었어요";
+  // 범위 평균(H20-1)은 본인 세대 값이 아니다 — 제목·합계 라벨로 평균임을 못박는다.
+  const caption = data.scope
+    ? `${data.scope.label} ${data.period} 관리비 평균 (표본 ${data.scope.sampleSize}세대)`
+    : `${data.period} 관리비 내역`;
   return (
     <figure className="sb">
-      <figcaption className="sb__caption">{data.period} 관리비 내역</figcaption>
+      <figcaption className="sb__caption">{caption}</figcaption>
       {/* 375px 에서 표가 넘치면 이 컨테이너 안에서만 가로 스크롤된다. */}
       <div className="sb__scroll" tabIndex={0} role="group" aria-label="관리비 항목 표">
         <table className="sb__table">
@@ -65,7 +69,7 @@ function FeeTable({ data }: { data: FeeTableData }) {
           </tbody>
           <tfoot>
             <tr>
-              <th scope="row">합계</th>
+              <th scope="row">{data.scope ? "평균 총액" : "합계"}</th>
               <td className="sb__num">{won(data.total)}</td>
             </tr>
           </tfoot>
