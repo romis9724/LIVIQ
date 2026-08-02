@@ -25,15 +25,12 @@ export function isBriefingPrompt(text: string): boolean {
 }
 
 /**
- * 마운트 직후 브리핑을 발동할지 — **탭 저장소**에 복원될 대화가 없을 때만.
- * 훅의 messages state 로 판정하면 안 된다: 복원도 effect 라 같은 커밋에서는 아직 빈
- * 배열이고(레이스), 복원된 대화 위에 브리핑이 끼어든다. 저장소를 직접(동기) 본다.
- * null = 저장된 적 없음(새 탭·로그인), 0건 = '새 대화' 마커 후 재진입 — 둘 다 브리핑 대상.
- * "빈 대화로 전이할 때마다"가 아니다: 사용자가 '새 대화'로 비운 화면에 자동 질의가
- * 끼어드는 UX 를 막으려고 호출부는 마운트 1회 ref 가드를 함께 쓴다.
+ * KST 날짜 키 "YYYY-MM-DD" — 탭 저장 키의 접미(H20-3, ADR-0028 결정 2 개정).
+ * 날이 바뀌면 저장 키가 달라져 자연히 빈 상태가 되고, 서버도 당일 대화만 주므로
+ * 새 대화 + 브리핑으로 시작한다. en-CA 로케일이 곧 ISO 날짜 표기다.
  */
-export function shouldBrief(storedMessageCount: number | null): boolean {
-  return storedMessageCount === null || storedMessageCount === 0;
+export function kstDateKey(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
 }
 
 /** 관리자 답변 CTA — 민원 집계 도구가 라우팅됐으면 민원현황으로 보낸다. */

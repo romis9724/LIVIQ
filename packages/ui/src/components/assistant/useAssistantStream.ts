@@ -65,6 +65,9 @@ export function useAssistantStream({
 }: AssistantStreamOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [pending, setPending] = useState(false);
+  // 복원 경로가 끝났는가 — 빈 응답·실패·복원 없음도 "끝"이다. 호출부가 "정말 빈 대화"를
+  // 판정할 수 있게 하려는 것(관리자 진입 브리핑 게이트 — ADR-0028 결정 2 개정, H20-3).
+  const [restored, setRestored] = useState(false);
   const conversationId = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -83,23 +86,35 @@ export function useAssistantStream({
   useEffect(() => {
     const thread = readThread(storageKey);
     if (thread !== null) {
-      if (thread.messages.length === 0) return; // 새 대화 마커 — 옛 대화를 되살리지 않는다
-      conversationId.current = thread.conversationId;
-      // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
-      seq = Math.max(seq, thread.messages.length);
-      setMessages(thread.messages);
+      if (thread.messages.length > 0) {
+        // 새 대화 마커(0건)면 옛 대화를 되살리지 않는다 — 그래도 복원은 끝난 것이다.
+        conversationId.current = thread.conversationId;
+        // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
+        seq = Math.max(seq, thread.messages.length);
+        setMessages(thread.messages);
+      }
+      setRestored(true);
       return;
     }
     const load = fetchLatestRef.current;
-    if (!load) return; // 서버 복원 없는 화면
+    if (!load) {
+      setRestored(true); // 서버 복원 없는 화면 — 여기서 끝
+      return;
+    }
     let alive = true;
+    // messages 와 restored 를 같은 태스크에서 세팅한다 — restored 가 먼저 true 가 되면
+    // 호출부가 "빈 대화"로 오판한다(관리자면 복원된 대화 위에 브리핑이 끼어든다).
+    const finish = (thread: RestoredThread | null) => {
+      if (!alive) return;
+      if (thread !== null && thread.messages.length > 0) {
+        conversationId.current = thread.conversationId;
+        setMessages(thread.messages);
+      }
+      setRestored(true);
+    };
     load()
-      .then((restored) => {
-        if (!alive || restored.messages.length === 0) return;
-        conversationId.current = restored.conversationId;
-        setMessages(restored.messages);
-      })
-      .catch(() => {}); // 네트워크·비로그인 — 빈 대화로 시작한다
+      .then(finish)
+      .catch(() => finish(null)); // 네트워크·비로그인 — 빈 대화로 시작한다
     return () => {
       alive = false;
     };
@@ -211,5 +226,5 @@ export function useAssistantStream({
     clearThread(storageKey);
   }, [storageKey]);
 
-  return { messages, ask, pending, startNew };
+  return { messages, ask, pending, startNew, restored };
 }

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  briefingPrompt,
-  isBriefingPrompt,
-  isInquirySummaryAnswer,
-  shouldBrief,
-} from "./briefing";
+import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer, kstDateKey } from "./briefing";
 
 describe("briefingPrompt", () => {
   it("오늘 날짜를 앞머리에 넣는다 — 8B 상대날짜 한계 보정", () => {
@@ -39,17 +34,18 @@ describe("isBriefingPrompt", () => {
   });
 });
 
-describe("shouldBrief", () => {
-  it("저장된 대화가 없으면(새 탭·로그인) 발동", () => {
-    expect(shouldBrief(null)).toBe(true);
+describe("kstDateKey", () => {
+  it("KST 날짜를 ISO 표기로 준다", () => {
+    expect(kstDateKey(new Date("2026-08-02T03:00:00Z"))).toBe("2026-08-02");
   });
 
-  it("'새 대화' 마커(0건 저장) 후 재진입도 발동", () => {
-    expect(shouldBrief(0)).toBe(true);
+  it("UTC 15:00 이 KST 자정 — 그 직전까지는 같은 날", () => {
+    expect(kstDateKey(new Date("2026-08-02T14:59:59Z"))).toBe("2026-08-02");
+    expect(kstDateKey(new Date("2026-08-02T15:00:00Z"))).toBe("2026-08-03");
   });
 
-  it("복원될 대화가 저장돼 있으면 발동하지 않는다", () => {
-    expect(shouldBrief(2)).toBe(false);
+  it("브라우저 시간대와 무관하게 KST 로 본다 — 연말 경계도 KST 기준", () => {
+    expect(kstDateKey(new Date("2025-12-31T16:00:00Z"))).toBe("2026-01-01");
   });
 });
 
