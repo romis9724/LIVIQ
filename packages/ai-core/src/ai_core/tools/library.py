@@ -370,7 +370,9 @@ async def _fees_single_month(
     return ToolResult(
         card=ToolCard(
             title=f"관리비 {period} 내역",
-            quote=_fee_quote(period, breakdown, total, prev_total, peer),
+            quote=_fee_quote(
+                period, breakdown, total, prev_total, peer, detail=_fee_detail_items(fee.breakdown)
+            ),
             source_kind="tool:get_fees",
             data=_fee_data(period, breakdown, total, prev_total, peer),
         )
@@ -609,12 +611,34 @@ def _breakdown_items(raw: object) -> list[tuple[str, int]]:
     return items
 
 
+# 세부 항목 질의("전기요금 얼마야?")는 하위 항목이 LLM에 보여야 답할 수 있다(사용자 요구 3).
+# level 3(급여 세부 등)은 입주민 질의 어휘에 없고 토큰만 먹어 제외, 0원 항목도 제외.
+_FEE_DETAIL_LEVELS = (1, 2)
+
+
+def _fee_detail_items(raw: object) -> list[tuple[str, int]]:
+    """fees.breakdown → 하위 항목(level 1~2, 0원 제외) 목록 — quote(LLM 경로) 전용."""
+    items: list[tuple[str, int]] = []
+    for entry in raw if isinstance(raw, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", ""))
+        amount = int(entry.get("amount", 0))
+        if not name or name == "합계" or amount <= 0:
+            continue
+        if int(entry.get("level", 0)) not in _FEE_DETAIL_LEVELS:
+            continue
+        items.append((name, amount))
+    return items
+
+
 def _fee_quote(
     period: str,
     breakdown: list[tuple[str, int]],
     total: int,
     prev_total: int | None,
     peer: PeerAverage | None,
+    detail: list[tuple[str, int]] | None = None,
 ) -> str:
     top = ", ".join(f"{name} {amount:,}원" for name, amount in breakdown[:3])
     quote = f"{period} 합계 {total:,}원 (주요 항목: {top})"
@@ -628,6 +652,11 @@ def _fee_quote(
             f" · 같은 평형({peer.unit_type}) {peer.sample_size}세대 평균 "
             f"{peer.avg_total:,}원 대비 {sign}{peer.diff:,}원"
         )
+    if detail:
+        # 세부 항목은 quote에만 — 화면 표(level 0)는 그대로다. 전기료·수도료 같은
+        # 항목 질의가 근거를 갖게 하는 유일한 경로(데이터는 있는데 모델이 못 보던 결함).
+        listed = ", ".join(f"{name} {amount:,}원" for name, amount in detail)
+        quote += f" · 세부 항목: {listed}"
     return quote
 
 
