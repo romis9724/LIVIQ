@@ -216,7 +216,7 @@ function AiRow({ message, onAsk }: AiRowProps) {
               {progressLabel(message.stage, message.tool)} 중…
             </div>
             <div className="bubble-ai">
-              <AnswerBody text={message.text} />
+              <AnswerBody text={message.text} citations={message.citations} />
               <span className="caret" aria-hidden="true" />
             </div>
           </>
@@ -233,7 +233,7 @@ function AiRow({ message, onAsk }: AiRowProps) {
           <>
             <ProgressSteps steps={message.steps} />
             <div className="bubble-ai">
-              <AnswerBody text={message.text} />
+              <AnswerBody text={message.text} citations={message.citations} />
               {blocks.map((b) => (
                 <StructuredBlock key={b.ref} data={b.data} />
               ))}
