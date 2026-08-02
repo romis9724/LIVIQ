@@ -1,16 +1,15 @@
 /**
  * 지하주차장 fake 3D 씬 — 프로토타입 `parking_view3d.js`(전역 IIFE) 포팅. (H14-4)
  * 배치도 2D 좌표를 미터 바닥면(x,z)에 투영해 면·차량을 InstancedMesh 로 그린다. 실측 3D 모델이
- * 아니라 배치도의 입체 표현이다. 좌표·상태 계산은 parking-3d-data(테스트 대상), 여기는 렌더만.
+ * 아니라 배치도의 입체 표현이다. 좌표·상태 계산은 parking-scene-data(테스트 대상), 여기는 렌더만.
+ * (web-admin → H20-8 공용 승격 — 입주민 3D가 두 번째 소비자. 추천 자리 순위 비콘 추가)
  *
- * three 를 직접 다루는 유일한 주차 모듈 — ParkingView3D 가 next/dynamic ssr:false 로만 불러
+ * three 를 직접 다루는 유일한 주차 모듈 — 소비자는 next/dynamic ssr:false 로만 불러
  * 타 라우트 번들에 새지 않게 한다(facilities/FacilityGraphCanvas 전례 · ADR-0022 결정 4).
- * 원본의 데모 연출(안내 비콘·순찰차)은 관리자 화면에 쓰임새가 없어 이식하지 않았다.
  */
 
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ParkingLayout, ParkingSpot } from "@/lib/api";
 import {
   SPOT_H_M,
   SPOT_W_M,
@@ -26,12 +25,13 @@ import {
   type CameraShot,
   type CarTone,
   type CruiseRoute,
+  type ParkingSceneLayout,
   type SceneState,
   type SpotPlacement,
   type SpotTone,
-} from "./parking-3d-data";
+} from "./parking-scene-data";
 
-/** 씬 색 — three 는 oklch 를 못 읽어 parking.css `:root` 에 sRGB hex 로 따로 둔다. */
+/** 씬 색 — three 는 oklch 를 못 읽어 parking-scene-3d.css `:root` 에 sRGB hex 로 따로 둔다. */
 export const SCENE_COLOR_VARS = {
   background: "--pk3d-bg",
   floor: "--pk3d-floor",
@@ -50,15 +50,22 @@ export const SCENE_COLOR_VARS = {
   label: "--pk3d-label",
   cruiseA: "--pk3d-cruise-a",
   cruiseB: "--pk3d-cruise-b",
+  beacon: "--pk3d-beacon",
 } as const;
 
 export type SceneColors = Record<keyof typeof SCENE_COLOR_VARS, string>;
 
+/** 추천 자리 비콘 1개 — 순위(1부터)와 면 번호. */
+export interface SpotBeacon {
+  spotNo: string;
+  rank: number;
+}
+
 export interface ParkingScene3DOptions {
   container: HTMLElement;
-  layout: ParkingLayout;
+  layout: ParkingSceneLayout;
   colors: SceneColors;
-  /** 주행 차량 애니메이션 — prefers-reduced-motion 이면 false(배치만 하고 멈춘다). */
+  /** 주행 차량·비콘 애니메이션 — prefers-reduced-motion 이면 false(배치만 하고 멈춘다). */
   driving: boolean;
   /** 면·차량 클릭(짧은 클릭만 — 드래그는 카메라 회전). */
   onSpotClick: (spotNo: string) => void;
@@ -87,6 +94,14 @@ const CLICK_MOVE_PX = 6;
 const CLICK_MS = 400;
 const MAX_FRAME_S = 0.1; // 프레임 간격 상한(탭 복귀 직후 큰 dt 로 차가 튀지 않게)
 
+// 비콘 — 추천 면 위에 떠 있는 역원뿔 + 순위 스프라이트. 부감(~100m)에서도 읽혀야 한다.
+const BEACON_CONE_RADIUS_M = 1.6;
+const BEACON_CONE_HEIGHT_M = 3.2;
+const BEACON_BASE_Y = 6.5; // 원뿔 중심 높이
+const BEACON_LABEL_GAP_M = 3.4; // 원뿔 위 순위 라벨까지 간격
+const BEACON_BOB_M = 0.7; // 위아래 부유 진폭
+const BEACON_BOB_HZ = 0.6;
+
 const SPOT_TONE_COLOR: Record<SpotTone, keyof SceneColors> = {
   empty: "empty",
   resident: "resident",
@@ -113,7 +128,7 @@ interface Tween {
   toTarget: THREE.Vector3;
 }
 
-/** 텍스트 스프라이트(동명·구역명) — 라벨 라이브러리 없이 이미 의존성인 three 만 쓴다. */
+/** 텍스트 스프라이트(동명·구역명·비콘 순위) — 라벨 라이브러리 없이 이미 의존성인 three 만 쓴다. */
 function textSprite(text: string, color: string): THREE.Sprite {
   const fontSize = 48;
   const padding = 16;
@@ -163,6 +178,9 @@ export class ParkingScene3D {
   private readonly cruisers: { group: THREE.Group; route: CruiseRoute; distance: number }[] = [];
   private readonly driving: boolean;
 
+  /** 추천 자리 비콘 — setBeacons() 로 통째로 갈아 끼운다. 부유 애니메이션은 animate 루프. */
+  private beacons: { group: THREE.Group; baseY: number; phase: number }[] = [];
+
   /** 차량 인스턴스 index → 면 번호(픽킹). */
   private carSpotNos: string[] = [];
   private tween: Tween | null = null;
@@ -209,7 +227,7 @@ export class ParkingScene3D {
   }
 
   // ── 정적 씬 ────────────────────────────────────────────────────────────────
-  private buildStatic(layout: ParkingLayout): void {
+  private buildStatic(layout: ParkingSceneLayout): void {
     const { w, h } = this.size;
     this.scene.background = new THREE.Color(this.colors.background);
     const reach = Math.max(MIN_REACH_M, w);
@@ -233,7 +251,7 @@ export class ParkingScene3D {
   }
 
   /** 동 footprint(반투명 extrude)·엘리베이터 코어·램프/설비실 박스 + 이름 라벨. */
-  private buildLayoutSolids(layout: ParkingLayout): void {
+  private buildLayoutSolids(layout: ParkingSceneLayout): void {
     for (const building of layout.buildings) {
       const shape = new THREE.Shape(
         outlineToShape(building.outline).map((p) => new THREE.Vector2(p.x, p.y)),
@@ -352,7 +370,7 @@ export class ParkingScene3D {
    * 앰비언트 주행 차량 — 차로(주차열 사이 통로)만 순환한다. 지오메트리는 주차 차량과 공유하고,
    * 5대뿐이라 인스턴싱 없이 Group 으로 둔다. 픽킹 목록에 넣지 않아 클릭에는 반응하지 않는다.
    */
-  private buildCruisers(spots: readonly ParkingSpot[]): void {
+  private buildCruisers(spots: ParkingSceneLayout["spots"]): void {
     const materialA = new THREE.MeshLambertMaterial({ color: this.colors.cruiseA });
     const materialB = new THREE.MeshLambertMaterial({ color: this.colors.cruiseB });
     const cabinMaterial = new THREE.MeshLambertMaterial({ color: this.colors.glass });
@@ -374,6 +392,49 @@ export class ParkingScene3D {
     for (const cruiser of this.cruisers) {
       cruiser.distance += cruiser.route.speedMps * deltaSeconds;
       placeCruiser(cruiser);
+    }
+  }
+
+  // ── 추천 자리 비콘(H20-8) ──────────────────────────────────────────────────
+  /**
+   * 추천 면 위에 순위 비콘(역원뿔 + 순위 숫자)을 세운다. 이전 비콘은 통째로 치운다.
+   * 없는 면 번호는 조용히 건너뛴다(추천 목록은 도구 확정값이지만 배치도와 어긋날 수 있다).
+   */
+  setBeacons(beacons: readonly SpotBeacon[]): void {
+    if (this.disposed) return;
+    for (const beacon of this.beacons) {
+      this.scene.remove(beacon.group);
+      beacon.group.traverse(disposeObject);
+    }
+    this.beacons = [];
+
+    for (const { spotNo, rank } of beacons) {
+      const placement = this.placements.find((item) => item.no === spotNo);
+      if (!placement) continue;
+      const group = new THREE.Group();
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(BEACON_CONE_RADIUS_M, BEACON_CONE_HEIGHT_M, 16),
+        new THREE.MeshLambertMaterial({ color: this.colors.beacon }),
+      );
+      cone.rotation.x = Math.PI; // 꼭짓점이 면을 가리키게 뒤집는다
+      group.add(cone);
+      const label = textSprite(String(rank), this.colors.label);
+      label.position.y = BEACON_LABEL_GAP_M;
+      group.add(label);
+      group.position.set(placement.x, BEACON_BASE_Y, placement.z);
+      this.scene.add(group);
+      // 순위별 위상차 — 셋이 같은 박자로 출렁이면 하나처럼 보인다.
+      this.beacons.push({ group, baseY: BEACON_BASE_Y, phase: rank * 0.9 });
+    }
+    // 루프가 꺼진 상태(reduced motion)에서도 비콘이 바로 보이게 한 프레임 그린다.
+    if (!this.active) this.renderer.render(this.scene, this.camera);
+  }
+
+  /** 비콘 부유 한 프레임 — driving(모션 허용)일 때만 호출된다. */
+  private stepBeacons(nowMs: number): void {
+    for (const beacon of this.beacons) {
+      beacon.group.position.y =
+        beacon.baseY + Math.sin((nowMs / 1000) * Math.PI * 2 * BEACON_BOB_HZ + beacon.phase) * BEACON_BOB_M;
     }
   }
 
@@ -473,7 +534,10 @@ export class ParkingScene3D {
     this.frameId = requestAnimationFrame(this.animate);
     const deltaSeconds = Math.min(MAX_FRAME_S, (now - this.lastFrameMs) / 1000 || 0);
     this.lastFrameMs = now;
-    if (this.driving) this.stepCruisers(deltaSeconds);
+    if (this.driving) {
+      this.stepCruisers(deltaSeconds);
+      this.stepBeacons(now);
+    }
     this.stepTween(now);
     // 트윈 중에는 트윈이 카메라를 소유한다(controls.update 와 싸우면 카메라가 튄다).
     if (!this.tween) this.controls.update();
@@ -497,7 +561,10 @@ export class ParkingScene3D {
 
   /** 짧게 누른 클릭만 선택으로 본다 — 길게 끈 것은 카메라 회전이다. */
   private readonly handlePointerUp = (event: PointerEvent): void => {
-    const moved = Math.hypot(event.clientX - this.pointerStart.x, event.clientY - this.pointerStart.y);
+    const moved = Math.hypot(
+      event.clientX - this.pointerStart.x,
+      event.clientY - this.pointerStart.y,
+    );
     if (moved > CLICK_MOVE_PX || performance.now() - this.pointerStart.at > CLICK_MS) return;
     const spotNo = this.pick(event);
     if (spotNo) this.onSpotClick(spotNo);
@@ -515,8 +582,8 @@ export class ParkingScene3D {
     const [hit] = raycaster.intersectObjects([this.bodyMesh, this.spotMesh]);
     if (hit?.instanceId === undefined) return null;
     return hit.object === this.spotMesh
-      ? this.placements[hit.instanceId]?.no ?? null
-      : this.carSpotNos[hit.instanceId] ?? null;
+      ? (this.placements[hit.instanceId]?.no ?? null)
+      : (this.carSpotNos[hit.instanceId] ?? null);
   }
 
   // ── 정리 ───────────────────────────────────────────────────────────────────

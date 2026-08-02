@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ParkingSpot } from "@/lib/api";
-import { PX_TO_M, SPOT_H, SPOT_W, type ParkedCar } from "./parking-sim";
+import { SPOT_H, SPOT_W } from "../parking-map/parking-map-data";
+import type { ParkingMapSpot } from "../parking-map/ParkingMap";
 import {
+  PX_TO_M,
   cruiseRoutes,
   floorSize,
   pathLength,
@@ -13,24 +14,18 @@ import {
   spotPlacements,
   spotShot,
   toMeters,
-} from "./parking-3d-data";
+  type SceneOccupant,
+} from "./parking-scene-data";
 
-const SPOTS: ParkingSpot[] = [
+const SPOTS: ParkingMapSpot[] = [
   { no: "001", kind: "일반", x: 130, y: 162, dir: "up" },
   { no: "002", kind: "일반", x: 166, y: 162, dir: "down" },
   { no: "003", kind: "전기차", x: 202, y: 162, dir: "up" },
 ];
 
-function car(overrides: Partial<ParkedCar> = {}): ParkedCar {
-  return {
-    plate: "12가3456",
-    dong: "401동",
-    ho: "101호",
-    model: "아이오닉5",
-    external: false,
-    entryMs: 0,
-    ...overrides,
-  };
+// 관리자 ParkedCar 를 접은 씬 최소 형태 — group 은 동명, 외부 차량은 external 만 true.
+function car(overrides: Partial<SceneOccupant> = {}): SceneOccupant {
+  return { external: false, group: "401동", ...overrides };
 }
 
 describe("floorSize", () => {
@@ -78,9 +73,9 @@ describe("sceneState", () => {
   });
 
   it("splits occupied spots into resident and external", () => {
-    const bySpot = new Map<string, ParkedCar>([
+    const bySpot = new Map<string, SceneOccupant>([
       ["001", car()],
-      ["002", car({ external: true, dong: null, ho: null })],
+      ["002", car({ external: true, group: null })],
     ]);
 
     const state = sceneState(placements, bySpot, null, null);
@@ -91,7 +86,7 @@ describe("sceneState", () => {
   });
 
   it("gives the selected spot priority over its occupancy tone", () => {
-    const bySpot = new Map<string, ParkedCar>([["001", car()]]);
+    const bySpot = new Map<string, SceneOccupant>([["001", car()]]);
 
     const state = sceneState(placements, bySpot, "001", null);
 
@@ -100,9 +95,9 @@ describe("sceneState", () => {
   });
 
   it("dims everything outside the active group, empty spots included", () => {
-    const bySpot = new Map<string, ParkedCar>([
-      ["001", car({ dong: "401동" })],
-      ["002", car({ dong: "402동" })],
+    const bySpot = new Map<string, SceneOccupant>([
+      ["001", car({ group: "401동" })],
+      ["002", car({ group: "402동" })],
     ]);
 
     const state = sceneState(placements, bySpot, null, "401동");
@@ -112,9 +107,9 @@ describe("sceneState", () => {
   });
 
   it("matches external cars for the 외부 group", () => {
-    const bySpot = new Map<string, ParkedCar>([
+    const bySpot = new Map<string, SceneOccupant>([
       ["001", car()],
-      ["002", car({ external: true, dong: null, ho: null })],
+      ["002", car({ external: true, group: null })],
     ]);
 
     const state = sceneState(placements, bySpot, null, "외부");
@@ -123,7 +118,7 @@ describe("sceneState", () => {
   });
 
   it("carries the placement of each occupied spot to its car instance", () => {
-    const bySpot = new Map<string, ParkedCar>([["002", car()]]);
+    const bySpot = new Map<string, SceneOccupant>([["002", car()]]);
 
     const state = sceneState(placements, bySpot, null, null);
 
@@ -158,7 +153,7 @@ describe("camera shots", () => {
 describe("cruiseRoutes", () => {
   // 시드 배치도와 같은 구조 — 4개의 주차열 띠(각 2줄) 사이에 통로가 있다.
   const ROWS = [162, 226, 372, 436, 582, 646, 792, 856];
-  const LAYOUT_SPOTS: ParkingSpot[] = ROWS.flatMap((y, row) =>
+  const LAYOUT_SPOTS: ParkingMapSpot[] = ROWS.flatMap((y, row) =>
     [100, 2872].map((x, col) => ({
       no: `${row}-${col}`,
       kind: "일반" as const,

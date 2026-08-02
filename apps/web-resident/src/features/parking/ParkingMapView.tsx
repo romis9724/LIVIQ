@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Button,
@@ -9,6 +10,7 @@ import {
   Skeleton,
   elapsedText,
   type ParkingMapLayout,
+  type ParkingSceneLayout,
   type ParkingSpotView,
 } from "@liviq/ui";
 import {
@@ -21,6 +23,19 @@ import {
 import { readSpotParam } from "./links";
 import { buildSpotDetail } from "./spot-detail";
 import "./parking.css";
+
+// three(WebGL)는 이 라우트에서만 쓴다 — dynamic ssr:false 로 격리(관리자 3D와 동일 전례).
+const ParkingView3DResident = dynamic(
+  () => import("./ParkingView3DResident").then((m) => m.ParkingView3DResident),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="rpk3d__loading" role="status" aria-live="polite">
+        3D 뷰를 준비하고 있어요…
+      </div>
+    ),
+  },
+);
 
 type DataState =
   | { kind: "loading" }
@@ -130,11 +145,15 @@ function ReadyView({
   const focusNo = recommended[0] ?? myVehicles[0]?.spotNo ?? null;
   const [selectedNo, setSelectedNo] = useState<string | null>(focusNo);
 
+  // 2D 배치도 ↔ 3D 보기(H20-8 — 추천 자리 순위 비콘 + 카메라 이동은 3D 쪽).
+  const [viewMode, setViewMode] = useState<"2d" | "3d">("2d");
+
   const occupied = useMemo(() => new Set(occupiedSpotNos), [occupiedSpotNos]);
   const mineBySpot = useMemo(
     () => new Map(myVehicles.map((v) => [v.spotNo, v] as const)),
     [myVehicles],
   );
+  const sceneLayout = useMemo<ParkingSceneLayout>(() => ({ ...layout, cores }), [layout, cores]);
 
   const spotViews = useMemo(() => {
     const views = new Map<string, ParkingSpotView>();
@@ -166,19 +185,52 @@ function ReadyView({
         </p>
       ) : null}
 
+      <div className="rpk__viewtoggle" role="group" aria-label="배치도 보기 방식">
+        {(
+          [
+            { id: "2d", label: "2D 배치도" },
+            { id: "3d", label: "3D 보기" },
+          ] as const
+        ).map((mode) => (
+          <button
+            key={mode.id}
+            type="button"
+            className="rpk__viewbtn"
+            aria-pressed={viewMode === mode.id}
+            data-active={viewMode === mode.id || undefined}
+            onClick={() => setViewMode(mode.id)}
+          >
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
       <section className="surface-card rpk__stage">
-        <ParkingMap
-          layout={layout}
-          spotViews={spotViews}
-          highlightNos={recommended}
-          selectedNo={selectedNo}
-          onSelect={setSelectedNo}
-          summaryLabel={`지하 1층 주차 배치도 — ${summary}. 면을 누르면 상태를 읽어 줍니다.`}
-          // 입주민 앱은 폭이 좁아 전체 보기로는 면이 안 보인다 — 볼 면이 있으면 확대해 연다.
-          // 5×는 사용자 요청(2026-08-03) — 3×로는 면 번호가 작다.
-          initialZoom={focusNo ? 5 : 1}
-        />
-        <MapLegend />
+        {viewMode === "3d" ? (
+          <ParkingView3DResident
+            layout={sceneLayout}
+            occupiedSpotNos={occupiedSpotNos}
+            recommended={recommended}
+            selectedNo={selectedNo}
+            onSelect={setSelectedNo}
+            summaryLabel={`지하 1층 주차장 3D — ${summary}. 추천 자리에 순위 비콘이 표시됩니다.`}
+          />
+        ) : (
+          <>
+            <ParkingMap
+              layout={layout}
+              spotViews={spotViews}
+              highlightNos={recommended}
+              selectedNo={selectedNo}
+              onSelect={setSelectedNo}
+              summaryLabel={`지하 1층 주차 배치도 — ${summary}. 면을 누르면 상태를 읽어 줍니다.`}
+              // 입주민 앱은 폭이 좁아 전체 보기로는 면이 안 보인다 — 볼 면이 있으면 확대해 연다.
+              // 5×는 사용자 요청(2026-08-03) — 3×로는 면 번호가 작다.
+              initialZoom={focusNo ? 5 : 1}
+            />
+            <MapLegend />
+          </>
+        )}
       </section>
 
       <SpotDetailPanel
