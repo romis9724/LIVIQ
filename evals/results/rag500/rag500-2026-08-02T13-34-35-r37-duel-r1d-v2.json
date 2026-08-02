@@ -1,0 +1,249 @@
+{
+  "label": "r37-duel-r1d-v2",
+  "set": "all",
+  "case_ids": [
+    "V2-QA-0001",
+    "V2-QA-0008",
+    "V2-QA-0010",
+    "V2-QA-0011",
+    "V2-QA-0013",
+    "V2-QA-0017",
+    "V2-QA-0018",
+    "V2-QA-0020",
+    "V2-QA-0021",
+    "V2-QA-0022",
+    "V2-QA-0027",
+    "V2-QA-0028",
+    "V2-QA-0032",
+    "V2-QA-0033",
+    "V2-QA-0035",
+    "V2-QA-0235",
+    "V2-QA-0236",
+    "V2-QA-0245",
+    "V2-QA-0340",
+    "V2-QA-0341",
+    "V2-QA-0346",
+    "V2-QA-0002",
+    "V2-QA-0036",
+    "V2-QA-0071",
+    "V2-QA-0101",
+    "V2-QA-0111",
+    "V2-QA-0151",
+    "V2-QA-0186",
+    "V2-QA-0226",
+    "V2-QA-0003",
+    "V2-QA-0037",
+    "V2-QA-0072",
+    "V2-QA-0102",
+    "V2-QA-0112",
+    "V2-QA-0152",
+    "V2-QA-0187",
+    "V2-QA-0227"
+  ],
+  "limit": null,
+  "api_url": "http://localhost:18000",
+  "ran_at": "2026-08-02T13:34:35.018Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 전 건 프로바이더 실측"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": null,
+    "by_category": [],
+    "by_backend": [],
+    "pairs": []
+  },
+  "errors": [
+    {
+      "case_id": "V2-QA-0001",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0002",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0003",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0008",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0010",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0011",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0013",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0017",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0018",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0020",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0021",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0022",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0027",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0028",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0032",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0033",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0035",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0036",
+      "category": "지침·매뉴얼",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0037",
+      "category": "지침·매뉴얼",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0071",
+      "category": "회의록",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0072",
+      "category": "회의록",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0101",
+      "category": "공지",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0102",
+      "category": "공지",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0111",
+      "category": "관리비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0112",
+      "category": "관리비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0151",
+      "category": "민원",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0152",
+      "category": "민원",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0186",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0187",
+      "category": "시설·설비",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0226",
+      "category": "평면도",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0227",
+      "category": "평면도",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0235",
+      "category": "평면도",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0236",
+      "category": "평면도",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0245",
+      "category": "평면도",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0340",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0341",
+      "category": "관리규약 조항",
+      "error": "fetch failed"
+    },
+    {
+      "case_id": "V2-QA-0346",
+      "category": "공지",
+      "error": "fetch failed"
+    }
+  ],
+  "cases": []
+}
