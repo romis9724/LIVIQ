@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer, kstDateKey } from "./briefing";
+import {
+  briefingPrompt,
+  isBriefingPrompt,
+  isFacilityAnswer,
+  isInquirySummaryAnswer,
+  isRecentNoticesAnswer,
+  kstDateKey,
+} from "./briefing";
 
 describe("briefingPrompt", () => {
   it("오늘 날짜를 앞머리에 넣는다 — 8B 상대날짜 한계 보정", () => {
@@ -66,5 +73,29 @@ describe("isInquirySummaryAnswer", () => {
     expect(isInquirySummaryAnswer(["summarize_inquiries"])).toBe(true);
     expect(isInquirySummaryAnswer(["search_documents"])).toBe(false);
     expect(isInquirySummaryAnswer(undefined)).toBe(false);
+  });
+});
+
+describe("isFacilityAnswer", () => {
+  it("시설 도구 3종 중 하나라도 라우팅됐으면 CTA", () => {
+    expect(isFacilityAnswer(["get_facilities"])).toBe(true);
+    expect(isFacilityAnswer(["get_overdue_checks"])).toBe(true);
+    expect(isFacilityAnswer(["search_facility_graph"])).toBe(true);
+    expect(isFacilityAnswer(["search_documents", "get_overdue_checks"])).toBe(true);
+  });
+
+  it("시설과 무관한 답변에는 CTA 없음", () => {
+    expect(isFacilityAnswer(["find_longterm_parking"])).toBe(false);
+    expect(isFacilityAnswer([])).toBe(false);
+    expect(isFacilityAnswer(undefined)).toBe(false);
+  });
+});
+
+describe("isRecentNoticesAnswer", () => {
+  it("get_recent_notices 가 라우팅된 답변에만 CTA", () => {
+    expect(isRecentNoticesAnswer(["get_recent_notices"])).toBe(true);
+    // 문서 검색으로 공지 '내용'을 답한 경우는 게시판 목록이 답이 아니다.
+    expect(isRecentNoticesAnswer(["search_documents"])).toBe(false);
+    expect(isRecentNoticesAnswer(undefined)).toBe(false);
   });
 });

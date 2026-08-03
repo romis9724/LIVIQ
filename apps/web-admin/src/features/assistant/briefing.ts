@@ -46,7 +46,29 @@ export function kstDateKey(now: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(now);
 }
 
+// 관리자 답변 CTA 판정 — 근거는 **도구 이름(toolPath)** 뿐이다. 모델 자유텍스트에서
+// 화면·번호를 파싱해 링크를 만들지 않는다(규칙 8). 입주민 전용 도구(빈자리·내 차 위치·
+// 세대 평면도)는 RESIDENT_ROLES 게이트라 관리자에겐 애초에 라우팅되지 않으므로,
+// 관리자가 실제로 받는 도구에 맞는 등가 CTA를 단다(H20-12).
+
 /** 관리자 답변 CTA — 민원 집계 도구가 라우팅됐으면 민원현황으로 보낸다. */
 export function isInquirySummaryAnswer(toolPath: readonly string[] | undefined): boolean {
   return toolPath?.includes("summarize_inquiries") ?? false;
+}
+
+/** FACILITY_ROLES 시설 도구 — ai_core tools/library.py 의 이름과 같아야 한다. */
+const FACILITY_TOOLS = ["get_facilities", "get_overdue_checks", "search_facility_graph"];
+
+/**
+ * 설비 현황·점검 기한·원인 추적 답변인가 — 시설관리 화면(전체화면 3D 그래프)으로 보낸다.
+ * ponytail: 딥링크 파라미터는 두지 않는다(강조할 쿼리 계약이 `/facilities` 에 없다).
+ * 설비 코드 강조가 필요해지면 `/parking?spot=` 처럼 그때 additive 로 붙인다.
+ */
+export function isFacilityAnswer(toolPath: readonly string[] | undefined): boolean {
+  return toolPath?.some((tool) => FACILITY_TOOLS.includes(tool)) ?? false;
+}
+
+/** 최근 공지 목록 답변인가 — 게시판으로 보낸다(문서 검색으로 답한 공지 '내용'은 제외). */
+export function isRecentNoticesAnswer(toolPath: readonly string[] | undefined): boolean {
+  return toolPath?.includes("get_recent_notices") ?? false;
 }
