@@ -146,8 +146,8 @@ export function ParkingView3D({
   return (
     <div className="pk-map">
       <div className="pk-zoom" role="group" aria-label="3D 카메라">
-        {/* 클로즈업 뒤 "다른 데로 못 간다"는 신고 — 이동(팬)은 오른쪽 끌기라 안내에 적는다. */}
-        <span className="pk-zoom__hint">끌어서 회전 · 휠로 확대 · 오른쪽 끌기로 이동</span>
+        {/* 좌드래그=이동으로 바꿨다(축 고정 신고 2회 — 공용 씬 mouseButtons). 회전이 우드래그. */}
+        <span className="pk-zoom__hint">끌어서 이동 · 휠로 확대 · 오른쪽 끌기로 회전</span>
         <button
           type="button"
           className="pk-zoom__reset"

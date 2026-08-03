@@ -219,6 +219,16 @@ export class ParkingScene3D {
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI / 2 - 0.06; // 바닥 아래로 못 내려간다
     this.controls.maxDistance = reach * MAX_DISTANCE_RATIO;
+    // 좌드래그 = 이동(팬). 기본(회전)은 클로즈업 뒤 target 이 그 면에 박혀 어디를 끌어도
+    // 그 축만 돈다 — "축이 고정돼 다른 데로 못 간다"(사용자 신고 2026-08-03, 2회). 주차장은
+    // 지도처럼 훑는 화면이라 이동을 1버튼에, 회전은 우드래그·두 손가락으로 보낸다.
+    this.controls.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE,
+    };
+    this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this.controls.screenSpacePanning = false; // 팬은 바닥면을 따라 — 하늘로 새지 않게
 
     this.buildStatic(layout);
     this.spotMesh = this.buildSpotMesh();
