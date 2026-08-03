@@ -22,7 +22,13 @@ import {
   useAssistantStream,
 } from "@liviq/ui";
 
-import { briefingPrompt, isBriefingPrompt, isInquirySummaryAnswer } from "./briefing";
+import {
+  briefingPrompt,
+  isBriefingPrompt,
+  isFacilityAnswer,
+  isInquirySummaryAnswer,
+  isRecentNoticesAnswer,
+} from "./briefing";
 import {
   buildLongtermParkingHref,
   isLongtermParkingAnswer,
@@ -32,14 +38,16 @@ import { ADMIN_ASSISTANT_STREAM_OPTIONS } from "./client";
 import { InquiryStatusPanel } from "./InquiryStatusPanel";
 import "./admin-assistant.css";
 
-const FALLBACK_DEFAULT = "확실한 답을 드리기 어렵습니다. 민원 관리 화면에서 직접 확인해 주세요.";
+const FALLBACK_DEFAULT = "확실한 답을 드리기 어려워요. 민원 관리 화면에서 직접 확인해 주세요.";
 
-// 폴백 사유별 안내 — 입주민과 달리 "담당자에게 연결"이 아니라 관리자가 직접 볼 화면을 가리킨다.
+// 폴백 사유별 안내 — 톤은 입주민(#140 대화체)과 맞추되, 내용은 관리자 맥락을 유지한다:
+// "담당자에게 연결"이 아니라 관리자가 직접 볼 화면을 가리킨다(H20-12).
 const FALLBACK_TEXT: Record<string, string> = {
-  no_evidence: "근거가 될 문서·데이터를 찾지 못했습니다. 질문을 조금 더 구체적으로 적어 주세요.",
-  llm_unavailable: "AI 요약이 일시적으로 어려워 찾은 근거만 보여드립니다. 잠시 후 다시 시도해 주세요.",
+  no_evidence:
+    "죄송해요, 근거가 될 문서·데이터를 찾지 못했어요. 질문을 조금 더 구체적으로 적어 주시면 다시 찾아볼게요.",
+  llm_unavailable: "AI 요약이 일시적으로 어려워 찾은 근거만 안내해요. 잠시 후 다시 시도해 주세요.",
   low_confidence: FALLBACK_DEFAULT,
-  masking_failed: "개인정보가 섞여 있어 이 질문은 처리하지 않았습니다(규칙 2).",
+  masking_failed: "개인정보가 섞여 있어 이 질문은 처리하지 않았어요(규칙 2).",
 };
 
 function fallbackText(reason: string | null): string {
@@ -205,11 +213,13 @@ function AiRow({ message, onAsk }: AiRowProps) {
   const blocks = structuredBlocks(message.citations);
   // 폴백에는 칩을 달지 않는다 — 서버가 이미 질문형만 중복 없이 보낸다(ai_core/suggestions.py).
   const chips = kind === "answered" ? (message.result?.suggestions ?? []) : [];
-  const isSummary = isInquirySummaryAnswer(message.result?.toolPath);
+  const toolPath = message.result?.toolPath;
+  const isSummary = isInquirySummaryAnswer(toolPath);
   // 장기주차 답변 → 3D 비콘 딥링크(ADM-1). 면 번호는 도구 카드 quote 확정값에서만 뽑는다.
-  const longtermSpots = isLongtermParkingAnswer(message.result?.toolPath)
-    ? longtermSpotNos(message.citations)
-    : [];
+  const longtermSpots = isLongtermParkingAnswer(toolPath) ? longtermSpotNos(message.citations) : [];
+  // 시설·공지 답변 → 해당 화면으로(H20-12). 판정은 도구 이름만, 파라미터는 없다.
+  const isFacility = isFacilityAnswer(toolPath);
+  const isNotices = isRecentNoticesAnswer(toolPath);
 
   return (
     <div className="ai-row">
@@ -258,6 +268,16 @@ function AiRow({ message, onAsk }: AiRowProps) {
                   className="btn btn--secondary btn--sm"
                 >
                   <span aria-hidden="true">🅿️</span> 주차장 3D에서 보기
+                </Link>
+              ) : null}
+              {isFacility ? (
+                <Link href="/facilities" className="btn btn--secondary btn--sm">
+                  <span aria-hidden="true">🔧</span> 시설관리에서 보기
+                </Link>
+              ) : null}
+              {isNotices ? (
+                <Link href="/notices" className="btn btn--secondary btn--sm">
+                  <span aria-hidden="true">📢</span> 공지사항 열기
                 </Link>
               ) : null}
               <FeedbackButtons className="ai-row__feedback" />
