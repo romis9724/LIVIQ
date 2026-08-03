@@ -10,6 +10,9 @@ import datetime
 import pytest
 
 from ai_core.rag.prompt import (
+    ADMIN_AGENT_ASK_UNIT_PROMPT,
+    ADMIN_AGENT_SYSTEM_PROMPT,
+    ADMIN_ANSWER_SYSTEM_PROMPT,
     AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
     FACILITY_ANSWER_SYSTEM_PROMPT,
@@ -75,6 +78,55 @@ def test_quote_first_prompt_keeps_confirmed_absence_rule(base: str) -> None:
 
     # Assert
     assert "NO_EVIDENCE로 처리하지 마십시오" in variant
+
+
+def test_admin_answer_prompt_extends_the_general_one_with_home_device_guidance() -> None:
+    """관리자 변형(H20-16) — 기존 규칙 1~6은 그대로 두고 세대 내부 위치 규칙만 덧붙인다."""
+    # Assert — 기존 프롬프트가 접두라 프리픽스 캐시·기존 규칙이 보존된다
+    assert ADMIN_ANSWER_SYSTEM_PROMPT.startswith(ANSWER_SYSTEM_PROMPT)
+    assert "트윈 대시보드" in ADMIN_ANSWER_SYSTEM_PROMPT
+    assert "동·호수" in ADMIN_ANSWER_SYSTEM_PROMPT
+    # 입주민 프롬프트는 오염되지 않는다 — 본인 세대 도구가 있어 이 안내가 틀린 답이 된다
+    assert "트윈 대시보드" not in ANSWER_SYSTEM_PROMPT
+
+
+def test_admin_agent_prompt_scopes_clarify_to_home_devices_without_a_unit() -> None:
+    """되묻기 확장은 **세대 평면도 설비 + 동·호수 없음**에만(사용자 지시 2026-08-03).
+
+    되묻기 문장은 동·호수가 없을 때 주는 변형에만 있다 — 주입 조건은 라우터가 가른다
+    (`_admin_overrides`). 공용 설비는 배제 문구로 못박는다: 넓히면 R31 도피가 재발한다.
+    """
+    # Assert — 관리자 공통 변형에는 되묻기 지시가 없다(세대 설비를 공용 목록으로 답하지 말 것만)
+    assert ADMIN_AGENT_SYSTEM_PROMPT.startswith(AGENT_SYSTEM_PROMPT)
+    assert "ask_clarification" not in ADMIN_AGENT_SYSTEM_PROMPT
+    # 되묻기 변형은 공통 변형의 확장 — 조건과 배제가 함께 있다
+    assert ADMIN_AGENT_ASK_UNIT_PROMPT.startswith(ADMIN_AGENT_SYSTEM_PROMPT)
+    assert "ask_clarification" in ADMIN_AGENT_ASK_UNIT_PROMPT
+    assert "단지 공용 설비 질문은 해당하지 않습니다" in ADMIN_AGENT_ASK_UNIT_PROMPT
+    # 공통(입주민) 결정 프롬프트는 불변 — 입주민은 본인 세대 평면도 도구가 답한다
+    assert "ask_clarification" not in AGENT_SYSTEM_PROMPT
+
+
+def test_agent_system_prompt_accepts_channel_variant() -> None:
+    """날짜 주입은 채널 변형에도 그대로 붙는다(관리자 결정 turn)."""
+    # Act
+    content = agent_system_prompt(datetime.date(2026, 8, 3), ADMIN_AGENT_SYSTEM_PROMPT)
+
+    # Assert
+    assert content.startswith(ADMIN_AGENT_SYSTEM_PROMPT)
+    assert "2026-08-03" in content
+
+
+def test_quote_first_prompt_handles_admin_variant() -> None:
+    """규칙 0 삽입은 헤더 기준이라 규칙이 하나 늘어난 관리자 변형에서도 같게 동작한다."""
+    # Act
+    variant = quote_first_prompt(ADMIN_ANSWER_SYSTEM_PROMPT)
+
+    # Assert
+    header, rule_zero, rest = variant.split("\n", 2)
+    assert header == ADMIN_ANSWER_SYSTEM_PROMPT.split("\n", 1)[0]
+    assert rule_zero == QUOTE_FIRST_RULE
+    assert "트윈 대시보드" in rest
 
 
 def test_agent_system_prompt_is_stable_within_a_day() -> None:

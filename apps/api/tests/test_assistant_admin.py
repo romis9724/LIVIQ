@@ -23,6 +23,7 @@ from app.deps import (
     visibilities_for,
 )
 from app.main import create_app
+from app.routers.assistant import _admin_overrides
 from app.session import get_redis
 from conftest import TENANT_ID, USER_ID
 from httpx import ASGITransport
@@ -31,6 +32,13 @@ from test_assistant import _parse_sse, _seed_conversation, _seed_indexed_documen
 
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import DoneEvent
+from ai_core.rag.prompt import (
+    ADMIN_AGENT_ASK_UNIT_PROMPT,
+    ADMIN_AGENT_SYSTEM_PROMPT,
+    ADMIN_ANSWER_SYSTEM_PROMPT,
+    AGENT_SYSTEM_PROMPT,
+    ANSWER_SYSTEM_PROMPT,
+)
 from ai_core.tools import ToolContext
 
 ADMIN_ASK = "/admin/assistant/ask"
@@ -69,6 +77,25 @@ async def manager_client(
     await _seed_indexed_document(db_session)
     async with _client(db_session, doc_only_llm, fake_redis, roles=("MANAGER",)) as c:
         yield c
+
+
+@pytest.fixture
+def system_prompts(
+    doc_only_llm: LlmClient, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, list[str]]:
+    """두 turn에 실제로 실린 시스템 프롬프트 기록 — agent=도구 결정, answer=최종 답변."""
+    captured: dict[str, list[str]] = {"agent": [], "answer": []}
+
+    def spy(kind: str, original: typing.Any) -> typing.Any:
+        def wrapped(messages: typing.Any, **kwargs: typing.Any) -> typing.Any:
+            captured[kind].append(str(messages[0]["content"]))
+            return original(messages, **kwargs)
+
+        return wrapped
+
+    monkeypatch.setattr(doc_only_llm, "chat", spy("agent", doc_only_llm.chat))
+    monkeypatch.setattr(doc_only_llm, "chat_stream", spy("answer", doc_only_llm.chat_stream))
+    return captured
 
 
 def _done(body: str) -> dict[str, object]:
@@ -133,6 +160,76 @@ async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None
     assert {"status", "token", "citation"} <= set(names)
     assert names[-1] == "done"
     assert events[-1][1]["status"] == "answered"
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        # 세대 평면도 설비 위치 + 동·호수 있음 → 되묻기 금지 + 공용 설비 목록 도구 감춤
+        (
+            "404동 301호 콘센트는 어디에 있지?",
+            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_SYSTEM_PROMPT, ("get_facilities",)),
+        ),
+        ("402동 201호 두꺼비집 어디에 있어?", None),  # 동의어(H20-7)도 같은 판정
+        # 동·호수 없음 → 되묻기 예외
+        (
+            "콘센트 어디 있는지 알려줘",
+            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, ()),
+        ),
+        # 공용 설비 위치는 되묻기 대상이 아니다(사용자 지시 2026-08-03)
+        ("승강기는 어디에 있나요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+        # 설비 현황·대수 질의는 위치 질문이 아니다 — 골든셋 시설 클래스가 여기 걸리면 회귀
+        ("소방 설비 현황을 알려주세요.", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+        ("단지 공용 설비가 총 몇 개인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+        ("미배정 민원 몇 건인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+    ],
+)
+def test_admin_overrides_scope(
+    question: str, expected: tuple[str, str, tuple[str, ...]] | None
+) -> None:
+    """관리자 변형은 **세대 평면도 설비 위치 질의**에만 걸린다(H20-16)."""
+    # Arrange — None은 첫 케이스와 같은 기대(동의어 경로)
+    want = expected or (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_SYSTEM_PROMPT, ("get_facilities",))
+
+    # Act · Assert
+    assert _admin_overrides(question) == want
+
+
+async def test_admin_ask_wires_overrides_into_both_turns(
+    manager_client: httpx.AsyncClient, system_prompts: dict[str, list[str]]
+) -> None:
+    """일반 관리자 질의는 공통 프롬프트 — 변형이 전 질의로 새지 않는다(H20-16)."""
+    await manager_client.post(ADMIN_ASK, json={"question": QUESTION})
+
+    assert system_prompts["answer"][-1] == ANSWER_SYSTEM_PROMPT
+    # 결정 turn은 날짜 문장이 뒤에 붙으므로 접두 비교(agent_system_prompt)
+    assert system_prompts["agent"][0].startswith(AGENT_SYSTEM_PROMPT)
+
+
+async def test_admin_ask_home_device_question_uses_admin_prompts(
+    manager_client: httpx.AsyncClient, system_prompts: dict[str, list[str]]
+) -> None:
+    """세대 설비 위치 질의는 두 turn 다 관리자 변형 + 공용 설비 목록 도구 비노출."""
+    await manager_client.post(ADMIN_ASK, json={"question": "404동 301호 콘센트는 어디에 있지?"})
+
+    assert system_prompts["answer"][-1] == ADMIN_ANSWER_SYSTEM_PROMPT
+    assert system_prompts["agent"][0].startswith(ADMIN_AGENT_SYSTEM_PROMPT)
+
+
+async def test_resident_ask_keeps_general_prompts(
+    db_session: AsyncSession,
+    doc_only_llm: LlmClient,
+    fake_redis: object,
+    system_prompts: dict[str, list[str]],
+) -> None:
+    """대조군 — 입주민 채널은 세대 설비 위치 질의에도 공통 프롬프트다(본인 세대 도구가 답한다)."""
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, doc_only_llm, fake_redis, roles=("RESIDENT",)) as c:
+        await c.post("/assistant/ask", json={"question": "404동 301호 콘센트는 어디에 있지?"})
+
+    assert system_prompts["answer"] == [ANSWER_SYSTEM_PROMPT]
+    assert system_prompts["agent"][0].startswith(AGENT_SYSTEM_PROMPT)
+    assert "ask_clarification" not in system_prompts["agent"][0]
 
 
 # ── 답변 캐시 우회(ADR-0028 결정 2) ────────────────────────────────────

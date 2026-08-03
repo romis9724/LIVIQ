@@ -1,0 +1,2537 @@
+{
+  "label": "r40-after-3",
+  "set": "smoke",
+  "case_ids": [
+    "V2-QA-0186",
+    "V2-QA-0187",
+    "V2-QA-0188",
+    "V2-QA-0189",
+    "V2-QA-0190",
+    "V2-QA-0191",
+    "V2-QA-0192",
+    "V2-QA-0193",
+    "V2-QA-0194",
+    "V2-QA-0195",
+    "V2-QA-0196",
+    "V2-QA-0197",
+    "V2-QA-0198",
+    "V2-QA-0199",
+    "V2-QA-0200",
+    "V2-QA-0201",
+    "V2-QA-0202",
+    "V2-QA-0203",
+    "V2-QA-0204",
+    "V2-QA-0205",
+    "V2-QA-0206",
+    "V2-QA-0207",
+    "V2-QA-0208",
+    "V2-QA-0209",
+    "V2-QA-0210",
+    "V2-QA-0211",
+    "V2-QA-0212",
+    "V2-QA-0213",
+    "V2-QA-0214",
+    "V2-QA-0215",
+    "V2-QA-0216",
+    "V2-QA-0217",
+    "V2-QA-0218",
+    "V2-QA-0219",
+    "V2-QA-0220",
+    "V2-QA-0221",
+    "V2-QA-0222",
+    "V2-QA-0223",
+    "V2-QA-0224",
+    "V2-QA-0225"
+  ],
+  "limit": null,
+  "api_url": "http://127.0.0.1:8010",
+  "ran_at": "2026-08-03T04:45:26.033Z",
+  "auth": "session",
+  "meta": {
+    "auth": "세션 로그인(/auth/login) — 케이스 계정의 실제 역할·테넌트로 호출",
+    "multi_turn": "conversation_id 순차 호출 — 서버가 직전 3턴을 LLM에 주입(H18-1, ADR-0025 §3). 히스토리가 있는 턴은 답변 캐시를 우회한다",
+    "id_convention": "uuid5(NAMESPACE_URL, 'liviq-rag-validation:' + fixtureId), 문서 -V1은 -V2 별칭",
+    "citation_scoring": "문서 단위(document_id) — 조항·revision은 미채점(expected.citations_raw 보존)",
+    "token_usage": "전 turn 합산(도구 결정 turn + 최종 답변 turn) — 추정 혼입 40/40건(최종 답변 turn은 스트리밍이라 usage 미제공 → 추정치), 원가는 참고값"
+  },
+  "pricing": null,
+  "summary": {
+    "overall": {
+      "key": "__ALL__",
+      "n": 40,
+      "pass": 20,
+      "citation_scored": 33,
+      "citation_hit": 31,
+      "citation_hit_rate": 0.9393939393939394,
+      "fallback_scored": 40,
+      "fallback_ok": 21,
+      "fallback_accuracy": 0.525,
+      "tool_scored": 33,
+      "tool_hit": 31,
+      "tool_accuracy": 0.9393939393939394,
+      "required_cases": 0,
+      "required_hit_sum": 0,
+      "required_total_sum": 0,
+      "required_call_rate": null,
+      "hard_fail": 0,
+      "needs_judge": 0,
+      "clarify_scored": 40,
+      "clarify_misuse": 0,
+      "clarify_misuse_rate": 0,
+      "total_p50_ms": 12575,
+      "total_p95_ms": 23310,
+      "ttft_p50_ms": 44,
+      "ttft_p95_ms": 52,
+      "token_input_sum": 151954,
+      "token_output_sum": 4118,
+      "token_estimated_cases": 40,
+      "errors": 0
+    },
+    "by_category": [
+      {
+        "key": "시설·설비",
+        "n": 40,
+        "pass": 20,
+        "citation_scored": 33,
+        "citation_hit": 31,
+        "citation_hit_rate": 0.9393939393939394,
+        "fallback_scored": 40,
+        "fallback_ok": 21,
+        "fallback_accuracy": 0.525,
+        "tool_scored": 33,
+        "tool_hit": 31,
+        "tool_accuracy": 0.9393939393939394,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 40,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 12575,
+        "total_p95_ms": 23310,
+        "ttft_p50_ms": 44,
+        "ttft_p95_ms": 52,
+        "token_input_sum": 151954,
+        "token_output_sum": 4118,
+        "token_estimated_cases": 40
+      }
+    ],
+    "by_backend": [
+      {
+        "key": "backend:neo4j",
+        "n": 3,
+        "pass": 3,
+        "citation_scored": 3,
+        "citation_hit": 3,
+        "citation_hit_rate": 1,
+        "fallback_scored": 3,
+        "fallback_ok": 3,
+        "fallback_accuracy": 1,
+        "tool_scored": 3,
+        "tool_hit": 3,
+        "tool_accuracy": 1,
+        "required_cases": 0,
+        "required_hit_sum": 0,
+        "required_total_sum": 0,
+        "required_call_rate": null,
+        "hard_fail": 0,
+        "needs_judge": 0,
+        "clarify_scored": 3,
+        "clarify_misuse": 0,
+        "clarify_misuse_rate": 0,
+        "total_p50_ms": 22264,
+        "total_p95_ms": 32788,
+        "ttft_p50_ms": 51,
+        "ttft_p95_ms": 51,
+        "token_input_sum": 16612,
+        "token_output_sum": 686,
+        "token_estimated_cases": 3
+      }
+    ],
+    "pairs": []
+  },
+  "errors": [],
+  "cases": [
+    {
+      "case_id": "V2-QA-0186",
+      "category": "시설·설비",
+      "execution_set": "Smoke",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "공용 설비 총 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 276,
+        "token_input": 3414,
+        "token_output": 157,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 26,
+        "total_ms": 18718,
+        "turns": [
+          {
+            "ttft_ms": 26,
+            "total_ms": 18718
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0187",
+      "category": "시설·설비",
+      "execution_set": "Smoke",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "공용 설비 총 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 103,
+        "token_input": 3501,
+        "token_output": 155,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 53,
+        "total_ms": 16666,
+        "turns": [
+          {
+            "ttft_ms": 53,
+            "total_ms": 16666
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0188",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "공용 설비 총 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록",
+          "설비 목록"
+        ],
+        "answer_chars": 305,
+        "token_input": 7249,
+        "token_output": 430,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 41654,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 20618
+          },
+          {
+            "ttft_ms": 54,
+            "total_ms": 21036
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0189",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "공용 설비 총 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 166,
+        "token_input": 3566,
+        "token_output": 274,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 49,
+        "total_ms": 23310,
+        "turns": [
+          {
+            "ttft_ms": 49,
+            "total_ms": 23310
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0190",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "EL 계열 설비 12개"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3132,
+        "token_output": 32,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 52,
+        "total_ms": 10025,
+        "turns": [
+          {
+            "ttft_ms": 52,
+            "total_ms": 10025
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0191",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "EL 계열 설비 12개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 24,
+        "token_input": 3415,
+        "token_output": 45,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 10687,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 10687
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0192",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "FR 계열 설비 6개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 20,
+        "token_input": 3420,
+        "token_output": 46,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 52,
+        "total_ms": 11355,
+        "turns": [
+          {
+            "ttft_ms": 52,
+            "total_ms": 11355
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0193",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "FR 계열 설비 6개"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3218,
+        "token_output": 109,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 13450,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 13450
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0194",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "WT 계열 설비 4개"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3141,
+        "token_output": 37,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 9343,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 9343
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0195",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "WT 계열 설비 4개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 47,
+        "token_input": 3427,
+        "token_output": 72,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 40,
+        "total_ms": 13101,
+        "turns": [
+          {
+            "ttft_ms": 40,
+            "total_ms": 13101
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0196",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "CM 계열 설비 7개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 17,
+        "token_input": 3427,
+        "token_output": 45,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 11832,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 11832
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0197",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "CM 계열 설비 7개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 35,
+        "token_input": 3433,
+        "token_output": 77,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 40,
+        "total_ms": 12225,
+        "turns": [
+          {
+            "ttft_ms": 40,
+            "total_ms": 12225
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0198",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": false,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 fault 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 114,
+        "token_input": 4047,
+        "token_output": 184,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 51,
+        "total_ms": 18348,
+        "turns": [
+          {
+            "ttft_ms": 51,
+            "total_ms": 18348
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:get_facilities"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0199",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 fault 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3792,
+        "token_output": 217,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 51,
+        "total_ms": 20630,
+        "turns": [
+          {
+            "ttft_ms": 51,
+            "total_ms": 20630
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0200",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 check 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities",
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3633,
+        "token_output": 72,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 51,
+        "total_ms": 12075,
+        "turns": [
+          {
+            "ttft_ms": 51,
+            "total_ms": 12075
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0201",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 risk 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3161,
+        "token_output": 41,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 48,
+        "total_ms": 9687,
+        "turns": [
+          {
+            "ttft_ms": 48,
+            "total_ms": 9687
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0202",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 normal 설비 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 37,
+        "token_input": 3420,
+        "token_output": 53,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 26,
+        "total_ms": 11817,
+        "turns": [
+          {
+            "ttft_ms": 26,
+            "total_ms": 11817
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0203",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "공용 설비 총 37개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 42,
+        "token_input": 3410,
+        "token_output": 57,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 52,
+        "total_ms": 11507,
+        "turns": [
+          {
+            "ttft_ms": 52,
+            "total_ms": 11507
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0204",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "EL 계열 설비 12개"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록"
+        ],
+        "answer_chars": 15,
+        "token_input": 3941,
+        "token_output": 60,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 35,
+        "total_ms": 12463,
+        "turns": [
+          {
+            "ttft_ms": 35,
+            "total_ms": 12463
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0205",
+      "category": "시설·설비",
+      "execution_set": "Critical",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_facilities",
+        "document_ids": [],
+        "expected_tool": "get_facilities",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "상태 fault 설비 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "설비 목록",
+          "설비 목록",
+          "설비 목록"
+        ],
+        "answer_chars": 62,
+        "token_input": 3803,
+        "token_output": 100,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 45,
+        "total_ms": 13120,
+        "turns": [
+          {
+            "ttft_ms": 45,
+            "total_ms": 13120
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0206",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3241,
+        "token_output": 39,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 10565,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 10565
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0207",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3248,
+        "token_output": 45,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 11362,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 11362
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0208",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3251,
+        "token_output": 42,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 56,
+        "total_ms": 10108,
+        "turns": [
+          {
+            "ttft_ms": 56,
+            "total_ms": 10108
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0209",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3242,
+        "token_output": 41,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 38,
+        "total_ms": 10656,
+        "turns": [
+          {
+            "ttft_ms": 38,
+            "total_ms": 10656
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0210",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 57,
+        "token_input": 3253,
+        "token_output": 80,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 44,
+        "total_ms": 11804,
+        "turns": [
+          {
+            "ttft_ms": 44,
+            "total_ms": 11804
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0211",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": false,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": false,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_facilities",
+          "get_facilities",
+          "get_facilities"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3615,
+        "token_output": 64,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 39,
+        "total_ms": 12575,
+        "turns": [
+          {
+            "ttft_ms": 39,
+            "total_ms": 12575
+          }
+        ]
+      },
+      "notes": [
+        "v2 인용 미충족: tool:get_overdue_checks"
+      ]
+    },
+    {
+      "case_id": "V2-QA-0212",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks",
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3704,
+        "token_output": 79,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 12336,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 12336
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0213",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3248,
+        "token_output": 38,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 10309,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 10309
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0214",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "점검 일정(임박·초과 + 다음 예정)"
+        ],
+        "answer_chars": 46,
+        "token_input": 3248,
+        "token_output": 70,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 11329,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 11329
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0215",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:get_overdue_checks",
+        "document_ids": [],
+        "expected_tool": "get_overdue_checks",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": "2026-08-01",
+        "facts": "7일 이내 점검 대상 없음(확정 조회)"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "get_overdue_checks",
+          "get_overdue_checks"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "점검 일정(임박·초과 + 다음 예정)"
+        ],
+        "answer_chars": 36,
+        "token_input": 3685,
+        "token_output": 102,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 49,
+        "total_ms": 13296,
+        "turns": [
+          {
+            "ttft_ms": 49,
+            "total_ms": 13296
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0216",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 54,
+        "token_input": 4266,
+        "token_output": 252,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 33,
+        "total_ms": 22264,
+        "turns": [
+          {
+            "ttft_ms": 33,
+            "total_ms": 22264
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0217",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "다중 턴",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph",
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 40,
+        "token_input": 8205,
+        "token_output": 256,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 51,
+        "total_ms": 32788,
+        "turns": [
+          {
+            "ttft_ms": 51,
+            "total_ms": 17699
+          },
+          {
+            "ttft_ms": 53,
+            "total_ms": 15089
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0218",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": "neo4j",
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": true,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": true,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "tool:search_facility_graph",
+        "document_ids": [],
+        "expected_tool": "search_facility_graph",
+        "acceptable_tools": [],
+        "required_tools": [],
+        "behavior": "answered",
+        "as_of": null,
+        "facts": "유사 장애: 운행 중 덜컹거리는 소음, 3층 정차 시 지연 발생"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 50,
+        "token_input": 4141,
+        "token_output": 178,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 51,
+        "total_ms": 18816,
+        "turns": [
+          {
+            "ttft_ms": 51,
+            "total_ms": 18816
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0219",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 100,
+        "token_input": 4125,
+        "token_output": 119,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 47,
+        "total_ms": 15522,
+        "turns": [
+          {
+            "ttft_ms": 47,
+            "total_ms": 15522
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0220",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3967,
+        "token_output": 39,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 37,
+        "total_ms": 13023,
+        "turns": [
+          {
+            "ttft_ms": 37,
+            "total_ms": 13023
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0221",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "pass",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": true,
+        "behavior_ok": true,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "fallback",
+        "fallback_reason": "no_evidence",
+        "confidence": 0,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [],
+        "answer_chars": 0,
+        "token_input": 3931,
+        "token_output": 45,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 12679,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 12679
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0222",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 19,
+        "token_input": 4035,
+        "token_output": 86,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 40,
+        "total_ms": 14130,
+        "turns": [
+          {
+            "ttft_ms": 40,
+            "total_ms": 14130
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0223",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 69,
+        "token_input": 3996,
+        "token_output": 107,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 40,
+        "total_ms": 14160,
+        "turns": [
+          {
+            "ttft_ms": 40,
+            "total_ms": 14160
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0224",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 23,
+        "token_input": 3930,
+        "token_output": 72,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 46,
+        "total_ms": 14166,
+        "turns": [
+          {
+            "ttft_ms": 46,
+            "total_ms": 14166
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "case_id": "V2-QA-0225",
+      "category": "시설·설비",
+      "execution_set": "Full",
+      "priority": "P1",
+      "conversation_type": "단일",
+      "needs_judge": false,
+      "pair_id": null,
+      "backend": null,
+      "verdict": "fail",
+      "hard_fail": false,
+      "checks": {
+        "citation_hit": null,
+        "fallback_ok": false,
+        "behavior_ok": false,
+        "tool_selection": null,
+        "completed": true,
+        "forbidden_violations": [],
+        "as_of_stale": false,
+        "clarify_misuse": false
+      },
+      "expected": {
+        "citations_raw": "",
+        "document_ids": [],
+        "expected_tool": null,
+        "acceptable_tools": [
+          "search_facility_graph",
+          "search_documents"
+        ],
+        "required_tools": [],
+        "behavior": "fallback",
+        "as_of": null,
+        "facts": "해당 설비 장애 이력 없음 — 이력 부재 안내 또는 폴백"
+      },
+      "actual": {
+        "status": "answered",
+        "fallback_reason": null,
+        "confidence": 0.8,
+        "tool_path": [
+          "search_facility_graph"
+        ],
+        "citation_document_ids": [],
+        "citation_titles": [
+          "유사 장애·정비 이력"
+        ],
+        "answer_chars": 24,
+        "token_input": 4073,
+        "token_output": 101,
+        "token_estimated": true
+      },
+      "latency": {
+        "ttft_ms": 43,
+        "total_ms": 15399,
+        "turns": [
+          {
+            "ttft_ms": 43,
+            "total_ms": 15399
+          }
+        ]
+      },
+      "notes": []
+    }
+  ]
+}

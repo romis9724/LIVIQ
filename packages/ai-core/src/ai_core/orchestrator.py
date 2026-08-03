@@ -41,6 +41,7 @@ from ai_core.llm.client import (
 from ai_core.llm.tokens import estimate_tokens
 from ai_core.masking import MaskingFailedError, ensure_masked, unmask
 from ai_core.rag.prompt import (
+    AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
     NO_EVIDENCE_MARKER,
     agent_system_prompt,
@@ -159,6 +160,8 @@ async def answer_question(
     allow_clarify: bool = True,
     extra_names: Sequence[str] = (),
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
+    agent_prompt: str = AGENT_SYSTEM_PROMPT,
+    exclude_tools: Sequence[str] = (),
     tool_confidence: float = TOOL_ONLY_CONFIDENCE,
 ) -> AsyncIterator[AssistantEvent]:
     """질의 1건 처리(도구 에이전트). 항상 마지막에 DoneEvent를 낸다.
@@ -169,6 +172,11 @@ async def answer_question(
     빼야 한다 — 연속 되묻기 금지(ADR-0025 §4). LLM 인자로 받지 않는다.
     answer_prompt: 최종 답변 turn의 시스템 프롬프트(기본 = 일반 응대). 시설 도우미(H3-4)는
     FACILITY_ANSWER_SYSTEM_PROMPT를 주입해 원인 후보 형식을 강제한다 — 나머지 경로는 공유.
+    agent_prompt: 도구 결정 turn의 시스템 프롬프트(기본 = 공통). 관리자 채널(H20-16)만
+    ADMIN_AGENT_SYSTEM_PROMPT를 주입한다 — 세대 평면도 설비 위치 되묻기 조건 한 줄 차이.
+    exclude_tools: 이번 질의에서 감출 도구 이름. 역할 가시성(정적)과 달리 **질의 단위**
+    판단을 호출자가 코드로 내릴 때 쓴다(H20-16: 질문이 특정 세대를 가리키면 단지 공용
+    설비 목록은 답이 아니다 — 프롬프트로 막으려 했으나 8B가 그대로 호출했다).
     tool_confidence: 도구 결과만으로 답할 때의 신뢰도(관리자 노브, 기본=코드 상수 H15-3).
     """
     llm = deps.llm
@@ -185,11 +193,14 @@ async def answer_question(
         return
 
     specs = registry.specs_for(ctx.roles, graph_available=deps.graph_available)
-    if not allow_clarify:
-        specs = [s for s in specs if s["function"]["name"] != CLARIFY_TOOL_NAME]
+    hidden = {*exclude_tools, *(() if allow_clarify else (CLARIFY_TOOL_NAME,))}
+    if hidden:
+        specs = [s for s in specs if s["function"]["name"] not in hidden]
     # 오늘 날짜는 단지 시간대(KST) 기준 — 서버가 UTC로 돌면 자정~09시 사이 날짜가 어긋난다.
     today = datetime.datetime.now(KST).date()
-    messages: list[dict[str, object]] = [{"role": "system", "content": agent_system_prompt(today)}]
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": agent_system_prompt(today, agent_prompt)}
+    ]
     # 히스토리는 OpenAI 규약대로 개별 user/assistant 메시지로 넣는다(도구 결정 turn).
     for role, content in recent:
         messages.append({"role": role, "content": content})

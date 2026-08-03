@@ -749,7 +749,7 @@ async def test_get_facilities_with_status_filter(settings: AiCoreSettings) -> No
             registry=default_registry(),
         )
     ).result
-    assert result.card is not None and "엘리베이터1(fault)" in result.card.quote
+    assert result.card is not None and "상태=fault" in result.card.quote
     assert captured["params"]["status"] == "fault"
     assert "status = :status" in captured["sql"]
 
@@ -759,10 +759,11 @@ async def test_get_facilities_quote_includes_counts(settings: AiCoreSettings) ->
     # LIMIT 잘림(구현 전 MAX_TOOL_ROWS=20 < 설비 37건)이면 대수가 틀린다(케이스셋 v2 §6-⓪).
     def handler(sql: str, params: dict[str, Any]) -> list[Any]:
         return [
-            row(name="승강기1", status="normal", code="EL-101-01"),
-            row(name="승강기2", status="normal", code="EL-102-01"),
-            row(name="CCTV1", status="normal", code="CM-401-01"),
-            row(name="무코드설비", status="normal", code=None),
+            row(name="승강기1", status="normal", code="EL-101-01", kind_label="승강기"),
+            row(name="승강기2", status="normal", code="EL-102-01", kind_label="승강기"),
+            row(name="CCTV1", status="normal", code="CM-401-01", kind_label="커뮤니티"),
+            # 라벨·코드가 없는 행도 집계에서 빠지지 않는다(LEFT JOIN 미스·백필 전 행).
+            row(name="무코드설비", status="normal", code=None, kind_label=None),
         ]
 
     result = (
@@ -775,11 +776,20 @@ async def test_get_facilities_quote_includes_counts(settings: AiCoreSettings) ->
     ).result
     assert result.card is not None
     assert "총 4개" in result.card.quote
-    assert "EL 2" in result.card.quote
-    assert "CM 1" in result.card.quote
+    # 계통은 한글명(codes FACILITY_SYSTEM) + 약어 — 약어만 주면 답변이 "EL: 12개"가 된다.
+    assert "승강기(EL) 2개" in result.card.quote
+    assert "커뮤니티(CM) 1개" in result.card.quote
+    assert "기타 1개" in result.card.quote
+    assert "normal 4개" in result.card.quote  # 상태별 집계도 근거에 들어간다
 
 
-async def test_get_facilities_caps_list_but_counts_all(settings: AiCoreSettings) -> None:
+async def test_get_facilities_quote_has_no_name_list(settings: AiCoreSettings) -> None:
+    """근거는 집계만 — 설비명 나열 금지(H20-16).
+
+    이름을 20개 실었더니 8B가 목록을 되풀이하는 답변을 냈다(2026-08-03 dev 실측).
+    화면 카드(data.items)에는 그대로 남는다 — 프롬프트에 안 실릴 뿐이다.
+    """
+
     def handler(sql: str, params: dict[str, Any]) -> list[Any]:
         return [row(name=f"설비{i}", status="normal", code=f"EL-{i:03d}-01") for i in range(25)]
 
@@ -793,7 +803,8 @@ async def test_get_facilities_caps_list_but_counts_all(settings: AiCoreSettings)
     ).result
     assert result.card is not None
     assert "총 25개" in result.card.quote  # 집계는 전수
-    assert "외 5개" in result.card.quote  # 나열은 20개 상한
+    assert "설비0" not in result.card.quote and "설비1" not in result.card.quote
+    assert result.card.data is not None and len(result.card.data["items"]) == 20
 
 
 async def test_get_facilities_empty_returns_card(settings: AiCoreSettings) -> None:
