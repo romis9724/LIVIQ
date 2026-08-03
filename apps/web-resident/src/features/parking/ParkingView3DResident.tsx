@@ -62,6 +62,9 @@ export function ParkingView3DResident({
 }: ParkingView3DResidentProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<ParkingScene3D | null>(null);
+  // 진입 카메라 연출은 씬당 1회 — 비콘 effect가 재발화해도 1순위로 되돌아가지 않는다
+  // (2026-08-03 사용자 신고: 2·3순위 칩 클릭 직후 1순위로 재비행).
+  const introFlownRef = useRef(false);
   const onSelectRef = useRef(onSelect);
   const supported = useMemo(isWebglSupported, []);
 
@@ -95,6 +98,7 @@ export function ParkingView3DResident({
       onSpotClick: (spotNo) => onSelectRef.current(spotNo),
     });
     sceneRef.current = scene;
+    introFlownRef.current = false; // 새 씬 = 인트로 다시 1회
     scene.setActive(!document.hidden);
     return () => {
       sceneRef.current = null;
@@ -120,14 +124,15 @@ export function ParkingView3DResident({
       ),
     );
     const first = recommended[0];
-    if (!first) return;
+    if (!first || introFlownRef.current) return;
+    introFlownRef.current = true;
     if (prefersReducedMotion()) {
       scene.flyToSpot(first, true);
       return;
     }
     const timer = window.setTimeout(() => sceneRef.current?.flyToSpot(first, false), INTRO_FLY_DELAY_MS);
     return () => window.clearTimeout(timer);
-    // layout 재생성 시 씬이 바뀌므로 함께 다시 건다.
+    // layout 재생성 시 씬이 바뀌므로 함께 다시 건다(인트로는 introFlownRef가 1회로 제한).
   }, [recommended, myVehicleSpotNos, layout, supported]);
 
   // 면 선택(3D 클릭·상세 패널 어디서 왔든) → 해당 면으로 카메라 이동.

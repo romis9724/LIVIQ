@@ -33,6 +33,30 @@ describe("useAssistantStream 복원", () => {
     expect(fetchLatest).not.toHaveBeenCalled();
   });
 
+  it("복원 후 새 메시지 id 가 저장 id 와 충돌하지 않는다 — 잘린 저장본(id 번호 > 개수)", async () => {
+    // Arrange — 긴 대화는 slice(-MAX)로 잘려 **id 번호가 저장 개수보다 크다**(예: 48건 대화
+    // → 꼬리 40건 저장, id m9~m48인데 개수는 40). 개수로 seq 를 되살리면 다음 발급이 m41이라
+    // 저장본 m41과 충돌 → React key 중복 → 말풍선이 뒤섞인다(2026-08-03 사용자 신고).
+    // 최소 재현: m3·m4 두 건 저장(개수 2) → seq=2 → 다음 발급 m3 = 즉시 충돌.
+    const stored: ChatMessage[] = [
+      { id: "m3", role: "user", text: "잘린 저장본 질문" },
+      { id: "m4", role: "user", text: "잘린 저장본 질문2" },
+    ];
+    window.sessionStorage.setItem(KEY, JSON.stringify({ messages: stored, conversationId: "c9" }));
+
+    const { result } = renderHook(() => useAssistantStream(options()));
+    await waitFor(() => expect(result.current.restored).toBe(true));
+
+    // Act — 새 질문(스트림은 실패해도 된다 — id 발급만 본다).
+    await act(async () => {
+      await result.current.ask("새 질문").catch(() => {});
+    });
+
+    // Assert — 전체 id 유일(2026-08-03 사용자 신고: 재로그인 복원 후 답변 밀림 = key 충돌).
+    const ids = result.current.messages.map((m) => m.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
   it("'새 대화' 마커(0건 저장)도 복원 완료 — 서버 복원은 건너뛴다", async () => {
     window.sessionStorage.setItem(KEY, JSON.stringify({ messages: [], conversationId: null }));
     const fetchLatest = vi.fn();
