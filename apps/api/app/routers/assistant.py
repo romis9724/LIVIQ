@@ -31,7 +31,11 @@ from ai_core.orchestrator import (
     ToolCitationEvent,
     answer_question,
 )
-from ai_core.rag.prompt import ANSWER_SYSTEM_PROMPT, FACILITY_ANSWER_SYSTEM_PROMPT
+from ai_core.rag.prompt import (
+    ADMIN_ANSWER_SYSTEM_PROMPT,
+    ANSWER_SYSTEM_PROMPT,
+    FACILITY_ANSWER_SYSTEM_PROMPT,
+)
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
 from ai_core.tools.floor_plan import RESIDENT_ROLES
@@ -123,8 +127,20 @@ async def admin_ask(
 
     도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
     서버 복원은 **당일 한정**으로 제공한다(아래 admin_latest_conversation, ADR-0028 결정 2 개정).
+    답변 프롬프트만 관리자 변형을 쓴다(H20-16) — 세대 내부 설비 위치는 관리자에게 조회 도구가
+    없어 공용 설비 목록으로 새던 것을 평면도 안내·되묻기로 돌린다(ADMIN_ANSWER_SYSTEM_PROMPT).
     """
-    return await _assistant_response(body, ctx, session, llm, graph, redis, tuning, channel="admin")
+    return await _assistant_response(
+        body,
+        ctx,
+        session,
+        llm,
+        graph,
+        redis,
+        tuning,
+        channel="admin",
+        answer_prompt=ADMIN_ANSWER_SYSTEM_PROMPT,
+    )
 
 
 @admin_assistant_router.get("/conversations/latest")

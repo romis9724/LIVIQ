@@ -31,6 +31,7 @@ from test_assistant import _parse_sse, _seed_conversation, _seed_indexed_documen
 
 from ai_core.llm.client import LlmClient
 from ai_core.orchestrator import DoneEvent
+from ai_core.rag.prompt import ADMIN_ANSWER_SYSTEM_PROMPT, ANSWER_SYSTEM_PROMPT
 from ai_core.tools import ToolContext
 
 ADMIN_ASK = "/admin/assistant/ask"
@@ -69,6 +70,20 @@ async def manager_client(
     await _seed_indexed_document(db_session)
     async with _client(db_session, doc_only_llm, fake_redis, roles=("MANAGER",)) as c:
         yield c
+
+
+@pytest.fixture
+def answer_system_prompts(doc_only_llm: LlmClient, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """최종 답변 turn에 실제로 실린 시스템 프롬프트 기록(배선 확인용)."""
+    captured: list[str] = []
+    original = doc_only_llm.chat_stream
+
+    def spy(messages: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        captured.append(str(messages[0]["content"]))
+        return original(messages, **kwargs)
+
+    monkeypatch.setattr(doc_only_llm, "chat_stream", spy)
+    return captured
 
 
 def _done(body: str) -> dict[str, object]:
@@ -133,6 +148,34 @@ async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None
     assert {"status", "token", "citation"} <= set(names)
     assert names[-1] == "done"
     assert events[-1][1]["status"] == "answered"
+
+
+async def test_admin_ask_uses_admin_answer_prompt(
+    manager_client: httpx.AsyncClient, answer_system_prompts: list[str]
+) -> None:
+    """관리자 채널은 세대 내부 위치 안내 규칙이 붙은 답변 프롬프트를 쓴다(H20-16).
+
+    관리자에겐 세대 내부 설비 조회 도구가 없어, 이 규칙이 없으면 "404동 301호 콘센트
+    어디?" 같은 질문이 단지 공용 설비 목록으로 샌다(2026-08-03 dev 실측).
+    """
+    await manager_client.post(ADMIN_ASK, json={"question": QUESTION})
+
+    assert answer_system_prompts
+    assert answer_system_prompts[-1] == ADMIN_ANSWER_SYSTEM_PROMPT
+
+
+async def test_resident_ask_keeps_general_answer_prompt(
+    db_session: AsyncSession,
+    doc_only_llm: LlmClient,
+    fake_redis: object,
+    answer_system_prompts: list[str],
+) -> None:
+    """대조군 — 입주민 채널은 일반 프롬프트 그대로다(본인 세대 도구가 있어 안내가 틀린 답)."""
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, doc_only_llm, fake_redis, roles=("RESIDENT",)) as c:
+        await c.post("/assistant/ask", json={"question": QUESTION})
+
+    assert answer_system_prompts == [ANSWER_SYSTEM_PROMPT]
 
 
 # ── 답변 캐시 우회(ADR-0028 결정 2) ────────────────────────────────────

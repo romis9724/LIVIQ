@@ -10,7 +10,7 @@ tenant_id·user_id는 항상 `ToolContext`에서 오며 LLM 인자로 받지 않
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple, cast
 
@@ -635,12 +635,23 @@ async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> 
     # LIMIT 없이 전수 조회 — MAX_TOOL_ROWS(20) < 설비 수(첫마을 37)면 대수 집계가 틀린다
     # (v2 §6-⓪, cursor HIGH). ponytail: 단지당 설비는 수백 규모라 메모리 집계로 충분,
     # 수천 규모가 되면 SQL GROUP BY로 이관.
-    sql = "SELECT name, status, code FROM facilities WHERE tenant_id = :tid AND deleted_at IS NULL"
+    # 계통 한글명은 공통 코드 그룹 FACILITY_SYSTEM에서 온다(EL → 승강기) — 약어만 근거로 주면
+    # 답변이 "EL: 12개"가 된다(2026-08-03 로컬 실측). ai-core가 표를 복사해 두면 codes 레지스트리와
+    # 어긋나므로 DB에서 그대로 읽는다. LEFT JOIN이라 코드·라벨이 없어도 집계는 약어로 성립한다.
+    sql = (
+        "SELECT f.name, f.status, f.code, c.label AS kind_label FROM facilities f "
+        "LEFT JOIN code_groups g "
+        "ON g.tenant_id = f.tenant_id AND g.group_key = 'FACILITY_SYSTEM' "
+        "LEFT JOIN codes c "
+        "ON c.tenant_id = f.tenant_id AND c.group_id = g.id "
+        "AND c.code = split_part(f.code, '-', 1) "
+        "WHERE f.tenant_id = :tid AND f.deleted_at IS NULL"
+    )
     params: dict[str, object] = {"tid": ctx.tenant_id}
     if a.status:
-        sql += " AND status = :status"
+        sql += " AND f.status = :status"
         params["status"] = a.status
-    sql += " ORDER BY name"
+    sql += " ORDER BY f.name"
     rows = (await deps.session.execute(text(sql), params)).all()
     condition = f"상태={a.status} " if a.status else ""
     if not rows:
@@ -654,12 +665,15 @@ async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> 
                 data=_facility_data([]),
             )
         )
-    # 대수 질문의 근거: 총수 + 코드 접두(EL-401-01 → EL) 종류별 수. 나열은 상한으로 자른다.
-    kind_counts = Counter((r.code or "기타").split("-")[0] for r in rows)
-    counts = " ".join(f"{kind} {n}" for kind, n in kind_counts.most_common())
-    listed = "; ".join(f"{r.name}({r.status})" for r in rows[:MAX_TOOL_ROWS])
-    overflow = f" 외 {len(rows) - MAX_TOOL_ROWS}개" if len(rows) > MAX_TOOL_ROWS else ""
-    quote = f"{condition}총 {len(rows)}개 — 종류별: {counts}. {listed}{overflow}"
+    # 근거는 **집계만** 준다(H20-16). 설비명을 20개씩 나열했더니 8B가 그 목록을 끝없이
+    # 되풀이하는 답변을 냈다(2026-08-03 dev 실측: "404동 301호 콘센트는 어디에 있지?" →
+    # 시설명 반복 루프). 대수·상태 질문의 정답은 전부 집계값이고, 이름은 화면 카드
+    # (_facility_data.items)가 이미 보여준다 — 프롬프트에 같은 목록을 또 실을 이유가 없다.
+    quote = (
+        f"{condition}설비 총 {len(rows)}개 — "
+        f"상태별: {_count_summary(str(r.status) for r in rows)}. "
+        f"종류별: {_count_summary(_facility_kind(r) for r in rows)}"
+    )
     return ToolResult(
         card=ToolCard(
             title="설비 목록",
@@ -668,6 +682,18 @@ async def _get_facilities(ctx: ToolContext, deps: ToolDeps, args: BaseModel) -> 
             data=_facility_data(rows),
         )
     )
+
+
+def _facility_kind(row: Any) -> str:
+    """계통 표기 — `승강기(EL)`. 라벨이 없으면 코드 접두만(EL-401-01 → EL), 코드도 없으면 기타."""
+    abbr = (row.code or "").split("-")[0] or "기타"
+    label = getattr(row, "kind_label", None)
+    return f"{label}({abbr})" if label else abbr
+
+
+def _count_summary(values: Iterable[str]) -> str:
+    """많은 순 집계 문자열 — `normal 37개, check 2개`(설비 근거 전용)."""
+    return ", ".join(f"{key} {n}개" for key, n in Counter(values).most_common())
 
 
 def _facility_data(rows: Sequence[Any]) -> dict[str, Any]:

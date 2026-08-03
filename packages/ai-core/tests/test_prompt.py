@@ -10,6 +10,7 @@ import datetime
 import pytest
 
 from ai_core.rag.prompt import (
+    ADMIN_ANSWER_SYSTEM_PROMPT,
     AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
     FACILITY_ANSWER_SYSTEM_PROMPT,
@@ -75,6 +76,28 @@ def test_quote_first_prompt_keeps_confirmed_absence_rule(base: str) -> None:
 
     # Assert
     assert "NO_EVIDENCE로 처리하지 마십시오" in variant
+
+
+def test_admin_answer_prompt_extends_the_general_one_with_home_device_guidance() -> None:
+    """관리자 변형(H20-16) — 기존 규칙 1~6은 그대로 두고 세대 내부 위치 규칙만 덧붙인다."""
+    # Assert — 기존 프롬프트가 접두라 프리픽스 캐시·기존 규칙이 보존된다
+    assert ADMIN_ANSWER_SYSTEM_PROMPT.startswith(ANSWER_SYSTEM_PROMPT)
+    assert "트윈 대시보드" in ADMIN_ANSWER_SYSTEM_PROMPT
+    assert "동·호수" in ADMIN_ANSWER_SYSTEM_PROMPT
+    # 입주민 프롬프트는 오염되지 않는다 — 본인 세대 도구가 있어 이 안내가 틀린 답이 된다
+    assert "트윈 대시보드" not in ANSWER_SYSTEM_PROMPT
+
+
+def test_quote_first_prompt_handles_admin_variant() -> None:
+    """규칙 0 삽입은 헤더 기준이라 규칙이 하나 늘어난 관리자 변형에서도 같게 동작한다."""
+    # Act
+    variant = quote_first_prompt(ADMIN_ANSWER_SYSTEM_PROMPT)
+
+    # Assert
+    header, rule_zero, rest = variant.split("\n", 2)
+    assert header == ADMIN_ANSWER_SYSTEM_PROMPT.split("\n", 1)[0]
+    assert rule_zero == QUOTE_FIRST_RULE
+    assert "트윈 대시보드" in rest
 
 
 def test_agent_system_prompt_is_stable_within_a_day() -> None:
