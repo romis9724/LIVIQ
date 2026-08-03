@@ -7,6 +7,7 @@ import {
   hasActiveIndexing,
   shortDate,
   summarize,
+  titleFromFilename,
   validateAttachment,
 } from "./data";
 
@@ -120,6 +121,22 @@ describe("validateAttachment", () => {
 
   it("20MB 초과는 거절", () => {
     expect(validateAttachment({ name: "a.pdf", size: 20 * 1024 * 1024 + 1 })).toContain("20MB");
+  });
+});
+
+describe("titleFromFilename", () => {
+  it("확장자를 떼어낸다", () => {
+    expect(titleFromFilename("관리규약.pdf")).toBe("관리규약");
+  });
+
+  it("macOS 파일명(NFD 자모 분해)을 NFC로 합성한다", () => {
+    const nfd = "첫마을4단지 관리규약".normalize("NFD");
+    expect(nfd.length).toBe(25);
+    expect(titleFromFilename(`${nfd}.pdf`)).toBe("첫마을4단지 관리규약");
+  });
+
+  it("보이지 않는 문자를 지우고 연속 공백을 접는다", () => {
+    expect(titleFromFilename(" 주차장​  운영﻿ 세칙 .txt")).toBe("주차장 운영 세칙");
   });
 });
 

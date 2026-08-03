@@ -95,6 +95,20 @@ export function validateAttachment(file: { name: string; size: number }): string
   return null;
 }
 
+/**
+ * 파일명 → 제목 기본값. 확장자 제거 + NFC 합성 + 보이지 않는 문자 제거 + 공백 접기.
+ * macOS 파일명은 한글이 NFD(자모 분해)라 그대로 저장하면 검색·LIKE가 어긋난다(dev 실측).
+ * 정본 검증은 서버(app/schemas/documents.py clean_title) — 여기선 입력창 기본값만 정리한다.
+ */
+export function titleFromFilename(filename: string): string {
+  return filename
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFC")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 /** 바이트 → 사람이 읽는 용량 문자열(B/KB/MB). 순수 함수(테스트 대상). */
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
