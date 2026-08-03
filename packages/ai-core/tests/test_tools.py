@@ -1021,12 +1021,26 @@ def test_get_fees_args_accept_comma_separated_months() -> None:
     """여러 달은 쉼표로 — 중복은 합치고 오름차순으로 정규화한다(공백 허용)."""
     assert GetFeesArgs(period="2026-07, 2026-06").requested_periods() == ["2026-06", "2026-07"]
     assert GetFeesArgs(period="2026-06,2026-06").requested_periods() == ["2026-06"]
-    for bad in ("2026/06", "2026-06;2026-07", "6월"):
+    for bad in ("2026/06", "2026-06;2026-07", "열세달"):
         try:
             GetFeesArgs(period=bad)
         except ValidationError:
             continue
         raise AssertionError(f"형식 검증이 통과하면 안 됨: {bad}")
+
+
+def test_get_fees_args_accept_year_less_months() -> None:
+    """ "6월"처럼 연도 없는 월도 받는다(H20-18) — 검증 실패는 곧 no_evidence 폴백이었다.
+
+    8B는 여러 달을 나열할 때 연도를 뺀다(dev 실측 `period="7월,8월"`). 연도가 없으면
+    단지 시간대(KST) 기준 올해로 읽는다.
+    """
+    from ai_core.tools.fees_common import KST
+
+    year = datetime.now(KST).year
+    assert GetFeesArgs(period="6월").requested_periods() == [f"{year}-06"]
+    assert GetFeesArgs(period="7월,8월").requested_periods() == [f"{year}-07", f"{year}-08"]
+    assert GetFeesArgs(period="2026-7").requested_periods() == ["2026-07"]
 
 
 def test_fee_quote_includes_detail_items_for_item_questions() -> None:

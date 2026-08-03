@@ -34,6 +34,7 @@ from ai_core.tools.fees_common import (
     breakdown_items,
     fee_detail_items,
     fold_null_literal,
+    fold_periods,
     fold_scope,
     latest_confirmed_period,
     scope_params,
@@ -103,7 +104,8 @@ class GetFeesArgs(BaseModel):
     @field_validator("period", mode="before")
     @classmethod
     def _fold_null_literal(cls, value: object) -> object:
-        return fold_null_literal(value)
+        """리터럴 null 접기 + 연도 없는 월("7월") 접기 — 둘 다 검증 실패 = 폴백이었다."""
+        return fold_periods(fold_null_literal(value))
 
     @field_validator("scope", mode="before")
     @classmethod
