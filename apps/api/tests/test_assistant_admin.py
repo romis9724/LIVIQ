@@ -35,11 +35,13 @@ from ai_core.orchestrator import DoneEvent
 from ai_core.rag.prompt import (
     ADMIN_AGENT_ASK_UNIT_PROMPT,
     ADMIN_AGENT_SYSTEM_PROMPT,
+    ADMIN_AGENT_UNIT_PROMPT,
     ADMIN_ANSWER_SYSTEM_PROMPT,
     AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
 )
 from ai_core.tools import ToolContext
+from ai_core.tools.floor_plan import HOUSEHOLD_DEVICES_TOOL
 
 ADMIN_ASK = "/admin/assistant/ask"
 ADMIN_LATEST = "/admin/assistant/conversations/latest"
@@ -95,6 +97,21 @@ def system_prompts(
 
     monkeypatch.setattr(doc_only_llm, "chat", spy("agent", doc_only_llm.chat))
     monkeypatch.setattr(doc_only_llm, "chat_stream", spy("answer", doc_only_llm.chat_stream))
+    return captured
+
+
+@pytest.fixture
+def tool_names(doc_only_llm: LlmClient, monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """결정 turn마다 실제로 스펙에 실린 도구 이름(가시성 검증용)."""
+    captured: list[list[str]] = []
+    original = doc_only_llm.chat
+
+    def wrapped(messages: typing.Any, **kwargs: typing.Any) -> typing.Any:
+        specs = kwargs.get("tools") or []
+        captured.append([s["function"]["name"] for s in specs])
+        return original(messages, **kwargs)
+
+    monkeypatch.setattr(doc_only_llm, "chat", wrapped)
     return captured
 
 
@@ -165,34 +182,45 @@ async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None
 @pytest.mark.parametrize(
     ("question", "expected"),
     [
-        # 세대 평면도 설비 위치 + 동·호수 있음 → 되묻기 금지 + 공용 설비 목록 도구 감춤
+        # 세대 평면도 설비 위치 + 동·호수 있음 → 되묻기 금지 + 공용 설비 목록 도구 감춤 +
+        # 그 세대를 조회 대상으로 실어 보낸다(H20-17)
         (
             "404동 301호 콘센트는 어디에 있지?",
-            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_SYSTEM_PROMPT, ("get_facilities",)),
+            (
+                ADMIN_ANSWER_SYSTEM_PROMPT,
+                ADMIN_AGENT_UNIT_PROMPT,
+                ("get_facilities",),
+                ("404", 301),
+            ),
         ),
-        ("402동 201호 두꺼비집 어디에 있어?", None),  # 동의어(H20-7)도 같은 판정
-        # 동·호수 없음 → 되묻기 예외
+        # 동의어(H20-7)도 같은 판정 — 대상 세대만 다르다
+        (
+            "402동 201호 두꺼비집 어디에 있어?",
+            (
+                ADMIN_ANSWER_SYSTEM_PROMPT,
+                ADMIN_AGENT_UNIT_PROMPT,
+                ("get_facilities",),
+                ("402", 201),
+            ),
+        ),
+        # 동·호수 없음 → 되묻기 예외(조회 대상 없음 = 세대 도구 비노출)
         (
             "콘센트 어디 있는지 알려줘",
-            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, ()),
+            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, (), None),
         ),
         # 공용 설비 위치는 되묻기 대상이 아니다(사용자 지시 2026-08-03)
-        ("승강기는 어디에 있나요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+        ("승강기는 어디에 있나요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
         # 설비 현황·대수 질의는 위치 질문이 아니다 — 골든셋 시설 클래스가 여기 걸리면 회귀
-        ("소방 설비 현황을 알려주세요.", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
-        ("단지 공용 설비가 총 몇 개인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
-        ("미배정 민원 몇 건인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())),
+        ("소방 설비 현황을 알려주세요.", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
+        ("단지 공용 설비가 총 몇 개인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
+        ("미배정 민원 몇 건인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
     ],
 )
 def test_admin_overrides_scope(
-    question: str, expected: tuple[str, str, tuple[str, ...]] | None
+    question: str, expected: tuple[str, str, tuple[str, ...], tuple[str, int] | None]
 ) -> None:
-    """관리자 변형은 **세대 평면도 설비 위치 질의**에만 걸린다(H20-16)."""
-    # Arrange — None은 첫 케이스와 같은 기대(동의어 경로)
-    want = expected or (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_SYSTEM_PROMPT, ("get_facilities",))
-
-    # Act · Assert
-    assert _admin_overrides(question) == want
+    """관리자 변형은 **세대 평면도 설비 위치 질의**에만 걸린다(H20-16·H20-17)."""
+    assert _admin_overrides(question) == expected
 
 
 async def test_admin_ask_wires_overrides_into_both_turns(
@@ -214,6 +242,47 @@ async def test_admin_ask_home_device_question_uses_admin_prompts(
 
     assert system_prompts["answer"][-1] == ADMIN_ANSWER_SYSTEM_PROMPT
     assert system_prompts["agent"][0].startswith(ADMIN_AGENT_SYSTEM_PROMPT)
+
+
+async def test_household_devices_tool_visible_only_with_unit(
+    manager_client: httpx.AsyncClient, tool_names: list[list[str]]
+) -> None:
+    """세대 평면도 도구는 **동·호수가 확정된 질의에서만** 스펙에 실린다(H20-17)."""
+    await manager_client.post(ADMIN_ASK, json={"question": "404동 301호 콘센트는 어디에 있지?"})
+
+    assert HOUSEHOLD_DEVICES_TOOL in tool_names[0]
+    assert "get_facilities" not in tool_names[0]  # 단지 공용 설비 목록은 계속 감춘다(H20-16)
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "콘센트 어디 있는지 알려줘",  # 위치 질의지만 동·호수 없음 → 되묻기 경로
+        "승강기는 어디에 있나요?",  # 공용 설비 — 관리자 변형 자체가 안 걸린다
+        QUESTION,
+    ],
+)
+async def test_household_devices_tool_hidden_without_unit(
+    manager_client: httpx.AsyncClient, tool_names: list[list[str]], question: str
+) -> None:
+    """조회 대상 세대가 없으면 노출도 하지 않는다 — 다른 질의로 새는 경로를 없앤다."""
+    await manager_client.post(ADMIN_ASK, json={"question": question})
+
+    assert HOUSEHOLD_DEVICES_TOOL not in tool_names[0]
+
+
+async def test_resident_ask_never_sees_household_devices_tool(
+    db_session: AsyncSession,
+    doc_only_llm: LlmClient,
+    fake_redis: object,
+    tool_names: list[list[str]],
+) -> None:
+    """CRITICAL 인가(규칙 4) — 입주민 채널은 동·호수를 적어도 타 세대 도구를 못 본다."""
+    await _seed_indexed_document(db_session)
+    async with _client(db_session, doc_only_llm, fake_redis, roles=("RESIDENT",)) as c:
+        await c.post("/assistant/ask", json={"question": "404동 301호 콘센트는 어디에 있지?"})
+
+    assert HOUSEHOLD_DEVICES_TOOL not in tool_names[0]
 
 
 async def test_resident_ask_keeps_general_prompts(

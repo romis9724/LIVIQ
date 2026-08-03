@@ -1,0 +1,7 @@
+case_id,suite,execution_set,priority,category,subcategory,language,conversation_type,role,user_ref,household_ref,label_source,acceptable_tools,turn_1,turn_2,turn_3,expected_facts,forbidden_content
+V2-AD-0001,관리자 채널 v2,Admin,P1,세대 평면도,분전함(두꺼비집),한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,402-202,plan-device-admin:분전함,find_household_devices,402동 202호 두꺼비집 어디?,,,,단지 공용 설비 목록·타 세대 위치
+V2-AD-0002,관리자 채널 v2,Admin,P1,세대 평면도,콘센트,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,404-301,plan-device-admin:콘센트,find_household_devices,404동 301호 콘센트는 어디에 있지?,,,,단지 공용 설비 목록·타 세대 위치
+V2-AD-0003,관리자 채널 v2,Admin,P1,세대 평면도,화재감지기,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,401-201,plan-device-admin:화재감지기,find_household_devices,401동 201호 화재감지기 위치 알려줘,,,,단지 공용 설비 목록·타 세대 위치
+V2-AD-0004,관리자 채널 v2,Admin,P0,세대 평면도,동·호수 누락 되묻기,한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,clarify:동/호수,,콘센트 어디 있어?,,,동/호수,설비 위치 단정·단지 공용 설비 목록
+V2-AD-0005,관리자 채널 v2,Admin,P0,시설·설비,공용 설비 위치(무회귀),한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,facilities:승강기,get_facilities,승강기는 어디에 있나요?,,,,되묻기·세대 평면도 조회
+V2-AD-0006,관리자 채널 v2,Admin,P1,세대 평면도,미등록 세대(지어내기 금지),한국어,단일,MANAGER,46f87feb-94bc-4c5c-a768-89366e8737f6,,none,find_household_devices,402동 201호 두꺼비집 어디?,,,트윈 대시보드,구체 방·방향 단정

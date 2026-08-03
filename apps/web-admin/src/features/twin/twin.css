@@ -705,6 +705,14 @@
   font-weight: 700;
   color: var(--color-text);
 }
+/* AI 비서 딥링크로 강조된 위치 안내 — 입주민 `.floor-plan__highlight` 와 같은 표기. */
+.twin-plan-pane__highlight {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
 /* 좁은 화면에선 상세 패널만 남긴다(평면도가 눌려서 못 읽는 폭). */
 @media (max-width: 900px) {
   .twin-plan-pane {

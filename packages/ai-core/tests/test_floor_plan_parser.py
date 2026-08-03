@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from ai_core.tools.floor_plan_parser import ParsedSpec, parse_query
+from ai_core.tools.floor_plan_parser import ParsedSpec, parse_query, parse_unit
 
 
 def test_room_and_element() -> None:
@@ -75,3 +75,30 @@ def test_specific_balcony_skips_group_expansion() -> None:
 
 def test_room_only_query_has_no_elements() -> None:
     assert parse_query("주방이 어디야") == ParsedSpec(rooms=("주방",))
+
+
+# ── parse_unit(관리자 세대 지정, H20-17) ────────────────────────────────
+#
+# 마스킹(masking/masker.py의 UNIT 패턴)과 **같은 형태**를 인정해야 한다 — 갈리면 관리자
+# 분기가 "동·호수 있음"으로 판정하고도 조회 대상이 없는 상태가 된다.
+
+
+def test_parse_unit_reads_dong_and_ho() -> None:
+    assert parse_unit("402동 201호 두꺼비집 어디?") == ("402", 201)
+
+
+def test_parse_unit_allows_spacing_variants() -> None:
+    assert parse_unit("404동301호 콘센트 위치") == ("404", 301)
+
+
+def test_parse_unit_reads_dash_form_with_context_word() -> None:
+    assert parse_unit("동호수 101-302 분전함 어디") == ("101", 302)
+
+
+def test_parse_unit_ignores_facility_unit_number() -> None:
+    """ "403동 2호기"는 세대가 아니라 설비 호기다(마스킹 패턴과 같은 예외)."""
+    assert parse_unit("403동 2호기 승강기 점검일") is None
+
+
+def test_parse_unit_returns_none_without_unit() -> None:
+    assert parse_unit("콘센트 어디 있어?") is None

@@ -233,6 +233,10 @@ _LAYOUT = {
 
 def _parking_handler(sql: str, params: dict[str, Any]) -> list[Any]:
     s = sql.lower()
+    # 전기차 보유 조회를 **맨 먼저** 거른다 — 이 SQL은 users 서브쿼리 + parking_vehicles를
+    # 함께 담고 있어서, 아래 두 분기 중 어느 쪽에 먼저 걸려도 엉뚱한 행이 돌아간다.
+    if "bool_or" in s:
+        return [row(has_ev=False)]
     if "from users" in s:
         return [row(building_name="401")]
     if "from parking_layouts" in s:

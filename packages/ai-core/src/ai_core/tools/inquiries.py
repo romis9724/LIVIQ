@@ -23,13 +23,12 @@ from typing import Any, cast
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
-from ai_core.tools.floor_plan import RESIDENT_ROLES
-from ai_core.tools.registry import Tool, ToolCard, ToolContext, ToolDeps, ToolResult
-
 # 관리사무소(소장·직원) — 민원 응대의 주체다. 설비 도구의 FACILITY_ROLES(FACILITY·MANAGER)와
 # 다른 집합인 이유는 ADR-0026 결정 2: 민원 현황은 시설 담당이 아니라 사무소 업무이고,
 # STAFF는 실제 users.role에 존재하는 반면 FACILITY는 H7-2에서 제거된 잔존 값이다.
-OFFICE_ROLES = frozenset({"MANAGER", "STAFF"})
+# 정의는 floor_plan.py(역할 상수 정본, RESIDENT_ROLES와 같은 자리) — 여기서는 재수출만 한다.
+from ai_core.tools.floor_plan import OFFICE_ROLES, RESIDENT_ROLES
+from ai_core.tools.registry import Tool, ToolCard, ToolContext, ToolDeps, ToolResult
 
 _SOURCE_KIND = "tool:search_similar_inquiries"
 _CARD_TITLE = "유사 민원 처리 사례"

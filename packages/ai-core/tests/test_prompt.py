@@ -84,10 +84,13 @@ def test_admin_answer_prompt_extends_the_general_one_with_home_device_guidance()
     """관리자 변형(H20-16) — 기존 규칙 1~6은 그대로 두고 세대 내부 위치 규칙만 덧붙인다."""
     # Assert — 기존 프롬프트가 접두라 프리픽스 캐시·기존 규칙이 보존된다
     assert ADMIN_ANSWER_SYSTEM_PROMPT.startswith(ANSWER_SYSTEM_PROMPT)
-    assert "트윈 대시보드" in ADMIN_ANSWER_SYSTEM_PROMPT
-    assert "동·호수" in ADMIN_ANSWER_SYSTEM_PROMPT
-    # 입주민 프롬프트는 오염되지 않는다 — 본인 세대 도구가 있어 이 안내가 틀린 답이 된다
-    assert "트윈 대시보드" not in ANSWER_SYSTEM_PROMPT
+    # H20-17: 안내 탈출구를 걷어냈다 — 도구 확정 위치를 빠짐없이 옮기라는 규칙만 남는다.
+    # 8B는 규칙 속 안내문·예시·조건부 갈래를 답 템플릿으로 오용한다(로컬 실측 3패턴).
+    assert "세대 평면도 위치" in ADMIN_ANSWER_SYSTEM_PROMPT
+    assert "빠짐없이" in ADMIN_ANSWER_SYSTEM_PROMPT
+    assert "트윈 대시보드" not in ADMIN_ANSWER_SYSTEM_PROMPT
+    # 입주민 프롬프트는 오염되지 않는다 — 본인 세대 도구가 있어 이 규칙 자체가 불필요하다
+    assert "세대 평면도 위치" not in ANSWER_SYSTEM_PROMPT
 
 
 def test_admin_agent_prompt_scopes_clarify_to_home_devices_without_a_unit() -> None:
@@ -126,7 +129,7 @@ def test_quote_first_prompt_handles_admin_variant() -> None:
     header, rule_zero, rest = variant.split("\n", 2)
     assert header == ADMIN_ANSWER_SYSTEM_PROMPT.split("\n", 1)[0]
     assert rule_zero == QUOTE_FIRST_RULE
-    assert "트윈 대시보드" in rest
+    assert "세대 평면도 위치" in rest
 
 
 def test_agent_system_prompt_is_stable_within_a_day() -> None:

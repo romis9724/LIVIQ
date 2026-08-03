@@ -55,6 +55,8 @@ function shortDate(iso: string): string {
 interface TwinDetailPanelProps {
   householdId: string;
   onClose: () => void;
+  /** AI 비서 딥링크(`?device=`)로 강조할 평면도 마커 라벨. */
+  highlightLabels?: readonly string[];
 }
 
 type DetailState =
@@ -66,7 +68,11 @@ type DetailState =
  * 세대 상세 — 오른쪽 슬라이드오버(세대원 마스킹·미종결 민원·당월 관리비) + 왼쪽 평면도 패널.
  * 상세가 열리면 평면도도 함께 뜬다(별도 버튼 없음). 개인정보는 마스킹만.
  */
-export function TwinDetailPanel({ householdId, onClose }: TwinDetailPanelProps) {
+export function TwinDetailPanel({
+  householdId,
+  onClose,
+  highlightLabels,
+}: TwinDetailPanelProps) {
   const [state, setState] = useState<DetailState>({ kind: "loading" });
 
   const load = useCallback(async () => {
@@ -95,7 +101,10 @@ export function TwinDetailPanel({ householdId, onClose }: TwinDetailPanelProps) 
     <div className="twin-detail-scrim" onClick={onClose}>
       {/* 왼쪽 딤 영역 전체가 평면도 자리 — 상세를 열면 곧바로 함께 뜬다. */}
       {state.kind === "ready" ? (
-        <TwinFloorPlanPane unitTypeLabel={state.detail.unitTypeLabel} />
+        <TwinFloorPlanPane
+          unitTypeLabel={state.detail.unitTypeLabel}
+          highlightLabels={highlightLabels}
+        />
       ) : null}
       <aside
         className="twin-detail"

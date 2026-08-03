@@ -9,6 +9,7 @@ import {
   computeBounds,
   legendForOverlay,
   matchFloorPlanId,
+  matchHouseholdId,
   occupancyColor,
   occupancyMetrics,
   overlayValueText,
@@ -212,5 +213,23 @@ describe("matchFloorPlanId", () => {
     expect(matchFloorPlanId(plans, null)).toBeNull();
     expect(matchFloorPlanId(plans, "  ")).toBeNull();
     expect(matchFloorPlanId(plans, "101B")).toBeNull();
+  });
+});
+
+describe("matchHouseholdId", () => {
+  const geometry: TwinGeometryItem[] = [
+    { ...item([]), householdId: "h-402-201", buildingName: "402", unitNo: 201 },
+    { ...item([]), householdId: "h-402-301", buildingName: "402", unitNo: 301 },
+    { ...item([]), householdId: "h-401-201", buildingName: "401동", unitNo: 201 },
+  ];
+
+  it("동 표기가 '402'·'402동' 어느 쪽이든 찾는다", () => {
+    expect(matchHouseholdId(geometry, { dong: "402", ho: 201 })).toBe("h-402-201");
+    expect(matchHouseholdId(geometry, { dong: "401", ho: 201 })).toBe("h-401-201");
+  });
+
+  it("없는 세대는 null — 딥링크가 엉뚱한 세대를 열지 않는다", () => {
+    expect(matchHouseholdId(geometry, { dong: "402", ho: 999 })).toBeNull();
+    expect(matchHouseholdId(geometry, { dong: "403", ho: 201 })).toBeNull();
   });
 });

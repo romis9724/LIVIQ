@@ -40,7 +40,7 @@ from ai_core.tools.fees_common import (
     self_household,
 )
 from ai_core.tools.fees_compare import compare_fees_tool
-from ai_core.tools.floor_plan import find_in_floor_plan_tool
+from ai_core.tools.floor_plan import find_household_devices_tool, find_in_floor_plan_tool
 from ai_core.tools.inquiries import search_similar_inquiries_tool, summarize_inquiries_tool
 from ai_core.tools.notices import get_recent_notices_tool
 from ai_core.tools.parking import find_my_vehicle_tool, find_nearest_available_parking_tool
@@ -825,16 +825,19 @@ def _check_quote(rows: Sequence[Any], upcoming: Sequence[Any]) -> str:
 
 
 def default_registry() -> ToolRegistry:
-    """운영 도구 16종. 시설 도구는 FACILITY·MANAGER, 민원 집계는 MANAGER·STAFF,
+    """운영 도구 17종. 시설 도구는 FACILITY·MANAGER, 민원 집계는 MANAGER·STAFF,
     그래프 도구는 Neo4j 가용 시만 노출.
 
     되묻기(ask_clarification)는 전 역할 노출이지만 실행되지 않는다 — 오케스트레이터가
     이름으로 판별해 되묻고 종료한다(ADR-0025 §4).
+    관리자 세대 평면도 도구(find_household_devices)는 역할이 맞아도 **동·호수가 확정된
+    질의에서만** 노출된다 — 감추는 쪽은 라우터다(H20-17, assistant.py `_assistant_response`).
     """
     return ToolRegistry(
         [
             ask_clarification_tool(),
             find_in_floor_plan_tool(),
+            find_household_devices_tool(),
             trace_home_device_issue_tool(),
             find_nearest_available_parking_tool(),
             find_my_vehicle_tool(),

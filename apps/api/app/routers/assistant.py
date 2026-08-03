@@ -10,7 +10,7 @@ import datetime
 import uuid
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-from typing import Annotated, cast
+from typing import Annotated, NamedTuple, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from redis.asyncio import Redis
@@ -22,7 +22,6 @@ from ai_core.backend_config import AiTuning
 from ai_core.graph import GraphClient
 from ai_core.history import HISTORY_CANDIDATE_TURNS
 from ai_core.llm.client import LlmClient
-from ai_core.masking import detect_pii
 from ai_core.orchestrator import (
     KST,
     CitationEvent,
@@ -34,7 +33,7 @@ from ai_core.orchestrator import (
 )
 from ai_core.rag.prompt import (
     ADMIN_AGENT_ASK_UNIT_PROMPT,
-    ADMIN_AGENT_SYSTEM_PROMPT,
+    ADMIN_AGENT_UNIT_PROMPT,
     ADMIN_ANSWER_SYSTEM_PROMPT,
     AGENT_SYSTEM_PROMPT,
     ANSWER_SYSTEM_PROMPT,
@@ -42,8 +41,8 @@ from ai_core.rag.prompt import (
 )
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
-from ai_core.tools.floor_plan import RESIDENT_ROLES
-from ai_core.tools.floor_plan_parser import parse_query
+from ai_core.tools.floor_plan import HOUSEHOLD_DEVICES_TOOL, RESIDENT_ROLES
+from ai_core.tools.floor_plan_parser import parse_query, parse_unit
 from app import answer_cache
 from app.ai_backend import backend_id
 from app.deps import (
@@ -132,9 +131,10 @@ async def admin_ask(
 
     도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
     서버 복원은 **당일 한정**으로 제공한다(아래 admin_latest_conversation, ADR-0028 결정 2 개정).
-    세대 평면도 설비 위치 질의만 프롬프트·도구 가시성을 갈아끼운다(H20-16, `_admin_overrides`).
+    세대 평면도 설비 위치 질의만 프롬프트·도구 가시성·조회 대상 세대를 갈아끼운다
+    (H20-16·H20-17, `_admin_overrides`).
     """
-    answer_prompt, agent_prompt, exclude_tools = _admin_overrides(body.question)
+    overrides = _admin_overrides(body.question)
     return await _assistant_response(
         body,
         ctx,
@@ -144,9 +144,10 @@ async def admin_ask(
         redis,
         tuning,
         channel="admin",
-        answer_prompt=answer_prompt,
-        agent_prompt=agent_prompt,
-        exclude_tools=exclude_tools,
+        answer_prompt=overrides.answer_prompt,
+        agent_prompt=overrides.agent_prompt,
+        exclude_tools=overrides.exclude_tools,
+        target_unit=overrides.target_unit,
     )
 
 
@@ -165,27 +166,44 @@ def _is_home_device_location_query(question: str) -> bool:
     return bool(parse_query(question).elements) and any(w in question for w in _LOCATION_WORDS)
 
 
-def _admin_overrides(question: str) -> tuple[str, str, tuple[str, ...]]:
-    """관리자 질의별 (답변 프롬프트, 결정 프롬프트, 감출 도구) — H20-16.
+class AdminOverrides(NamedTuple):
+    """관리자 질의별 프롬프트·도구 가시성·조회 대상 세대."""
+
+    answer_prompt: str
+    agent_prompt: str
+    exclude_tools: tuple[str, ...]
+    # 세대 평면도 도구가 조회할 (동 이름, 호수). None이면 그 도구를 아예 노출하지 않는다.
+    target_unit: tuple[str, int] | None = None
+
+
+def _admin_overrides(question: str) -> AdminOverrides:
+    """관리자 질의별 오버라이드 — H20-16, 세대 조회 배선은 H20-17.
 
     갈림목 판정은 **코드가 한다**. 8B는 프롬프트 조건문으로 이 분기를 지키지 못했다
     (로컬 실측: 동·호수가 명시된 "402동 201호 두꺼비집"에도 3/3 되물었고, 공용 설비 위치
     질문 "승강기는 어디에 있나요?"에도 되물었다). 신호는 전부 기존 순수 함수 재사용이다:
-    평면도 요소 어휘는 `parse_query`(콘센트·분전함·두꺼비집…), 동·호수는 마스킹 패턴.
-    질문은 이 판정 때문에 어디로도 나가지 않는다(로컬 정규식, 규칙 2와 무관).
+    평면도 요소 어휘는 `parse_query`(콘센트·분전함·두꺼비집…), 동·호수는 `parse_unit`
+    (마스킹 UNIT 패턴과 같은 형태). 질문은 이 판정 때문에 어디로도 나가지 않는다
+    (로컬 정규식, 규칙 2와 무관).
 
     - 평면도 설비 **위치** 질의가 아니면: 기본 프롬프트 그대로(다른 관리자 질의는 무영향).
     - 위치 질의 + 동·호수 없음: 되묻기 예외를 줘서 동/호수를 되묻는다(사용자 지시).
-    - 위치 질의 + 동·호수 있음: 되묻지 않고, **단지 공용 설비 목록 도구를 감춘다** —
-      특정 세대 질문에 단지 37개 설비 현황 카드가 뜨는 것이 사용자 신고 내용이다.
-      세대 안 설비를 실제로 조회하는 관리자 도구는 H20-17이 만든다. 그때까지는 답변
-      프롬프트 규칙 7의 평면도 안내나 폴백으로 끝난다(지어내지 않는다).
+    - 위치 질의 + 동·호수 있음: 되묻지 않고 **그 세대를 조회한다**(find_household_devices).
+      단지 공용 설비 목록 도구는 계속 감춘다 — 특정 세대 질문에 단지 37개 설비 현황 카드가
+      뜨는 것이 H20-16의 사용자 신고 내용이다. 도구가 빈손이면 답변 프롬프트 규칙 7의
+      평면도 안내로 끝난다(지어내지 않는다).
     """
     if not _is_home_device_location_query(question):
-        return ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ()
-    if "UNIT" in detect_pii(question):
-        return ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_SYSTEM_PROMPT, ("get_facilities",)
-    return ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, ()
+        return AdminOverrides(ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())
+    unit = parse_unit(question)
+    if unit is not None:
+        return AdminOverrides(
+            ADMIN_ANSWER_SYSTEM_PROMPT,
+            ADMIN_AGENT_UNIT_PROMPT,
+            ("get_facilities",),
+            unit,
+        )
+    return AdminOverrides(ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, ())
 
 
 @admin_assistant_router.get("/conversations/latest")
@@ -245,6 +263,7 @@ async def _assistant_response(
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
     agent_prompt: str = AGENT_SYSTEM_PROMPT,
     exclude_tools: Sequence[str] = (),
+    target_unit: tuple[str, int] | None = None,
 ) -> EventSourceResponse:
     """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 세 엔드포인트 공유."""
     conversation = await _load_or_create_conversation(session, ctx, body.conversation_id, channel)
@@ -277,7 +296,14 @@ async def _assistant_response(
         roles=ctx.roles,
         visibilities=ctx.visibilities,
         building_id=await _building_id(session, ctx),
+        target_unit=target_unit,
     )
+    # 세대 평면도 도구는 **코드가 동·호수를 확정한 질의에서만** 스펙에 실린다(H20-17).
+    # 역할만으로 상시 노출하면 관리자의 다른 질의("승강기는 어디에…")가 이리로 샐 수 있고,
+    # 대상 세대가 없으면 어차피 조회도 못 한다 — 노출과 조회 조건을 한 값으로 묶는다.
+    hidden_tools = tuple(exclude_tools)
+    if target_unit is None:
+        hidden_tools = (*hidden_tools, HOUSEHOLD_DEVICES_TOOL)
     # 캐시 키의 백엔드 세그먼트 — 런타임에 바뀐 백엔드의 답변이 섞이지 않게(H15-1).
     backend = backend_id(llm.settings)
     # 답변 캐시는 입주민 채널만 참여한다(읽기·쓰기 모두 — ADR-0028 결정 2).
@@ -316,7 +342,7 @@ async def _assistant_response(
                 allow_clarify=body.allow_clarify and not history.last_was_clarify,
                 answer_prompt=answer_prompt,
                 agent_prompt=agent_prompt,
-                exclude_tools=exclude_tools,
+                exclude_tools=hidden_tools,
                 tool_confidence=tuning.tool_confidence,
             )
         async for event in events:
