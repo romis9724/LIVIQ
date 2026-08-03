@@ -37,6 +37,11 @@ class ToolContext:
     # (H20-17, 라우터의 `_admin_overrides`). 동·호수는 마스킹돼 모델 눈에 보이지 않으므로
     # LLM 인자로는 받을 수 없고, 받아서도 안 된다(모델 착오 = 타 세대 조회, 규칙 4).
     target_unit: tuple[str, int] | None = None
+    # 그 세대를 조회할 때 쓸 **질의 원문**(target_unit과 항상 함께 설정된다, H20-17b).
+    # 되묻기로 질문이 두 턴에 쪼개지면 모델이 넘기는 query는 설비 어휘를 잃는다
+    # ("콘센트 어디 있어?" → "어느 동·호수?" → "401동 201호") — 라우터가 두 턴을 합쳐
+    # 확정한 원문을 여기 실어, 무엇을 찾는지도 코드가 정한다.
+    target_query: str | None = None
 
 
 @dataclass(frozen=True)
