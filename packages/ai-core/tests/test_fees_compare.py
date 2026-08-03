@@ -2,6 +2,7 @@
 
 검증 축은 넷이다: ①대상 표기 정규화·개수 경계 ②확정값 비교(차액은 뺄셈 한 번)
 ③값을 못 낸 대상을 숨기지 않는다(규칙 1) ④타 세대 개별 금액 미노출(CRITICAL).
+H20-18로 다섯째 축이 붙었다: ⑤비교 축이 **월**인 갈래(두 달 증감).
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from ai_core.config import AiCoreSettings
 from ai_core.llm.client import LlmClient, ToolCallRequest
 from ai_core.rag.retrieval import Retriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry, execute_tool
-from ai_core.tools.fees_common import COMPLEX_SCOPE, MIN_PEER_SAMPLE, SELF_SCOPE
+from ai_core.tools.fees_common import COMPLEX_SCOPE, KST, MIN_PEER_SAMPLE, SELF_SCOPE
 from ai_core.tools.fees_compare import MAX_TARGETS, CompareFeesArgs
 
 TENANT = uuid.uuid4()
@@ -65,11 +66,14 @@ def _handler(
     latest: str | None = "2026-07",
     aggregates: dict[str, tuple[object, int]] | None = None,
     items: dict[str, Sequence[tuple[str, int]]] | None = None,
+    self_totals: dict[str, int] | None = None,
+    period_aggregates: dict[str, tuple[object, int]] | None = None,
 ) -> Any:
     """대상별 응답을 흉내내는 가짜 세션.
 
     `aggregates`·`items`의 키는 동 이름(단지 전체는 `COMPLEX_SCOPE`)이다 — 집계 쿼리는
     params["dong"] 유무로 갈린다(실제 SQL과 같은 분기).
+    `self_totals`·`period_aggregates`의 키는 **월**이다(기간 축 비교용 — 달마다 다른 값).
     """
     aggs = aggregates if aggregates is not None else {COMPLEX_SCOPE: (COMPLEX_AVG, COMPLEX_SAMPLE)}
     item_rows = items or {}
@@ -87,7 +91,10 @@ def _handler(
         if "max(period)" in s:
             return [row(period=latest)] if latest else []
         if "count(*) as sample_size" in s:
-            avg_total, sample_size = aggs.get(_key(params), (None, 0))
+            if period_aggregates is not None:
+                avg_total, sample_size = period_aggregates.get(str(params["period"]), (None, 0))
+            else:
+                avg_total, sample_size = aggs.get(_key(params), (None, 0))
             return [row(avg_total=avg_total, sample_size=sample_size)]
         if "jsonb_array_elements" in s:
             return [
@@ -95,6 +102,11 @@ def _handler(
                 for name, amount in item_rows.get(_key(params), ())
             ]
         if "breakdown, total_amount" in s:
+            if self_totals is not None:
+                total = self_totals.get(str(params["period"]))
+                if total is None:
+                    return []
+                return [row(breakdown=SELF_BREAKDOWN, total_amount=total)]
             return [row(breakdown=SELF_BREAKDOWN, total_amount=SELF_TOTAL)]
         return []
 
@@ -138,10 +150,171 @@ def test_targets_reject_out_of_range_counts() -> None:
 
 def test_period_null_literal_and_multi_month_fold() -> None:
     assert CompareFeesArgs(targets="우리집,전체", period="null").period is None
-    # 여러 달을 나열해 오면 가장 최근 달 하나로 비교한다(비교 축은 대상이지 월이 아니다).
+    # 대상이 여럿이면 달을 나열해 와도 대상 축이다 — 가장 최근 달 하나로 비교한다.
     assert CompareFeesArgs(targets="우리집,전체", period="2026-06,2026-07").requested_period() == (
         "2026-07"
     )
+
+
+# ── 월 토큰 관용(H20-18 — dev 실측 인자) ────────────────────────────────
+
+
+def test_month_tokens_in_targets_move_to_period() -> None:
+    """dev 3/3 실측 인자 `{"targets":"7월,8월","period":"7월,8월"}`가 기간 축이 된다.
+
+    모델은 달을 **대상**에 넣고 연도를 뺀다. `fold_scope`가 "7월"을 동 이름으로 접으면
+    데이터 없는 동 두 개를 비교하게 되고, period는 패턴 검증에서 죽는다(invalid_args).
+    """
+    year = datetime.now(KST).year
+    args = CompareFeesArgs.model_validate({"targets": "7월,8월", "period": "7월,8월"})
+
+    assert args.target_tokens() == []
+    assert args.requested_periods() == [f"{year}-07", f"{year}-08"]
+    assert args.is_period_axis
+
+
+def test_month_tokens_in_targets_survive_null_literal_period() -> None:
+    """모델은 `{"targets":"7월,8월","period":"null"}`도 보낸다 — 합칠 때 null을 먼저 접는다."""
+    year = datetime.now(KST).year
+    args = CompareFeesArgs.model_validate({"targets": "7월,8월", "period": "null"})
+    assert args.requested_periods() == [f"{year}-07", f"{year}-08"]
+
+
+def test_month_tokens_keep_dong_numbers_as_targets() -> None:
+    """동 번호를 월로 훔치지 않는다 — 월 표식("월")이나 연도가 있어야 월이다."""
+    args = CompareFeesArgs(targets="401,402")
+    assert args.target_tokens() == ["401동", "402동"]
+    assert args.requested_periods() == []
+
+
+def test_year_less_months_in_period_field_get_this_year() -> None:
+    """연도 없는 월도 받는다 — 없으면 패턴 검증 실패로 도구가 죽는다(dev 실측)."""
+    year = datetime.now(KST).year
+    assert CompareFeesArgs(targets="우리집,전체", period="7월").requested_periods() == [
+        f"{year}-07"
+    ]
+    assert CompareFeesArgs(targets="우리집,전체", period="2026-7").requested_periods() == [
+        "2026-07"
+    ]
+    with pytest.raises(ValidationError):
+        CompareFeesArgs(targets="우리집,전체", period="열세달")
+
+
+def test_targets_may_be_omitted_only_for_period_axis() -> None:
+    """대상 축은 여전히 2~4개를 요구한다 — 달이 둘일 때만 대상 생략이 성립한다."""
+    assert CompareFeesArgs.model_validate({"period": "2026-07,2026-08"}).target_tokens() == []
+    with pytest.raises(ValidationError):
+        CompareFeesArgs.model_validate({"period": "2026-07"})
+    with pytest.raises(ValidationError):
+        CompareFeesArgs.model_validate({})
+
+
+# ── 기간 축 비교(월 간) ─────────────────────────────────────────────────
+
+
+async def test_compare_two_months_of_own_household(settings: AiCoreSettings) -> None:
+    """ "관리비 7월 8월 비교해줘" — 본인 세대 두 달 확정값과 증감이 한 카드에."""
+    handler = _handler(self_totals={"2026-07": 176_601, "2026-08": 181_000})
+    result = await _result(settings, handler, {"targets": "7월,8월", "period": "2026-07,2026-08"})
+
+    assert result.card is not None
+    assert result.card.title == "2026-07 vs 2026-08 관리비 비교"
+    assert "우리집" in result.card.quote
+    assert "2026-07 176,601원" in result.card.quote
+    assert "2026-08 181,000원" in result.card.quote
+    # 증감은 나중 달 기준(+ = 늘었다). 뺄셈 한 번 + 퍼센트 한 번만 코드가 한다.
+    assert "증감 +4,399원(+2.5%)" in result.card.quote
+    assert result.card.data == {
+        "kind": "fee_compare",
+        "period": "2026-07 vs 2026-08",
+        "rows": [
+            {
+                "label": "2026-07",
+                "kind": "self",
+                "amount": 176_601,
+                "sample_size": None,
+                "note": "",
+            },
+            {
+                "label": "2026-08",
+                "kind": "self",
+                "amount": 181_000,
+                "sample_size": None,
+                "note": "",
+            },
+        ],
+        "base_label": "2026-08",
+        "diffs": [{"label": "2026-07", "diff": 4_399}],
+        "axis": "period",
+        "subject": "우리집",
+        "change_pct": 2.5,
+    }
+
+
+async def test_compare_two_months_uses_latest_two_and_says_what_it_dropped(
+    settings: AiCoreSettings,
+) -> None:
+    """셋 이상이면 최근 두 달만 비교하고 **버린 달을 적는다**(H19-4 교훈 — 조용히 빼지 않는다)."""
+    handler = _handler(self_totals={"2026-06": 170_000, "2026-07": 176_601, "2026-08": 181_000})
+    result = await _result(settings, handler, {"period": "2026-06,2026-07,2026-08"})
+
+    assert result.card is not None
+    assert result.card.title == "2026-07 vs 2026-08 관리비 비교"
+    assert "2026-06" in result.card.quote  # 제외 사실이 근거에 남는다
+    assert "170,000" not in result.card.quote
+
+
+async def test_compare_two_months_blocks_month_before_approval(settings: AiCoreSettings) -> None:
+    """FR-FEE-03은 달마다 적용된다 — 승인 이전 달은 값이 안 나가고 사유만 남는다."""
+    handler = _handler(
+        self_row=row(household_id=HOUSEHOLD, approved_at=datetime(2026, 8, 1, tzinfo=UTC)),
+        self_totals={"2026-07": 176_601, "2026-08": 181_000},
+    )
+    result = await _result(settings, handler, {"period": "2026-07,2026-08"})
+
+    assert result.card is not None
+    assert "2026-07 입주 승인 이전이라 확인 불가" in result.card.quote
+    assert "176,601" not in result.card.quote
+    assert "2026-08 181,000원" in result.card.quote
+    assert result.card.data is not None and result.card.data["diffs"] == []
+    assert "증감" not in result.card.quote
+
+
+async def test_compare_two_months_falls_back_to_complex_average_without_household(
+    settings: AiCoreSettings,
+) -> None:
+    """세대가 없는 관리자 채널은 본인이 될 수 없다 — 단지 평균 두 달을 비교한다."""
+    handler = _handler(
+        self_row=None,
+        period_aggregates={"2026-07": (168_211, COMPLEX_SAMPLE), "2026-08": (171_000, 320)},
+    )
+    result = await _result(settings, handler, {"period": "2026-07,2026-08"})
+
+    assert result.card is not None
+    assert "단지 전체" in result.card.quote
+    assert "2026-07 평균 168,211원(표본 322세대)" in result.card.quote
+    assert "증감 +2,789원(+1.7%)" in result.card.quote
+    assert result.card.data is not None and result.card.data["subject"] == "단지 전체"
+
+
+async def test_compare_two_months_of_one_named_target(settings: AiCoreSettings) -> None:
+    """대상을 하나 지정하면 그 대상의 두 달 — 대상이 여럿이면 첫 대상만 쓴다."""
+    handler = _handler(
+        period_aggregates={"2026-07": (150_000, 60), "2026-08": (147_000, 60)},
+    )
+    result = await _result(settings, handler, {"targets": "401동", "period": "7월,8월"})
+
+    assert result.card is not None
+    assert "401동" in result.card.quote
+    assert "증감 -3,000원(-2.0%)" in result.card.quote
+
+
+async def test_compare_two_months_without_any_data_returns_note(settings: AiCoreSettings) -> None:
+    handler = _handler(self_totals={})
+    result = await _result(settings, handler, {"period": "2026-07,2026-08"})
+
+    assert result.card is None
+    assert "비교할 수 있는" in result.note and "관리비 내역 없음" in result.note
 
 
 # ── 총액 비교 ───────────────────────────────────────────────────────────

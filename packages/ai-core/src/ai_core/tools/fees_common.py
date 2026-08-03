@@ -12,12 +12,18 @@ tenant_id·user_id는 항상 `ToolContext`에서 오며 LLM 인자로 받지 않
 
 from __future__ import annotations
 
+import datetime
+import re
 from typing import Any, NamedTuple
 
 from sqlalchemy import text
 from sqlalchemy.sql.elements import TextClause
 
 from ai_core.tools.registry import ToolContext, ToolDeps
+
+# ponytail: orchestrator.py에도 같은 한 줄이 있다 — tz 상수 하나를 위해 공용 모듈을 새로
+# 만들지 않는다(fees_common이 orchestrator를 import하면 순환).
+KST = datetime.timezone(datetime.timedelta(hours=9))
 
 # 같은 평형·동·단지 평균 비교의 표본 하한(ADR-0026 결정 3). 미달이면 비교를 생략한다 —
 # 소표본 평균은 본인 값과 함께 특정 세대 금액을 역산시킨다(n=2면 상대 세대 금액이 그대로
@@ -89,6 +95,45 @@ def fold_null_literal(value: object) -> object:
     if isinstance(value, str) and value.strip().lower() in _NULL_LITERALS:
         return None
     return value
+
+
+# 월 토큰 관용(H20-18) — "2026-07"·"2026-7"·"7월"·(period 필드 한정)"7".
+# 8B는 여러 달을 나열할 때 **연도를 뺀다**: dev 3/3 실측 `period="7월,8월"` → PERIOD_PATTERN
+# 검증 실패 → invalid_args → 폴백. 오늘 날짜를 프롬프트에 넣어도(H19-11) 이 자리는 안 막혔다.
+_MONTH_TOKEN = re.compile(r"^(?:(\d{4})\s*-\s*)?(\d{1,2})\s*(월)?$")
+_MONTHS_IN_YEAR = 12
+
+
+def fold_period_token(value: str, *, require_marker: bool = False) -> str | None:
+    """월 표기 하나 → "YYYY-MM". 월로 읽히지 않으면 None(호출부가 원문을 그대로 흘린다).
+
+    연도가 없으면 단지 시간대(KST) 기준 **올해**로 읽는다 — "7월 관리비"는 올해 7월이다.
+    `require_marker=True`면 연도나 "월" 표식이 있어야 월로 본다: 대상 목록에서 쓰는 갈래로,
+    동 번호("401")를 월로 훔치지 않기 위한 조건이다.
+    """
+    matched = _MONTH_TOKEN.match(value.strip())
+    if matched is None:
+        return None
+    year, month, marker = matched.group(1), int(matched.group(2)), matched.group(3)
+    if require_marker and not (year or marker):
+        return None
+    if not 1 <= month <= _MONTHS_IN_YEAR:
+        return None
+    return f"{int(year) if year else datetime.datetime.now(KST).year:04d}-{month:02d}"
+
+
+def fold_periods(value: object) -> object:
+    """`period` 필드(쉼표 나열) 정규화 — 전 토큰이 월로 읽힐 때만 접는다.
+
+    하나라도 못 읽히면 원문을 그대로 돌려준다(패턴 검증이 지금처럼 거부하게 둔다 —
+    반쯤 접힌 값으로 엉뚱한 달을 조회하는 것보다 검증 실패가 낫다).
+    """
+    if not isinstance(value, str) or not value.strip():
+        return value
+    folded = [fold_period_token(part) for part in value.split(",")]
+    if any(period is None for period in folded):
+        return value
+    return ",".join(period for period in folded if period is not None)
 
 
 def fold_scope(value: str) -> str | None:
