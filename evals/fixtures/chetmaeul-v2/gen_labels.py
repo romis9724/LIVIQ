@@ -29,9 +29,9 @@ draft CSV의 label_source 열이 리졸버를 고른다(콜론 구분 스펙):
                                   본인 대상이 있으면 household_ref 필수, 항목을 주면 항목 비교
   inquiries:mine                  본인 민원 (user_ref 바인딩 필수)
   inquiries:other-block           타인 민원 차단 (폴백/거부가 정답)
-  inquiry-summary:recent|pending  관리자 민원 집계(H20-2 브리핑) — 리졸버 **미구현**.
-                                  dev gen 시 신설 여부 판정(H19-4의 V2-QA-0337 관례 —
-                                  낡은 라벨로 gen을 돌리면 구현된 기능이 실패로 채점된다)
+  inquiry-summary:recent|pending  관리자 민원 집계(H20-2 브리핑). recent=도구 기본 7일 창의
+                                  상태별 집계, pending=도구 상한 90일의 미처리 집계
+                                  ("전체 미배정" 후속 질의). 창이 롤링이라 gen 시점 의존
   facilities:count[:<코드접두>]   설비 대수 (예: facilities:count:EL)
   facilities:status:<status>      상태 조회 (빈 결과면 "없음" 카드가 정답)
   overdue:window                  점검 임박·초과 (현 데이터 전부 NULL → "없음" 카드가 정답)
@@ -58,7 +58,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +68,17 @@ from ai_core.parking import Core, Spot, nearest_available_spots
 
 # 도구의 랭킹 SQL·임계·상한을 그대로 쓴다(비공개 이름 의도적 참조) — 문구를 복사하면
 # 가시성 규칙(done 또는 본인 건)과 임계가 갈라져 라벨이 도구 출력과 어긋난다.
-from ai_core.tools.inquiries import _LIMIT, _SIMILAR_SQL, _SIMILARITY_THRESHOLD
+from ai_core.tools.inquiries import (
+    _LIMIT,
+    _PENDING_STATUSES,
+    _SIMILAR_SQL,
+    _SIMILARITY_THRESHOLD,
+    _STATUS_COUNT_SQL,
+    _STATUS_LABEL,
+    _SUMMARY_DEFAULT_DAYS,
+    _SUMMARY_MAX_DAYS,
+    _counts,
+)
 
 # 표본 하한도 도구와 같은 값을 쓴다 — 도구가 평균을 거부하는 범위에 라벨을 만들면 거짓이다.
 # 비교 라벨은 대상 정규화·항목 매칭까지 도구 것을 그대로 빌린다(라벨과 도구가 다른 대상·
@@ -532,6 +542,60 @@ async def resolve_inquiries(
         expected_behavior=BEHAVIOR_ANSWERED,
         as_of=AS_OF,
         label_source_resolved=f"inquiries user={uref} n={len(rows)}",
+        errors=[],
+    )
+
+
+async def resolve_inquiry_summary(
+    conn: asyncpg.Connection, tid: str, case: dict[str, str], args: list[str]
+) -> Label:
+    """inquiry-summary:recent|pending — 관리자 민원 집계 (H20-2 진입 브리핑).
+
+    도구 summarize_inquiries의 집계 SQL을 그대로 실행한다(파라미터 표기만 asyncpg용) —
+    라벨 숫자가 도구 확정값과 갈라지면 채점이 거짓말이 된다(similar-inquiries와 같은
+    드리프트 차단). 기간·상태 집합도 도구 상수를 빌린다: recent는 도구 기본 7일,
+    pending은 "최근 일주일 말고 전체" 후속 질의라 도구 상한 90일.
+
+    창은 도구와 같이 **생성 시각 기준 롤링**이다(도구가 now()를 쓴다). as_of 열은 감사용일
+    뿐이라 며칠 지난 뒤 재측정하려면 gen을 다시 돌려야 한다.
+    """
+    mode = args[0] if args else ""
+    if mode not in {"recent", "pending"}:
+        return _error("inquiry-summary는 :recent 또는 :pending")
+    days = _SUMMARY_DEFAULT_DAYS if mode == "recent" else _SUMMARY_MAX_DAYS
+    since = datetime.now(UTC) - timedelta(days=days)
+    sql, names = _positional(str(_STATUS_COUNT_SQL))
+    binds: dict[str, Any] = {"tid": tid, "since": since, "dong": None}
+    missing = [n for n in names if n not in binds]
+    if missing:
+        return _error(f"도구 SQL 파라미터 변경됨: {missing} — 리졸버 binds 동기화 필요")
+    rows = await conn.fetch(sql, *(binds[n] for n in names))
+    # ROLLUP 총계 행(status NULL)과 상태별 행을 분리 — 도구의 판독과 동일.
+    total = next((int(r["cnt"]) for r in rows if r["status"] is None), 0)
+    counts = {r["status"]: int(r["cnt"]) for r in rows if r["status"] is not None}
+    scope = f"최근 {days}일"
+    if total == 0:
+        # 0건도 DB가 확인한 확정 근거 — 도구가 "없음" 카드를 내므로 answered가 정답이다(⓪ 계약).
+        facts = f"{scope} 접수 민원 없음(확정 집계)"
+    elif mode == "recent":
+        facts = f"{scope} 접수 민원 {total}건; 상태별: " + _counts(
+            (_STATUS_LABEL.get(s, s), n) for s, n in counts.items()
+        )
+    else:
+        pending = [(s, counts.get(s, 0)) for s in _PENDING_STATUSES]
+        facts = f"{scope} 미처리 민원 {sum(n for _, n in pending)}건; " + _counts(
+            (_STATUS_LABEL.get(s, s), n) for s, n in pending
+        )
+    return Label(
+        expected_facts=facts,
+        expected_citations="tool:summarize_inquiries",
+        expected_tool="summarize_inquiries",
+        acceptable_tools="",
+        expected_behavior=BEHAVIOR_ANSWERED,
+        as_of=AS_OF,
+        label_source_resolved=(
+            f"inquiries summarize mode={mode} days={days} since={since.isoformat()} total={total}"
+        ),
         errors=[],
     )
 
@@ -1083,6 +1147,7 @@ RESOLVERS = {
     "fees-avg": resolve_fees_avg,
     "fees-compare": resolve_fees_compare,
     "inquiries": resolve_inquiries,
+    "inquiry-summary": resolve_inquiry_summary,
     "facilities": resolve_facilities,
     "overdue": resolve_overdue,
     "graph": resolve_graph,
@@ -1226,6 +1291,11 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
         ("fees-avg:dong:402동:latest", {"role": "RESIDENT"}),
         ("fees-avg:complex:latest", {"role": "RESIDENT"}),
         ("inquiries:mine", {"role": "RESIDENT", "user_ref": inquiry_author or ""}),
+        ("inquiry-summary:recent", {"role": "MANAGER"}),
+        ("inquiry-summary:pending", {"role": "MANAGER"}),
+        # 모드 오타 — 거부돼야 정상(expect_reject_specs는 spec 문자열로 찾으므로 역할 위반
+        # 프로브는 facilities:count 하나로 충분하다)
+        ("inquiry-summary:week", {"role": "MANAGER"}),
         ("plan-device:콘센트", {"role": "RESIDENT", "household_ref": "401-201"}),
         ("parking:nearest", {"role": "RESIDENT", "household_ref": "401-201"}),
         (
@@ -1256,6 +1326,7 @@ async def cmd_selfcheck(conn: asyncpg.Connection, tid: str) -> int:
     ]
     expect_reject_specs = {
         "doc-clause:첫마을4단지 관리규약:제5조",  # 조항 모호(5중 중복)
+        "inquiry-summary:week",  # 미지원 모드
         "facilities:count",  # RESIDENT 역할 위반
         "clarify",  # 특정 대상 미지정
     }
