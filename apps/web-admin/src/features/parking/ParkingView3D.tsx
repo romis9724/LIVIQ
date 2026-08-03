@@ -146,7 +146,8 @@ export function ParkingView3D({
   return (
     <div className="pk-map">
       <div className="pk-zoom" role="group" aria-label="3D 카메라">
-        <span className="pk-zoom__hint">끌어서 회전 · 휠로 확대</span>
+        {/* 좌드래그=이동으로 바꿨다(축 고정 신고 2회 — 공용 씬 mouseButtons). 회전이 우드래그. */}
+        <span className="pk-zoom__hint">끌어서 이동 · 휠로 확대 · 오른쪽 끌기로 회전</span>
         <button
           type="button"
           className="pk-zoom__reset"

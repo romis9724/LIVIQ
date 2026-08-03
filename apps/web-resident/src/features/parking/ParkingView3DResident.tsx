@@ -161,7 +161,8 @@ export function ParkingView3DResident({
   return (
     <div className="rpk3d">
       <div className="rpk3d__bar">
-        <span className="rpk3d__hint">끌어서 회전 · 휠·핀치로 확대</span>
+        {/* 좌드래그=이동으로 바꿨다(축 고정 신고 2회 — 공용 씬 mouseButtons). 회전은 두 손가락. */}
+        <span className="rpk3d__hint">끌어서 이동 · 휠로 확대 · 두 손가락으로 회전</span>
         {recommended.map((spotNo, index) => (
           <button
             key={spotNo}
