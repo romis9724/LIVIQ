@@ -15,6 +15,7 @@ import {
   VISIBILITY_META,
   documentErrorMessage,
   formatFileSize,
+  titleFromFilename,
   validateAttachment,
 } from "./data";
 import "./documents.css";
@@ -53,8 +54,8 @@ export function DocumentForm() {
     const error = validateAttachment(picked);
     setFileError(error);
     setFile(picked);
-    // 제목 미입력 시 파일명(확장자 제거)으로 초기 채움 — 수정 가능.
-    if (!title.trim() && !error) setTitle(picked.name.replace(/\.[^.]+$/, ""));
+    // 제목 미입력 시 파일명(확장자 제거·NFC 정리)으로 초기 채움 — 수정 가능.
+    if (!title.trim() && !error) setTitle(titleFromFilename(picked.name));
   }
 
   async function handleSubmit() {

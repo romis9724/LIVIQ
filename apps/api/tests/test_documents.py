@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 import uuid
 from collections.abc import AsyncIterator
 
@@ -364,6 +365,57 @@ async def test_patch_updates_all_fields(client: Client) -> None:
     detail = (await c.get(f"/documents/{doc_id}")).json()
     assert detail["body"] == "새 본문"
     assert detail["category_code_id"] == str(DOC_CODE_GUIDE_ID)
+
+
+# ── 제목 정규화 (H20-14) ────────────────────────────────────────────────────
+
+
+async def test_create_normalizes_nfd_title_so_search_matches(client: Client) -> None:
+    """macOS 파일명 유래 NFD 제목은 NFC로 저장 — 안 그러면 LIKE·검색이 전부 어긋난다(dev 실측)."""
+    c, _, _, _ = client
+    nfd_title = unicodedata.normalize("NFD", "첫마을4단지 관리규약")
+    assert len(nfd_title) == 25  # 화면엔 11자, 실제론 자모 분해 25자
+
+    response = await _create(c, title=nfd_title)
+    assert response.status_code == 201
+    assert response.json()["title"] == "첫마을4단지 관리규약"
+    items = (await c.get("/documents", params={"q": "관리규약"})).json()["items"]
+    assert len(items) == 1
+
+
+async def test_create_strips_zero_width_and_collapses_spaces(client: Client) -> None:
+    c, _, _, _ = client
+    response = await _create(c, title="  주차장​ 운영﻿⁠  세칙\t")
+    assert response.status_code == 201
+    assert response.json()["title"] == "주차장 운영 세칙"
+
+
+async def test_create_rejects_title_of_only_invisible_chars(client: Client) -> None:
+    c, _, _, _ = client
+    response = await _create(c, title="​​ ﻿")
+    assert response.status_code == 422
+
+
+async def test_create_keeps_normal_title_unchanged(client: Client) -> None:
+    c, _, _, _ = client
+    response = await _create(c, title="관리규약 제1조 (목적)")
+    assert response.json()["title"] == "관리규약 제1조 (목적)"
+
+
+async def test_patch_normalizes_title(client: Client) -> None:
+    c, _, _, _ = client
+    doc_id = (await _create(c)).json()["id"]
+    nfd_title = unicodedata.normalize("NFD", "관리규약")
+    response = await c.patch(f"/documents/{doc_id}", json={"title": f" {nfd_title}​ "})
+    assert response.status_code == 200
+    assert response.json()["title"] == "관리규약"
+
+
+async def test_patch_rejects_title_of_only_invisible_chars(client: Client) -> None:
+    c, _, _, _ = client
+    doc_id = (await _create(c)).json()["id"]
+    response = await c.patch(f"/documents/{doc_id}", json={"title": "​"})
+    assert response.status_code == 422
 
 
 # ── 분류 코드 검증 ──────────────────────────────────────────────────────────
