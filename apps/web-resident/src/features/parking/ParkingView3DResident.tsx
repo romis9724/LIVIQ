@@ -161,8 +161,8 @@ export function ParkingView3DResident({
   return (
     <div className="rpk3d">
       <div className="rpk3d__bar">
-        {/* 클로즈업 뒤 "다른 데로 못 간다"는 신고 — 이동(팬)은 두 손가락이라 안내에 적는다. */}
-        <span className="rpk3d__hint">끌어서 회전 · 휠·두 손가락으로 확대·이동</span>
+        {/* 좌드래그=이동으로 바꿨다(축 고정 신고 2회 — 공용 씬 mouseButtons). 회전은 두 손가락. */}
+        <span className="rpk3d__hint">끌어서 이동 · 휠로 확대 · 두 손가락으로 회전</span>
         {recommended.map((spotNo, index) => (
           <button
             key={spotNo}
