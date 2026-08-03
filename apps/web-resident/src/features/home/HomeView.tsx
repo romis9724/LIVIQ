@@ -29,15 +29,6 @@ import "./home.css";
 /** 섹션별 독립 로딩 상태 — 한 섹션이 실패해도 나머지는 렌더한다. */
 type Loadable<T> = { status: "loading" } | { status: "error" } | { status: "ready"; data: T };
 
-// 하단 탭에 없는 화면은 여기가 유일한 진입점이다(주차장은 AI 비서 CTA·이 바로가기로 들어온다).
-const SHORTCUTS = [
-  { href: "/fees", icon: "🧾", label: "관리비" },
-  { href: "/inquiries", icon: "🛠", label: "민원접수" },
-  { href: "/notices", icon: "📢", label: "공지" },
-  { href: "/parking", icon: "🅿️", label: "주차장" },
-  { href: "/me", icon: "👤", label: "내 정보" },
-] as const;
-
 export function HomeView() {
   const period = currentPeriod();
   const [fee, setFee] = useState<Loadable<FeeData>>({ status: "loading" });
@@ -121,18 +112,8 @@ export function HomeView() {
 
         <NoticeSection state={notices} />
         <InquirySection state={inquiry} />
-
-        {/* 바로가기 */}
-        <nav className="shortcut-grid" aria-label="바로가기">
-          {SHORTCUTS.map((s) => (
-            <Link key={s.label} href={s.href} className="shortcut">
-              <span className="shortcut__icon" aria-hidden="true">
-                {s.icon}
-              </span>
-              <span className="shortcut__label">{s.label}</span>
-            </Link>
-          ))}
-        </nav>
+        {/* 하단 바로가기 아이콘 그리드는 삭제(사용자 지시 2026-08-03) — 같은 목적지가
+            하단 탭·관리비 카드·AI 비서 CTA(주차장)로 전부 도달 가능해 중복이었다. */}
       </main>
     </div>
   );
