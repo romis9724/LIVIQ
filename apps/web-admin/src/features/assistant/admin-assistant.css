@@ -64,6 +64,34 @@
   justify-content: center;
 }
 
+/* 패널 안의 목록은 전부 마커·기본 여백 제거(전역 reset 이 없다 — 다른 화면 CSS 관례와 동일). */
+.adm-counts,
+.adm-recent,
+.adm-drill,
+.adm-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 패널 안의 맨몸 버튼(카드·줄)은 브라우저 기본 겉모습을 벗긴다. */
+.adm-count,
+.adm-row {
+  font: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+}
+/* '닫기'는 링크처럼 보이는 버튼 — 색은 .adm-panel__more 를 그대로 쓴다. */
+button.adm-panel__more {
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
 /* 상태별 카운트 — 강조는 값 색만(docs/05 §5A). */
 .adm-counts {
   display: grid;
@@ -72,6 +100,7 @@
 }
 .adm-count {
   display: flex;
+  width: 100%;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);
@@ -79,6 +108,16 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-sunken);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.adm-count:hover {
+  border-color: var(--color-accent);
+}
+.adm-count[aria-pressed="true"] {
+  border-color: color-mix(in oklch, var(--color-accent) 35%, transparent);
+  background: color-mix(in oklch, var(--color-accent) 12%, var(--color-surface));
 }
 .adm-count__label {
   font-size: var(--text-sm);
@@ -126,6 +165,98 @@
 .adm-recent__date {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
+}
+
+/* 상태 카드 드릴다운 — 상태별 목록 + 민원별 인라인 요약(H20-13) */
+.adm-drill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.adm-drill__item {
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-2);
+}
+.adm-drill__item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.adm-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.adm-row:hover,
+.adm-row[aria-expanded="true"] {
+  background: var(--color-surface-sunken);
+}
+.adm-row__title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-row__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+/* 경과일은 재촉 신호 — 기준을 넘기면 값 색만 바꾼다(docs/05 §5A). */
+.adm-row__elapsed {
+  font-variant-numeric: tabular-nums;
+}
+.adm-row__elapsed[data-overdue] {
+  color: var(--color-danger);
+  font-weight: 700;
+}
+
+.adm-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-sunken);
+}
+.adm-detail__label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.adm-detail__body {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.adm-detail__link {
+  align-self: flex-start;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+.adm-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.adm-history__line {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.adm-history__date {
+  flex: none;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 /* 좁은 화면: 패널을 채팅 아래로 내리고, 스크롤은 바깥 컬럼이 받는다. */

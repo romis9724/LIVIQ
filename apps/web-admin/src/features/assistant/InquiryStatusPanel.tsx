@@ -2,21 +2,19 @@
 
 // AI 비서 우측 패널 — 상태 요약 + 최근 민원 목록(ADR-0028 맥락: 민원 관리 화면 임베드 아님).
 // 마운트 1회 조회, 폴링 없음. 실패해도 왼쪽 채팅은 그대로 쓸 수 있어야 한다.
+// 상태 카드를 누르면 같은 패널 안에서 그 상태의 목록으로 드릴다운한다(H20-13).
 
 import Link from "next/link";
 import { Button, Skeleton, StatusPill } from "@liviq/ui";
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, listAdminInquiries, type Inquiry } from "@/lib/api";
+import { listAdminInquiries, type Inquiry, type InquiryStatus } from "@/lib/api";
 import { STATUS_META, countByStatus } from "@/features/inquiry-admin/data";
-import { pillKind, recentInquiries, relativeDay, statusRows } from "./panel-data";
+import { InquiryDrilldown } from "./InquiryDrilldown";
+import { errorMessage, pillKind, recentInquiries, relativeDay, statusRows } from "./panel-data";
 
 const RECENT_LIMIT = 5;
-
-function errorMessage(err: unknown): string {
-  if (err instanceof ApiError || err instanceof Error) return err.message;
-  return "알 수 없는 오류가 발생했습니다.";
-}
+const DRILL_SECTION_ID = "adm-drill-section";
 
 export function InquiryStatusPanel() {
   const [inquiries, setInquiries] = useState<readonly Inquiry[] | null>(null);
@@ -77,41 +75,71 @@ function PanelSkeleton() {
 }
 
 function PanelBody({ inquiries }: { inquiries: readonly Inquiry[] }) {
+  // 드릴다운으로 펼친 상태 — null 이면 기본 화면(최근 민원).
+  const [openStatus, setOpenStatus] = useState<InquiryStatus | null>(null);
   const rows = statusRows(countByStatus(inquiries));
-  const recent = recentInquiries(inquiries, RECENT_LIMIT);
   const now = new Date();
 
   return (
     <>
       <ul className="adm-counts">
-        {rows.map((row) => (
-          <li key={row.status} className="adm-count" data-alert={row.alert || undefined}>
-            <span className="adm-count__label">{row.label}</span>
-            <span className="adm-count__value">{row.count}</span>
-          </li>
-        ))}
+        {rows.map((row) => {
+          const open = openStatus === row.status;
+          return (
+            <li key={row.status}>
+              <button
+                type="button"
+                className="adm-count"
+                data-alert={row.alert || undefined}
+                aria-pressed={open}
+                aria-controls={DRILL_SECTION_ID}
+                onClick={() => setOpenStatus(open ? null : row.status)}
+              >
+                <span className="adm-count__label">{row.label}</span>
+                <span className="adm-count__value">{row.count}</span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
 
-      <section aria-labelledby="adm-recent-title">
-        <h3 id="adm-recent-title" className="adm-panel__subtitle">
-          최근 민원
-        </h3>
-        {recent.length === 0 ? (
-          <p className="adm-panel__note">접수된 민원이 없습니다.</p>
-        ) : (
-          <ul className="adm-recent">
-            {recent.map((item) => (
-              <li key={item.id} className="adm-recent__item">
-                <span className="adm-recent__title">{item.title}</span>
-                <span className="adm-recent__meta">
-                  <StatusPill status={pillKind(item.status)} label={STATUS_META[item.status].label} />
-                  <span className="adm-recent__date">{relativeDay(item.createdAt, now)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {openStatus ? (
+        <section id={DRILL_SECTION_ID} aria-labelledby="adm-drill-title">
+          <div className="adm-panel__head">
+            <h3 id="adm-drill-title" className="adm-panel__subtitle">
+              {STATUS_META[openStatus].label} 민원
+            </h3>
+            <button type="button" className="adm-panel__more" onClick={() => setOpenStatus(null)}>
+              닫기
+            </button>
+          </div>
+          <InquiryDrilldown inquiries={inquiries} status={openStatus} now={now} />
+        </section>
+      ) : (
+        <section aria-labelledby="adm-recent-title">
+          <h3 id="adm-recent-title" className="adm-panel__subtitle">
+            최근 민원
+          </h3>
+          {inquiries.length === 0 ? (
+            <p className="adm-panel__note">접수된 민원이 없습니다.</p>
+          ) : (
+            <ul className="adm-recent">
+              {recentInquiries(inquiries, RECENT_LIMIT).map((item) => (
+                <li key={item.id} className="adm-recent__item">
+                  <span className="adm-recent__title">{item.title}</span>
+                  <span className="adm-recent__meta">
+                    <StatusPill
+                      status={pillKind(item.status)}
+                      label={STATUS_META[item.status].label}
+                    />
+                    <span className="adm-recent__date">{relativeDay(item.createdAt, now)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </>
   );
 }

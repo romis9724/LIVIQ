@@ -156,6 +156,7 @@ function inquiry(overrides: Partial<Inquiry> = {}): Inquiry {
     assigneeUserId: null,
     authorUserId: "u-1",
     createdAt: "2026-07-20T00:00:00Z",
+    updatedAt: "2026-07-20T00:00:00Z",
     facilityId: null,
     facilityName: null,
     ...overrides,

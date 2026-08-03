@@ -11,6 +11,7 @@ import {
   Toast,
 } from "@liviq/ui";
 import type { ToastTone } from "@liviq/ui";
+import { useSearchParams } from "next/navigation";
 import {
   useCallback,
   useEffect,
@@ -79,6 +80,8 @@ function staffLabel(map: Map<string, string>, userId: string | null): string | n
 }
 
 export function InquiryAdmin() {
+  // AI 비서 패널 드릴다운에서 넘어오는 딥링크(H20-13) — 목록 로드 후 그 민원을 펼친다.
+  const deepLinkId = useSearchParams().get("inquiry");
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -132,6 +135,11 @@ export function InquiryAdmin() {
     },
     [],
   );
+
+  // 딥링크는 첫 지정만 — 이후 사용자의 선택·닫기를 URL 이 되돌리지 않는다.
+  useEffect(() => {
+    if (deepLinkId) setSelectedId(deepLinkId);
+  }, [deepLinkId]);
 
   // userId → 표시 라벨(성명 우선, 없으면 email). 목록 담당 컬럼·상세 스레드 공용.
   const staffMap = useMemo(() => {
