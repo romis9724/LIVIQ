@@ -96,12 +96,14 @@ const CLICK_MOVE_PX = 6;
 const CLICK_MS = 400;
 const MAX_FRAME_S = 0.1; // 프레임 간격 상한(탭 복귀 직후 큰 dt 로 차가 튀지 않게)
 
-// 비콘 — 추천 면 위에 떠 있는 역원뿔 + 순위 스프라이트. 부감(~100m)에서도 읽혀야 한다.
-const BEACON_CONE_RADIUS_M = 1.6;
-const BEACON_CONE_HEIGHT_M = 3.2;
-const BEACON_BASE_Y = 6.5; // 원뿔 중심 높이
-const BEACON_LABEL_GAP_M = 3.4; // 원뿔 위 순위 라벨까지 간격
-const BEACON_BOB_M = 0.7; // 위아래 부유 진폭
+// 비콘 — 추천 면 위에 떠 있는 역원뿔 + 순위 스프라이트. 부감(~100m)에서도 읽혀야 하지만
+// 클로즈업에서 면을 다 가리면 안 된다 — 2026-08-03 사용자 신고로 절반 크기로 줄였다.
+const BEACON_CONE_RADIUS_M = 0.8;
+const BEACON_CONE_HEIGHT_M = 1.6;
+const BEACON_BASE_Y = 4.6; // 원뿔 중심 높이(원뿔이 작아진 만큼 면 가까이 내린다)
+const BEACON_LABEL_GAP_M = 1.7; // 원뿔 위 순위 라벨까지 간격
+const BEACON_LABEL_SCALE_M = LABEL_SCALE_M / 2; // 순위 숫자도 동명 라벨의 절반
+const BEACON_BOB_M = 0.35; // 위아래 부유 진폭
 const BEACON_BOB_HZ = 0.6;
 
 const SPOT_TONE_COLOR: Record<SpotTone, keyof SceneColors> = {
@@ -131,7 +133,7 @@ interface Tween {
 }
 
 /** 텍스트 스프라이트(동명·구역명·비콘 순위) — 라벨 라이브러리 없이 이미 의존성인 three 만 쓴다. */
-function textSprite(text: string, color: string): THREE.Sprite {
+function textSprite(text: string, color: string, scaleM = LABEL_SCALE_M): THREE.Sprite {
   const fontSize = 48;
   const padding = 16;
   const canvas = document.createElement("canvas");
@@ -156,7 +158,7 @@ function textSprite(text: string, color: string): THREE.Sprite {
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }),
   );
-  sprite.scale.set(canvas.width * LABEL_SCALE_M, canvas.height * LABEL_SCALE_M, 1);
+  sprite.scale.set(canvas.width * scaleM, canvas.height * scaleM, 1);
   return sprite;
 }
 
@@ -186,6 +188,12 @@ export class ParkingScene3D {
   /** 차량 인스턴스 index → 면 번호(픽킹). */
   private carSpotNos: string[] = [];
   private tween: Tween | null = null;
+  /**
+   * 3D 안에서 직접 누른 면 — 소비자의 "선택 → flyToSpot" 효과가 되돌아왔을 때 한 번 무시한다.
+   * 화면에 보이는 면을 누른 건데 카메라가 클로즈업으로 끌려가면 조작이 잠긴 것처럼 느껴진다
+   * (2026-08-03 사용자 신고: 클로즈업 뒤 다른 위치로 이동이 되지 않는다).
+   */
+  private selfPickedNo: string | null = null;
   private frameId: number | null = null;
   private lastFrameMs = 0;
   private active = false;
@@ -223,6 +231,7 @@ export class ParkingScene3D {
     this.applyShot(overviewShot(this.size));
     this.renderer.domElement.addEventListener("pointerdown", this.handlePointerDown);
     this.renderer.domElement.addEventListener("pointerup", this.handlePointerUp);
+    this.renderer.domElement.addEventListener("wheel", this.releaseCamera, { passive: true });
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     this.resize();
@@ -420,7 +429,7 @@ export class ParkingScene3D {
       );
       cone.rotation.x = Math.PI; // 꼭짓점이 면을 가리키게 뒤집는다
       group.add(cone);
-      const sprite = textSprite(label, this.colors.label);
+      const sprite = textSprite(label, this.colors.label, BEACON_LABEL_SCALE_M);
       sprite.position.y = BEACON_LABEL_GAP_M;
       group.add(sprite);
       group.position.set(placement.x, BEACON_BASE_Y, placement.z);
@@ -478,8 +487,11 @@ export class ParkingScene3D {
     this.flyTo(overviewShot(this.size), instant ? 0 : FLY_MS);
   }
 
-  /** 선택한 면 클로즈업. 없는 면 번호는 무시한다. */
+  /** 선택한 면 클로즈업. 없는 면 번호와 방금 3D 안에서 직접 누른 면은 무시한다. */
   flyToSpot(spotNo: string, instant: boolean): void {
+    const selfPicked = spotNo === this.selfPickedNo;
+    this.selfPickedNo = null; // 어느 요청이든 기억은 한 번만 쓴다(묵은 값이 다음 이동을 삼키지 않게)
+    if (selfPicked) return;
     const placement = this.placements.find((item) => item.no === spotNo);
     if (!placement) return;
     this.flyTo(spotShot(placement), instant ? 0 : FLY_MS);
@@ -559,6 +571,7 @@ export class ParkingScene3D {
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
     this.pointerStart = { x: event.clientX, y: event.clientY, at: performance.now() };
+    this.releaseCamera();
   };
 
   /** 짧게 누른 클릭만 선택으로 본다 — 길게 끈 것은 카메라 회전이다. */
@@ -569,7 +582,18 @@ export class ParkingScene3D {
     );
     if (moved > CLICK_MOVE_PX || performance.now() - this.pointerStart.at > CLICK_MS) return;
     const spotNo = this.pick(event);
-    if (spotNo) this.onSpotClick(spotNo);
+    if (!spotNo) return;
+    this.selfPickedNo = spotNo;
+    this.onSpotClick(spotNo);
+  };
+
+  /**
+   * 사용자가 카메라를 잡으면(드래그·휠) 진행 중인 fly-to 를 즉시 놓는다.
+   * 트윈 중에는 렌더 루프가 controls.update() 를 건너뛰어 입력이 씹힌다 — 여기서 끊어야
+   * 이동 도중에도, 이동 완료 직후에도 회전·팬·줌이 곧바로 먹는다.
+   */
+  private readonly releaseCamera = (): void => {
+    this.tween = null;
   };
 
   private pick(event: PointerEvent): string | null {
@@ -597,6 +621,7 @@ export class ParkingScene3D {
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener("pointerdown", this.handlePointerDown);
     this.renderer.domElement.removeEventListener("pointerup", this.handlePointerUp);
+    this.renderer.domElement.removeEventListener("wheel", this.releaseCamera);
     this.controls.dispose();
     this.scene.traverse(disposeObject);
     this.scene.clear();
