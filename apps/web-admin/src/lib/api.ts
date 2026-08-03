@@ -271,7 +271,8 @@ export type InquiryEventType =
   | "ai_classified"
   | "assigned"
   | "status_changed"
-  | "comment";
+  | "comment"
+  | "facility_linked";
 
 export interface Inquiry {
   id: string;
@@ -283,6 +284,8 @@ export interface Inquiry {
   assigneeUserId: string | null;
   authorUserId: string;
   createdAt: string;
+  // 완료일자 전용 컬럼이 없다 — done 이후 서버가 변경을 잠그므로 사실상 완료 시각(H20-13).
+  updatedAt: string;
   facilityId: string | null; // 담당자 정식 연결(H13-2, ADR-0022 결정 3①) — null 이면 미연결
   facilityName: string | null;
 }
@@ -310,6 +313,7 @@ interface RawInquiry {
   assignee_user_id: string | null;
   author_user_id: string;
   created_at: string;
+  updated_at: string;
   facility_id: string | null;
   facility_name: string | null;
 }
@@ -333,6 +337,7 @@ function toInquiry(raw: RawInquiry): Inquiry {
     assigneeUserId: raw.assignee_user_id,
     authorUserId: raw.author_user_id,
     createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
     facilityId: raw.facility_id,
     facilityName: raw.facility_name,
   };

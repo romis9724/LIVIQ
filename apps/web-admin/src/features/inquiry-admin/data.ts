@@ -66,6 +66,7 @@ const EVENT_LABEL: Record<InquiryEventType, string> = {
   assigned: "담당자 배정",
   status_changed: "상태 변경",
   comment: "코멘트",
+  facility_linked: "시설 연결",
 };
 
 export function eventLabel(type: InquiryEventType): string {

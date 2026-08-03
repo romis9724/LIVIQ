@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { InquiryAdmin } from "@/features/inquiry-admin/InquiryAdmin";
 
 export const metadata: Metadata = {
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function InquiriesAdminPage() {
-  return <InquiryAdmin />;
+  // InquiryAdmin 이 useSearchParams(?inquiry= 딥링크)를 쓴다 — App Router 는 Suspense 경계 필수.
+  return (
+    <Suspense>
+      <InquiryAdmin />
+    </Suspense>
+  );
 }
