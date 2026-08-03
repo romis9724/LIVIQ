@@ -57,6 +57,18 @@ export interface AssistantStreamOptions {
 let seq = 0;
 const nextId = () => `m${++seq}`;
 
+/**
+ * 복원 메시지들의 최대 id 번호 — seq 를 **개수**로 되살리면 안 된다: 저장은 꼬리
+ * `slice(-MAX)`라 긴 대화에서 id 번호(m48)가 개수(40)보다 커지고, 새 발급(m41)이 저장본과
+ * 충돌해 React key 중복으로 말풍선이 뒤섞였다(2026-08-03 사용자 신고 — 복원 후 답변 밀림).
+ */
+function maxMessageSeq(messages: readonly ChatMessage[]): number {
+  return messages.reduce((acc, m) => {
+    const match = /^m(\d+)$/.exec(m.id);
+    return match ? Math.max(acc, Number(match[1])) : acc;
+  }, 0);
+}
+
 export function useAssistantStream({
   askUrl,
   apiFetch,
@@ -90,7 +102,7 @@ export function useAssistantStream({
         // 새 대화 마커(0건)면 옛 대화를 되살리지 않는다 — 그래도 복원은 끝난 것이다.
         conversationId.current = thread.conversationId;
         // 복원한 메시지 id 와 새 메시지 id 가 겹치면 React key 가 충돌한다(전체 리로드 시 seq=0).
-        seq = Math.max(seq, thread.messages.length);
+        seq = Math.max(seq, maxMessageSeq(thread.messages));
         setMessages(thread.messages);
       }
       setRestored(true);

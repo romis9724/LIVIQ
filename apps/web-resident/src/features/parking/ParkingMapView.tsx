@@ -159,6 +159,9 @@ function ReadyView({
     [myVehicles],
   );
   const sceneLayout = useMemo<ParkingSceneLayout>(() => ({ ...layout, cores }), [layout, cores]);
+  // 참조 안정화 — 인라인 map을 넘기면 렌더마다 새 배열이라 3D 비콘 effect가 선택 변경 때마다
+  // 재발화해 카메라가 1순위로 되돌아갔다(2026-08-03 사용자 신고).
+  const myVehicleSpotNos = useMemo(() => myVehicles.map((v) => v.spotNo), [myVehicles]);
 
   const spotViews = useMemo(() => {
     const views = new Map<string, ParkingSpotView>();
@@ -216,7 +219,7 @@ function ReadyView({
             layout={sceneLayout}
             occupiedSpotNos={occupiedSpotNos}
             recommended={recommended}
-            myVehicleSpotNos={myVehicles.map((v) => v.spotNo)}
+            myVehicleSpotNos={myVehicleSpotNos}
             selectedNo={selectedNo}
             onSelect={setSelectedNo}
             summaryLabel={`지하 1층 주차장 3D — ${summary}. 추천 자리에 순위 비콘이 표시됩니다.`}
