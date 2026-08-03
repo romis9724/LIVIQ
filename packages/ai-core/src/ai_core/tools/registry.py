@@ -33,6 +33,10 @@ class ToolContext:
     # 로그인 세대의 동(H19-1) — 공지 검색의 대상 동 필터에 쓴다. 세대 미배정·비입주민은 None
     # (필터 미적용 = 전 동 검색). tenant_id·visibilities와 같은 격리 값이라 LLM 인자로 받지 않는다.
     building_id: uuid.UUID | None = None
+    # 질문에서 **코드가** 뽑은 조회 대상 세대 `(동 이름, 호수)` — 관리자 세대 평면도 도구 전용
+    # (H20-17, 라우터의 `_admin_overrides`). 동·호수는 마스킹돼 모델 눈에 보이지 않으므로
+    # LLM 인자로는 받을 수 없고, 받아서도 안 된다(모델 착오 = 타 세대 조회, 규칙 4).
+    target_unit: tuple[str, int] | None = None
 
 
 @dataclass(frozen=True)

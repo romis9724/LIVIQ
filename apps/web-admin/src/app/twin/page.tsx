@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { TwinView } from "@/features/twin/TwinView";
 
 export const metadata: Metadata = {
@@ -7,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function TwinPage() {
-  return <TwinView />;
+  // TwinView 가 useSearchParams(?dong=&ho=&device= AI 비서 딥링크)를 쓴다 — Suspense 경계 필수.
+  return (
+    <Suspense>
+      <TwinView />
+    </Suspense>
+  );
 }

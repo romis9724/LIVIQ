@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 ELEMENT_SYNONYMS: dict[str, tuple[str, ...]] = {
@@ -81,6 +82,31 @@ ROOM_GROUPS: dict[str, tuple[str, ...]] = {
     "발코니": ("발코니(전면)", "발코니(후면)", "발코니(측면)"),
     "베란다": ("발코니(전면)", "발코니(후면)", "발코니(측면)"),
 }
+
+
+# 동·호수 추출 — 패턴은 masking/masker.py의 UNIT과 **같은 형태**여야 한다(캡처 그룹만 추가).
+# 갈라지면 마스킹은 가리는데 여기선 못 뽑는 조합(또는 그 반대)이 생겨, 관리자 분기가
+# "동·호수 있음"으로 판정하고도 조회 대상이 없는 상태가 된다(H20-17).
+# `(?!기)`도 같은 이유로 유지 — "403동 2호기"는 세대가 아니라 설비 호기다.
+_UNIT_PATTERN = re.compile(
+    r"(?P<dong>\d{1,4})\s*동\s*(?P<ho>\d{1,4})\s*호(?!기)"
+    r"|(?:동호수|호수)\s*[:：]?\s*(?P<dong_alt>\d{1,4})\s*-\s*(?P<ho_alt>\d{1,4})"
+)
+
+
+def parse_unit(query: str) -> tuple[str, int] | None:
+    """질의에서 (동 이름, 호수)를 뽑는다 — 없으면 None.
+
+    관리자 채널에서 **코드가** 조회 대상 세대를 정하는 경로다(LLM 인자로 받지 않는다):
+    동·호수는 LLM에 나가기 전에 마스킹되므로(규칙 2) 모델은 `<PII:UNIT:1>`만 본다.
+    동은 문자열 그대로 둔다 — `buildings.name`이 "402"·"402동" 어느 쪽일 수 있다.
+    """
+    match = _UNIT_PATTERN.search(query)
+    if match is None:
+        return None
+    dong = match.group("dong") or match.group("dong_alt")
+    ho = match.group("ho") or match.group("ho_alt")
+    return dong, int(ho)
 
 
 @dataclass(frozen=True)

@@ -18,13 +18,15 @@ function errorMessage(err: unknown): string {
 interface TwinFloorPlanPaneProps {
   /** null = 세대 타입 미상(매칭할 평면도가 없다). */
   unitTypeLabel: string | null;
+  /** AI 비서 딥링크(`?device=`)로 강조할 마커 라벨. 없으면 평소와 같다. */
+  highlightLabels?: readonly string[];
 }
 
 /**
  * 세대 상세와 함께 열리는 평면도 패널 — 상세 스크림의 왼쪽(딤 영역) 전체를 차지한다.
  * 세대 타입으로 평면도를 찾아(목록 → 매칭 → 상세) 입주민과 동일한 뷰어로 보여준다.
  */
-export function TwinFloorPlanPane({ unitTypeLabel }: TwinFloorPlanPaneProps) {
+export function TwinFloorPlanPane({ unitTypeLabel, highlightLabels }: TwinFloorPlanPaneProps) {
   const [state, setState] = useState<PlanState>({ kind: "loading" });
 
   useEffect(() => {
@@ -57,6 +59,11 @@ export function TwinFloorPlanPane({ unitTypeLabel }: TwinFloorPlanPaneProps) {
         <h3 className="twin-plan-pane__title">
           {unitTypeLabel ? `${unitTypeLabel} 평면도` : "평면도"}
         </h3>
+        {highlightLabels && highlightLabels.length > 0 ? (
+          <p className="twin-plan-pane__highlight">
+            <span aria-hidden="true">📍</span> AI 비서가 찾은 위치 {highlightLabels.join(" · ")}
+          </p>
+        ) : null}
         {state.kind === "loading" ? (
           <Skeleton height="18rem" />
         ) : state.kind === "error" ? (
@@ -64,7 +71,11 @@ export function TwinFloorPlanPane({ unitTypeLabel }: TwinFloorPlanPaneProps) {
         ) : !state.detail ? (
           <p className="twin-detail__empty">평면도 없음</p>
         ) : (
-          <FloorPlanViewer plan={state.detail.plan} devices={state.detail.devices} />
+          <FloorPlanViewer
+            plan={state.detail.plan}
+            devices={state.detail.devices}
+            highlightLabels={highlightLabels}
+          />
         )}
       </div>
     </section>

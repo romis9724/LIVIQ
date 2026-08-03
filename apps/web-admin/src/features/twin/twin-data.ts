@@ -249,6 +249,21 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * (동, 호수) → 세대 id. AI 비서 딥링크(`/twin?dong=402&ho=201`)가 열 세대를 고른다(H20-17).
+ * 동 표기는 "402"·"402동" 둘 다 실재해 양쪽을 받는다(서버 SQL과 같은 규칙).
+ */
+export function matchHouseholdId(
+  geometry: readonly TwinGeometryItem[],
+  target: { dong: string; ho: number },
+): string | null {
+  const names = [target.dong, `${target.dong}동`];
+  const hit = geometry.find(
+    (g) => names.includes(g.buildingName) && g.unitNo === target.ho,
+  );
+  return hit?.householdId ?? null;
+}
+
+/**
  * 세대 unitTypeLabel("84M(공공임대)") ↔ 평면도 unitTypeName 매칭 → 평면도 id(없으면 null).
  * 괄호 뒤 부기는 무시한다(normalizeUnitType 재사용 — 평면도 관리 화면과 같은 규칙).
  */

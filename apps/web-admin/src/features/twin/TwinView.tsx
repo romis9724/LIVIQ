@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Button, EmptyState } from "@liviq/ui";
 import {
   ApiError,
@@ -10,11 +11,13 @@ import {
   listTwinGeometry,
   type TwinGeometryItem,
 } from "@/lib/api";
+import { readDeviceParam, readUnitParams } from "./assistant-links";
 import {
   OVERLAY_KINDS,
   OVERLAY_LABELS,
   RENDER_STYLES,
   RENDER_STYLE_LABELS,
+  matchHouseholdId,
   type OverlayKind,
   type RenderStyle,
 } from "./twin-data";
@@ -76,6 +79,12 @@ export function TwinView() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
 
+  // AI 비서 딥링크(H20-17) — `?dong=402&ho=201&device=현관 분전함`.
+  // 값은 전부 검증해서 받는다(assistant-links) — URL 은 신뢰할 수 없는 입력이다.
+  const searchParams = useSearchParams();
+  const linkedUnit = useMemo(() => readUnitParams(searchParams), [searchParams]);
+  const highlightLabels = useMemo(() => readDeviceParam(searchParams), [searchParams]);
+
   const closeDetail = useCallback(() => setSelectedId(null), []);
 
   // 실사 3D 컨트롤 — 렌더 스타일·시점·clip. 뷰 전환에도 유지(iframe 재마운트 시 ready 효과가 재동기화).
@@ -116,6 +125,18 @@ export function TwinView() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // 딥링크로 지정된 세대는 geometry 가 준비된 뒤 **1회만** 연다 — 닫은 뒤 되살아나면 안 된다.
+  // 세대를 못 찾으면 그냥 평소 화면(지어내지 않는다).
+  const linkedAppliedRef = useRef(false);
+  const [linkedId, setLinkedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (linkedAppliedRef.current || geo.kind !== "ready" || !linkedUnit) return;
+    linkedAppliedRef.current = true;
+    const householdId = matchHouseholdId(geo.geometry, linkedUnit);
+    setLinkedId(householdId);
+    setSelectedId(householdId);
+  }, [geo, linkedUnit]);
 
   // 현재 kind 오버레이가 미캐시면 로드해 병합 — 캐시된 kind 는 재요청하지 않는다.
   useEffect(() => {
@@ -203,7 +224,12 @@ export function TwinView() {
       </main>
 
       {selectedId ? (
-        <TwinDetailPanel householdId={selectedId} onClose={closeDetail} />
+        <TwinDetailPanel
+          householdId={selectedId}
+          onClose={closeDetail}
+          // 강조는 딥링크가 가리킨 그 세대에만 — 사용자가 다른 세대를 열면 평소 평면도다.
+          highlightLabels={selectedId === linkedId ? highlightLabels : undefined}
+        />
       ) : null}
     </>
   );

@@ -34,6 +34,11 @@ import {
   isLongtermParkingAnswer,
   longtermSpotNos,
 } from "@/features/parking/assistant-links";
+import {
+  buildTwinHouseholdHref,
+  householdDeviceTarget,
+  isHouseholdDevicesAnswer,
+} from "@/features/twin/assistant-links";
 import { ADMIN_ASSISTANT_STREAM_OPTIONS } from "./client";
 import { InquiryStatusPanel } from "./InquiryStatusPanel";
 import "./admin-assistant.css";
@@ -220,6 +225,11 @@ function AiRow({ message, onAsk }: AiRowProps) {
   // 시설·공지 답변 → 해당 화면으로(H20-12). 판정은 도구 이름만, 파라미터는 없다.
   const isFacility = isFacilityAnswer(toolPath);
   const isNotices = isRecentNoticesAnswer(toolPath);
+  // 세대 설비 위치 답변 → 트윈의 그 세대 평면도(H20-17). 동·호수·강조 라벨은 도구 카드
+  // data(서버 확정값)에서만 뽑는다 — 도구가 답을 못 냈으면 카드가 없어 CTA 도 없다.
+  const householdTarget = isHouseholdDevicesAnswer(toolPath)
+    ? householdDeviceTarget(message.citations)
+    : null;
 
   return (
     <div className="ai-row">
@@ -278,6 +288,14 @@ function AiRow({ message, onAsk }: AiRowProps) {
               {isNotices ? (
                 <Link href="/notices" className="btn btn--secondary btn--sm">
                   <span aria-hidden="true">📢</span> 공지사항 열기
+                </Link>
+              ) : null}
+              {householdTarget ? (
+                <Link
+                  href={buildTwinHouseholdHref(householdTarget)}
+                  className="btn btn--secondary btn--sm"
+                >
+                  <span aria-hidden="true">🏠</span> 평면도 보기
                 </Link>
               ) : null}
               <FeedbackButtons className="ai-row__feedback" />
