@@ -250,11 +250,15 @@ async def _locate(
     *,
     query: str,
     plan_id: uuid.UUID | None,
+    llm_assist: bool = True,
 ) -> list[Any] | ToolResult:
     """도면 장치 조회 → 스펙 추출 → 매칭. 답을 못 내면 ToolResult(note)로 돌려준다.
 
     입주민(본인 세대)·관리자(지정 세대) 두 도구의 공통 몸통 — 세대를 **어떻게 정하느냐**만
     다르고(plan_id 해석) 나머지는 같다. 카드 문구·source_kind는 호출자가 붙인다.
+
+    llm_assist: 규칙 파서가 빈손일 때 LLM 보조 추출을 쓸지. **질의가 마스킹 안 된 원문일
+    때는 False여야 한다**(규칙 2) — 관리자 경로의 query는 동·호수가 남아 있는 라우터 원문이다.
     """
     if plan_id is None:
         return ToolResult(note=_NOT_READY_NOTE)
@@ -266,7 +270,7 @@ async def _locate(
         return ToolResult(note=_NOT_READY_NOTE)
 
     spec = parse_query(query)
-    if spec.is_empty:
+    if spec.is_empty and llm_assist:
         known_elements = sorted({d.device_type for d in devices if d.device_type != "room"})
         known_rooms = sorted({d.room for d in devices if d.room})
         spec = await _llm_assist_spec(deps, query, known_elements, known_rooms)
@@ -315,7 +319,17 @@ async def _find_household_devices(ctx: ToolContext, deps: ToolDeps, args: BaseMo
 
     dong, ho = ctx.target_unit
     plan_id = await _resolve_unit_floor_plan_id(ctx, deps, dong=dong, ho=ho)
-    located = await _locate(ctx, deps, query=a.query, plan_id=plan_id)
+    # **무엇을 찾는지도 코드가 정한다**(H20-17b) — 되묻기로 쪼개진 질문에서 모델이 넘기는
+    # query는 설비 어휘를 잃는다(dev 실측: 후속 턴 "401동 201호"가 그대로 인자로 왔다).
+    # 라우터 원문에는 동·호수가 남아 있으므로 LLM 보조 추출 경로는 끈다(규칙 2) — 라우터가
+    # 요소 어휘를 확인하고 넣은 값이라 규칙 파서만으로 반드시 스펙이 나온다.
+    located = await _locate(
+        ctx,
+        deps,
+        query=ctx.target_query or a.query,
+        plan_id=plan_id,
+        llm_assist=ctx.target_query is None,
+    )
     if isinstance(located, ToolResult):
         return located
 

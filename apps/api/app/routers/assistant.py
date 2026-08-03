@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import datetime
 import uuid
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, NamedTuple, cast
 
@@ -41,6 +41,7 @@ from ai_core.rag.prompt import (
 )
 from ai_core.rag.retrieval import PgVectorRetriever
 from ai_core.tools import ToolContext, ToolDeps, default_registry
+from ai_core.tools.clarify import CLARIFY_TOOL_NAME
 from ai_core.tools.floor_plan import HOUSEHOLD_DEVICES_TOOL, RESIDENT_ROLES
 from ai_core.tools.floor_plan_parser import parse_query, parse_unit
 from app import answer_cache
@@ -132,22 +133,11 @@ async def admin_ask(
     도구 가시성은 기존 역할 체계 그대로다(MANAGER = summarize_inquiries·get_facilities 등).
     서버 복원은 **당일 한정**으로 제공한다(아래 admin_latest_conversation, ADR-0028 결정 2 개정).
     세대 평면도 설비 위치 질의만 프롬프트·도구 가시성·조회 대상 세대를 갈아끼운다
-    (H20-16·H20-17, `_admin_overrides`).
+    (H20-16·H20-17, `_admin_overrides`) — 판정에 히스토리가 필요해(되묻기 후속 턴, H20-17b)
+    오버라이드 계산은 대화를 읽은 뒤 `_assistant_response` 안에서 한다.
     """
-    overrides = _admin_overrides(body.question)
     return await _assistant_response(
-        body,
-        ctx,
-        session,
-        llm,
-        graph,
-        redis,
-        tuning,
-        channel="admin",
-        answer_prompt=overrides.answer_prompt,
-        agent_prompt=overrides.agent_prompt,
-        exclude_tools=overrides.exclude_tools,
-        target_unit=overrides.target_unit,
+        body, ctx, session, llm, graph, redis, tuning, channel="admin", admin_overrides=True
     )
 
 
@@ -174,9 +164,28 @@ class AdminOverrides(NamedTuple):
     exclude_tools: tuple[str, ...]
     # 세대 평면도 도구가 조회할 (동 이름, 호수). None이면 그 도구를 아예 노출하지 않는다.
     target_unit: tuple[str, int] | None = None
+    # 그 도구가 쓸 질의 원문(되묻기 후속이면 두 턴 합성) — target_unit과 항상 함께 간다.
+    target_query: str | None = None
 
 
-def _admin_overrides(question: str) -> AdminOverrides:
+def _effective_question(question: str, history: _History) -> str:
+    """되묻기 직후의 답변은 원 질문과 **한 질문으로** 본다(H20-17b).
+
+    되묻기는 하나의 질문을 두 턴으로 쪼갠다: "콘센트 어디 있어?" → "어느 동·호수를
+    말씀하시나요?" → "401동 201호". 현재 턴만 보면 설비 어휘가 없어 아래 판정이 전부
+    풀리고, 세대 도구는 노출조차 되지 않는다(2026-08-03 dev 실측: 되묻기 후속 턴이
+    no_evidence 폴백).
+    현재 질문을 **앞에** 둔다 — `parse_unit`은 첫 일치를 쓰므로 사용자가 방금 답한
+    동·호수가 이긴다(원 질문에 다른 동·호수가 적혀 있어도 최신 답이 우선).
+    합성은 **되묻기 직후 한 턴에만** 건다. 일반 후속까지 합치면 앞 턴의 동·호수·설비
+    어휘가 무관한 질의에 달라붙는다("승강기는 어디에 있나요?"가 세대 질의로 오인된다).
+    """
+    if not history.last_was_clarify or not history.last_user_question:
+        return question
+    return f"{question} {history.last_user_question}"
+
+
+def _admin_overrides(question: str, history: _History) -> AdminOverrides:
     """관리자 질의별 오버라이드 — H20-16, 세대 조회 배선은 H20-17.
 
     갈림목 판정은 **코드가 한다**. 8B는 프롬프트 조건문으로 이 분기를 지키지 못했다
@@ -192,16 +201,21 @@ def _admin_overrides(question: str) -> AdminOverrides:
       단지 공용 설비 목록 도구는 계속 감춘다 — 특정 세대 질문에 단지 37개 설비 현황 카드가
       뜨는 것이 H20-16의 사용자 신고 내용이다. 도구가 빈손이면 답변 프롬프트 규칙 7의
       평면도 안내로 끝난다(지어내지 않는다).
+      **되묻기 도구도 함께 감춘다**(H20-17b): 프롬프트로 "되묻지 말라"고 해도 qwen3-8b가
+      되물었다(dev 실측 2026-08-03 — "402동 201호 두꺼비집 어디?"에 '어떤 설비를
+      말씀하시나요?'). 조회 대상이 확정된 질의에 되물을 것은 없으므로 코드가 끊는다.
     """
-    if not _is_home_device_location_query(question):
+    effective = _effective_question(question, history)
+    if not _is_home_device_location_query(effective):
         return AdminOverrides(ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, ())
-    unit = parse_unit(question)
+    unit = parse_unit(effective)
     if unit is not None:
         return AdminOverrides(
             ADMIN_ANSWER_SYSTEM_PROMPT,
             ADMIN_AGENT_UNIT_PROMPT,
-            ("get_facilities",),
+            ("get_facilities", CLARIFY_TOOL_NAME),
             unit,
+            effective,
         )
     return AdminOverrides(ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, ())
 
@@ -261,11 +275,14 @@ async def _assistant_response(
     *,
     channel: str,
     answer_prompt: str = ANSWER_SYSTEM_PROMPT,
-    agent_prompt: str = AGENT_SYSTEM_PROMPT,
-    exclude_tools: Sequence[str] = (),
-    target_unit: tuple[str, int] | None = None,
+    admin_overrides: bool = False,
 ) -> EventSourceResponse:
-    """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 세 엔드포인트 공유."""
+    """대화 적재 + (캐시 히트 재생 | 도구 에이전트 스트림) + 영속화 — 세 엔드포인트 공유.
+
+    admin_overrides: 관리자 홈 AI 비서만 True — 질문+히스토리로 프롬프트·도구 가시성·조회
+    대상 세대를 갈아끼운다(`_admin_overrides`). 히스토리를 읽은 뒤라야 판정할 수 있어
+    엔드포인트가 아니라 여기서 계산한다.
+    """
     conversation = await _load_or_create_conversation(session, ctx, body.conversation_id, channel)
     # 히스토리는 이번 질문을 적재하기 **전에** 읽는다 — 방금 넣은 user 메시지가 섞이면
     # 같은 질문이 두 번 실려 나간다.
@@ -273,6 +290,11 @@ async def _assistant_response(
         await _load_history(session, ctx, conversation.id)
         if body.conversation_id is not None
         else _History()
+    )
+    overrides = (
+        _admin_overrides(body.question, history)
+        if admin_overrides
+        else AdminOverrides(answer_prompt, AGENT_SYSTEM_PROMPT, ())
     )
     session.add(
         Message(
@@ -296,13 +318,14 @@ async def _assistant_response(
         roles=ctx.roles,
         visibilities=ctx.visibilities,
         building_id=await _building_id(session, ctx),
-        target_unit=target_unit,
+        target_unit=overrides.target_unit,
+        target_query=overrides.target_query,
     )
     # 세대 평면도 도구는 **코드가 동·호수를 확정한 질의에서만** 스펙에 실린다(H20-17).
     # 역할만으로 상시 노출하면 관리자의 다른 질의("승강기는 어디에…")가 이리로 샐 수 있고,
     # 대상 세대가 없으면 어차피 조회도 못 한다 — 노출과 조회 조건을 한 값으로 묶는다.
-    hidden_tools = tuple(exclude_tools)
-    if target_unit is None:
+    hidden_tools = overrides.exclude_tools
+    if overrides.target_unit is None:
         hidden_tools = (*hidden_tools, HOUSEHOLD_DEVICES_TOOL)
     # 캐시 키의 백엔드 세그먼트 — 런타임에 바뀐 백엔드의 답변이 섞이지 않게(H15-1).
     backend = backend_id(llm.settings)
@@ -340,8 +363,8 @@ async def _assistant_response(
                 # 직전 턴이 되묻기였으면 되묻기 도구를 감춘다 — 연속 되묻기 금지(ADR-0025 §4).
                 # 요청이 끄고 들어온 경우(자동 발화 — 관리자 진입 브리핑)도 같이 감춘다.
                 allow_clarify=body.allow_clarify and not history.last_was_clarify,
-                answer_prompt=answer_prompt,
-                agent_prompt=agent_prompt,
+                answer_prompt=overrides.answer_prompt,
+                agent_prompt=overrides.agent_prompt,
                 exclude_tools=hidden_tools,
                 tool_confidence=tuning.tool_confidence,
             )
@@ -517,10 +540,12 @@ async def _building_id(session: AsyncSession, ctx: RequestContext) -> uuid.UUID 
 
 @dataclass(frozen=True)
 class _History:
-    """대화 히스토리 + 되묻기 연속 여부 — 조회 1회로 둘 다 얻는다."""
+    """대화 히스토리 + 되묻기 연속 여부 + 직전 사용자 질문 — 조회 1회로 셋 다 얻는다."""
 
     turns: tuple[tuple[str, str], ...] = ()
     last_was_clarify: bool = False
+    # 이번 질문 **직전**의 사용자 발화(되묻기 후속 합성용 — `_effective_question`).
+    last_user_question: str | None = None
 
 
 async def _load_history(
@@ -545,10 +570,14 @@ async def _load_history(
             .limit(_HISTORY_MESSAGE_LIMIT)
         )
     ).all()
+    # rows는 최신순이라 첫 assistant/user가 각각 직전 답변·직전 질문이다(이번 질문은 아직
+    # 적재 전 — 호출 순서가 이 성질을 보장한다).
     last_assistant = next((m for m in rows if m.role == "assistant"), None)
+    last_user = next((m for m in rows if m.role == "user" and m.content), None)
     return _History(
         turns=tuple((m.role, m.content) for m in reversed(rows) if m.content),
         last_was_clarify=last_assistant is not None and last_assistant.status == "clarify",
+        last_user_question=last_user.content if last_user is not None else None,
     )
 
 

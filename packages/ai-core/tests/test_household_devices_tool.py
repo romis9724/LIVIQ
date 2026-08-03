@@ -135,6 +135,28 @@ async def test_returns_card_for_target_unit(settings: AiCoreSettings) -> None:
     assert "현관 분전함 1곳: 왼쪽" in result.card.quote
 
 
+async def test_target_query_overrides_model_argument(settings: AiCoreSettings) -> None:
+    """조회 질의도 코드가 정한다(H20-17b) — 되묻기 후속 턴의 모델 인자에는 설비 어휘가 없다.
+
+    `_forbidden_llm`이 함께 검증한다: 라우터 원문에는 동·호수가 남아 있으므로 LLM 보조
+    추출 경로로 흘리면 안 된다(규칙 2).
+    """
+    ctx = ToolContext(
+        TENANT,
+        USER,
+        roles=("MANAGER",),
+        visibilities=("ALL",),
+        target_unit=TARGET,
+        target_query="402동 201호 콘센트 어디 있어?",
+    )
+    deps = _deps(_forbidden_llm(settings), _handler(_DEVICES))
+
+    result = await _run(ctx, deps, "402동 201호")
+
+    assert result.card is not None
+    assert "거실 콘센트 2곳" in result.card.quote
+
+
 async def test_card_data_carries_unit_and_highlight_labels(settings: AiCoreSettings) -> None:
     """화면 딥링크가 쓰는 확정값(ADR-0025 §6) — 동·호수와 강조 라벨을 서버가 확정한다."""
     deps = _deps(_forbidden_llm(settings), _handler(_DEVICES))

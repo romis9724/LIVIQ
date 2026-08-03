@@ -23,7 +23,7 @@ from app.deps import (
     visibilities_for,
 )
 from app.main import create_app
-from app.routers.assistant import _admin_overrides
+from app.routers.assistant import _admin_overrides, _History
 from app.session import get_redis
 from conftest import TENANT_ID, USER_ID
 from httpx import ASGITransport
@@ -41,6 +41,7 @@ from ai_core.rag.prompt import (
     ANSWER_SYSTEM_PROMPT,
 )
 from ai_core.tools import ToolContext
+from ai_core.tools.clarify import CLARIFY_TOOL_NAME
 from ai_core.tools.floor_plan import HOUSEHOLD_DEVICES_TOOL
 
 ADMIN_ASK = "/admin/assistant/ask"
@@ -179,18 +180,24 @@ async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None
     assert events[-1][1]["status"] == "answered"
 
 
+_GENERAL = (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None, None)
+# 동·호수가 확정된 질의에서 감추는 도구 — 공용 설비 목록(H20-16) + 되묻기(H20-17b).
+_UNIT_HIDDEN = ("get_facilities", CLARIFY_TOOL_NAME)
+
+
 @pytest.mark.parametrize(
     ("question", "expected"),
     [
         # 세대 평면도 설비 위치 + 동·호수 있음 → 되묻기 금지 + 공용 설비 목록 도구 감춤 +
-        # 그 세대를 조회 대상으로 실어 보낸다(H20-17)
+        # 그 세대를 조회 대상으로 실어 보낸다(H20-17). 조회 질의 원문도 함께 간다(H20-17b).
         (
             "404동 301호 콘센트는 어디에 있지?",
             (
                 ADMIN_ANSWER_SYSTEM_PROMPT,
                 ADMIN_AGENT_UNIT_PROMPT,
-                ("get_facilities",),
+                _UNIT_HIDDEN,
                 ("404", 301),
+                "404동 301호 콘센트는 어디에 있지?",
             ),
         ),
         # 동의어(H20-7)도 같은 판정 — 대상 세대만 다르다
@@ -199,28 +206,74 @@ async def test_manager_streams_answer(manager_client: httpx.AsyncClient) -> None
             (
                 ADMIN_ANSWER_SYSTEM_PROMPT,
                 ADMIN_AGENT_UNIT_PROMPT,
-                ("get_facilities",),
+                _UNIT_HIDDEN,
                 ("402", 201),
+                "402동 201호 두꺼비집 어디에 있어?",
             ),
         ),
         # 동·호수 없음 → 되묻기 예외(조회 대상 없음 = 세대 도구 비노출)
         (
             "콘센트 어디 있는지 알려줘",
-            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, (), None),
+            (ADMIN_ANSWER_SYSTEM_PROMPT, ADMIN_AGENT_ASK_UNIT_PROMPT, (), None, None),
         ),
         # 공용 설비 위치는 되묻기 대상이 아니다(사용자 지시 2026-08-03)
-        ("승강기는 어디에 있나요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
+        ("승강기는 어디에 있나요?", _GENERAL),
         # 설비 현황·대수 질의는 위치 질문이 아니다 — 골든셋 시설 클래스가 여기 걸리면 회귀
-        ("소방 설비 현황을 알려주세요.", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
-        ("단지 공용 설비가 총 몇 개인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
-        ("미배정 민원 몇 건인가요?", (ANSWER_SYSTEM_PROMPT, AGENT_SYSTEM_PROMPT, (), None)),
+        ("소방 설비 현황을 알려주세요.", _GENERAL),
+        ("단지 공용 설비가 총 몇 개인가요?", _GENERAL),
+        ("미배정 민원 몇 건인가요?", _GENERAL),
     ],
 )
 def test_admin_overrides_scope(
-    question: str, expected: tuple[str, str, tuple[str, ...], tuple[str, int] | None]
+    question: str,
+    expected: tuple[str, str, tuple[str, ...], tuple[str, int] | None, str | None],
 ) -> None:
     """관리자 변형은 **세대 평면도 설비 위치 질의**에만 걸린다(H20-16·H20-17)."""
-    assert _admin_overrides(question) == expected
+    assert _admin_overrides(question, _History()) == expected
+
+
+# ── 되묻기 후속 턴 합성(H20-17b) ───────────────────────────────────────
+
+
+def _after_clarify(question: str) -> _History:
+    """직전 턴이 되묻기였던 히스토리 — 되물은 문장까지 그대로 담는다."""
+    return _History(
+        turns=(
+            ("user", question),
+            ("assistant", "어느 동·호수를 말씀하시나요? (예: 401동 201호)"),
+        ),
+        last_was_clarify=True,
+        last_user_question=question,
+    )
+
+
+def test_clarify_followup_answers_original_question() -> None:
+    """되묻기에 답한 짧은 후속 턴은 원 질문과 합쳐 판정한다 — 현재 턴만 보면 설비 어휘가 없다."""
+    overrides = _admin_overrides("401동 201호", _after_clarify("콘센트 어디 있어?"))
+
+    assert overrides.target_unit == ("401", 201)
+    assert overrides.agent_prompt == ADMIN_AGENT_UNIT_PROMPT
+    assert overrides.exclude_tools == _UNIT_HIDDEN
+    # 조회 질의에는 요소 어휘가 남아 있어야 한다 — 없으면 도구가 위치를 특정하지 못한다.
+    assert "콘센트" in (overrides.target_query or "")
+
+
+def test_clarify_followup_prefers_the_unit_just_answered() -> None:
+    """원 질문에 다른 동·호수가 있어도 방금 답한 세대가 이긴다(현재 턴을 앞에 둔다)."""
+    overrides = _admin_overrides("405동 101호요", _after_clarify("402동 201호 콘센트 어디?"))
+
+    assert overrides.target_unit == ("405", 101)
+
+
+def test_followup_without_clarify_is_not_merged() -> None:
+    """되묻기가 아니었던 직전 턴은 합치지 않는다 — 앞 턴의 세대가 무관한 질의에 달라붙는다."""
+    history = _History(
+        turns=(("user", "402동 201호 콘센트 어디?"), ("assistant", "거실 왼쪽입니다.")),
+        last_was_clarify=False,
+        last_user_question="402동 201호 콘센트 어디?",
+    )
+
+    assert _admin_overrides("승강기는 어디에 있나요?", history) == _GENERAL
 
 
 async def test_admin_ask_wires_overrides_into_both_turns(
@@ -252,6 +305,35 @@ async def test_household_devices_tool_visible_only_with_unit(
 
     assert HOUSEHOLD_DEVICES_TOOL in tool_names[0]
     assert "get_facilities" not in tool_names[0]  # 단지 공용 설비 목록은 계속 감춘다(H20-16)
+    # 조회 대상이 확정됐으면 되물을 것이 없다 — 프롬프트가 아니라 **스펙에서** 뺀다(H20-17b:
+    # qwen3-8b가 "되묻지 말라"는 지시를 받고도 '어떤 설비를 말씀하시나요?'로 되물었다).
+    assert CLARIFY_TOOL_NAME not in tool_names[0]
+
+
+async def test_clarify_followup_turn_exposes_household_devices_tool(
+    manager_client: httpx.AsyncClient, db_session: AsyncSession, tool_names: list[list[str]]
+) -> None:
+    """되묻기 후속 턴("401동 201호")도 세대 도구가 실린다 — 원 질문과 합쳐 판정(H20-17b).
+
+    이 배선이 없으면 후속 턴에는 설비 어휘가 없어 오버라이드가 통째로 풀리고, 세대 도구가
+    노출조차 되지 않아 답할 방법이 사라진다(2026-08-03 dev 실측: 전부 no_evidence 폴백).
+    """
+    conversation_id = await _seed_conversation(
+        db_session,
+        channel="admin",
+        at=_now(),
+        messages=(
+            ("user", "콘센트 어디 있어?", None),
+            ("assistant", "어느 동·호수를 말씀하시나요? (예: 401동 201호)", "clarify"),
+        ),
+    )
+
+    await manager_client.post(
+        ADMIN_ASK, json={"question": "401동 201호", "conversation_id": str(conversation_id)}
+    )
+
+    assert HOUSEHOLD_DEVICES_TOOL in tool_names[0]
+    assert "get_facilities" not in tool_names[0]
 
 
 @pytest.mark.parametrize(
