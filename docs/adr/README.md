@@ -4,6 +4,9 @@
 ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superseded` 처리(삭제 아님).
 
 - 형식: [_template.md](_template.md) 복사 → 다음 번호 부여.
+- 상태 표기: `Proposed` → `Accepted` → `Superseded by NNNN`. 결정 **일부**만 바뀌면 새 ADR 대신
+  본문에 개정 노트(날짜·작업 단위)를 달고 상태를 `Accepted → 개정 (Hx-y)`로 적는다. 아래 목록의
+  상태는 각 ADR 본문 헤더가 정본이다.
 - 요약 암묵지는 루트 [MEMORY.md](../../MEMORY.md), 구현 하네스 ADR 로그는 [09 §10](../09-implementation-harness.md).
 
 ## 목록
@@ -32,9 +35,9 @@ ADR은 "왜"를 말한다. 결정이 바뀌면 새 ADR로 이전 것을 `Superse
 | [0020](0020-container-deploy-3tier-vm.md) | 컨테이너 배포 — 이미지 4개·3-tier VM·compose profiles 단일 파일 | Accepted |
 | [0021](0021-gitlab-ci-single-host-wsl.md) | 사내 단일 호스트 배포 — GitLab CI + WSL Docker(0020 형상에 추가) | Accepted |
 | [0022](0022-facility-graph-dashboard.md) | 시설관리 메인 = 3D 시설 그래프 — Neo4j 파생 그래프의 첫 읽기 소비자 | Accepted |
-| [0023](0023-parking-occupancy-persisted.md) | 주차 점유 PG 영속화 — 프론트 시뮬 폐기, 최근접 빈자리 도구의 SoR | Accepted |
+| [0023](0023-parking-occupancy-persisted.md) | 주차 점유 PG 영속화 — 프론트 시뮬 폐기, 최근접 빈자리 도구의 SoR | Accepted → 개정 (H16) |
 | [0024](0024-assistant-inquiry-triage.md) | AI 비서 민원 트리아지 — 유사 민원 조회 도구 + 접수 딥링크(AI 직접 생성 금지) | Accepted |
-| [0025](0025-agent-depth-plan-clarify-structured.md) | 에이전트 심화 — 계획 turn·멀티턴·되묻기·구조화 응답(LangChain 미도입) | Accepted |
-| [0026](0026-assistant-ops-tools-and-dong-targeting.md) | AI 비서 운영 도구 확충과 공지 동 타게팅 — 검색 필터·관리자 집계 도구·평균 비교 표본 하한 | Proposed |
-| [0027](0027-assistant-multiturn-restore-and-relevance.md) | 멀티턴 확장 — 서버 대화 복원(새 대화 버튼) + 히스토리 관련성 필터(lexical 1차) | Proposed |
-| [0028](0028-admin-assistant-home.md) | 관리자 홈 개편 — AI 비서 첫 진입(진입 브리핑)·대시보드→민원현황·어시스턴트 UI 공용 승격 | Proposed |
+| [0025](0025-agent-depth-plan-clarify-structured.md) | 에이전트 심화 — 계획 turn·멀티턴·되묻기·구조화 응답(LangChain 미도입) | Accepted → 개정 (H20-16·17·17b) |
+| [0026](0026-assistant-ops-tools-and-dong-targeting.md) | AI 비서 운영 도구 확충과 공지 동 타게팅 — 검색 필터·관리자 집계 도구·평균 비교 표본 하한 | Accepted |
+| [0027](0027-assistant-multiturn-restore-and-relevance.md) | 멀티턴 확장 — 서버 대화 복원(새 대화 버튼) + 히스토리 관련성 필터(lexical 1차) | Accepted |
+| [0028](0028-admin-assistant-home.md) | 관리자 홈 개편 — AI 비서 첫 진입(진입 브리핑)·대시보드→민원현황·어시스턴트 UI 공용 승격 | Accepted → 개정 (H20-3) |

@@ -1,6 +1,6 @@
 # ADR-0027: 멀티턴 확장 — 서버 대화 복원과 히스토리 관련성 필터
 
-- 상태: Proposed
+- 상태: Accepted
 - 날짜: 2026-08-01
 - 관련: [ADR-0025](0025-agent-depth-plan-clarify-structured.md)(멀티턴 컨텍스트·되묻기·계획 turn) · [09 §8.22](../09-implementation-harness.md)(H19 체크리스트)
 
