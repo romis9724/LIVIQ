@@ -17,7 +17,7 @@
 
 TDD: 새 기능·버그픽스는 실패 테스트(RED)→구현(GREEN)→리팩터. 테스트는 AAA, 행동 기반 네이밍.
 
-> **도구 이원화**: 웹·ui = **Vitest**, 백엔드(api·ai-core·db) = **pytest**(pytest-asyncio · testcontainers-python). 커버리지 목표는 80%로 동일(Vitest thresholds / pytest-cov `--cov-fail-under=80`).
+> **도구 이원화**: 웹·ui = **Vitest**, 백엔드(api·ai-core·db·ai-worker) = **pytest**(pytest-asyncio · testcontainers-python). 커버리지 목표는 80%로 동일하나 **강제 지점이 다르다**: Python 4종은 각 `pyproject.toml`의 `--cov-fail-under=80`으로 하드 게이트, TS 3종은 v8 커버리지 **수집만** 하고 thresholds는 아직 미설정(CI TODO — [09 §4.1](09-implementation-harness.md)).
 
 ## 2. 단위 테스트 (Vitest · pytest)
 
@@ -30,7 +30,9 @@ TDD: 새 기능·버그픽스는 실패 테스트(RED)→구현(GREEN)→리팩�
 | `ai-core/intent` | AI 처리/사람연결 분류 경계 |
 | `ai-core/tools` | 파라미터 검증(Pydantic)·tenant/소유권 강제·읽기전용(쓰기 시도 차단) |
 | 도메인 서비스 | 민원 분류, 관리비 설명 입력 검증, 권한 규칙 |
-| UI 훅 | `useAssistantStream` 상태 전이(로딩→스트림→완료/오류) |
+| UI 훅 | `useAssistantStream` 상태 전이(로딩→스트림→완료/오류) — `@liviq/ui` 공용 승격(H20-2) |
+
+> **규모(2026-08-08 실측, `pytest --collect-only` / `vitest run`)**: pytest 1,201건(ai-core 438 · api 549 · db 171 · ai-worker 43) · Vitest 762건(web-admin 406 · web-resident 173 · ui 183). 앱별 수치는 `pnpm test`(turbo) 로그가 단일 출처 — 문서 값은 스냅샷이다.
 
 ## 3. 통합 테스트 (api + 실제 PG/Redis, testcontainers-python)
 
@@ -43,33 +45,36 @@ TDD: 새 기능·버그픽스는 실패 테스트(RED)→구현(GREEN)→리팩�
 | 검색 | 공개범위(visibility)별 노출, tenant 선필터 |
 | ERP 어댑터 | 정상/지연/실패 시 graceful(캐시·안내) |
 | 인제스트 잡 | 멱등(중복 해시), 실패 재시도, 색인상태 전이 |
-| 감사 로그 | 발송·검수·개인정보 열람 시 기록, 개인정보 비저장 |
+| 감사 로그 | 가입 승인·거절·비활성화, 명부 업로드, 관리비 확정, 개인정보(명부·번호판) 열람 시 기록. 로그 자체에 개인정보 비저장 |
 
 ## 4. E2E 테스트 (Playwright)
 
-핵심 여정([04 §5])을 결정론적으로(임의 timeout 금지, 명시적 wait):
+핵심 여정([04 §5])을 결정론적으로(임의 timeout 금지, 명시적 wait). 스펙은 `tests/e2e/`
+(2026-08-08 기준 9파일·14케이스, 그중 `@llm` 4케이스):
 
-- 입주민: 로그인 → 비서 질의 → **출처 카드 노출** → 👍/👎
-- 입주민: 근거 없는 질문 → "담당자 연결" 폴백 노출(환각 아님)
-- 입주민: 민원 접수(사진) → 상태 추적 / 관리비 → "왜 올랐나요" 설명
-- 관리자: 공지 키워드 → AI 초안 → 검수 → 발송 확인 다이얼로그 (자동발송 아님)
-- 관리자: AI 검수 큐 승인/반려
-- 시설: AI 도우미 "원인 후보" 표기 확인(단정 아님)
+| 스펙 | 여정 | CI |
+|------|------|-----|
+| `signup-journey.spec.ts` | 가입 전 구간 5단계(직렬): SYS_ADMIN 단지 생성·소장 초대 → 소장 초대 수락·직원 초대·명부 업로드 → 명부 일치 주민 가입·이메일 검증·온보딩 → 소장 승인 후 홈 진입 → **명부 불일치는 대기 상태·일반 API 차단** | ✅ 게이트 |
+| `resident-inquiry.spec.ts` | 입주민 민원 접수 → 목록·상세 타임라인 반영 | ✅ 게이트 |
+| `resident-fees.spec.ts` | 당월 확정 관리비의 합계·항목·전월 대비 표시 | ✅ 게이트 |
+| `resident-notices.spec.ts` | 발행된 공지가 목록에 뜨고 상세 본문 열람 | ✅ 게이트 |
+| `admin-notice-board.spec.ts` | 관리자가 공지를 작성·발행·첨부 → 입주민이 제목·첨부 확인 (AI 미개입 게시판 — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md)) | ✅ 게이트 |
+| `admin-facilities.spec.ts` | 설비 등록 → 장애 기록 → 상세 이력 반영 | ✅ 게이트 |
+| `assistant.spec.ts` | 근거 없는 질문 → **담당자 연결 폴백**(환각 아님) · 비서 응답이 출처 카드 또는 폴백으로 종결 | `@llm` |
+| `admin-facility-assistant.spec.ts` | 시설 도우미가 **원인 후보 또는 폴백을 출처와 함께** 응답(단정 아님) | `@llm` |
+| `signup-journey-ai.spec.ts` | 승인된 입주민의 비서 질의가 출처 카드 또는 폴백으로 종결 | `@llm` |
 
-각 핵심 화면 **320·768·1024·1440** 스크린샷(시각 회귀). 라이트 테마 기준.
+시각 회귀(각 핵심 화면 **320·768·1024·1440** 스크린샷, 라이트 테마)는 여전히 백로그 —
+현재는 `tests/e2e/scripts/visual-sweep.mjs`(`pnpm --filter @liviq/e2e visual`) 수동 스윕이 대신한다.
 
-> **H2-7 도입 범위**: 위 여정 중 **LLM 불요 결정론 여정만 CI 게이트**(민원·공지·관리비 조회·검수 큐 —
-> pg·redis 서비스 컨테이너로 실행). 비서 질의·폴백 여정은 폴백조차 질의 임베딩이 필요해
-> **`@llm` 태그로 분리, 로컬(Ollama) 전용**. 시각 회귀 스크린샷은 백로그.
-> **H3-4 시설 여정**: 설비 등록→장애 기록→이력 확인 CRUD 여정은 결정론(CI 게이트),
-> AI 도우미(원인 후보) 여정은 `@llm`+Neo4j 필요 — 로컬 전용.
-> **H6-4 가입 전 구간 여정**: 명부 업로드→가입 신청(mock IdP 실 PKCE)→승인→재로그인→
-> 기능 이용+불일치 분기는 결정론(CI 게이트), 승인 사용자의 AI 질의 마무리는 `@llm` 로컬 전용.
-> **주(2026-07-21)**: mock IdP·PKCE 여정은 H6 시점 기록 — H7-4([09 §8.8](09-implementation-harness.md))에서
-> 자체 이메일 인증 여정(가입·검증·초대)으로 재작성한다([ADR-0014](adr/0014-local-email-auth.md)).
-> E2E 인증은 전부 실 세션 쿠키(dev 헤더 미사용 — H6-1).
+> **`@llm` 분리**: 비서·시설 도우미 여정은 폴백조차 질의 임베딩이 필요하다. `playwright.config.ts`가
+> `grepInvert: isCI ? /@llm/ : undefined`로 **CI에서만 제외**하고, 로컬(Ollama)에서는 전체가 돈다.
+> CI e2e 잡은 pg16+pgvector·redis 서비스 컨테이너로 결정론 여정 10건을 돌린다([ci.yml](../.github/workflows/ci.yml) `e2e`).
+> **인증**: 전부 실 세션 쿠키(dev 헤더 미사용 — H6-1). 시드 계정 로그인 `storageState`를 `auth.setup.ts`가
+> 만들고, 가입 여정만 브라우저 컨텍스트를 따로 연다. H6-4의 mock IdP·PKCE 여정은 H7-4에서
+> 자체 이메일 인증 여정으로 **재작성 완료**([ADR-0014](adr/0014-local-email-auth.md)).
 
-## 5. AI 평가 트랙 (`tests/ai-eval`)
+## 5. AI 평가 트랙 (`evals/`)
 
 기능 테스트로는 품질을 못 잡으므로 별도 트랙.
 
@@ -85,6 +90,22 @@ TDD: 새 기능·버그픽스는 실패 테스트(RED)→구현(GREEN)→리팩�
 - 골든셋: 단지 공용 + 단지별. 👎 피드백을 골든셋 후보로 승격. 항목마다 **기대 도구 경로**를 두어 에이전트 도구 선택([01 §5.2](01-architecture.md))을 회귀 평가한다.
 - LLM-judge는 보조 지표 — **같은 모델이 쓰고 채점하는 맹점**을 인지하고 정기 수동 채점으로 교정.
 - 모델/프롬프트/청킹 변경 시 회귀 평가 필수(전후 비교 리포트).
+
+### 5.1 하네스 구성 (실제 자산)
+
+| 자산 | 내용 |
+|------|------|
+| `evals/cases/*.json` + `run.mjs` | **하드 규칙 회귀**(절대 규칙 7영역) — stdlib only, 어댑터 미배선이면 `pending`(fail 아님). `.github/workflows/evals.yml`이 `evals/**` 변경·주간 스케줄로 실행하고 스냅샷을 아티팩트로 보존 |
+| `evals/rag500.mjs` + `rag500-score.mjs` | 대량 품질·지연 러너(인용 적중·폴백 정확·Hard Gate·완주·TTFT/총지연 자동 채점). `rag500-selfcheck.mjs`는 api 없이 채점 로직 자기검사 |
+| `evals/fixtures/rag-validation/` | 합성 3단지 코퍼스 — `quality-cases-500.csv`(500) · `chain-cases-200.csv`(200) |
+| `evals/fixtures/chetmaeul-v2/` | 첫마을 실데이터 케이스셋 v2 — `quality-cases-v2.csv`(353) · `graphrag-cases.csv`(92) |
+| `evals/results/rag500/MEASUREMENT-LOG.md` | **측정 단일 출처**. 모든 실행·환경 변화·판정 근거·기각 사유를 시간순 기록(R1~) |
+
+> **비교 규율(측정 교훈)**: 8B 파일럿은 같은 설정에서도 회차별로 카테고리 인용 적중이 최대 ±8%p 흔들린다(R9).
+> **인용률·pass 비교는 3회 이상 반복의 중위값으로만** 하고, 범위가 겹치면 무판정으로 남긴다(R12·R30b).
+> 측정은 **답변 캐시 오프 필수**(R1에서 캐시 히트가 지연·품질 수치를 오염시킨 전례).
+> 위 표의 인용 정확도 게이트는 **가정값이고 8B 파일럿 실측은 미달**이다 — 상한이 검색이 아니라
+> 모델의 **인용 규율**이라는 것이 H15-2 결론(프롬프트 강화·사후 재요청 처방 둘 다 R21에서 기각).
 
 ## 6. 보안 테스트
 
@@ -109,12 +130,16 @@ TDD: 새 기능·버그픽스는 실패 테스트(RED)→구현(GREEN)→리팩�
 
 ## 9. CI 게이트 (머지 차단 조건)
 
-1. 타입체크·린트 통과
-2. 단위+통합 커버리지 ≥ 80% (TS=vitest thresholds · Python=pytest-cov)
-3. **RLS/인가·캐시 격리·Neo4j 격리 테스트 통과**(필수)
-4. **LLM 마스킹 누출 0건**(필수)
-5. E2E 핵심 여정 그린
-6. axe 접근성 위반 0(심각)
-7. AI eval 회귀: 환각률/적중률 기준 미달 시 경고→리뷰. **파일럿 안정화 후 하드 게이트로 승격**.
+현재 `.github/workflows/ci.yml`이 강제하는 것(✅)과 아직 계획인 것(🟡)을 구분한다.
+turbo 태스크는 **PR에서 변경 영향 패키지만**(`--filter=...[origin/main]`), main push에선 전체를 돈다.
+
+1. ✅ format(Python `ruff format --check`) → lint → typecheck 통과. TS format(prettier)은 🟡 미도입.
+2. ✅ Python 커버리지 ≥ 80%(`--cov-fail-under=80`, api·ai-core·db·ai-worker) · 🟡 TS는 수집만(vitest thresholds 미설정).
+3. ✅ **RLS/인가·캐시 격리·Neo4j 격리 테스트 통과**(필수) — `packages/db/tests/test_rls.py`·`test_runtime_roles.py`, `apps/api/tests/test_answer_cache.py`(교차 tenant·타 사용자·타 동·역할 전파 0건), `packages/ai-core/tests/test_graph.py`(교차 tenant 침투 거부).
+4. ✅ **LLM 마스킹 누출 0건**(필수) — `packages/ai-core/tests/test_masking.py` 외 fail-closed 경로.
+5. ✅ E2E 결정론 여정 그린(§4 — `@llm` 4건은 CI 제외, 로컬 전용).
+6. ✅ OpenAPI 계약 드리프트 0(`pnpm generate:api-types` 후 diff) · 컨텍스트 경로 검증(`pnpm check:paths`) · 시크릿 스캔(gitleaks, 별도 잡).
+7. 🟡 axe 접근성 위반 0(심각) — 아직 CI 미배선(수동 점검). 의존성 취약점 스캔도 동일.
+8. 🟡 AI eval 회귀: `evals.yml`은 `evals/**` 변경·주간 스케줄에서만 돌고 pass-rate를 **스냅샷으로 보존**할 뿐 머지를 막지 않는다. **파일럿 안정화 후 하드 게이트로 승격**.
 
 > 상세 파이프라인·실행 순서: [09-implementation-harness.md](09-implementation-harness.md).

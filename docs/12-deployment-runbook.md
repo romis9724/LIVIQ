@@ -83,10 +83,10 @@ GHCR 패키지는 기본 **private**이다. 각 VM에서 PAT로 로그인한다(
 echo "$GHCR_PAT" | docker login ghcr.io -u <github-user> --password-stdin
 ```
 
-env에 이미지 좌표를 지정한다(`<owner>`는 소문자):
+env에 이미지 좌표를 지정한다(`<owner>`는 소문자). **`IMAGE_PREFIX`는 끝 구분자까지 포함**한다(ADR-0021 결정 5 — compose가 `${IMAGE_PREFIX}api`로 참조하므로 대시를 빼면 `liviqapi`를 찾는다):
 
 ```
-IMAGE_PREFIX=ghcr.io/<owner>/liviq
+IMAGE_PREFIX=ghcr.io/<owner>/liviq-       # → ghcr.io/<owner>/liviq-api:<sha> (release.yml의 이름 규약)
 IMAGE_TAG=<배포할 커밋 sha>
 ```
 

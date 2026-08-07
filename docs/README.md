@@ -28,6 +28,14 @@
 | 12 | [배포 런북](12-deployment-runbook.md) | 3-tier VM 배포·업그레이드·롤백 절차, 인바운드 규칙, 트러블슈팅 |
 | 13 | [GitLab→WSL 배포](13-gitlab-wsl-deploy.md) | 개발·검증 1호스트 CI/CD(빌드→기동→스모크), 러너 준비, 롤백 |
 
+## 부속 자료 (번호 없는 docs/ 산출물)
+
+- [ai-readiness-map.html](ai-readiness-map.html) — AI 준비도 지도(브라우저로 열어보는 리포트, 2026-07-13 스냅샷)
+- [ai-readiness-score.json](ai-readiness-score.json) — 위 지도의 채점 원본(루브릭 v2-100pt, 자동+수동 조정)
+- [design-handoff-prompt.md](design-handoff-prompt.md) — 디자인 세션에 그대로 붙여넣는 핸드오프 프롬프트
+- [review/deep-check-2026-07-13.md](review/deep-check-2026-07-13.md) — 구현 착수 전 5관점 심층 점검(59건 발견·12건 결정 기록)
+- [review/codex-review.md](review/codex-review.md) · [review/cursor-review.md](review/cursor-review.md) — 외부 도구 문서·설계 리뷰 기록
+
 ## 참고 자료
 
 - [refs/README.md](../refs/README.md) — 경쟁 솔루션(아파트너·아파트데스크) 분석 및 추출 화면

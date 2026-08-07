@@ -9,7 +9,7 @@
 3. **단일 출처(SSOT).** 관리비 원천은 확정 업로드 데이터(현재 엑셀, 추후 ERP), AI는 읽기·설명만.
 4. **개인정보는 경계에서 차단.** 모든 LLM 호출 전 마스킹(self-hosted 포함).
 5. **테넌트 격리 우선.** 모든 데이터/쿼리는 단지 단위 격리.
-6. **사람이 최종 결정.** 위험 출력은 검수 게이트.
+6. **사람이 최종 결정.** AI는 입주민에게 자동 발송하지 않고, 신뢰도 낮은 답변은 담당자 연결 폴백으로 사람이 이어받는다(사후 검수 큐는 H8-7에서 제거 — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md) 개정 노트).
 7. **토큰은 비용이다.** 캐싱·컨텍스트 예산·에이전트 스텝 상한을 1급 설계 요소로(단일 모델, 라우팅 보류).
 8. **단일 LLM + OpenAI-호환 추상화.** 프로바이더는 env로 교체(Ollama·vLLM·OpenAI 등). 멀티 모델 라우팅은 필요 검증 후.
 
@@ -89,10 +89,10 @@
 
 ```text
 질의 → [캐시 확인(정확/의미)] ─히트─► 즉시 응답 (에이전트 미진입)
-                            └미스─► [의도분류] ─사람연결─► 검수 큐/담당자
+                            └미스─► [의도분류] ─사람연결─► 담당자 연결 폴백
                                               └AI처리─► [도구호출 에이전트 루프]
                                                           │  도구 레지스트리에서 선택·조합
-                                                          │  스텝 상한 2~3회(도구 호출 수·토큰 예산)
+                                                          │  스텝 상한 4회(MAX_TOOL_STEPS — 도구 호출 수·토큰 예산)
                                                           │  초과 시 현재 근거로 답변 또는 폴백
                                                           ▼
                           PII 마스킹(도구 결과 포함) → LLM 생성(출처 강제)
@@ -100,22 +100,27 @@
                         → 응답(스트리밍, 출처 카드: 문서 인용 + 도구 결과 근거)
 ```
 
-도구 레지스트리(전부 **읽기 전용** — 파라미터 Pydantic 검증·tenant/소유권은 코드가 강제, LLM은 선택만):
+도구 레지스트리 **17종**(전부 **읽기 전용** — 인자 Pydantic 검증·tenant/소유권은 코드가 강제, LLM은 선택만). 정본은 `packages/ai-core/src/ai_core/tools/library.py`의 `default_registry()`이며, 아래 권한 스코프는 각 도구의 `allowed_roles`다(빈 값 = 전 역할):
 
 | 도구 | 소스 | 용도 | 권한 스코프 |
 |------|------|------|-------------|
 | `search_documents` | pgvector 벡터검색 | 공지·규약·회의록 등 문서 근거 검색 | tenant + 문서 공개범위(visibility) |
-| `search_facility_graph` | Neo4j 벡터매칭 + 그래프 확장 | 유사 장애·연결 설비·정비 이력 → 원인 후보 | tenant + 시설 역할 |
-| `get_fees` | 고정 SQL(`fees`) | 본인 세대 관리비·항목·전월 대비 | tenant + 본인 세대 소유권 |
+| `search_facility_graph` | Neo4j 벡터매칭 + 그래프 확장 | 유사 장애·연결 설비·정비 이력 → 원인 후보(과거 장애 원인 추적 전용 — 점검 기한 질의 배제) | tenant + 시설 역할(FACILITY·MANAGER) |
+| `get_fees` | 고정 SQL(`fees`·`household_geometries`) | 본인 세대 관리비·항목·전월 대비·같은 평형 평균 대비. `scope`(동·전체) 지정 시 그 범위 평균(집계값만) | tenant + 본인 세대 소유권(범위 평균은 세대 무관 집계) |
+| `compare_fees` | 고정 SQL(`fees`·`households`·`buildings`) | 우리집↔단지 평균, 동↔동, 특정 항목(전기료 등) **비교 전용**([ADR-0026](adr/0026-assistant-ops-tools-and-dong-targeting.md)) | tenant + 본인 세대 소유권(비교 대상은 집계값) |
 | `get_my_inquiries` | 고정 SQL(`inquiries`) | 본인 민원 접수·처리 상태 | tenant + 본인 소유권 |
-| `get_recent_notices` | 고정 SQL(`notices`) | 게시판 최근 공지 목록(최신 5건) — 유사도 검색이 못 잡는 "공지사항" 메타 질의용 | tenant + 전 역할 |
-| `ask_clarification` | 없음(되묻기 전용) | 대상이 갈릴 때 되묻고 종료([ADR-0025](adr/0025-agent-depth-plan-clarify-structured.md)) — 문장은 코드가 생성 | tenant + 전 역할 |
 | `search_similar_inquiries` | 고정 SQL(`inquiries`+`inquiry_events`, pg_trgm) | 유사 민원의 제목·분류·처리결과 요약([ADR-0024](adr/0024-assistant-inquiry-triage.md)) | tenant + RESIDENT(요약 컬럼만) |
-| `get_facilities` | 고정 SQL(`facilities`) | 설비 목록·현재 상태 | tenant + 역할 |
-| `get_overdue_checks` | 고정 SQL(`facilities`) | 점검 기한 임박·초과 설비 | tenant + 역할 |
-| `find_in_floor_plan` | 고정 SQL(`floor_plans`) | 본인 세대 평면도에서 기기·공간 위치 | tenant + 본인 세대 |
-| `trace_home_device_issue` | Neo4j 그래프 추적 | 세대 기기 → 연결 설비 → 인과 연쇄 | tenant + 본인 세대 |
-| `find_nearest_available_parking` | 고정 SQL(`parking_*`) + 기하 | 본인 동에서 가까운 빈 주차면([ADR-0023](adr/0023-parking-occupancy-persisted.md)) | tenant + 본인 세대 |
+| `summarize_inquiries` | 고정 SQL(`inquiries`+`households`·`buildings`·`codes`) | 기간·동별 민원 집계(상태·유형별)+미처리 우선 목록 — 제목·분류·상태·접수일만(본문·작성자·동호수 미조회) | tenant + MANAGER·STAFF |
+| `get_recent_notices` | 고정 SQL(`notices`+`codes`) | 게시판 최근 공지 목록(published 최신 5건) — 유사도 검색이 못 잡는 "공지사항" 메타 질의용 | tenant + 전 역할 |
+| `ask_clarification` | 없음(되묻기 전용) | 대상이 갈릴 때 되묻고 종료([ADR-0025](adr/0025-agent-depth-plan-clarify-structured.md)) — 문장은 코드가 생성 | tenant + 전 역할 |
+| `get_facilities` | 고정 SQL(`facilities`+`codes`) | 설비 목록·대수·현재 상태(근거는 **집계만** — H20-16) | tenant + 시설 역할(FACILITY·MANAGER) |
+| `get_overdue_checks` | 고정 SQL(`facilities`) | 점검 기한 임박(7일)·초과 설비 + 다음 점검 예정일 | tenant + 시설 역할(FACILITY·MANAGER) |
+| `find_in_floor_plan` | 고정 SQL(`floor_plans`·`plan_devices`) | 본인 세대 평면도에서 기기·공간 위치 | tenant + 본인 세대(RESIDENT) |
+| `find_household_devices` | 고정 SQL(`floor_plans`·`plan_devices`) | 질문에 적힌 **동·호수 세대**의 평면도 설비·방 위치(H20-17). 대상 세대는 LLM 인자가 아니라 라우터가 질문에서 뽑은 값 | tenant + MANAGER·STAFF(동·호수가 확정된 질의에서만 스펙 노출) |
+| `trace_home_device_issue` | Neo4j 그래프 추적 | 세대 기기 → 연결 설비 → 인과 연쇄 | tenant + 본인 세대(RESIDENT) |
+| `find_nearest_available_parking` | 고정 SQL(`parking_*`) + 기하 | 본인 동에서 가까운 빈 주차면(EV 선호 지정 가능, [ADR-0023](adr/0023-parking-occupancy-persisted.md)) | tenant + 본인 세대(RESIDENT) |
+| `find_my_vehicle` | 고정 SQL(`parking_vehicles`·`parking_layouts`) + 기하 | 본인 세대 등록 차량의 주차면·입차 경과·우리 동 승강기까지 거리(**번호판 미조회**) | tenant + 본인 세대(RESIDENT) |
+| `find_longterm_parking` | 고정 SQL(`parking_vehicles`) | 명부에 없는 **외부 차량**의 장기 주차면·경과 시간(오래된 순, **번호판 미조회**) | tenant + 시설 역할(FACILITY·MANAGER) |
 
 > 캐시는 에이전트 앞단에서 먼저 확인([08](08-llm-token-optimization.md)) — 히트면 에이전트에 진입하지 않는다. 도구 결과도 문서 인용과 동일 원칙으로 **출처 카드**에 표기하고(예: "근거: 관리비 2026-06 확정 데이터"), 어떤 도구를 왜 호출했는지 **경로를 로깅**해 골든셋 회귀 평가에 활용한다([07](07-testing-strategy.md) §AI eval).
 > 시설형 질의의 그래프 질의·Neo4j 벡터 인덱스·데이터 배치는 [11-data-architecture.md](11-data-architecture.md).
@@ -208,7 +213,7 @@
 > `—` 행은 요약만 있고 정본 ADR 파일이 없다(pgvector·RLS·ai-core 라이브러리·액션 코드 실행·PWA·Neo4j 파생 그래프) — 정본이 필요하면 [docs/adr/](adr/README.md)에 추가한다. 마스킹([ADR-0002](adr/0002-mask-before-external-llm.md))·모노레포+AI 계층([ADR-0001](adr/0001-monorepo-layered-ai.md))도 정본 파일 참조.
 > ADR 변경은 [docs/adr/](adr/README.md)에 새 ADR로 기록하고 이전 결정은 Superseded 처리한다.
 
-## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈 · H13 시설 그래프·평면도)
+## 13. REST API 표면 (v1 — H2 확정 · H3 시설 추가 · H7 인증 재설계 · H8 공지 게시판 · H8-4 코드 관리 · H8-6 공지·문서 코드 적용 · H9 단지 트윈 · H13 시설 그래프·평면도 · H16~H17 주차 · H20 관리자 AI 비서)
 
 > **필드 계약의 원천은 `apps/api`의 Pydantic 모델**([09 §1.1](09-implementation-harness.md))이다. 이 절은 **엔드포인트 목록·인가 역할·화면 매핑·불변식**을 소유한다 — 필드 상세를 여기 중복 기술하지 않는다. 화면 트리는 [04](04-menu-structure.md).
 
@@ -258,30 +263,48 @@
 | `DELETE /admin/tenants/{id}` | SYS_ADMIN | **빈 단지만** 완전 삭제(주민·콘텐츠 존재 시 409) (H7-6) |
 | `POST /admin/tenants/{id}/deactivate` · `/activate` | SYS_ADMIN | 단지 비활성화(소속 로그인 403·가입 목록 제외·세션 revoke)/재활성화 (H7-6) |
 
-**AI 비서** (H1 구현됨, 화면: 입주민 AI 비서)
+**AI 비서** (H1 구현됨 · H20-2 관리자 홈 [ADR-0028](adr/0028-admin-assistant-home.md), 화면: 입주민 AI 비서 / 관리자 홈 AI 비서)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `POST /assistant/ask` | RESIDENT+ | SSE. 계약은 [09 §1.1](09-implementation-harness.md) — 불변 |
+| `POST /assistant/ask` | 세션(입주민 채널) | SSE. 계약은 [09 §1.1](09-implementation-harness.md) — 불변. `channel="resident"` |
+| `GET /assistant/conversations/latest` | 세션 | 본인의 가장 최근 입주민 대화 1건 복원(탭 저장소가 빈 새 탭·재시작의 2차 경로, [ADR-0027](adr/0027-assistant-multiturn-restore-and-relevance.md)). **날짜 제한 없음**, 대화가 없으면 빈 응답 |
+| `POST /admin/assistant/ask` | MANAGER | 관리자 홈 AI 비서 — 같은 에이전트 경로, `channel="admin"`([ADR-0028](adr/0028-admin-assistant-home.md)). 도구 가시성은 기존 역할 체계 그대로. 세대 평면도 설비 **위치** 질의만 프롬프트·도구 가시성·조회 대상 세대를 코드가 갈아끼운다(H20-16·H20-17) |
+| `GET /admin/assistant/conversations/latest` | MANAGER | 본인의 **당일(KST)** 관리자 대화 1건 복원(H20-3) — 날이 바뀌면 빈 응답 → 프론트가 새 대화+진입 브리핑으로 시작 |
 
 **문서** (H1 구현·H2-2 보강, 화면: 관리자 문서 관리)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `POST /documents` | MANAGER·STAFF | 구현됨 — 업로드→S3→인제스트 큐, `content_hash` 멱등. H8-6: `source_type` 제거·`category_code_id`(DOC_CATEGORY 코드) 필수 |
-| `GET /documents` | MANAGER·STAFF | 구현됨 — H2-2에서 `index_status` 필터 추가. H8-6: `category_code_id` 필터 |
-| `PATCH /documents/{id}` | MANAGER·STAFF | H2-2 — 공개범위(visibility)·제목 수정. H8-6: `category_code_id` 수정 |
-| `POST /documents/{id}/reindex` | MANAGER·STAFF | H2-2 — 재색인(failed 복구) |
+| `POST /documents` | MANAGER·STAFF | 구현됨 — multipart(파일+제목+분류+visibility) 업로드→S3→인제스트 큐, `content_hash` 멱등(현재 버전 집합 내 중복 409). H8-6: `source_type` 제거·`category_code_id`(DOC_CATEGORY 코드) 필수 |
+| `GET /documents` | MANAGER·STAFF | 구현됨 — H2-2에서 `index_status` 필터 추가. 제목 부분일치 `q` 필터(자연어 검색 아님) |
+| `GET /documents/{id}` | MANAGER·STAFF | 상세 + 버전 이력(`document_versions` 최신순, [ADR-0016](adr/0016-document-board-versioned-attachment.md)) |
+| `PATCH /documents/{id}` | MANAGER·STAFF | H2-2 — 공개범위(visibility)·제목 수정. H8-6: `category_code_id` 수정. visibility 변경 시 답변 캐시 세대 증가 |
+| `POST /documents/{id}/file` | MANAGER·STAFF | 새 첨부 버전 업로드 = `version+1` + 재인제스트 enqueue + 캐시 세대 증가(동일 파일 409, [ADR-0016](adr/0016-document-board-versioned-attachment.md)) |
+| `GET /documents/{id}/versions/{version}/download` | MANAGER·STAFF | 버전 원본 다운로드 — API 경유(tenant 소유 검증, presigned URL 미사용) |
+| `DELETE /documents/{id}` | MANAGER·STAFF | soft delete + 청크 즉시 삭제(검색에서 바로 제외). 파일·버전 이력은 보존(`citations.chunk_id`는 SET NULL로 근거 보존) |
+| `POST /documents/{id}/reindex` | MANAGER·STAFF | H2-2 — 재색인(failed 복구). 색인 진행 중이면 409 |
 
-**민원** (H2-3, 화면: 입주민 민원·하자 / 관리자 민원 관리)
+**민원** (H2-3 · H8-9 수동 워크플로 [ADR-0018](adr/0018-inquiry-manual-handling.md), 화면: 입주민 민원·하자 / 관리자 민원 관리)
 
 | 엔드포인트 | 역할 | 비고 |
 |-----------|------|------|
-| `POST /inquiries` | RESIDENT | 접수. AI 카테고리·우선순위는 서버가 **제안값**으로 채움(키워드 기반, [03 §4.4](03-database-design.md)) |
+| `POST /inquiries` | RESIDENT | 접수(제목·본문·분류 선택). 분류는 입주민이 고르고 우선순위는 담당자가 지정 — **AI 미개입**(ADR-0018) |
 | `GET /inquiries` | RESIDENT | **본인 `author_user_id` 한정**(세대 공유 제외 — FR-RES-02) |
+| `GET /inquiries/categories` | 세션 | 접수 폼용 INQUIRY_CATEGORY active 코드 목록(§코드 관리) |
 | `GET /inquiries/{id}` + `/events` | 작성자 또는 MANAGER·STAFF | 타임라인 = `inquiry_events` 순차 |
-| `GET /admin/inquiries` | MANAGER·STAFF | 접수함(상태·카테고리 필터) |
-| `POST /admin/inquiries/{id}/assign` · `/status` | MANAGER·STAFF | 상태 머신 `received→assigned→in_progress→done`(역행은 관리자만). 변경 시 `inquiry_events` 기록 + 작성자 알림 |
+| `POST /inquiries/{id}/comments` | RESIDENT(작성자) | 입주민 피드백 — `in_progress`·`reopened`일 때만, 담당자에게 알림 |
+| `POST /inquiries/{id}/reopen` | RESIDENT(작성자) | 재접수 — `done`인 건만 `reopened`로. 담당자에게 알림 |
+| `GET /admin/inquiries` | MANAGER·STAFF | 접수함(`status`·`category_code_id` 필터) |
+| `POST /admin/inquiries/{id}/assign` | MANAGER·STAFF | 담당자 배정(대상은 같은 단지의 MANAGER·STAFF만). `received`면 `assigned` 전이 + 작성자 알림 |
+| `POST /admin/inquiries/{id}/ack` | MANAGER·STAFF | 열람 ack — 담당자 본인이 `assigned` 상세를 열면 `in_progress` 전이(그 외는 no-op) |
+| `POST /admin/inquiries/{id}/comments` | 담당자 또는 MANAGER | 답변 등록(배정 이후·완료 전) + 작성자 알림 |
+| `POST /admin/inquiries/{id}/complete` | 담당자 또는 MANAGER | 완료 — `in_progress`·`reopened` + **답변 1건 이상**일 때만 `done` 전이 + 작성자 알림 |
+| `POST /admin/inquiries/{id}/priority` · `/category` | MANAGER·STAFF | 우선순위·분류 수동 수정(완료 건 불가). 타임라인 이벤트 없음(ADR-0018) |
+| `PUT /admin/inquiries/{id}/facility` | MANAGER | 시설 정식 연결·해제 — 시설을 지정하는 **유일한 경로**(FR-FAC-05 ①, `facility_linked` 이벤트 기록) |
+| `POST /admin/inquiries/{id}/facility-suggest` | MANAGER | LLM 시설 **후보 추천**(FR-FAC-05 ②) — 읽기 전용(DB 쓰기·알림 없음). 마스킹 실패·LLM 미가용은 폴백 없이 503 |
+
+> 상태는 `received|assigned|in_progress|done|reopened` 5종(`apps/api/app/schemas/inquiries.py` `InquiryStatus`)이며, **별도 상태 변경 엔드포인트는 없다** — 상태는 배정·열람 ack·완료·재접수 같은 **액션의 부산물**이다(ADR-0018). 전이는 `inquiry_events`(`status_changed`)에 기록되고 작성자·담당자 알림이 함께 나간다.
 
 **공지** (H8-1 게시판 전환 · [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md), 화면: 입주민 공지 / 관리자 공지사항)
 
@@ -308,15 +331,11 @@
 | `GET /admin/fees/uploads/{id}` | MANAGER·STAFF | 미리보기·행 단위 오류 확인(확정 전) |
 | `POST /admin/fees/uploads/{id}/apply` | MANAGER | **확정 적용** — 해당 (tenant, period) 전체 교체, 단일 트랜잭션([11 §3.3](11-data-architecture.md)) |
 | `GET /fees` | RESIDENT | **본인 세대 + 입주 승인 이후 월만**([06 §2](06-security-privacy.md) 결정 E) |
-| `GET /admin/fees` | MANAGER·STAFF | 월별 부과 현황·세대별 조회 |
+| `GET /admin/fees` | MANAGER·STAFF | 월별 부과 현황(동·호 검색) + 총계 |
+| `GET /admin/fees/{household_id}` | MANAGER·STAFF | 세대별 고지서 상세(`period` 필수 — 트리 breakdown·합계, H8-7). 해당 세대·월이 없으면 404 |
 | `POST /fees/explain` | RESIDENT | AI 설명(SSE) — 확정 데이터(전월·평균 diff)를 컨텍스트로 **설명만**, 인용 `source_kind=fee_data`. H3 도구 레지스트리 도입 시 `get_fees` 도구로 통합(§5.2) |
 
-**검수 큐** (H2-6, 화면: 관리자 AI 검수 큐)
-
-| 엔드포인트 | 역할 | 비고 |
-|-----------|------|------|
-| `GET /admin/review-queue` | MANAGER | `messages.review_status=needs_review` 목록(질문·답변·인용·신뢰도) |
-| `POST /admin/review-queue/{message_id}/decide` | MANAGER | `approve`/`reject`(+메모) → `reviewed_by/at` 기록. **사후 검수** — 이미 전달된 답변 회수 없음, 골든셋 후보로 축적([07 §5](07-testing-strategy.md)). 반려 시 정정 알림은 백로그 |
+> **검수 큐 없음(H8-7)**: 사후 AI 검수 큐(`/admin/review-queue`)는 라우터·화면째 제거됐다([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md) 개정 노트). 저신뢰 답변은 목록에 쌓지 않고 **담당자 연결 폴백**으로 끝난다 — `messages.review_status=needs_review` 플래그와 `confidence`만 남아 있다([03 §4.3](03-database-design.md)).
 
 **시설** (H3-1·H3-4 · [ADR-0009](adr/0009-neo4j-in-mvp.md) · H13-1 그래프 · [ADR-0022](adr/0022-facility-graph-dashboard.md), 화면: 관리자 시설 관리(그래프 메인·목록 보조)·AI 도우미. 그래프 모델·동기화: [11 §3.5·§4](11-data-architecture.md))
 
@@ -333,13 +352,26 @@
 
 > Neo4j에 직접 쓰는 엔드포인트는 없다 — 모든 시설 쓰기는 PG 트랜잭션+outbox 한 경로, 그래프 반영은 ai-worker 단독([11 §3.5](11-data-architecture.md)).
 > `graph`는 **읽기 전용**이며 노드 상세는 기존 `GET /admin/facilities/{id}`(FacilityDetail)를 재사용한다 — 그래프 응답에 상세 필드를 중복하지 않는다.
-> H13-2에서 `inquiries.facility_id`(nullable FK)가 추가되며, **LLM 추천은 후보 제시까지**이고 정식 연결은 담당자 승인 액션 엔드포인트만 수행한다(§13.3 불변식 1·규칙 8).
+> H13-2에서 `inquiries.facility_id`(nullable FK)가 추가됐고, **LLM 추천은 후보 제시까지**이며 정식 연결은 담당자 승인 액션 엔드포인트(`PUT /admin/inquiries/{id}/facility`)만 수행한다(§13.3 불변식 1·규칙 8).
 
-**운영 대시보드** (H4 — FR-ADM-06 · [09 §8.5](09-implementation-harness.md), 화면: 관리자 대시보드)
+**주차장** (H9-5 배치도·차량 · H16 점유 영속화 · H17-2 입주민 주차맵, 화면: 관리자 주차장 / 입주민 주차맵)
+
+| 엔드포인트 | 역할 | 비고 |
+|-----------|------|------|
+| `GET /admin/parking/layout` | MANAGER | 지하주차장 배치도(면 좌표·동 footprint) — 미적재면 404가 아니라 `layout=null` |
+| `GET /admin/parking/vehicles` | MANAGER | 등록 차량 목록(동·호·차종·EV·주차면·입차시각). **번호판 복호 평문을 내보내는 유일한 경로** — 열람 건수를 `audit_logs`에 기록([06 §8](06-security-privacy.md)) |
+| `GET /parking/map` | RESIDENT | 배치도 + 점유 면 번호 + **본인 세대** 차량 위치·본인 동(`my_dong`, H20-5). 타 세대는 "면이 찼다"는 사실만 — 번호판·동호수는 조회조차 하지 않는다(복호 경로 없음) |
+
+> 적재는 API가 아니라 시드 스크립트 경로다([03 §4.11](03-database-design.md)) — 주차 API는 전부 **읽기 전용**이다.
+
+**운영 대시보드** (H4 — FR-ADM-06 · H8-10 액션 큐 · [09 §8.5](09-implementation-harness.md), 화면: 관리소 운영 > 민원현황 `/inquiry-status`)
 
 | 엔드포인트 | 역할 | 설명 |
 |-----------|------|------|
-| `GET /admin/dashboard/stats` | MANAGER | 기간 파라미터(기본 7일) — 질의 수·평균 토큰(입/출)·폴백률·needs_review율·캐시 적중률·민원 상태 분포·시설 상태 분포 + 일일 토큰 예산 사용량·초과 여부(NFR-COST-01, 경고만·차단 없음). 집계는 SQL(파일럿 규모 — 별도 집계 테이블 없음) |
+| `GET /admin/dashboard/stats` | MANAGER | 기간 파라미터(기본 7일) — **`actions`(오늘 할 일: 승인 대기·미배정/처리중 민원·임시저장/예약 공지 — 기간 무관 현재 open 카운트)** + 질의 수·평균 토큰(입/출)·응답률·폴백률·캐시 적중률·민원 상태 분포(기간 내)·시설 상태 분포(전체 스냅샷) + 일일 토큰 예산 사용량·초과 여부(NFR-COST-01, 경고만·차단 없음). 집계는 SQL(파일럿 규모 — 별도 집계 테이블 없음) |
+
+> **`needs_review_rate`는 없다** — 검수 큐 제거(H8-7)로 stale이 되어 H8-10에서 스키마·집계·프런트에서 함께 걷어냈다(`DashboardStatsOut`이 정본).
+> 화면 이름은 H20-2에서 바뀌었다: 구 관리자 대시보드(`/dashboard`)는 **관리소 운영 > 민원현황(`/inquiry-status`)** 으로 이동했고(AI 도우미 현황 위젯만 삭제), MANAGER 첫 진입은 AI 비서(`/assistant`)다([ADR-0028](adr/0028-admin-assistant-home.md)).
 
 > AI 질의 경로(H4)에는 정확 캐시([08 §2.0·2.1](08-llm-token-optimization.md) 스코프 키)와 Redis 레이트 리밋(사용자·단지별, 초과 429)이 앞단에 붙는다 — SSE 계약·오케스트레이터는 불변.
 
@@ -395,7 +427,7 @@
 
 ### 13.3 표면 불변식 (구현이 어겨서는 안 되는 것)
 
-1. AI가 상태를 바꾸는 엔드포인트는 없다 — AI 산출물은 항상 제안 컬럼(`ai_suggested_*`)에 머물고, 상태 전이는 사람 액션 엔드포인트만 수행(규칙 6·8).
+1. AI가 상태를 바꾸는 엔드포인트는 없다 — AI 산출물은 **응답 본문(후보 제시)** 에 머물고 DB 상태로 승격되지 않는다. 상태 전이는 사람 액션 엔드포인트만 수행한다(규칙 6·8. 예: 시설 연결은 `facility-suggest`가 후보만 주고 `PUT .../facility`가 확정). H8-9 이후 민원 분류·우선순위도 AI 제안 컬럼 없이 사람이 지정한다([ADR-0018](adr/0018-inquiry-manual-handling.md)).
 2. 관리비 쓰기는 엑셀 업로드 confirm 플로우가 유일하다. `/fees/explain`은 읽기+설명 전용(규칙 5).
 3. 입주민 리소스는 소유권 필터가 쿼리에 박힌다(`author_user_id`·`household_id`·승인 시점) — 파라미터로 우회 불가.
 4. SSE 계약(4이벤트)은 assistant·explain 등 모든 AI 스트리밍이 공유하며 변경 금지([09 §1.1](09-implementation-harness.md)).

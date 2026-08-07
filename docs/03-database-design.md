@@ -456,10 +456,8 @@ conversations(id, tenant_id, user_id, channel,       -- resident|admin
 messages(id, tenant_id, conversation_id, role,       -- user|assistant|system
          content text, intent,                        -- ai|handoff (1차 분기와 정렬)
          confidence numeric NULL,                      -- 신뢰도
-         status,                                       -- answered|fallback|handed_off
-         review_status NULL,                           -- needs_review|approved|rejected
-         reviewed_by NULL, reviewed_at NULL,           -- 검수 처리 기록(검수 큐, H2-6)
-         review_note text NULL,                        -- 검수 메모(반려 사유·수정 제안 — 골든셋 후보)
+         status,                                       -- answered|fallback|handed_off|clarify(되묻기 — 다음 턴 히스토리·연속 되묻기 차단 근거, [ADR-0025])
+         review_status NULL,                           -- needs_review|NULL — 저신뢰 답변 플래그. 검수 큐 제거(H8-7)로 approved/rejected 전이는 없음([ADR-0015] 개정 노트)
          token_input int, token_output int, cost_usd numeric,  -- [08] 비용추적
          created_at)
 
@@ -473,7 +471,7 @@ citations(id, tenant_id, message_id,
 ```
 
 > **인용은 문서에 한정하지 않는다.** 문서 인용은 `source_kind`의 한 종류일 뿐, 도구 결과(관리비·민원·시설·그래프) 근거도 동일 테이블로 추적한다.
-> 신뢰도 임계 미만 응답은 `messages.review_status=needs_review` + 사용자에겐 폴백 안내(사후 검수로 골든셋 개선).
+> 신뢰도 임계 미만 응답은 `messages.review_status=needs_review` 플래그 + 사용자에겐 **담당자 연결 폴백**. 사후 검수 컬럼(`reviewed_by`·`reviewed_at`·`review_note`)은 H8-7 마이그레이션 `b2d9e4f7a1c3`이 drop했다(검수 큐 제거 — [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md) 개정 노트).
 > **과거 답변 출처 보존**: `chunk_id`는 청크 재색인·삭제 시 `ON DELETE SET NULL`. 원문 청크가 사라져도 `quote`·`source_revision`으로 답변 시점의 근거를 열람할 수 있다.
 
 ### 4.4 민원·공지
@@ -484,14 +482,17 @@ inquiries(id, tenant_id, household_id, author_user_id,
           category_code_id NULL,                        -- FK → codes (INQUIRY_CATEGORY, RESTRICT), 입주민 선택
           title, body text,
           priority NULL,                                -- urgent|normal|low (담당자 수동 지정, AI 없음)
-          status,                                       -- received|assigned|in_progress|done
-          assignee_user_id NULL, attachments jsonb,
+          status,                                       -- received|assigned|in_progress|done|reopened (완료 건 재접수 — ADR-0018 개정)
+          assignee_user_id NULL,
+          facility_id NULL,                             -- FK → facilities(tenant_id, id) composite. 담당자가 승인한 정식 연결만(H13-2, FR-FAC-05 ①) — LLM 추천은 후보 제시까지
+          attachments jsonb,
+          deleted_at NULL,                              -- soft delete(§3)
           created_at, updated_at)
 
 -- 민원 타임라인 (화면 "민원 상세 대화 스레드"의 원천 — 상태·배정·답변/피드백마다 기록, H2-3·H8-9)
-inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified(과거호환)|assigned|status_changed|comment
+inquiry_events(id, tenant_id, inquiry_id, type,        -- created|ai_classified(과거호환)|assigned|status_changed|comment|facility_linked
                actor_user_id NULL,                     -- NULL = 시스템
-               payload jsonb,                          -- 상태:{from,to} · 배정:{assignee_user_id} · comment:{kind:reply|feedback, body}
+               payload jsonb,                          -- 상태:{from,to} · 배정:{assignee_user_id} · comment:{kind:reply|feedback, body} · 시설연결:{facility_id, facility_name}
                created_at)
 
 -- 공지 (H8-1 게시판 전환 — AI 초안 폐기, [ADR-0015]. 작성·수정·삭제·고정·임시저장·예약 발행)
@@ -525,14 +526,21 @@ notifications(id, tenant_id, user_id, type,            -- notice|inquiry_status|
 ### 4.5 시설·회의
 
 ```sql
-facilities(id, tenant_id, name, location, type, status,   -- normal|check|fault|risk
-           next_check_at, created_at, updated_at)
+facilities(id, tenant_id, name,
+           code NULL,                                     -- 시설 코드번호 `EL-401-01`(H14-2) — 등록 시 서버가 부여, 수정 경로 없음
+           location, type, status,                        -- normal|check|fault|risk
+           next_check_at,
+           deleted_at NULL,                               -- soft delete(§3)
+           created_at, updated_at)
+  UNIQUE(tenant_id, code)                                 -- 단지 안에서만 유일(단지가 다르면 같은 코드 공존 — 규칙 3)
 
 maintenance_logs(id, tenant_id, facility_id, performed_at,
                  work text, performer, parts jsonb, created_at)
 
 incidents(id, tenant_id, facility_id, occurred_at, symptom text,
-          resolution text, root_cause text NULL, created_at)
+          resolution text, root_cause text NULL,
+          caused_by_incident_id NULL,                     -- 같은 단지 선행 원인 장애(다단계 인과 CAUSED_BY, GraphRAG G1a). composite FK라 타 단지 참조는 DB가 거부
+          created_at)
 ```
 
 > **회의록은 별도 테이블 없이 `documents`(DOC_CATEGORY 코드 "회의록")로 관리**한다.
