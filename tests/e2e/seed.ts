@@ -3,7 +3,8 @@
 // superuser(liviq)로 접속하므로 RLS를 우회한다(시드는 격리 예외). 실제 격리 검증은
 // pytest 통합 테스트가 런타임 role로 수행한다. 여기서는 결정론 여정에 필요한 최소 데이터만
 // 고정 UUID로 심는다: E2E tenant·building·household·approved user·published notice 2건·
-// 확정 fee(당월+전월)·needs_review 검수 메시지 1건, 그리고 시스템 테넌트 + E2E SYS_ADMIN.
+// 확정 fee(당월+전월)·needs_review 플래그 메시지 1건(대시보드 지표용 — 검수 큐는 H8-7에서
+// 제거됐다), 그리고 시스템 테넌트 + E2E SYS_ADMIN.
 //
 // 멱등성: E2E tenant 하위 행을 FK 역순으로 전부 지우고 다시 넣는다(반복 실행 안전).
 // 가입 여정 단지(name LIKE 'E2E-%')와 그 종속 행도 함께 정리해 반복 실행 누적을 막는다.
