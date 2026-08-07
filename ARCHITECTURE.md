@@ -67,17 +67,29 @@ dev 헤더(`X-Dev-*`)는 local 보조 경로로만 동작.
 화면 실연동(H6 완료): **양 앱 전 화면 실연동·목업 0** — web-resident 홈·비서·민원·공지·관리비·나/알림함·온보딩, web-admin 대시보드·문서·민원·공지사항·관리비·시설·주민 관리. 웹 인증은 세션 쿠키 1차(credentials CORS, H6-1), 인증 수단은 H7에서 자체 이메일 인증으로 교체 — 가입 여정 E2E(설치→단지→초대→명부→가입→승인)가 CI 게이트(H7-4).
 공지는 **AI 미개입 일반 게시판**(H8-1, [ADR-0015](docs/adr/0015-notice-board-replaces-ai-draft.md)) — 작성·수정·삭제(soft)·상단 고정·임시저장·예약 발행(ai-worker arq cron 1분, `worker_scheduled_scan` RLS)·첨부(`notice_attachments`, MinIO, 다운로드 API 경유·인가 CRITICAL). 작성·발행은 MANAGER·STAFF.
 공지 벡터화(H8-3): **published 공지만** 본문+파싱 가능 첨부(.pdf/.txt/.md)를 `content_chunks(source_type=notice)`로 인제스트(발행·published 수정·첨부 변경 시 재인제스트 enqueue, soft delete 시 청크 즉시 삭제). 검색은 notices 조인(published·미삭제)으로 미발행 미노출 이중 방어(CRITICAL) — 작성·발행 경로 AI 미개입 원칙은 불변.
-문서관리는 H8-2([ADR-0016](docs/adr/0016-document-board-versioned-attachment.md))에서 **관리자 전용 게시판**으로 전환 — 게시글=제목+본문(설명용·임베딩 제외)+첨부 1개 필수(.pdf/.txt/.md), 재업로드=`document_versions` version+1+자동 재인제스트(벡터는 최신만), 이력 다운로드 전용(롤백 없음), soft delete 시 청크 즉시 삭제. 청크는 `content_chunks`(document|notice 다형)로 일반화 — H8-3 공지 벡터화가 스키마 변경 없이 진입.
+문서관리는 H8-2([ADR-0016](docs/adr/0016-document-board-versioned-attachment.md))에서 **관리자 전용 게시판**으로 전환 — 게시글=제목+본문(설명용·임베딩 제외)+첨부 1개 필수(.pdf/.txt/.md), 재업로드=`document_versions` version+1+자동 재인제스트(벡터는 최신만), 이력 다운로드 전용(롤백 없음), soft delete 시 청크 즉시 삭제. 제목은 경계에서 NFC 정규화한다(`DocumentTitle` — 작성 Form·PATCH 양쪽, macOS 파일명의 NFD가 화면 검색·SQL LIKE 불일치를 냈다, H20-14). 청크는 `content_chunks`(document|notice 다형)로 일반화 — H8-3 공지 벡터화가 스키마 변경 없이 진입.
 설정 인프라(H8-4, [ADR-0017](docs/adr/0017-tenant-code-registry.md)): 관리자 **설정** 메뉴(MANAGER 전용) 하위 **코드 관리** — tenant 스코프 계층 공통 코드(`code_groups`·`codes`, 자기참조 parent). 분류 하드코딩 대체 — NOTICE_CATEGORY·DOC_CATEGORY 기본 시드(단지 생성·마이그레이션), is_system 그룹 잠금·도메인 FK RESTRICT. 설정 하위 **동/호수 관리**(H8-5): `buildings`·`households` CRUD·층/호 범위 일괄 생성, 세대 삭제는 입주민·명부·민원·관리비·기기 FK 연결 시 409(CRITICAL).
 코드 적용(H8-6): notices에 `category_code_id`(NOTICE_CATEGORY·NULL 허용)·`event_start/end`·`target_buildings`·`keywords`(벡터화 임베딩 포함), documents `source_type`→`category_code_id`(DOC_CATEGORY·NOT NULL, 기존 데이터 label 매핑) 전환. 코드가 도메인 FK(RESTRICT) 참조 대상 — 사용 중 코드 삭제는 409.
 시설 쓰기는 PG 트랜잭션+`outbox_events` 원자 기록(H3-1) — Neo4j 반영은 ai-worker graph-sync(H3-2, arq cron 15초)가
 outbox 폴링으로 단독 수행. 그래프 접근은 ai-core `graph/` typed query 레이어만(raw Cypher 비노출, 격리 CRITICAL 테스트).
 `/assistant/ask`는 읽기 전용 도구호출 에이전트(H3-3, [ADR-0007](docs/adr/0007-readonly-tool-agent.md)) — ai-core `tools/`
-레지스트리 10종(역할·그래프 가용성 필터, tenant·user는 코드 주입 — 목록은 [docs/01 §5.2](docs/01-architecture.md)),
-스텝 상한 3, 도구 인용은 `source_kind=tool:*`
+레지스트리 **17종**(역할·그래프 가용성 필터, tenant·user는 코드 주입 — 목록은 [docs/01 §5.2](docs/01-architecture.md)),
+스텝 상한 4(H18 계획 turn 포함), 도구 인용은 `source_kind=tool:*`
 (SSE citation은 document_id null). Neo4j env 없으면 그래프 도구만 제외(PG 폴백).
+관리비는 조회 `get_fees`(본인 세대 · `scope`로 동·전체 평균)와 비교 `compare_fees`(대상 축 2~4개 —
+서로 다른 달이 오면 **기간 축**으로 전환해 두 달을 나란히, H20-18)로 갈리고, 세대 평면도는
+`find_in_floor_plan`(입주민)·`find_household_devices`(관리자), 주차는 `find_nearest_available_parking`·
+`find_my_vehicle`·`find_longterm_parking`, 민원은 `search_similar_inquiries`·`get_my_inquiries`·
+`summarize_inquiries`가 맡는다.
 민원 트리아지(H17-1, [ADR-0024](docs/adr/0024-assistant-inquiry-triage.md))는 도구 추가 1종으로 끝난다 —
 접수는 프론트가 `tool_path`를 보고 띄우는 프리필 딥링크이고 **AI는 쓰기를 하지 않는다**(규칙 8).
+관리자 채널(`POST /admin/assistant/ask`·`channel="admin"`, H20-2 [ADR-0028](docs/adr/0028-admin-assistant-home.md))은
+같은 에이전트를 태우되 **도구 가시성과 되묻기 여부를 코드가 정한다** — 라우터 `_admin_overrides`
+(`apps/api/app/routers/assistant.py`)가 평면도 요소·위치 어휘와 동·호수 유무로 갈라
+관리자 프롬프트(`ADMIN_ANSWER_SYSTEM_PROMPT` 규칙 7 · 동·호수 없으면 `ADMIN_AGENT_ASK_UNIT_PROMPT`로 되묻기)와
+`exclude_tools`를 넘긴다(H20-16·17·17b). 8B가 프롬프트 조건문으로는 이 분기를 지키지 못했기 때문이다(실측).
+조회 대상 세대도 LLM 인자가 아니라 `ToolContext.target_unit`·`target_query`로 **코드가 주입**한다 —
+마스킹 뒤 모델 눈에는 `<PII:UNIT:1>`뿐이고(규칙 2), 세대 지정을 모델에 맡기면 착오가 곧 타 세대 조회다(규칙 4).
 시설 AI 도우미 `POST /admin/facilities/assistant`(H3-4)는 같은 에이전트에 시설 프롬프트(원인 후보·단정 금지)만
 주입해 공유 — done 이벤트 `tool_path`로 도구 경로 관측(evals 규칙 8 실측).
 AI 질의 앞단(H4): Redis 레이트 리밋(사용자·단지, 429·fail-open)과 정확 캐시([docs/08 §2.0](docs/08-llm-token-optimization.md)
@@ -92,6 +104,8 @@ web-admin `/parking`이 SVG 배치도로 렌더한다. 적재 경로는 API가 �
 **면 점유 상태도 DB가 단일 출처다**(H16 — `spot_no`·`entry_at`·부분 유니크 `(tenant_id, spot_no)`, 외부 차량은 `household_id NULL`).
 시드가 결정적 배정(고정 시드·재실률 0.75·자기 동 근처 선호)하고, 웹은 인덱싱만 한다
 (`parking-sim.ts`의 `occupancyFromVehicles` — 입출차 카메라(번호판 인식) 연동 시 시드 경로만 교체).
+렌더러는 2D `ParkingMap`·3D `ParkingScene3D` 둘 다 `@liviq/ui` 공용이고 web-admin·web-resident가 함께 소비한다
+(H17-2·H20-8, 카메라·비콘 수정은 씬 1곳 = 양 앱 반영 — H20-15).
 차량번호는 관리자 세션에만 복호 노출하고 입주민 앱·LLM 경로에는 흐르지 않는다([docs/06 §4](docs/06-security-privacy.md)).
 E2E는 `tests/e2e`(@liviq/e2e, Playwright — H2-7): 결정론 여정 4종이 CI 게이트, `@llm` 태그 여정은 로컬 전용.
 
