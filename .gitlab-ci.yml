@@ -7,7 +7,8 @@
 # ── 이미지가 어디로 가는가 (두 경로, 목적이 다르다) ─────────────────
 #   ① 배포: build 가 만든 **로컬 이미지**를 그대로 기동한다. Runner 가 배포 대상 호스트 안에서
 #      돌기 때문에 push→pull 왕복(4종 약 1.3GB)이 순수 낭비다.
-#   ② 게시: 스모크를 통과한 뒤 GitLab Container Registry 로 push 한다. 이력·백업·타 호스트
+#   ② 게시: 스모크를 통과한 뒤 **사내 Nexus**(`REGISTRY_IMAGE`)로 push 한다. GitLab 컨테이너
+#      레지스트리는 포트가 노출돼 있지 않아 쓸 수 없다(ADR-0021). 이력·백업·타 호스트
 #      배포 경로용이다. **배포가 이걸 기다리지 않는다** — 게시가 실패해도 이미 기동된 배포는
 #      영향받지 않는다(순서상 배포·검증이 먼저 끝나 있다).
 #   순서가 이런 이유: 레지스트리에는 검증을 통과한 이미지만 올린다.
@@ -43,7 +44,8 @@ variables:
   # **구분자를 포함한다**(ADR-0021 결정 5) — compose.prod.yml 이 `${IMAGE_PREFIX:-liviq-}api` 로
   # 참조하므로 대시가 값 안에 있어야 한다. 여기서 `liviq` 로 두면 compose 는 `liviqapi` 를 찾고
   # 스크립트는 `liviq-api` 를 빌드해 서로 어긋난다(정합 시 실제로 잡은 결함).
-  # 이 값은 **로컬 이미지 이름**이다. 레지스트리 좌표는 게시에서만 쓰고 $CI_REGISTRY_IMAGE 로 온다.
+  # 이 값은 **로컬 이미지 이름**이다. 레지스트리 좌표는 게시에서만 쓰고 CI 변수 REGISTRY_IMAGE
+  # (사내 Nexus)로 온다 — GitLab 레지스트리($CI_REGISTRY_IMAGE)는 쓰지 않는다.
   IMAGE_PREFIX: "liviq-"
   # 시크릿의 단일 출처. 레포에 없고, 러너가 읽기만 한다.
   ENV_FILE: "/etc/liviq/env.prod"

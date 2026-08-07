@@ -1,6 +1,6 @@
 # LIVIQ — LLM·RAG 기반 아파트 관리 지원 시스템 구축 계획서
 
-> ⚠️ **역사적 문서** — 초기 사업계획 스냅샷. 이후 결정으로 일부 내용이 대체됨(LLM은 [ADR-0005](adr/0005-single-llm-openai-compat.md), 관리비는 [ADR-0006](adr/0006-fees-excel-upload-source.md), 에이전트는 [ADR-0007](adr/0007-readonly-tool-agent.md), STT는 MVP 제외). **실행 기준은 [00](00-requirements.md)·[09](09-implementation-harness.md)·[docs/adr/](adr/README.md)**.
+> ⚠️ **역사적 문서** — 초기 사업계획 스냅샷. 이후 결정으로 일부 내용이 대체됨(LLM은 [ADR-0005](adr/0005-single-llm-openai-compat.md), 관리비는 [ADR-0006](adr/0006-fees-excel-upload-source.md), 에이전트는 [ADR-0007](adr/0007-readonly-tool-agent.md), **공지 AI 초안(§1.3·§1.4·§5.3)은 폐지 — 공지는 AI 미개입 게시판** [ADR-0015](adr/0015-notice-board-replaces-ai-draft.md), **3D 트윈 후순위(§9)는 뒤집힘 — H9부터 3D 트윈 채택** [ADR-0019](adr/0019-complex-twin-3d.md), STT는 MVP 제외). **실행 기준은 [00](00-requirements.md)·[09](09-implementation-harness.md)·[docs/adr/](adr/README.md)**.
 
 Version 2.0
 작성일: 2026-06-20
@@ -290,6 +290,8 @@ LIVIQ — 아파트 관리 업무 지원 AI 플랫폼
 ---
 
 ## 10. 단계별 로드맵 (개략, 파일럿 후 보정)
+
+> 이 로드맵은 **[09 §8](09-implementation-harness.md)의 H-unit 플랜으로 대체**됐다(현재 진행 H20). 아래는 초기 가정 기록.
 
 기간은 인력·데이터 상태에 따라 변동하는 **가정치**다.
 

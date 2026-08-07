@@ -1,6 +1,6 @@
 # ADR-0026: AI 비서 운영 도구 확충과 공지 동 타게팅
 
-- 상태: Proposed
+- 상태: Accepted
 - 날짜: 2026-08-01
 - 관련: [ADR-0007](0007-readonly-tool-agent.md)(읽기 전용 도구 에이전트) · [ADR-0023](0023-parking-occupancy-persisted.md)(주차 점유 영속화) · [ADR-0024](0024-assistant-inquiry-triage.md)(민원 트리아지) · [ADR-0025](0025-agent-depth-plan-clarify-structured.md)(에이전트 심화) · [09 §8.22](../09-implementation-harness.md)(H19 체크리스트)
 
@@ -84,7 +84,8 @@
 저촉하지 않는다: 평균 비교는 **확정 업로드 데이터를 조회한 집계값을 제시**하는 것이지 AI가 관리비를
 계산·부과하는 것이 아니다(화면 숫자는 도구 확정값 그대로 — ADR-0025의 `ToolCard.data` 원칙과 동일).
 
-ADR 문서 상태는 구현 전이므로 `Proposed`로 두되, 결정 3은 사용자 승인이 끝난 **채택**이다.
+(작성 시점의 문서 상태는 `Proposed`였고, 결정 3만 사용자 승인이 끝난 채택이었다. 이후 결정 1·2·3이
+H19-1·H19-3·H19-4로 전부 구현되어 상태를 `Accepted`로 올렸다 — [09 §8.22](../09-implementation-harness.md).)
 
 ## 대안
 

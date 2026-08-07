@@ -1,7 +1,8 @@
 """신뢰도 산출·폴백 판정 (docs/01 §6 — 입력: 검색 점수·인용 검증 결과).
 
-임계값은 파일럿 보정 대상(초기값). 임계 미만 = 사용자에겐 폴백 안내 +
-messages.review_status=needs_review로 검수 큐(규칙 6).
+임계값은 파일럿 보정 대상(초기값). 임계 미만 = 사용자에겐 폴백 안내(담당자 연결) +
+messages.review_status=needs_review 플래그(규칙 6). 사후 검수 큐는 H8-7에서 제거됐다
+(ADR-0015 개정 노트) — 플래그는 품질 집계·골든셋 후보 축적용으로만 남는다.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from dataclasses import dataclass
 RETRIEVAL_WEIGHT = 0.6
 CITATION_WEIGHT = 0.4
 FALLBACK_THRESHOLD = 0.45  # 미만이면 답변 대신 담당자 연결 폴백
-REVIEW_THRESHOLD = 0.65  # 미만이면 답변은 내보내되 검수 큐 등록
+REVIEW_THRESHOLD = 0.65  # 미만이면 답변은 내보내되 needs_review 플래그(사용자 경로 불변)
 
 
 @dataclass(frozen=True)

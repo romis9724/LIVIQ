@@ -202,12 +202,14 @@ wsl -d Ubuntu -u root systemctl is-active docker gitlab-runner
 ## 4. 첫 배포 이후 — 로그인 계정 만들기
 
 빈 DB 에는 로그인할 계정이 없다. 최초 SYS_ADMIN 은 이미지에 포함된 부트스트랩으로 만든다
-(유일한 경로 — H7-2, [ADR-0014](adr/0014-local-email-auth.md)):
+(유일한 경로 — H7-2, [ADR-0014](adr/0014-local-email-auth.md)). **`api` 가 아니라 `migrate` 서비스로**
+실행한다 — api 컨테이너는 `DATABASE_URL` 이 런타임 롤(`liviq_app`)로 덮여 있어 시드가 권한 오류로
+깨진다([12 §4](12-deployment-runbook.md)와 같은 이유, [03 §5.1](03-database-design.md)):
 
 ```bash
 docker compose --env-file /etc/liviq/env.prod \
   -f infra/compose.prod.yml -f infra/compose.wsl.yml --profile app \
-  run --rm --workdir /app api python scripts/bootstrap_sys_admin.py --email admin@example.com
+  run --rm --workdir /app migrate python scripts/bootstrap_sys_admin.py --email admin@example.com
 ```
 
 `MAIL_BACKEND=console` 이므로 검증·초대 링크는 api 로그로 나온다:
@@ -289,7 +291,7 @@ docker compose --env-file /etc/liviq/env.prod \
 - **로그인이 되지 않고 쿠키가 안 붙는다** → `API_ENV` 가 `local` 인지 본다(HTTP 에 Secure 쿠키).
 - **감사 로그 `ip` 가 전부 같은 IP** → `FORWARDED_ALLOW_IPS` 미설정(H11-1, [06 §8](06-security-privacy.md)).
 - **`liviq-api:<tag>` pull 시도 후 실패** → 그 태그를 빌드하지 않았다. `tags` 로 확인하고 `build` 한다
-  (`IMAGE_PREFIX=liviq` 는 레지스트리에 없는 로컬 이름이라 pull 이 성립할 수 없다).
+  (`IMAGE_PREFIX=liviq-` 는 레지스트리에 없는 로컬 이름이라 pull 이 성립할 수 없다).
 
 ---
 

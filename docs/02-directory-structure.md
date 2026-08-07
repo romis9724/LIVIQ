@@ -79,61 +79,73 @@ web-resident/
 └── package.json
 ```
 
-> `web-admin`도 동일 패턴. 라우트: `documents/`, `inquiries/`, `notices/`(초안·검수), `review-queue/`(AI 검수), `facilities/`, `fees/`(엑셀 업로드), `onboarding/`(가입 승인), `dashboard/`, `settings/`.
+> `web-admin`도 동일 패턴. 라우트: `assistant/`(MANAGER 첫 진입 AI 비서 — [ADR-0028](adr/0028-admin-assistant-home.md)), `inquiry-status/`(민원현황 — 구 `dashboard/`), `inquiries/`, `notices/`, `documents/`, `facilities/`, `fees/`(엑셀 업로드), `residents/`(가입 승인·명부), `staff/`, `parking/`, `twin/`, `settings/`, `system/`(SYS_ADMIN). AI 검수 큐 화면은 H8-7에서 제거됐다([ADR-0015](adr/0015-notice-board-replaces-ai-draft.md) 개정 노트).
 
 ## 4. `apps/api` (FastAPI, 도메인 라우터)
 
 ```text
 api/
 ├── app/
-│   ├── main.py                    # FastAPI 앱·미들웨어·라우터 등록
+│   ├── main.py                    # FastAPI 앱 조립 — credentials CORS(웹 출처)·라우터 등록
 │   ├── config.py                  # env 검증(Pydantic Settings), 시크릿 로더
-│   ├── deps.py                    # 공통 의존성 (인증·역할·테넌트·세션 주입)
-│   ├── middleware/                # 로깅·감사·PII 마스킹
-│   ├── routers/                   # 경계 — auth·tenants·users·documents·search·assistant·inquiries·notices·fees·facilities·review·consents·audit
-│   ├── services/                  # 도메인 로직 (라우터가 호출, `packages/db` 사용)
-│   ├── schemas/                   # 요청·응답 Pydantic 모델 (→ OpenAPI)
-│   └── integrations/
-│       └── erp/                   # (추후) ERP 어댑터 — 도입 시 활성, 현재는 인터페이스 자리만
+│   ├── deps.py                    # 공통 의존성 (세션 인증·역할 가드·테넌트 세션·LLM/그래프/스토리지/큐 주입)
+│   ├── routers/                   # 도메인 경계 — auth·onboarding·approvals·staff·roster·admin_tenants·households·codes·documents·notices·inquiries·fees·facilities·floor_plans·twin·parking·assistant·dashboard·notifications·ai_config·ai_reindex
+│   ├── schemas/                   # 요청·응답 Pydantic 모델 (→ OpenAPI, 라우터와 1:1 파일)
+│   ├── session.py · password.py · auth_tokens.py · invites.py · mail.py   # 인증·계정 헬퍼
+│   ├── pii.py · audit.py · rate_limit.py · answer_cache.py               # 횡단 관심사(암복호·감사·레이트 리밋·정확 캐시)
+│   └── fees_excel.py · facility_suggest.py · facility_code.py · outbox.py · accounts.py …  # 도메인 헬퍼
+├── scripts/                       # 시드·운영 스크립트 (seed_demo.py·seed_parking.py·bootstrap_sys_admin.py·export_openapi.py 등)
+├── tests/                         # pytest (라우터 단위 + 인가·격리 CRITICAL 게이트)
 ├── pyproject.toml
 └── package.json                   # turbo 태스크 연결 (lint=ruff·typecheck=mypy·test=pytest)
 ```
 
 규칙:
-- 라우터 = 도메인 경계. router(경계) → service(로직) → repository(데이터, `packages/db`).
-- 입력은 라우터에서 Pydantic v2로 검증. 외부(ERP/LLM)는 어댑터 인터페이스 뒤로 숨김(테스트 모킹 용이).
+- 라우터 = 도메인 경계. 그 아래 서비스·리포지토리 **계층은 두지 않는다** — 라우터가 `packages/db` 모델·세션을 직접 쓰고, 재사용 로직만 `app/` 루트의 **flat 헬퍼 모듈**로 뽑는다(`pii.py`·`fees_excel.py`처럼). 계층을 미리 만들지 않는 쪽이 파일럿 규모에 맞다(YAGNI).
+- 입력은 라우터에서 Pydantic v2로 검증. 외부(LLM·스토리지·큐)는 `deps.py`가 주입하는 어댑터 뒤로 숨김(테스트 모킹 용이). ERP 어댑터는 **미구현**(도입 시 신설 — [ADR-0006](adr/0006-fees-excel-upload-source.md)).
 
 ## 5. `packages/ai-core` (Python, 프레임워크 비의존)
 
 ```text
 ai-core/
 ├── src/ai_core/
-│   ├── orchestrator.py            # 캐시→의도분류→에이전트 루프(스텝 상한)→후처리
-│   ├── intent/                    # 분류기 (AI처리/사람연결/캐시 1차 분기)
-│   ├── agent/                     # 도구 레지스트리 — retrieval(pgvector)·graph(Neo4j)·sql(고정 조회). 전부 읽기 전용, 파라미터 Pydantic 검증·tenant/소유권 강제
-│   ├── rag/                       # 임베딩·벡터검색·리랭킹·프롬프트 빌더
+│   ├── orchestrator.py            # 에이전트 루프(계획 turn·스텝 상한·되묻기 종료)→생성→후처리
+│   ├── tools/                     # 도구 레지스트리(17종) — registry.py(Tool·ToolCard·ToolContext) + library.py(조립)
+│   │                              #   + clarify·floor_plan(+parser)·inquiries·notices·parking·fees_common·fees_compare·trace_home_device
+│   │                              #   전부 읽기 전용, 인자 Pydantic 검증·tenant/소유권은 코드가 강제
+│   ├── rag/                       # 청킹(chunking)·벡터검색(retrieval)·프롬프트 빌더(prompt)
+│   ├── graph/                     # Neo4j typed 클라이언트·설정 (raw Cypher 금지)
 │   ├── llm/                       # OpenAI-호환 클라이언트(env로 프로바이더 교체), 토큰 카운트
 │   ├── budget/                    # 컨텍스트 예산·청크 선택 ([08])
-│   ├── cache/                     # 정확/의미 캐시 인터페이스
-│   ├── masking/                   # PII 마스킹/가명화 (api와 공유)
-│   ├── citations/                 # 인용 검증
-│   └── confidence.py              # 신뢰도 산출·폴백 판정
+│   ├── masking/                   # PII 마스킹/가명화 + fail-closed 게이트 (api와 공유)
+│   ├── parking/                   # 주차면 기하(거리·코어 좌표) — 주차 도구가 사용
+│   ├── citations.py               # 인용 실재 검증
+│   ├── confidence.py              # 신뢰도 산출·폴백 판정
+│   ├── history.py                 # 멀티턴 히스토리(직전 3턴) 구성
+│   ├── suggestions.py             # 후속 질문 칩(질문형만)
+│   ├── synonyms.py                # 생활어→표준어 질의 확장(임베딩 텍스트 한정)
+│   ├── fee_explain.py             # 관리비 설명 전용 경로(/fees/explain)
+│   └── config.py · backend_config.py  # LLM·임베딩 env 검증(fail-closed) + DB(`ai_backend_config`) 우선·env 폴백 병합
 ├── pyproject.toml
 └── package.json                   # turbo 태스크 연결 (lint=ruff·typecheck=mypy·test=pytest)
 ```
 
 > FastAPI/Next에 의존하지 않음 → 테스트·재사용·서비스 분리(ADR-4) 용이.
+> 정확 캐시는 ai-core가 아니라 **api**에 있다(`apps/api/app/answer_cache.py`) — 캐시는 에이전트 앞단(요청 경계)에서 Redis로 판정하기 때문([01 §5.2](01-architecture.md)). 의도분류 전용 모듈도 없다 — 도구 선택이 그 역할을 흡수했다([ADR-0007](adr/0007-readonly-tool-agent.md)).
 
 ## 6. `packages/db` (SQLAlchemy + Alembic)
 
 ```text
 db/
 ├── src/liviq_db/
-│   ├── models/                    # 테이블별 SQLAlchemy 2.0 async 모델 (tenants.py, users.py, documents.py, chunks.py ...)
-│   ├── rls/                       # RLS 정책 SQL
-│   ├── __init__.py                # 엔진·세션·모델 export
-│   └── seed.py
-├── alembic/                       # 생성된 마이그레이션 (env.py + versions/)
+│   ├── models/                    # 도메인 묶음별 SQLAlchemy 2.0 async 모델 (tenants·users·documents(+ContentChunk)·
+│   │                              #   conversations·inquiries·notices·facilities·fees·parking·plans·codes·ops·base)
+│   ├── engine.py                  # 엔진·세션 팩토리(tenant 컨텍스트 SET LOCAL)
+│   ├── runtime_roles.py           # 접속 롤 계약(liviq_app·liviq_worker — [03 §5.1](03-database-design.md))
+│   ├── codes_seed.py · facility_systems.py   # 기본 코드·시설 계통 시드 데이터
+│   ├── config.py
+│   └── __init__.py                # 엔진·세션·모델 export
+├── alembic/                       # 마이그레이션 (env.py + versions/) — **RLS 정책·GRANT SQL도 여기**(별도 rls/ 디렉토리 없음)
 ├── alembic.ini
 ├── pyproject.toml
 └── package.json                   # turbo 태스크 연결 (lint=ruff·typecheck=mypy·test=pytest)

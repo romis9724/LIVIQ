@@ -7,7 +7,7 @@
 
 | 스토어 | 담는 것 | 안 담는 것 | 격리 |
 |--------|---------|-----------|------|
-| **PostgreSQL 16 + pgvector** (SoR) | 업무 전 도메인(계정·세대·문서메타·대화·민원·공지·**인앱 알림함**(`notifications`)·시설·회의록(문서)·관리비·평면도·감사·큐) + **문서 임베딩**(`document_chunks`) | 시설 텍스트 임베딩(→Neo4j), 원본 파일 바이트(→S3) | **RLS** 행 격리(`tenant_id`) |
+| **PostgreSQL 16 + pgvector** (SoR) | 업무 전 도메인(계정·세대·문서메타·대화·민원·공지·**인앱 알림함**(`notifications`)·시설·회의록(문서)·관리비·평면도·감사·큐) + **문서·공지 임베딩**(`content_chunks`) | 시설 텍스트 임베딩(→Neo4j), 원본 파일 바이트(→S3) | **RLS** 행 격리(`tenant_id`) |
 | **Neo4j** (파생) | 시설 도메인 그래프(설비·장애·정비·부품·위치) + **시설 텍스트 벡터**(노드 프로퍼티) | 업무 원천(항상 PG가 SoR), 문서 임베딩 | `tenant_id` 노드 프로퍼티 + **쿼리 레이어 강제 필터** |
 | **Redis** | 응답 캐시(정확/의미)·세션·arq 큐 | 영속 원천 데이터 | 키 프리픽스 `tenant:{id}:` |
 | **S3 호환** | 원본 파일(문서)·평면도 이미지·업로드 엑셀 | 정형/관계 데이터·임베딩 | 키 프리픽스 `{tenant_id}/`, 서명 URL |
@@ -23,10 +23,10 @@
 
 | 데이터 | 저장 위치 | 임베딩 | 근거 |
 |--------|-----------|--------|------|
-| 공지·규약·지침 | PG `documents`+`document_chunks`, 원본 S3 | pgvector | RAG 검색 대상 |
-| 회의록(문서) | PG `documents`+`document_chunks`, 원본 S3 | pgvector | 일반 문서와 동일 파이프라인(STT·자동요약은 추후) |
+| 공지·규약·지침 | PG `documents`·`notices`+`content_chunks`, 원본 S3 | pgvector | RAG 검색 대상 |
+| 회의록(문서) | PG `documents`+`content_chunks`, 원본 S3 | pgvector | 일반 문서와 동일 파이프라인(STT·자동요약은 추후) |
 | 민원 | PG `inquiries` | pgvector(본문, 선택) | 유사 민원 검색 |
-| 첨부(추출 텍스트) | PG `document_chunks`, 원본 S3 | pgvector | 문서와 동일 파이프라인 |
+| 첨부(추출 텍스트) | PG `content_chunks`, 원본 S3 | pgvector | 문서와 동일 파이프라인 |
 | 시설 이력(설비·장애·조치·부품) | PG(SoR) → Neo4j(파생) | **Neo4j 노드 벡터만** | 그래프 확장 + 증상 유사도 |
 | 관리비 | PG `fees` | **없음(정형, SQL 조회)** | AI는 설명만, 계산·검색 불필요 |
 | 평면도 좌표·설비 상태 | PG `plan_devices`·`facilities`(**H13-3 기동** — 죽은 스키마였던 `unit_types`·`floor_plans`·`plan_devices`가 이때부터 실 행 보유, 저장 위치는 이 표의 결정 그대로 불변) | **없음(정형, SQL 조회)** | 좌표·상태는 정형 질의 · **그래프 노드 편입 예정**(H13-3+ — 평면도 마커·방·평형을 outbox 경유로 Neo4j에 투영, FR-FAC-06. **SoR은 PG 유지**) |
@@ -39,6 +39,8 @@
 
 업로드 원본은 S3, 정규화 텍스트·임베딩은 pgvector. `content_hash`로 멱등, 버전 변경 시 증분 재색인. **발행된 공지도 인제스트 트리거** — `content_chunks`(`source_type=notice`, H8-3)로 자동 색인, 정정·철회 시 재색인/제거([03 §4.2](03-database-design.md)).
 
+> 청크 테이블 이름은 **`content_chunks`** 하나다 — 초기 스키마(`d5422d3f35d5`)의 `document_chunks`가 H8-2에서 문서·공지 다형으로 일반화되며 개명됐다(마이그레이션 `d7e8f9a0b1c2`). 옛 이름은 그 마이그레이션 파일 안에만 남아 있다.
+
 ```mermaid
 flowchart LR
   U[업로드] --> S3[(S3 원본)]
@@ -50,7 +52,7 @@ flowchart LR
   O --> N
   N --> C[구조 인지 청킹]
   C --> E[임베딩]
-  E --> V[(pgvector document_chunks upsert)]
+  E --> V[(pgvector content_chunks upsert)]
   V --> IX[documents.index_status 갱신]
 ```
 
@@ -201,7 +203,7 @@ flowchart LR
 CREATE VECTOR INDEX incident_embedding IF NOT EXISTS
 FOR (i:Incident) ON (i.embedding)
 OPTIONS { indexConfig: {
-  `vector.dimensions`: 1024,                  -- pgvector document_chunks와 동일 모델·차원
+  `vector.dimensions`: 1024,                  -- pgvector content_chunks와 동일 모델·차원
   `vector.similarity_function`: 'cosine'
 }};
 

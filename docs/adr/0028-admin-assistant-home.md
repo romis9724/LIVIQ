@@ -1,6 +1,6 @@
 # ADR-0028: 관리자 홈 개편 — AI 비서 첫 진입, 대시보드는 민원현황으로
 
-- 상태: Proposed
+- 상태: Accepted (H20-2) → 개정 (H20-3)
 - 날짜: 2026-08-02
 - 관련: [ADR-0025](0025-agent-depth-plan-clarify-structured.md)(에이전트 심화) · [ADR-0026](0026-assistant-ops-tools-and-dong-targeting.md)(관리자 집계 도구 `summarize_inquiries`) · [ADR-0027](0027-assistant-multiturn-restore-and-relevance.md)(서버 복원) · [09 §8.23](../09-implementation-harness.md)(H20 체크리스트)
 
